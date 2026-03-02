@@ -30,6 +30,7 @@ const config = {
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
+          routeBasePath: '/',
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/gina-io/docs/tree/main/',
         },
@@ -91,7 +92,7 @@ const config = {
             items: [
               {
                 label: 'Getting Started',
-                to: '/docs/intro',
+                to: '/intro',
               },
             ],
           },
