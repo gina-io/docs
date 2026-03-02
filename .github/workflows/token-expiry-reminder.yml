@@ -1,4 +1,4 @@
-name: Vercel token expiry reminder
+name: Token expiry reminder
 
 on:
   schedule:
@@ -26,7 +26,18 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Action required: Vercel token expires in ${process.env.DAYS_LEFT} days`,
-              body: `The \`VERCEL_TOKEN\` secret used by the deploy workflow expires on **2026-06-02**.\n\n1. Go to https://vercel.com/account/settings/tokens\n2. Create a new token (90 days)\n3. Update the \`VERCEL_TOKEN\` secret at https://github.com/gina-io/docs/settings/secrets/actions\n4. Update the expiry date in \`.github/workflows/token-expiry-reminder.yml\``,
+              title: `Action required: tokens expire in ${process.env.DAYS_LEFT} days`,
+              body: [
+                `The following secrets expire on **2026-06-02** (90-day tokens created 2026-03-02):`,
+                ``,
+                `| Secret | Where to rotate |`,
+                `|---|---|`,
+                `| \`VERCEL_TOKEN\` | https://vercel.com/account/settings/tokens |`,
+                `| \`CLOUDFLARE_API_TOKEN\` | https://dash.cloudflare.com/profile/api-tokens |`,
+                ``,
+                `After rotating both tokens:`,
+                `1. Update the secrets at https://github.com/gina-io/docs/settings/secrets/actions`,
+                `2. Update the \`EXPIRY\` date in \`.github/workflows/token-expiry-reminder.yml\``,
+              ].join('\n'),
               labels: ['maintenance']
             })

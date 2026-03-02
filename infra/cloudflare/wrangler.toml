@@ -1,0 +1,7 @@
+name = "gina-docs-proxy"
+main = "worker.js"
+compatibility_date = "2026-03-02"
+
+routes = [
+  { pattern = "gina.io/docs*", zone_name = "gina.io" }
+]
