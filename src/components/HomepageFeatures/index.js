@@ -4,32 +4,35 @@ import styles from './styles.module.css';
 
 const FeatureList = [
   {
-    title: 'Easy to Use',
+    title: 'Projects and bundles',
     Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Organise your applications into projects and bundles. Each bundle is an
+        independent process with its own port, config, and lifecycle — start,
+        stop, and restart them individually or all at once.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
+    title: 'MVC and event-driven',
     Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Gina follows an MVC architecture with an event-driven core. It does not
+        rely on Express or Connect, yet is compatible with middleware and plugins
+        written for those frameworks.
       </>
     ),
   },
   {
-    title: 'Powered by React',
+    title: 'Built-in environments',
     Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Switch between <code>dev</code>, <code>prod</code>, and custom
+        environments with a single command. In dev mode, changes to controllers,
+        templates, and assets are picked up without restarting.
       </>
     ),
   },

@@ -19,8 +19,8 @@ function HomepageHeader() {
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
-            to="/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            to="/getting-started/installation">
+            Get started
           </Link>
         </div>
       </div>
@@ -32,8 +32,8 @@ export default function Home() {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title="Node.js MVC Framework"
+      description="Gina I/O — Node.js MVC and event-driven framework for building web applications and services.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

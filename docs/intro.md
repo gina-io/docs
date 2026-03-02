@@ -2,46 +2,51 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# What is Gina?
 
-Let's discover **Docusaurus in less than 5 minutes**.
+**Gina I/O** is a Node.js MVC and event-driven framework for building web applications and services.
 
-## Getting Started
+## Philosophy
 
-Get started by **creating a new site**.
+Gina was designed to be **accessible, flexible, scalable, and maintainable**. The goal is to let developers create web applications faster without sacrificing structure.
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+Unlike many Node.js frameworks, Gina does not rely on Connect or Express under the hood — yet it is compatible with plugins and middleware written for those frameworks.
 
-### What you'll need
+## Key concepts
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+### Projects and bundles
 
-## Generate a new site
+Gina organises your code into **projects** and **bundles**.
 
-Generate a new Docusaurus site using the **classic template**.
+- A **project** is a collection of bundles. Think of it as a representation of your domain (e.g. `myproject`).
+- A **bundle** is a single application or service inside a project (e.g. `frontend`, `api`, `admin`).
 
-The classic template will automatically be added to your project after you run the command:
+Each bundle runs as an independent process with its own port, configuration, and lifecycle.
 
-```bash
-npm init docusaurus@latest my-website classic
-```
+### Framework as a server
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+Gina is both a framework and a server. When you run `gina start`, you start the framework socket server that manages your bundles. Bundles are then started, stopped, and monitored via CLI commands that communicate with that server.
 
-The command also installs all necessary dependencies you need to run Docusaurus.
+### Environments
 
-## Start your site
+Gina distinguishes between **framework environments** (`dev`, `prod`) and **project environments** (which you define per project). Each environment can have its own hostname, port range, and build output.
 
-Run the development server:
+In the development environment, changes to controllers, templates, and public assets are picked up **without restarting the bundle**.
 
-```bash
-cd my-website
-npm run start
-```
+## Alpha status
 
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
+> Gina is currently in preview/alpha. Some commands or features may not work as expected while the framework is still under active development and testing.
 
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
+Windows support is in alpha — Windows users can use Docker or WSL in the meantime.
 
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+## Requirements
+
+- Node.js **>= 16** (host tested up to Node 25)
+- npm
+- Unix-like OS (macOS, Linux) for full feature support
+
+## Next steps
+
+- [Install Gina](./getting-started/installation)
+- [Create your first project](./getting-started/first-project)
+- [Add a bundle and go live](./getting-started/first-bundle)
