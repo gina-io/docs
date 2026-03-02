@@ -11,6 +11,10 @@ const config = {
     v4: true,
   },
 
+  markdown: {
+    format: 'detect',
+  },
+
   url: 'https://gina.io',
   baseUrl: '/docs/',
 
@@ -106,10 +110,6 @@ const config = {
           {
             title: 'More',
             items: [
-              {
-                label: 'Blog',
-                to: '/blog',
-              },
               {
                 label: 'npm',
                 href: 'https://www.npmjs.com/package/gina',
