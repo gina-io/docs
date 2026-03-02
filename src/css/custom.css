@@ -1,30 +1,290 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * Gina documentation theme.
+ * Brand extracted from gina.io: amber #f0b036, dark #333, blue #2eb3fe.
  */
 
-/* You can override the default Infima variables here. */
+/* ─── Brand tokens ────────────────────────────────────────────────── */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  /* Primary colour — dark amber, AA-accessible on white (#c98b09 = 4.8:1) */
+  --ifm-color-primary:          #c98b09;
+  --ifm-color-primary-dark:     #b07b06;
+  --ifm-color-primary-darker:   #966705;
+  --ifm-color-primary-darkest:  #6d4b04;
+  --ifm-color-primary-light:    #e0a00d;
+  --ifm-color-primary-lighter:  #edb21a;
+  --ifm-color-primary-lightest: #f5c43d;
+
+  /* Gina palette */
+  --gina-amber:       #f0b036;
+  --gina-amber-dark:  #c98b09;
+  --gina-dark:        #333333;
+  --gina-dark-2:      #444444;
+  --gina-mid:         #8c8c8c;
+  --gina-light:       #f3f3f3;
+  --gina-blue:        #2eb3fe;
+
+  /* Overrides */
+  --ifm-link-color:               var(--gina-blue);
+  --ifm-link-hover-color:         #0d9ae8;
+  --ifm-font-family-base:         "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+  --ifm-heading-font-family:      "Helvetica Neue", HelveticaNeue, Helvetica, Arial, sans-serif;
+  --ifm-code-font-size:           94%;
+  --ifm-navbar-background-color:  var(--gina-dark);
+  --ifm-navbar-link-color:        rgba(255, 255, 255, 0.85);
+  --ifm-navbar-link-hover-color:  var(--gina-amber);
+  --ifm-footer-background-color:  var(--gina-dark);
+  --ifm-footer-link-color:        rgba(255, 255, 255, 0.7);
+  --ifm-footer-link-hover-color:  var(--gina-amber);
+  --ifm-footer-title-color:       #ffffff;
+  --ifm-footer-color:             rgba(255, 255, 255, 0.5);
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  /* Primary — bright amber, readable on dark backgrounds */
+  --ifm-color-primary:          #f0b036;
+  --ifm-color-primary-dark:     #d89c27;
+  --ifm-color-primary-darker:   #c68e1d;
+  --ifm-color-primary-darkest:  #a07214;
+  --ifm-color-primary-light:    #f5be55;
+  --ifm-color-primary-lighter:  #f7c96e;
+  --ifm-color-primary-lightest: #f9d488;
+
+  --ifm-link-color:       #5ac8ff;
+  --ifm-link-hover-color: #7dd5ff;
+
+  --ifm-navbar-background-color: #1e1e1e;
+
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Navbar ──────────────────────────────────────────────────────── */
+.navbar {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.navbar__brand {
+  color: #ffffff;
+}
+
+.navbar__brand:hover {
+  color: var(--gina-amber);
+  text-decoration: none;
+}
+
+.navbar__title {
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.navbar__link--active {
+  color: var(--gina-amber) !important;
+}
+
+/* Search icon */
+.navbar__search-input {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.navbar__search-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Mobile hamburger */
+.navbar__toggle svg {
+  stroke: rgba(255, 255, 255, 0.85);
+}
+
+/* Dropdown menu */
+.navbar__item.dropdown .dropdown__menu {
+  border-top: 2px solid var(--gina-amber);
+}
+
+/* ─── Hero ────────────────────────────────────────────────────────── */
+.hero--primary {
+  /* The gina.io hexagon motif, tiled + large single at top-right */
+  background-color: var(--gina-dark);
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.07'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.15'/%3E%3C/svg%3E");
+  background-size: 90px auto, 480px auto;
+  background-position: center, right -60px top -30px;
+  background-repeat: repeat, no-repeat;
+}
+
+.hero--primary .hero__title {
+  color: #ffffff;
+  font-size: 3.2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.hero--primary .hero__subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.25rem;
+}
+
+/* Amber CTA button */
+.hero--primary .button--secondary {
+  background-color: var(--gina-amber);
+  border-color: var(--gina-amber);
+  color: var(--gina-dark);
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.65em 1.75em;
+  border-radius: 3px;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.hero--primary .button--secondary:hover {
+  background-color: #dea02c;
+  border-color: #dea02c;
+  color: var(--gina-dark);
+  text-decoration: none;
+}
+
+/* ─── Homepage features section ───────────────────────────────────── */
+.features-section {
+  background-color: #ffffff;
+  padding: 3.5rem 0 2rem;
+  border-bottom: 1px solid var(--gina-light);
+}
+
+[data-theme='dark'] .features-section {
+  background-color: var(--ifm-background-color);
+  border-bottom-color: #2a2a2a;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────────── */
+.menu__link--active:not(.menu__link--sublist) {
+  border-left: 3px solid var(--gina-amber);
+  background-color: rgba(240, 176, 54, 0.08);
+  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 3px);
+}
+
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  background-color: rgba(240, 176, 54, 0.12);
+}
+
+/* ─── Table of contents ───────────────────────────────────────────── */
+.table-of-contents__link--active {
+  font-weight: 600;
+}
+
+/* ─── Code blocks ─────────────────────────────────────────────────── */
+.prism-code {
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] .prism-code {
+  border-color: #2e2e2e;
+}
+
+/* Inline code */
+code {
+  background-color: #f5f5f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 3px;
+  color: #444;
+  padding: 0.1em 0.4em;
+}
+
+[data-theme='dark'] code {
+  background-color: #282828;
+  border-color: #3a3a3a;
+  color: #e0e0e0;
+}
+
+/* ─── Tables ──────────────────────────────────────────────────────── */
+table {
+  display: table;
+  width: 100%;
+}
+
+table th {
+  background-color: var(--gina-light);
+  color: var(--gina-dark-2);
+  font-weight: 600;
+}
+
+table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+[data-theme='dark'] table th {
+  background-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme='dark'] table tr:nth-child(even) {
+  background-color: #202020;
+}
+
+/* ─── Admonitions / callout notes ─────────────────────────────────── */
+.alert {
+  border-radius: 4px;
+}
+
+.alert--note,
+.alert--info {
+  --ifm-alert-border-color: var(--gina-blue);
+}
+
+.alert--warning {
+  --ifm-alert-border-color: var(--gina-amber);
+}
+
+/* ─── Blockquote (tip/note style from gina.io docs) ──────────────── */
+blockquote {
+  border-left: 4px solid var(--gina-amber);
+  color: var(--gina-mid);
+  font-style: normal;
+  background-color: #fffbf2;
+  padding: 0.75rem 1rem;
+  border-radius: 0 4px 4px 0;
+}
+
+[data-theme='dark'] blockquote {
+  background-color: rgba(240, 176, 54, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* ─── Footer tweaks ───────────────────────────────────────────────── */
+.footer__copyright {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.footer__link-separator {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Pagination nav ──────────────────────────────────────────────── */
+.pagination-nav__link {
+  border-color: #e5e5e5;
+  border-radius: 4px;
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--gina-amber);
+}
+
+[data-theme='dark'] .pagination-nav__link {
+  border-color: #2e2e2e;
+}
+
+[data-theme='dark'] .pagination-nav__link:hover {
+  border-color: var(--gina-amber);
+}
+
+/* ─── Breadcrumbs ─────────────────────────────────────────────────── */
+.breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--gina-mid);
+  background: none;
 }

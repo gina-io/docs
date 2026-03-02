@@ -1,11 +1,63 @@
+/**
+ * Homepage feature cards — gina.io hexagon motif.
+ */
+
 .features {
   display: flex;
-  align-items: center;
-  padding: 2rem 0;
+  align-items: flex-start;
+  padding: 3rem 0 2.5rem;
   width: 100%;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+/* ─── Hexagon icon badge ──────────────────────────────────────────── */
+.featureHex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 87px; /* 76 × 1.143 to match gina.io 105:120 hex ratio */
+  background-color: #f0b036;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  margin-bottom: 1.4rem;
+  transition: background-color 0.2s;
+}
+
+.featureHex svg {
+  width: 32px;
+  height: 32px;
+  stroke: #333333;
+  fill: none;
+}
+
+/* ─── Card wrapper ────────────────────────────────────────────────── */
+.featureCard {
+  padding: 0 1.5rem 1.5rem;
+  text-align: center;
+}
+
+.featureCard:hover .featureHex {
+  background-color: #e0a020;
+}
+
+/* ─── Title ───────────────────────────────────────────────────────── */
+.featureTitle {
+  color: #444444;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='dark'] .featureTitle {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* ─── Description ─────────────────────────────────────────────────── */
+.featureDescription {
+  color: #8c8c8c;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+[data-theme='dark'] .featureDescription {
+  color: rgba(255, 255, 255, 0.55);
 }
