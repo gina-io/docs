@@ -109,10 +109,10 @@
   /* The gina.io hexagon motif, tiled + large single at top-right */
   background-color: var(--gina-dark);
   background-image:
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.07'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.15'/%3E%3C/svg%3E");
-  background-size: 90px auto, 480px auto;
-  background-position: center, right -60px top -30px;
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.05'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 105 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M52.433%2C0l51.962%2C30l0%2C60l-51.962%2C30l-51.962%2C-30l0%2C-60l51.962%2C-30Z' fill='%23f2af0d' fill-opacity='0.09'/%3E%3C/svg%3E");
+  background-size: 90px auto, 520px auto;
+  background-position: center, right -80px top -40px;
   background-repeat: repeat, no-repeat;
 }
 
