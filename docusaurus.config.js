@@ -64,6 +64,9 @@ const config = {
         logo: {
           alt: 'Gina logo',
           src: 'img/logo.svg',
+          srcDark: 'img/logo.svg',
+          width: 32,
+          height: 32,
         },
         items: [
           {
@@ -71,11 +74,6 @@ const config = {
             sidebarId: 'tutorialSidebar',
             position: 'left',
             label: 'Docs',
-          },
-          {to: '/blog', label: 'Blog', position: 'left'},
-          {
-            type: 'docsVersionDropdown',
-            position: 'right',
           },
           {
             href: 'https://github.com/Rhinostone/gina',
