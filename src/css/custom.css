@@ -94,6 +94,16 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Color mode toggle — button uses currentColor for SVG fill */
+.navbar button[class*='toggleButton'] {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.navbar button[class*='toggleButton']:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* Mobile hamburger */
 .navbar__toggle svg {
   stroke: rgba(255, 255, 255, 0.85);
