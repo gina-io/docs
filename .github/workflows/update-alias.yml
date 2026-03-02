@@ -1,0 +1,26 @@
+name: Deploy and update alias
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          url=$(npx vercel deploy --prod \
+            --token ${{ secrets.VERCEL_TOKEN }} \
+            --yes \
+            2>/dev/null)
+          echo "url=$url" >> $GITHUB_OUTPUT
+
+      - name: Update stable alias
+        run: |
+          npx vercel alias set ${{ steps.deploy.outputs.url }} gina-io-docs.vercel.app \
+            --token ${{ secrets.VERCEL_TOKEN }} \
+            --scope ${{ secrets.VERCEL_ORG_ID }}

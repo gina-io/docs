@@ -1,0 +1,32 @@
+name: Vercel token expiry reminder
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check token expiry
+        run: |
+          EXPIRY="2026-06-02"
+          TODAY=$(date +%Y-%m-%d)
+          DAYS=$(( ($(date -d "$EXPIRY" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
+          if [ "$DAYS" -le 14 ]; then
+            echo "TOKEN_EXPIRING=true" >> $GITHUB_ENV
+            echo "DAYS_LEFT=$DAYS" >> $GITHUB_ENV
+          fi
+
+      - name: Open reminder issue
+        if: env.TOKEN_EXPIRING == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Action required: Vercel token expires in ${process.env.DAYS_LEFT} days`,
+              body: `The \`VERCEL_TOKEN\` secret used by the deploy workflow expires on **2026-06-02**.\n\n1. Go to https://vercel.com/account/settings/tokens\n2. Create a new token (90 days)\n3. Update the \`VERCEL_TOKEN\` secret at https://github.com/gina-io/docs/settings/secrets/actions\n4. Update the expiry date in \`.github/workflows/token-expiry-reminder.yml\``,
+              labels: ['maintenance']
+            })
