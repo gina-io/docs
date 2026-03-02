@@ -25,16 +25,16 @@ const libBase     = path.join(fwBase, fwVersion, 'lib');
 
 // Modules to document. `files` is relative to libBase.
 const MODULES = [
-  { id: 'merge',      title: 'merge',      desc: 'Deep-merge two or more objects or arrays',      files: ['merge/src/main.js']      },
+  { id: 'merge',      title: 'Merge',      desc: 'Deep-merge two or more objects or arrays',      files: ['merge/src/main.js']      },
   { id: 'collection', title: 'Collection', desc: 'Ordered collection with query helpers',          files: ['collection/src/main.js'] },
-  { id: 'logger',     title: 'logger',     desc: 'Multi-stream structured logging',                files: ['logger/src/main.js']     },
-  { id: 'routing',    title: 'routing',    desc: 'Route dispatcher and URL builder',               files: ['routing/src/main.js']    },
-  { id: 'cache',      title: 'cache',      desc: 'In-memory and filesystem caching',               files: ['cache/src/main.js']      },
-  { id: 'cron',       title: 'cron',       desc: 'Scheduled task runner',                          files: ['cron/src/main.js']       },
-  { id: 'archiver',   title: 'archiver',   desc: 'File archiving (tar, zip)',                      files: ['archiver/src/main.js']   },
-  { id: 'domain',     title: 'domain',     desc: 'Domain and public-suffix validation',            files: ['domain/src/main.js']     },
-  { id: 'math',       title: 'math',       desc: 'Math utility helpers',                           files: ['math/index.js']          },
-  { id: 'url',        title: 'url',        desc: 'URL parsing and manipulation',                   files: ['url/index.js']           },
+  { id: 'logger',     title: 'Logger',     desc: 'Multi-stream structured logging',                files: ['logger/src/main.js']     },
+  { id: 'routing',    title: 'Routing',    desc: 'Route dispatcher and URL builder',               files: ['routing/src/main.js']    },
+  { id: 'cache',      title: 'Cache',      desc: 'In-memory and filesystem caching',               files: ['cache/src/main.js']      },
+  { id: 'cron',       title: 'Cron',       desc: 'Scheduled task runner',                          files: ['cron/src/main.js']       },
+  { id: 'archiver',   title: 'Archiver',   desc: 'File archiving (tar, zip)',                      files: ['archiver/src/main.js']   },
+  { id: 'domain',     title: 'Domain',     desc: 'Domain and public-suffix validation',            files: ['domain/src/main.js']     },
+  { id: 'math',       title: 'Math',       desc: 'Math utility helpers',                           files: ['math/index.js']          },
+  { id: 'url',        title: 'URL',        desc: 'URL parsing and manipulation',                   files: ['url/index.js']           },
 ];
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'docs', 'api');
