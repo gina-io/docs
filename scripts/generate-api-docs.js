@@ -40,13 +40,45 @@ const MODULES = [
 const OUTPUT_DIR = path.join(__dirname, '..', 'docs', 'api');
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-// Inline script run in each child process: renders one file and prints markdown to stdout
+// Inline script run in each child process: renders one file and prints markdown to stdout.
+// Patches are applied to a temp copy of each source file so invalid JSDoc annotations
+// in older published versions of gina do not abort the entire render.
 const RENDER_SCRIPT = `
-const j = require('jsdoc-to-markdown');
-const files = process.argv.slice(1);
+const j    = require('jsdoc-to-markdown');
+const fs   = require('fs');
+const os   = require('os');
+const path = require('path');
+
+const PATCHES = [
+  // @package gina.lib — invalid value on the @package tag; replace with @memberof
+  { re: /(@package)\\s+gina\\.lib/g, to: '@memberof module:lib' },
+  // bare @returns with no type/description — jsdoc-to-markdown chokes on it
+  { re: /(@returns)\\s*$/gm, to: '@returns {void}' },
+];
+
+function patchedCopy(src) {
+  let text = fs.readFileSync(src, 'utf8');
+  let patched = false;
+  for (const { re, to } of PATCHES) {
+    const out = text.replace(re, to);
+    if (out !== text) { text = out; patched = true; }
+  }
+  if (!patched) return src;
+  const tmp = path.join(os.tmpdir(), 'gina-apidoc-' + path.basename(src));
+  fs.writeFileSync(tmp, text, 'utf8');
+  return tmp;
+}
+
+const origFiles = process.argv.slice(1);
+const files     = origFiles.map(patchedCopy);
+
 j.render({ files, 'no-cache': true, 'module-index-format': 'dl' })
   .then(md => { process.stdout.write(md || ''); })
-  .catch(err => { process.stderr.write(err.message); process.exit(1); });
+  .catch(err => { process.stderr.write(err.message); process.exit(1); })
+  .finally(() => {
+    // clean up temp copies
+    files.forEach((f, i) => { if (f !== origFiles[i]) try { fs.unlinkSync(f); } catch(_) {} });
+  });
 `;
 
 const successful = [];
