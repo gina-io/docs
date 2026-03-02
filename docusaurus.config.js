@@ -12,7 +12,7 @@ const config = {
   },
 
   url: 'https://gina.io',
-  baseUrl: '/',
+  baseUrl: '/docs/',
 
   organizationName: 'gina-io',
   projectName: 'docs',
