@@ -3,9 +3,13 @@ export default {
     const url = new URL(request.url);
     const target = 'https://gina-io-docs.vercel.app';
 
-    // Proxy /docs* to Vercel deployment (no stripping — baseUrl: '/docs/' in Docusaurus)
+    // Strip /docs prefix and proxy to Vercel.
+    // Docusaurus baseUrl '/docs/' embeds '/docs/' into all asset/page paths, so
+    // the browser always requests gina.io/docs/*, Worker strips to /*, Vercel
+    // serves from build/ root where the actual files live.
     if (url.pathname === '/docs' || url.pathname.startsWith('/docs/')) {
-      const targetUrl = target + url.pathname + url.search;
+      const stripped = url.pathname === '/docs' ? '/' : url.pathname.slice('/docs'.length);
+      const targetUrl = target + stripped + url.search;
       return fetch(targetUrl, {
         method: request.method,
         headers: request.headers,
