@@ -298,3 +298,292 @@ blockquote {
   color: var(--gina-mid);
   background: none;
 }
+
+/* ─── Sidebar manager ────────────────────────────────────────────── */
+
+/* Smooth width transition on collapse/expand */
+.theme-doc-sidebar-container {
+  overflow-x: hidden;   /* clip menu during width animation */
+  transition: width 0.22s ease;
+}
+
+/* Suppress all transitions during drag (no lag) */
+.sidebar-resizing .theme-doc-sidebar-container,
+.sidebar-resizing .sidebar-resize-handle {
+  transition: none;
+}
+
+/* Suppress sidebar width transition during initial state restoration to prevent flash */
+html.sidebar-restoring .theme-doc-sidebar-container,
+html.sidebar-restoring .sidebar-resize-handle {
+  transition: none !important;
+}
+
+/* While collapsed, suppress any width transition so SPA navigation never causes
+ * the sidebar to briefly animate open before snapping back to 52 px. */
+[data-sidebar-collapsed] .theme-doc-sidebar-container {
+  transition: none !important;
+}
+
+/* ── Sticky header housing the toggle button ──────────────────────── */
+.sidebar-custom-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;   /* toggle button right-aligned when open */
+  padding: 10px 10px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--ifm-background-surface-color);
+}
+
+html[data-sidebar-collapsed] .sidebar-custom-header {
+  justify-content: center;     /* centered when icon-only strip */
+  padding: 10px 0 8px;
+}
+
+/* ── Panel toggle button ──────────────────────────────────────────── */
+.sidebar-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.18);
+  background: transparent;
+  color: var(--ifm-color-emphasis-500);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--ifm-color-emphasis-800);
+  border-color: rgba(128, 128, 128, 0.35);
+}
+
+[data-theme='dark'] .sidebar-toggle-btn {
+  color: rgba(255, 255, 255, 0.45);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme='dark'] .sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Section icons ────────────────────────────────────────────────── */
+.sidebar-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  color: var(--ifm-color-emphasis-500);
+  transition: color 0.15s;
+}
+
+.sidebar-nav-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.menu__link:hover .sidebar-nav-icon {
+  color: var(--ifm-color-emphasis-900);
+}
+
+.menu__link--active .sidebar-nav-icon {
+  color: var(--gina-amber);
+}
+
+/* ── Collapsed state ──────────────────────────────────────────────── */
+html[data-sidebar-collapsed] .theme-doc-sidebar-container {
+  overflow: hidden;
+}
+
+/* Hide category controls */
+html[data-sidebar-collapsed] .menu__caret {
+  display: none;
+}
+
+html[data-sidebar-collapsed] .menu__link--sublist-caret::after {
+  content: none;
+}
+
+/* Hide sub-items — only top-level icons visible */
+html[data-sidebar-collapsed] .menu__list .menu__list {
+  display: none !important;
+}
+
+/* Center icon within the 52 px strip.
+ * font-size: 0 hides bare text nodes (items whose text wasn't wrapped in a span).
+ * > *:not(.sidebar-nav-icon) covers any Docusaurus-wrapped label spans.
+ * Both are needed for robustness across Docusaurus versions. */
+html[data-sidebar-collapsed] .menu__link {
+  justify-content: center !important;
+  padding: 10px 0 !important;
+  border-left: none !important;
+  font-size: 0;       /* hide bare text nodes */
+  overflow: hidden;
+}
+
+html[data-sidebar-collapsed] .menu__link > *:not(.sidebar-nav-icon) {
+  display: none;      /* hide any other child elements */
+}
+
+html[data-sidebar-collapsed] .sidebar-nav-icon {
+  font-size: 1rem;    /* restore after parent font-size: 0 */
+  margin-right: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--ifm-color-emphasis-500);
+}
+
+html[data-sidebar-collapsed] .sidebar-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Active item: amber icon + subtle background */
+html[data-sidebar-collapsed] .menu__link--active .sidebar-nav-icon {
+  color: var(--gina-amber);
+}
+
+html[data-sidebar-collapsed] .menu__link--active {
+  background-color: rgba(240, 176, 54, 0.1) !important;
+  border-radius: 4px;
+}
+
+/* ── Collapsed category flyout ────────────────────────────────────── */
+
+/* Hard guard: flyout must never appear or intercept events in expanded mode.
+ * Prevents stale isCollapsed.current from causing the flyout to block sidebar clicks. */
+html:not([data-sidebar-collapsed]) .sidebar-flyout {
+  display: none !important;
+  pointer-events: none;
+}
+
+.sidebar-flyout {
+  position: fixed;
+  min-width: 180px;
+  max-width: 280px;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid rgba(128, 128, 128, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.14);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+[data-theme='dark'] .sidebar-flyout {
+  background: #1e1e2e;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.sidebar-flyout-header {
+  padding: 6px 14px 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ifm-color-emphasis-500);
+  background: rgba(128, 128, 128, 0.09);
+  border-bottom: 1px solid rgba(128, 128, 128, 0.16);
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
+}
+
+[data-theme='dark'] .sidebar-flyout-header {
+  color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  border-bottom-color: rgba(255, 255, 255, 0.11);
+}
+
+.sidebar-flyout-item {
+  display: block;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  color: var(--ifm-menu-color);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sidebar-flyout-item:hover {
+  background: var(--ifm-menu-color-background-hover);
+  color: var(--ifm-menu-color-active);
+  text-decoration: none;
+}
+
+.sidebar-flyout-item--active {
+  color: var(--gina-amber);
+  font-weight: 500;
+}
+
+.sidebar-flyout-item--active:hover {
+  color: var(--gina-amber);
+}
+
+/* ── Drag-to-resize handle ────────────────────────────────────────── */
+/*
+ * Positioned via --sidebar-handle-left (set inline by SidebarManager).
+ * Straddles the sidebar right edge (3 px inside + 3 px outside).
+ * Hidden (left: -999px) when the sidebar is collapsed.
+ */
+.sidebar-resize-handle {
+  position: fixed;
+  top: var(--ifm-navbar-height);
+  left: var(--sidebar-handle-left, -999px);
+  width: 6px;
+  height: calc(100vh - var(--ifm-navbar-height));
+  cursor: col-resize;
+  z-index: 999;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover {
+  background: rgba(201, 139, 9, 0.35);
+}
+
+/* ─── Mermaid diagram zoom ────────────────────────────────────────── */
+.docusaurus-mermaid-container {
+  cursor: zoom-in;
+  position: relative;
+  transition: opacity 0.15s;
+}
+
+.docusaurus-mermaid-container:hover {
+  opacity: 0.9;
+}
+
+/* Zoom hint badge, shown on hover */
+.docusaurus-mermaid-container::after {
+  content: 'click to zoom';
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  user-select: none;
+}
+
+.docusaurus-mermaid-container:hover::after {
+  opacity: 1;
+}

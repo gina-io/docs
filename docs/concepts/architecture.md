@@ -18,6 +18,16 @@ Gina organises code into **projects** and **bundles**.
 - A **bundle** is a single application or service inside a project. Each bundle
   runs as an independent Node.js process with its own port, config, and lifecycle.
 
+```mermaid
+graph TD
+    P["myproject"] --> B1["frontend bundle"]
+    P --> B2["api bundle"]
+    P --> B3["admin bundle"]
+    B1 --> N1["Node.js process<br/>port 3100"]
+    B2 --> N2["Node.js process<br/>port 3101"]
+    B3 --> N3["Node.js process<br/>port 3102"]
+```
+
 See [Projects and bundles](./projects-and-bundles) for the full reference.
 
 ---
@@ -26,20 +36,21 @@ See [Projects and bundles](./projects-and-bundles) for the full reference.
 
 When you run `gina start`, Gina starts a background socket server on port `8124`.
 All online CLI commands (like `bundle:start` and `bundle:stop`) communicate with
-this server over a Unix socket rather than spawning a new process for each command.
+this server over a TCP socket rather than spawning a new process for each command.
 
 An offline command like `env:list` runs directly, without connecting to the server.
 
-```
-$ gina bundle:start frontend @myproject
-         ↓
-bin/gina         spawns bin/cli as a detached daemon process
-         ↓
-bin/cli          connects to the framework socket on port 8124
-         ↓
-bin/cmd          receives the command and dispatches to the handler
-         ↓
-lib/cmd/bundle/start.js    executes, result returned via socket → stdout
+```mermaid
+flowchart TD
+    A["gina bundle:start frontend @myproject"] --> B["bin/gina"]
+    B --> C{"online command?"}
+    C -->|"bundle:*, project:*, framework:*"| D["bin/cli<br/>detached daemon"]
+    C -->|"env:list, project:list ..."| E["bin/cli<br/>direct execution"]
+    D --> F["TCP socket<br/>port 8124"]
+    F --> G["bin/cmd<br/>dispatcher"]
+    G --> H["lib/cmd/ handler"]
+    H --> OUT["result → stdout"]
+    E --> OUT
 ```
 
 ---
@@ -57,27 +68,33 @@ In the development environment, changes to the following directories are applied
 - `public/` (static assets)
 - `templates/`
 
+```mermaid
+stateDiagram-v2
+    [*] --> Stopped
+    Stopped --> Running : bundle start
+    Running --> Stopped : bundle stop / process exit
+    Running --> Running : hot reload (controllers · templates · assets)
+    Running --> Crashed : unhandled exception
+    Crashed --> Stopped : process exit
+```
+
 ---
 
 ## HTTP request lifecycle
 
-```
-HTTP request
-         ↓
-core/router.js        matches the URL against routing.json rules
-         ↓
-core/controller.js    sets up session, auth state, request data
-         ↓
-User controller action (e.g. this.home = function(req, res, next) { ... })
-         ↓
-self.render(data)        → HTML response via Swig template
-self.renderJSON(data)    → JSON response
-self.redirect(url)       → HTTP redirect
-self.throwError(...)     → 4xx / 5xx error response
-```
-
 Routes are declared in `src/<bundle>/config/routing.json` — they are not
 registered in code.
+
+```mermaid
+flowchart TD
+    REQ["HTTP request"] --> ROUTER["core/router.js<br/>match URL against routing.json"]
+    ROUTER --> CTRL["core/controller.js<br/>session · auth · request data"]
+    CTRL --> ACTION["Controller action<br/>this.home = function(req, res, next)"]
+    ACTION --> HTML["self.render(data)<br/>HTML via Swig template"]
+    ACTION --> JSON["self.renderJSON(data)<br/>JSON response"]
+    ACTION --> REDIR["self.redirect(url)<br/>HTTP redirect"]
+    ACTION --> ERR["self.throwError(...)<br/>4xx / 5xx error"]
+```
 
 ---
 
@@ -88,6 +105,18 @@ registered in code.
 | Model | `src/<bundle>/models/` | Data access and business logic |
 | View | `src/<bundle>/templates/` | HTML templates (Swig by default) |
 | Controller | `src/<bundle>/controllers/` | Request handling and rendering |
+
+```mermaid
+flowchart LR
+    REQ["HTTP request"] --> C["Controller<br/>controllers/"]
+    C -->|"query data"| M["Model<br/>models/"]
+    M -->|"read / write"| DB[("Data source")]
+    DB --> M
+    M -->|"result"| C
+    C -->|"render"| V["View<br/>templates/"]
+    V --> HTML["HTML response"]
+    C --> JSONR["JSON response"]
+```
 
 ---
 
