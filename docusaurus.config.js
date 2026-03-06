@@ -13,7 +13,10 @@ const config = {
 
   markdown: {
     format: 'detect',
+    mermaid: true,
   },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   url: 'https://gina.io',
   baseUrl: '/docs/',

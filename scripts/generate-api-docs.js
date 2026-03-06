@@ -27,7 +27,7 @@ const libBase     = path.join(fwBase, fwVersion, 'lib');
 const MODULES = [
   { id: 'merge',      title: 'Merge',      desc: 'Deep-merge two or more objects or arrays',      files: ['merge/src/main.js']      },
   { id: 'collection', title: 'Collection', desc: 'Ordered collection with query helpers',          files: ['collection/src/main.js'] },
-  { id: 'logger',     title: 'Logger',     desc: 'Multi-stream structured logging',                files: ['logger/src/main.js']     },
+  { id: 'logger',     title: 'Logger',     desc: 'Multi-stream structured logging',                files: ['logger/src/main.js'],     manual: true },
   { id: 'routing',    title: 'Routing',    desc: 'Route dispatcher and URL builder',               files: ['routing/src/main.js']    },
   { id: 'cache',      title: 'Cache',      desc: 'In-memory and filesystem caching',               files: ['cache/src/main.js']      },
   { id: 'cron',       title: 'Cron',       desc: 'Scheduled task runner',                          files: ['cron/src/main.js']       },
@@ -84,6 +84,18 @@ j.render({ files, 'no-cache': true, 'module-index-format': 'dl' })
 const successful = [];
 
 for (const mod of MODULES) {
+  // Skip generation for manually-maintained pages; preserve the existing file as-is.
+  if (mod.manual) {
+    const manualPath = path.join(OUTPUT_DIR, `${mod.id}.md`);
+    if (fs.existsSync(manualPath)) {
+      console.log(`[api-docs] skip ${mod.id}: manual page preserved`);
+      successful.push(mod);
+    } else {
+      console.warn(`[api-docs] skip ${mod.id}: marked manual but file not found`);
+    }
+    continue;
+  }
+
   const sourcePaths = mod.files
     .map(f => path.join(libBase, f))
     .filter(f => fs.existsSync(f));
