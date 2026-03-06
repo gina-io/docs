@@ -15,8 +15,7 @@ jobs:
         run: |
           url=$(npx vercel deploy --prod \
             --token ${{ secrets.VERCEL_TOKEN }} \
-            --yes \
-            2>/dev/null)
+            --yes)
           echo "url=$url" >> $GITHUB_OUTPUT
 
       - name: Update stable alias
