@@ -11,6 +11,7 @@
 # Auto-generated API docs (rebuilt at Vercel build time via prebuild script)
 /docs/api/*
 !/docs/api/_category_.json
+!/docs/api/logger.md
 
 # Misc
 .DS_Store
