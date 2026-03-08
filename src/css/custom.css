@@ -301,21 +301,25 @@ blockquote {
 
 /* ─── Sidebar manager ────────────────────────────────────────────── */
 
-/* Smooth width transition on collapse/expand */
+/* Smooth width transition on collapse/expand.
+ * NOTE: no overflow-x here — Docusaurus already uses clip-path:inset(0) on this
+ * element, which clips overflow without creating a scroll container. Adding
+ * overflow:hidden would break position:sticky on the inner sidebarViewport. */
 .theme-doc-sidebar-container {
-  overflow-x: hidden;   /* clip menu during width animation */
   transition: width 0.22s ease;
 }
 
 /* Suppress all transitions during drag (no lag) */
 .sidebar-resizing .theme-doc-sidebar-container,
-.sidebar-resizing .sidebar-resize-handle {
+.sidebar-resizing .sidebar-resize-handle,
+.sidebar-resizing .sidebar-edge-toggle {
   transition: none;
 }
 
 /* Suppress sidebar width transition during initial state restoration to prevent flash */
 html.sidebar-restoring .theme-doc-sidebar-container,
-html.sidebar-restoring .sidebar-resize-handle {
+html.sidebar-restoring .sidebar-resize-handle,
+html.sidebar-restoring .sidebar-edge-toggle {
   transition: none !important;
 }
 
@@ -325,55 +329,42 @@ html.sidebar-restoring .sidebar-resize-handle {
   transition: none !important;
 }
 
-/* ── Sticky header housing the toggle button ──────────────────────── */
-.sidebar-custom-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;   /* toggle button right-aligned when open */
-  padding: 10px 10px 8px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+/* ── Edge toggle button (sits on the separator between sidebar and content) ── */
+.sidebar-edge-toggle {
+  position: fixed;
+  left: var(--sidebar-handle-left, -999px);
+  top: calc(var(--ifm-navbar-height) + 1rem);
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--ifm-color-emphasis-300);
   background: var(--ifm-background-surface-color);
-}
-
-html[data-sidebar-collapsed] .sidebar-custom-header {
-  justify-content: center;     /* centered when icon-only strip */
-  padding: 10px 0 8px;
-}
-
-/* ── Panel toggle button ──────────────────────────────────────────── */
-.sidebar-toggle-btn {
+  color: var(--ifm-color-emphasis-600);
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid rgba(128, 128, 128, 0.18);
-  background: transparent;
-  color: var(--ifm-color-emphasis-500);
-  cursor: pointer;
   padding: 0;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 1000;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.sidebar-toggle-btn:hover {
-  background: rgba(128, 128, 128, 0.1);
-  color: var(--ifm-color-emphasis-800);
-  border-color: rgba(128, 128, 128, 0.35);
+.sidebar-edge-toggle:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
-[data-theme='dark'] .sidebar-toggle-btn {
-  color: rgba(255, 255, 255, 0.45);
-  border-color: rgba(255, 255, 255, 0.12);
+[data-theme='dark'] .sidebar-edge-toggle {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme='dark'] .sidebar-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.85);
-  border-color: rgba(255, 255, 255, 0.25);
+[data-theme='dark'] .sidebar-edge-toggle:hover {
+  background: var(--ifm-color-emphasis-200);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
 /* ── Section icons ────────────────────────────────────────────────── */
@@ -404,7 +395,7 @@ html[data-sidebar-collapsed] .sidebar-custom-header {
 
 /* ── Collapsed state ──────────────────────────────────────────────── */
 html[data-sidebar-collapsed] .theme-doc-sidebar-container {
-  overflow: hidden;
+  clip-path: inset(0);
 }
 
 /* Hide category controls */
@@ -538,7 +529,7 @@ html:not([data-sidebar-collapsed]) .sidebar-flyout {
 /*
  * Positioned via --sidebar-handle-left (set inline by SidebarManager).
  * Straddles the sidebar right edge (3 px inside + 3 px outside).
- * Hidden (left: -999px) when the sidebar is collapsed.
+ * Stays at the collapsed edge (COLLAPSED_WIDTH - 3 px) when collapsed.
  */
 .sidebar-resize-handle {
   position: fixed;
@@ -554,6 +545,27 @@ html:not([data-sidebar-collapsed]) .sidebar-flyout {
 
 .sidebar-resize-handle:hover {
   background: rgba(201, 139, 9, 0.35);
+}
+
+/* ─── Right sidebar — reading progress bar ───────────────────────── */
+.toc-reading-progress {
+  height: 3px;
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='dark'] .toc-reading-progress {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toc-reading-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gina-amber);
+  transition: width 0.12s linear;
+  border-radius: 2px;
 }
 
 /* ─── Mermaid diagram zoom ────────────────────────────────────────── */

@@ -32,10 +32,13 @@ const COLLAPSED_WIDTH = 52;
 //
 function SidebarManager() {
   const [handleLeft, setHandleLeft]  = useState(-999);
+  const [collapsed, setCollapsed]    = useState(false);
   const dragging      = useRef(false);
   const savedWidth    = useRef(300);
   const isCollapsed   = useRef(false);  // never stale — read inside event handlers
   const asideRef      = useRef(null);
+  const collapseItRef = useRef(null);
+  const expandItRef   = useRef(null);
 
   useEffect(() => {
     // ── Restore persisted state ──────────────────────────────────────────────
@@ -50,6 +53,8 @@ function SidebarManager() {
     if (isCollapsed.current) {
       document.documentElement.dataset.sidebarCollapsed = '1';
       document.documentElement.style.setProperty('--doc-sidebar-width', COLLAPSED_WIDTH + 'px');
+      setCollapsed(true);
+      setHandleLeft(COLLAPSED_WIDTH - 3);
     } else {
       document.documentElement.style.setProperty('--doc-sidebar-width', savedWidth.current + 'px');
     }
@@ -73,13 +78,8 @@ function SidebarManager() {
       document.documentElement.style.setProperty('--doc-sidebar-width', COLLAPSED_WIDTH + 'px');
       localStorage.setItem('sidebarCollapsed', '1');
       localStorage.setItem('sidebarWidth', savedWidth.current);
-      const btn = aside.querySelector('.sidebar-toggle-btn');
-      if (btn) {
-        btn.innerHTML = SVG_PANEL_OPEN;
-        btn.setAttribute('aria-label', 'Expand sidebar');
-        btn.title = 'Expand sidebar';
-      }
-      setHandleLeft(-999);
+      setCollapsed(true);
+      setHandleLeft(COLLAPSED_WIDTH - 3);
     };
 
     const expandIt = () => {
@@ -89,12 +89,7 @@ function SidebarManager() {
       delete document.documentElement.dataset.sidebarCollapsed;
       document.documentElement.style.setProperty('--doc-sidebar-width', savedWidth.current + 'px');
       localStorage.removeItem('sidebarCollapsed');
-      const btn = aside.querySelector('.sidebar-toggle-btn');
-      if (btn) {
-        btn.innerHTML = SVG_PANEL_CLOSE;
-        btn.setAttribute('aria-label', 'Collapse sidebar');
-        btn.title = 'Collapse sidebar';
-      }
+      setCollapsed(false);
       hideFlyout();
       // handleLeft updated by ResizeObserver after width transition
     };
@@ -133,26 +128,18 @@ function SidebarManager() {
       });
     };
 
-    // ── inject toggle button ─────────────────────────────────────────────────
-    const injectToggleBtn = (aside) => {
-      if (!aside || aside.querySelector('.sidebar-custom-header')) return;
-      const header = document.createElement('div');
-      header.className = 'sidebar-custom-header';
-      const btn = document.createElement('button');
-      btn.className = 'sidebar-toggle-btn';
-      btn.type      = 'button';
-      const collapsed = isCollapsed.current;
-      btn.innerHTML  = collapsed ? SVG_PANEL_OPEN : SVG_PANEL_CLOSE;
-      btn.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
-      btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
-      btn.addEventListener('click', () => {
-        if (isCollapsed.current) expandIt();
-        else collapseIt();
-      });
-      header.appendChild(btn);
-      const nav = aside.querySelector('nav.menu');
-      if (nav) nav.before(header);
-      else aside.prepend(header);
+    collapseItRef.current = collapseIt;
+    expandItRef.current   = expandIt;
+
+    // ── inject reading progress bar into right TOC sidebar ───────────────────
+    const injectTocProgress = (tocEl) => {
+      if (!tocEl || tocEl.querySelector('.toc-reading-progress')) return;
+      const bar = document.createElement('div');
+      bar.className = 'toc-reading-progress';
+      const fill = document.createElement('div');
+      fill.className = 'toc-reading-progress-fill';
+      bar.appendChild(fill);
+      tocEl.prepend(bar);
     };
 
     // ── hover flyout for categories in collapsed mode ────────────────────────
@@ -267,7 +254,8 @@ function SidebarManager() {
     // ── resize handle position ───────────────────────────────────────────────
     let ro = null;
     const updateHandle = () => {
-      if (isCollapsed.current || !asideRef.current) return;
+      if (!asideRef.current) return;
+      if (isCollapsed.current) { setHandleLeft(COLLAPSED_WIDTH - 3); return; }
       const w = asideRef.current.getBoundingClientRect().width;
       setHandleLeft(w > 50 ? w - 3 : -999);
     };
@@ -284,13 +272,25 @@ function SidebarManager() {
         ro = new ResizeObserver(updateHandle);
         ro.observe(el);
       }
-      injectToggleBtn(el);
       injectNavIcons(el);
       attachFlyoutListeners(el); // safe to call repeatedly (data-flyout-attached guard)
       updateHandle();
+      const tocEl = document.querySelector('.theme-doc-toc-desktop');
+      if (tocEl) injectTocProgress(tocEl);
     };
 
     attach();
+
+    // ── Reading progress bar ─────────────────────────────────────────────────
+    const updateProgress = () => {
+      const fill = document.querySelector('.toc-reading-progress-fill');
+      if (!fill) return;
+      const scrollH = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const pct = scrollH > 0 ? (window.scrollY / scrollH) * 100 : 0;
+      fill.style.width = Math.min(100, pct) + '%';
+    };
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    updateProgress();
 
     // Re-attach / re-inject after SPA navigation or React re-renders
     let debounceTimer = null;
@@ -298,11 +298,12 @@ function SidebarManager() {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         const aside = asideRef.current;
-        // Re-inject toggle if React wiped it during re-render
-        if (aside && !aside.querySelector('.sidebar-custom-header')) injectToggleBtn(aside);
         if (aside) injectNavIcons(aside);
         if (aside) attachFlyoutListeners(aside); // pick up newly rendered lazy-loaded items
         attach(); // finds new aside on doc page navigation (hideFlyout called inside if new aside)
+        const tocEl = document.querySelector('.theme-doc-toc-desktop');
+        if (tocEl && !tocEl.querySelector('.toc-reading-progress')) injectTocProgress(tocEl);
+        updateProgress(); // sync progress bar after navigation
       }, 150);
     });
     mo.observe(document.body, { childList: true, subtree: true });
@@ -313,6 +314,7 @@ function SidebarManager() {
       clearTimeout(debounceTimer);
       clearTimeout(hideTimer);
       flyout.remove();
+      window.removeEventListener('scroll', updateProgress);
     };
   }, []);
 
@@ -347,11 +349,23 @@ function SidebarManager() {
   }, []);
 
   return (
-    <div
-      className="sidebar-resize-handle"
-      onMouseDown={onMouseDown}
-      style={{ '--sidebar-handle-left': handleLeft + 'px' }}
-    />
+    <div style={{ '--sidebar-handle-left': handleLeft + 'px' }}>
+      <div
+        className="sidebar-resize-handle"
+        onMouseDown={onMouseDown}
+      />
+      <button
+        className="sidebar-edge-toggle"
+        type="button"
+        onClick={() => {
+          if (isCollapsed.current) expandItRef.current?.();
+          else collapseItRef.current?.();
+        }}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        dangerouslySetInnerHTML={{ __html: collapsed ? SVG_PANEL_OPEN : SVG_PANEL_CLOSE }}
+      />
+    </div>
   );
 }
 
