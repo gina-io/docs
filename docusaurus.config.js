@@ -1,5 +1,6 @@
 // @ts-check
 import {themes as prismThemes} from 'prism-react-renderer';
+import readingTimePlugin from './src/remark/reading-time.js';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -40,6 +41,7 @@ const config = {
           routeBasePath: '/',
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/gina-io/docs/tree/main/',
+          remarkPlugins: [readingTimePlugin],
         },
         blog: {
           showReadingTime: true,
