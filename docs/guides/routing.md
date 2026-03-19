@@ -106,7 +106,7 @@ unique across the project.
 | `param.title` | — | — | Page title. Supports `:param` substitution |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action |
 | `scopes` | — | `[current scope]` | Scopes where this route is active |
-| `cache` | — | — | Response cache strategy (`"memory"` or `{ type, ttl, sliding }`) |
+| `cache` | — | — | Response cache strategy. See [Caching](./caching.md) for the full field reference. |
 | `_comment`, `_sample` | — | — | Developer notes, ignored by the framework |
 
 ---
