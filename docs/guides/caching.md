@@ -180,8 +180,8 @@ constant traffic.
 
 ## `ttl` and `maxAge` — what is the difference?
 
-Both are durations in **whole seconds**, but they measure from different
-reference points:
+Both are durations in **seconds** (fractional values such as `0.5` are
+supported), but they measure from different reference points:
 
 | Field | Measures from | Active when |
 |---|---|---|
