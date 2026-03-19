@@ -8,6 +8,23 @@ Gina can cache rendered HTML pages and JSON responses so that repeated
 requests to the same URL are served directly from memory or disk, bypassing
 the controller and template engine entirely.
 
+```mermaid
+flowchart LR
+    A(["HTTP GET request"]) --> B{"Cache hit?"}
+
+    B -- "hit" --> C["Cached response\n(memory or disk)"]
+    C --> D(["HTTP response"])
+
+    B -- "miss" --> E
+    subgraph E["Full render pipeline — bypassed on hit"]
+        direction LR
+        E1["Router"] --> E2["Controller"] --> E3["Template engine"]
+    end
+    E --> F["Rendered response"]
+    F --> G[("Cache store")]
+    F --> D
+```
+
 Caching is opt-in and configured per route in `routing.json`.
 
 ---
