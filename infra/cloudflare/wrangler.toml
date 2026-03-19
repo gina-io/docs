@@ -3,5 +3,11 @@ main = "worker.js"
 compatibility_date = "2026-03-02"
 
 routes = [
-  { pattern = "gina.io/docs*", zone_name = "gina.io" }
+  { pattern = "gina.io/docs*", zone_name = "gina.io" },
+  { pattern = "gina.io/api/*", zone_name = "gina.io" }
 ]
+
+[[d1_databases]]
+binding      = "DB"
+database_name = "gina-docs-votes"
+database_id  = "d972a7c8-a1ac-4297-a246-94c5ff029751"
