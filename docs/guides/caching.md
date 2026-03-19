@@ -72,9 +72,9 @@ The `cache` field accepts either a shorthand string or a full object.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `type` | `"memory"` \| `"fs"` | — | Storage backend (see [Storage backends](#storage-backends)). |
-| `ttl` | number (seconds) | server default | Expiry duration. Meaning depends on `sliding` — see [Expiration modes](#expiration-modes). |
+| `ttl` | number (seconds, fractional ok) | server default | Expiry duration. Meaning depends on `sliding` — see [Expiration modes](#expiration-modes). |
 | `sliding` | boolean | `false` | Enable sliding-window expiration. |
-| `maxAge` | number (seconds) | — | Absolute lifetime ceiling. Only meaningful when `sliding: true`. |
+| `maxAge` | number (seconds, fractional ok) | — | Absolute lifetime ceiling. Only meaningful when `sliding: true`. |
 | `invalidateOnEvents` | string[] | — | Event names that immediately evict this entry (see [Event-driven invalidation](#event-driven-invalidation)). |
 
 Only `GET` requests are cached. `POST`, `PUT`, `DELETE`, and other methods
@@ -257,7 +257,7 @@ The `cache` block in `settings.server.json` controls global cache behavior:
 |---|---|
 | `enable` | Master switch. Set to `"true"` to activate caching. Per-route `cache` fields are ignored when this is `"false"`. |
 | `path` | Directory for `fs`-type cached files. |
-| `ttl` | Default TTL (seconds) used when a route's `cache` config does not specify one. |
+| `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. |
 
 ---
 
