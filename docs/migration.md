@@ -75,7 +75,7 @@ eviction. Integer values are unchanged — **no action required** on existing co
 
 A new optional `queryTimeout` field is available on every route in `routing.json`. When set,
 it acts as the timeout budget for outgoing `self.query()` calls made within that route's
-controller action — without having to pass `timeout` explicitly at every call site.
+controller action — without having to pass `requestTimeout` explicitly at every call site.
 
 This is a **purely additive change** — existing `routing.json` files require no modification.
 
@@ -89,9 +89,9 @@ This is a **purely additive change** — existing `routing.json` files require n
 
 Priority order for `self.query()` timeout (highest wins):
 
-1. `timeout` in the `self.query()` options object (explicit call-site override)
+1. `requestTimeout` in the `self.query()` options object (explicit call-site override)
 2. `queryTimeout` on the matched route in `routing.json` (per-route default)
-3. Framework hard default — `10 s`
+3. Framework hard default — `10s`
 
 See the [Routing guide](./guides/routing#per-route-query-timeout) for full details.
 
@@ -132,7 +132,7 @@ If `timeout` is omitted, behaviour is unchanged — the framework default of `10
 
 :::note Priority order for outgoing request timeout
 `self.query()` resolves the request timeout in this order (highest wins):
-1. `timeout` in the `self.query()` options object (explicit call-site override)
+1. `requestTimeout` in the `self.query()` options object (explicit call-site override)
 2. `requestTimeout` on the matched proxy target in `app.json`
 3. `queryTimeout` on the matched route in `routing.json`
 4. Framework hard default — `10s`
