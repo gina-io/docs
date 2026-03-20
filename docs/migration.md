@@ -71,6 +71,37 @@ eviction. Integer values are unchanged — **no action required** on existing co
 
 ---
 
+### Per-route query timeout — `queryTimeout` field
+
+A new optional `queryTimeout` field is available on every route in `routing.json`. When set,
+it acts as the timeout budget for outgoing `self.query()` calls made within that route's
+controller action — without having to pass `timeout` explicitly at every call site.
+
+This is a **purely additive change** — existing `routing.json` files require no modification.
+
+```jsonc title="routing.json"
+"report-export": {
+  "url": "/reports/:id/export",
+  "param": { "control": "export" },
+  "queryTimeout": "120s"   // or 120000 — both are accepted
+}
+```
+
+Priority order for `self.query()` timeout (highest wins):
+
+1. `timeout` in the `self.query()` options object (explicit call-site override)
+2. `queryTimeout` on the matched route in `routing.json` (per-route default)
+3. Framework hard default — `10 s`
+
+See the [Routing guide](./guides/routing#per-route-query-timeout) for full details.
+
+:::note Why not `timeout`?
+`timeout` is reserved for future incoming-request cancellation. `queryTimeout` is scoped
+exclusively to outgoing `self.query()` calls, making its intent unambiguous.
+:::
+
+---
+
 ### Timeout config — human-readable string format
 
 All timeout fields in `settings.json` and `app.json` now accept duration strings

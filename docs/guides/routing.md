@@ -87,6 +87,7 @@ unique across the project.
       "middlewares.passport.authentificate"
     ],
     "scopes": ["production", "beta"],
+    "queryTimeout": "30s",
     "cache": {
       "type": "memory",
       "ttl": 3600
@@ -106,6 +107,7 @@ unique across the project.
 | `param.title` | — | — | Page title. Supports `:param` substitution |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action |
 | `scopes` | — | `[current scope]` | Scopes where this route is active |
+| `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests made from this route's controller action via `self.query()`. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |
 | `cache` | — | — | Response cache strategy. See [Caching](./caching.md) for the full field reference. |
 | `_comment`, `_sample` | — | — | Developer notes, ignored by the framework |
 
@@ -375,6 +377,58 @@ bundle started.
 
 ---
 
+## Per-route query timeout
+
+By default, outgoing sub-requests made from a controller action via `self.query()` time out
+after **10 seconds**. Set `queryTimeout` on a route to raise or lower that budget for a specific
+endpoint without touching every call site in the controller.
+
+```json
+"report-export": {
+  "url": "/reports/:id/export",
+  "param": { "control": "export" },
+  "queryTimeout": "120s"
+}
+```
+
+The value is normalised to milliseconds at startup and exposed on `req.routing.queryTimeout`.
+It is used as a fallback when no timeout is passed explicitly to `self.query()`:
+
+```js
+// routing.json declares "queryTimeout": "120s" on this route
+
+this.export = function(req, res, next) {
+  // No explicit timeout — picks up 120 s from the route
+  self.query({ hostname: 'coreapi', path: '/heavy-report/' + req.routing.param.id }, function(err, data) {
+    if (err) return self.throwError(res, 503, err);
+    self.renderJSON(data);
+  });
+};
+```
+
+To override the route timeout for a specific call, pass `timeout` in the options:
+
+```js
+// Route queryTimeout is 120 s, but this particular call has a tighter budget
+self.query({ hostname: 'coreapi', path: '/ping', timeout: '5s' }, callback);
+```
+
+**Priority order** (highest wins):
+
+1. `timeout` in the `self.query()` options object
+2. `queryTimeout` on the matched route in `routing.json`
+3. Framework default — `10s`
+
+Accepted formats: duration string (`"30s"`, `"500ms"`, `"2m"`, `"1h"`) or an integer in milliseconds (`30000`).
+
+:::note Why `queryTimeout` and not `timeout`?
+`timeout` is reserved for future incoming-request cancellation (the budget for the controller
+action itself, enforced with `AbortController`). `queryTimeout` is unambiguous — it applies
+only to outgoing `self.query()` calls made from within the controller action.
+:::
+
+---
+
 ## Global routing
 
 `routing.global.json` defines middlewares and settings that apply to **every route**
@@ -428,7 +482,8 @@ Contains the matched route's resolved metadata:
     id:         "abc-123"             // resolved param value
   },
   middleware:   ["middlewares.passport.authentificate"],
-  requirements: { id: "/^[-a-f0-9]+$/i" }
+  requirements: { id: "/^[-a-f0-9]+$/i" },
+  queryTimeout: 30000                 // normalised to ms (set via "queryTimeout": "30s" in routing.json)
 }
 ```
 
