@@ -2,6 +2,9 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import readingTimePlugin from './src/remark/reading-time.js';
 
+// Updated automatically by gina's post_publish script on each release.
+const ginaVersion = '0.1.7';
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Gina',
@@ -83,6 +86,11 @@ const config = {
             sidebarId: 'tutorialSidebar',
             position: 'left',
             label: 'Docs',
+          },
+          {
+            label: 'v' + ginaVersion,
+            href: 'https://github.com/Rhinostone/gina/releases',
+            position: 'right',
           },
           {
             href: 'https://github.com/Rhinostone/gina',
