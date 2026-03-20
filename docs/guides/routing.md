@@ -406,25 +406,27 @@ this.export = function(req, res, next) {
 };
 ```
 
-To override the route timeout for a specific call, pass `timeout` in the options:
+To override the route timeout for a specific call, pass `requestTimeout` in the options:
 
 ```js
 // Route queryTimeout is 120 s, but this particular call has a tighter budget
-self.query({ hostname: 'coreapi', path: '/ping', timeout: '5s' }, callback);
+self.query({ hostname: 'coreapi', path: '/ping', requestTimeout: '5s' }, callback);
 ```
 
 **Priority order** (highest wins):
 
-1. `timeout` in the `self.query()` options object
+1. `requestTimeout` in the `self.query()` options object
 2. `queryTimeout` on the matched route in `routing.json`
 3. Framework default — `10s`
 
 Accepted formats: duration string (`"30s"`, `"500ms"`, `"2m"`, `"1h"`) or an integer in milliseconds (`30000`).
 
-:::note Why `queryTimeout` and not `timeout`?
+:::note Timeout field naming
 `timeout` is reserved for future incoming-request cancellation (the budget for the controller
-action itself, enforced with `AbortController`). `queryTimeout` is unambiguous — it applies
-only to outgoing `self.query()` calls made from within the controller action.
+action itself, enforced with `AbortController`). `requestTimeout` is the consistent name for
+outgoing sub-request timeouts — used both in `self.query()` options and in
+`app.json::proxy.<service>.requestTimeout`. `queryTimeout` scopes the fallback to a specific
+route without touching every call site.
 :::
 
 ---
