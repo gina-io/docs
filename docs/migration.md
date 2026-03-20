@@ -102,6 +102,44 @@ exclusively to outgoing `self.query()` calls, making its intent unambiguous.
 
 ---
 
+### `app.json` proxy — `timeout` renamed to `requestTimeout`
+
+The `timeout` field on a proxy target entry in `app.json` has been renamed to
+`requestTimeout`. This is a **breaking rename** — update every `proxy.<service>`
+block that declares a `timeout` value.
+
+```jsonc title="src/dashboard/config/app.json — before"
+"proxy": {
+  "coreapi": {
+    "hostname": "coreapi@myproject",
+    "port"    : "coreapi@myproject",
+    "timeout" : "30s"   // ← rename this
+  }
+}
+```
+
+```jsonc title="src/dashboard/config/app.json — after"
+"proxy": {
+  "coreapi": {
+    "hostname"      : "coreapi@myproject",
+    "port"          : "coreapi@myproject",
+    "requestTimeout": "30s"   // ✓
+  }
+}
+```
+
+If `timeout` is omitted, behaviour is unchanged — the framework default of `10s` applies.
+
+:::note Priority order for outgoing request timeout
+`self.query()` resolves the request timeout in this order (highest wins):
+1. `timeout` in the `self.query()` options object (explicit call-site override)
+2. `requestTimeout` on the matched proxy target in `app.json`
+3. `queryTimeout` on the matched route in `routing.json`
+4. Framework hard default — `10s`
+:::
+
+---
+
 ### Timeout config — human-readable string format
 
 All timeout fields in `settings.json` and `app.json` now accept duration strings
