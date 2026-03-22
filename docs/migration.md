@@ -298,9 +298,9 @@ TLS certificates are required. HTTP/1.1 fallback is available via `allowHTTP1`.
     "scheme": "https",
     "allowHTTP1": true,
     "credentials": {
-      "privateKey":  "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/private.key",
-      "certificate": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.crt",
-      "ca":          "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/ca_bundle.crt"
+      "privateKey":  "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/private.key",
+      "certificate": "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/certificate.crt",
+      "ca":          "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/ca_bundle.crt"
     }
   }
 }

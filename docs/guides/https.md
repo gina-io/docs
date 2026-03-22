@@ -122,11 +122,11 @@ Create or edit `myproject/src/frontend/config/settings.server.credentials.dev.js
 
 ```json
 {
-  "ca": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.combined.pem"
+  "ca": "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/certificate.combined.pem"
 }
 ```
 
-`{GINA_HOMEDIR}`, `{scope}`, and `{host}` are substituted automatically by Gina at runtime.
+`${GINA_HOMEDIR}`, `${scope}`, and `${host}` are substituted automatically by Gina at runtime.
 
 Then restart all bundles:
 
