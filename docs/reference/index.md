@@ -134,23 +134,23 @@ Your values always win. The framework baseline only fills in keys you have not d
 
 ## Path template variables
 
-Values in config files can reference framework-resolved paths using `{variable}` placeholders.
+Values in config files can reference framework-resolved paths using `${variable}` placeholders.
 These are substituted at load time.
 
 | Variable | Resolves to |
 |---|---|
-| `{gina}` | Absolute path to the gina install |
-| `{version}` | Active gina version string |
-| `{scope}` | Active scope (`local`, `beta`, `production` …) |
-| `{rootDomain}` | Root domain of the project (e.g. `example.com`) |
-| `{host}` | Hostname of the bundle |
-| `{projectVersionMajor}` | Major version of the project |
-| `{bundlePath}` | Absolute path to the current bundle |
-| `{templatesPath}` | Absolute path to the bundle's templates directory |
-| `{publicPath}` | Absolute path to the bundle's public directory |
-| `{handlersPath}` | Absolute path to the bundle's handlers directory |
-| `{tmpPath}` | Absolute path to the project tmp directory |
-| `{cachePath}` | Absolute path to the project cache directory |
+| `${gina}` | Absolute path to the gina install |
+| `${version}` | Active gina version string |
+| `${scope}` | Active scope (`local`, `beta`, `production` …) |
+| `${rootDomain}` | Root domain of the project (e.g. `example.com`) |
+| `${host}` | Hostname of the bundle |
+| `${projectVersionMajor}` | Major version of the project |
+| `${bundlePath}` | Absolute path to the current bundle |
+| `${templatesPath}` | Absolute path to the bundle's templates directory |
+| `${publicPath}` | Absolute path to the bundle's public directory |
+| `${handlersPath}` | Absolute path to the bundle's handlers directory |
+| `${tmpPath}` | Absolute path to the project tmp directory |
+| `${cachePath}` | Absolute path to the project cache directory |
 
 ---
 

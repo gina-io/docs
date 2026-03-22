@@ -115,7 +115,7 @@ can accept files.
     "autoTmpCleanupTimeout": false,
     "groups": {
       "avatar": {
-        "path"              : "{tmpPath}",
+        "path"              : "${tmpPath}",
         "allowedExtensions" : ["jpg", "jpeg", "png", "webp"],
         "isMultipleAllowed" : false,
         "maxFieldsSize"     : "512K"
@@ -137,7 +137,7 @@ can accept files.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `path` | string | — | Destination directory. Supports `{tmpPath}` |
+| `path` | string | — | Destination directory. Supports `${tmpPath}` |
 | `allowedExtensions` | string[] \| `"*"` | — | Allowed file extensions. `"*"` accepts everything |
 | `isMultipleAllowed` | boolean | `false` | Allow multiple files per upload |
 | `maxFieldsSize` | string | global | Per-group size override (e.g. `"8MB"`, `"512K"`) |
@@ -201,9 +201,9 @@ sent to the client.
 {
   "server": {
     "credentials": {
-      "privateKey"  : "/etc/ssl/{scope}/{host}/private.key",
-      "certificate" : "/etc/ssl/{scope}/{host}/certificate.crt",
-      "ca"          : "/etc/ssl/{scope}/{host}/ca_bundle.crt",
+      "privateKey"  : "/etc/ssl/${scope}/${host}/private.key",
+      "certificate" : "/etc/ssl/${scope}/${host}/certificate.crt",
+      "ca"          : "/etc/ssl/${scope}/${host}/ca_bundle.crt",
       "allowHTTP1"  : true
     }
   }
@@ -218,7 +218,7 @@ sent to the client.
 | `allowHTTP1` | boolean | Accept HTTP/1.1 on the same port. Required for non-HTTP/2 clients |
 
 :::note
-Path template variables such as `{scope}`, `{host}`, and `{rootDomain}` are
+Path template variables such as `${scope}`, `${host}`, and `${rootDomain}` are
 particularly useful here since certificate paths typically vary by environment
 and domain. See [path template variables](./index.md#path-template-variables) for
 the full list.
