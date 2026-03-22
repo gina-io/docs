@@ -51,7 +51,7 @@ framework boot sequence requires:
 | `~/.gina/projects.json` | Project metadata (paths, envs, scopes, protocols) |
 | `~/.gina/ports.json` | Port → `bundle@project/env` mapping |
 | `~/.gina/ports.reverse.json` | `bundle@project` → env → protocol → scheme → port |
-| `~/.gina/{version}/settings.json` | Framework runtime settings (dirs, log level, …) |
+| `~/.gina/${version}/settings.json` | Framework runtime settings (dirs, log level, …) |
 
 No framework socket server is needed. `gina-init` is idempotent — safe to run
 on every container start.

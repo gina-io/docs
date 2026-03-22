@@ -32,8 +32,8 @@ matching the current route's `param.control` (or `param.file`), merges it with
 ```json title="src/frontend/config/templates.json"
 {
   "_common": {
-    "layout"   : "{templatesPath}/html/layout.html",
-    "handlers" : "{templatesPath}/handlers",
+    "layout"   : "${templatesPath}/html/layout.html",
+    "handlers" : "${templatesPath}/handlers",
     "stylesheets": [
       { "name": "main", "url": "/css/main.css" }
     ],
@@ -59,8 +59,8 @@ values always win.
 |---|---|---|---|
 | `layout` | string | framework default | Path to the main HTML layout file. Supports [path template variables](./index.md#path-template-variables) |
 | `noLayout` | string | framework default | Layout used when `layout` is `""` or `false` |
-| `html` | string | `{templatesPath}/html` | Directory containing template HTML files |
-| `handlers` | string | `{templatesPath}/handlers` | Directory containing client-side JS handler files |
+| `html` | string | `${templatesPath}/html` | Directory containing template HTML files |
+| `handlers` | string | `${templatesPath}/handlers` | Directory containing client-side JS handler files |
 | `routeNameAsFilenameEnabled` | boolean | `true` | When `true`, the route name is used as the default template filename if `param.file` is not set |
 | `ginaEnabled` | boolean | `true` | Include gina's built-in CSS and JS in every page. Set to `false` to exclude them entirely |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
@@ -121,7 +121,7 @@ either the route's `param.control` value or the route's `param.file` path.
 ```json title="src/frontend/config/templates.json"
 {
   "_common": {
-    "layout"     : "{templatesPath}/html/layout.html",
+    "layout"     : "${templatesPath}/html/layout.html",
     "stylesheets": [
       { "name": "main", "url": "/css/main.css", "isCommon": true }
     ],
@@ -140,7 +140,7 @@ either the route's `param.control` value or the route's `param.file` path.
   },
 
   "invoice-detail": {
-    "layout": "{templatesPath}/html/print-layout.html",
+    "layout": "${templatesPath}/html/print-layout.html",
     "stylesheets": [
       { "name": "invoice", "url": "/css/invoice.css" }
     ]
@@ -178,8 +178,8 @@ To disable the toolbar for the entire bundle, set `ginaEnabled: false` in `_comm
 ```json title="src/dashboard/config/templates.json"
 {
   "_common": {
-    "layout"                 : "{templatesPath}/html/layout.html",
-    "handlers"               : "{templatesPath}/handlers",
+    "layout"                 : "${templatesPath}/html/layout.html",
+    "handlers"               : "${templatesPath}/handlers",
     "routeNameAsFilenameEnabled": true,
     "ginaEnabled"            : true,
     "javascriptsDeferEnabled": true,

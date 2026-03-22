@@ -71,14 +71,14 @@ local alias you choose; the value is a connection descriptor object.
       "hostname": "coreapi@myproject",
       "port"    : "coreapi@myproject",
       "path"    : "/api",
-      "ca"      : "~/.gina/certificates/scopes/{scope}/{rootDomain}/ca.pem",
+      "ca"      : "~/.gina/certificates/scopes/${scope}/${rootDomain}/ca.pem",
       "requestTimeout" : "30s"
     },
     "auth": {
       "hostname": "auth@myproject",
       "port"    : "auth@myproject",
       "path"    : "/auth",
-      "ca"      : "~/.gina/certificates/scopes/{scope}/{rootDomain}/ca.pem"
+      "ca"      : "~/.gina/certificates/scopes/${scope}/${rootDomain}/ca.pem"
     }
   }
 }
@@ -94,7 +94,7 @@ local alias you choose; the value is a connection descriptor object.
 | `rejectUnauthorized` | boolean | Set to `false` to disable TLS certificate verification. Dev only — see [env overlay](#environment-overlay) |
 
 The `bundle@project` notation tells the framework to look up the actual address from
-`~/.gina/{version}/ports.json` at startup. This means proxy targets always reflect
+`~/.gina/${version}/ports.json` at startup. This means proxy targets always reflect
 the current port allocation without hardcoding addresses.
 
 ### `*` — application constants
@@ -137,11 +137,11 @@ in local development, where self-signed certificates are common.
   "proxy": {
     "coreapi": {
       "rejectUnauthorized": false,
-      "ca": "~/.gina/certificates/scopes/{scope}/{host}/certificate.combined.pem"
+      "ca": "~/.gina/certificates/scopes/${scope}/${host}/certificate.combined.pem"
     },
     "auth": {
       "rejectUnauthorized": false,
-      "ca": "~/.gina/certificates/scopes/{scope}/{host}/certificate.combined.pem"
+      "ca": "~/.gina/certificates/scopes/${scope}/${host}/certificate.combined.pem"
     }
   }
 }
@@ -163,14 +163,14 @@ Only the declared keys are overridden. The base `app.json` supplies `hostname`, 
       "hostname": "coreapi@myproject",
       "port"    : "coreapi@myproject",
       "path"    : "/api",
-      "ca"      : "~/.gina/certificates/scopes/{scope}/{rootDomain}/ca.pem",
+      "ca"      : "~/.gina/certificates/scopes/${scope}/${rootDomain}/ca.pem",
       "requestTimeout" : "30s"
     },
     "auth": {
       "hostname": "auth@myproject",
       "port"    : "auth@myproject",
       "path"    : "/auth",
-      "ca"      : "~/.gina/certificates/scopes/{scope}/{rootDomain}/ca.pem"
+      "ca"      : "~/.gina/certificates/scopes/${scope}/${rootDomain}/ca.pem"
     }
   },
   "uploadMaxSizeMB": 8,

@@ -45,27 +45,27 @@ URL starts with `/css/`, regardless of the filename.
 
 ```json title="src/frontend/config/statics.json"
 {
-  "css" : "{bundlePath}/public/css",
-  "js"  : "{bundlePath}/public/js",
-  "img" : "{bundlePath}/public/img"
+  "css" : "${bundlePath}/public/css",
+  "js"  : "${bundlePath}/public/js",
+  "img" : "${bundlePath}/public/img"
 }
 ```
 
-`GET /css/main.css` → serves `{bundlePath}/public/css/main.css`.
-`GET /js/app.js` → serves `{bundlePath}/public/js/app.js`.
+`GET /css/main.css` → serves `${bundlePath}/public/css/main.css`.
+`GET /js/app.js` → serves `${bundlePath}/public/js/app.js`.
 
-[Path template variables](./index.md#path-template-variables) like `{bundlePath}`
+[Path template variables](./index.md#path-template-variables) like `${bundlePath}`
 are substituted at startup.
 
 The empty-string key `""` maps the bundle root URL — useful for top-level files:
 
 ```json
 {
-  "": "{publicPath}"
+  "": "${publicPath}"
 }
 ```
 
-`GET /favicon.ico` → served from `{publicPath}/favicon.ico`.
+`GET /favicon.ico` → served from `${publicPath}/favicon.ico`.
 
 ---
 
@@ -95,12 +95,12 @@ flowchart LR
 
 | Key | Resolves to | Purpose |
 |---|---|---|
-| `html` | `{templatesPath}/html` | Template HTML files |
-| `sass` | `{templatesPath}/sass` | SASS source files |
-| `handlers` | `{handlersPath}` | Client-side JS handlers |
-| `css/vendor/gina` | `{gina}/framework/v{version}/core/asset/plugin/dist/vendor/gina/css` | Gina's built-in CSS |
-| `js/vendor/gina` | `{gina}/framework/v{version}/core/asset/plugin/dist/vendor/gina/js` | Gina's built-in JS |
-| `""` | `{publicPath}` | Bundle public directory |
+| `html` | `${templatesPath}/html` | Template HTML files |
+| `sass` | `${templatesPath}/sass` | SASS source files |
+| `handlers` | `${handlersPath}` | Client-side JS handlers |
+| `css/vendor/gina` | `${gina}/framework/v${version}/core/asset/plugin/dist/vendor/gina/css` | Gina's built-in CSS |
+| `js/vendor/gina` | `${gina}/framework/v${version}/core/asset/plugin/dist/vendor/gina/js` | Gina's built-in JS |
+| `""` | `${publicPath}` | Bundle public directory |
 
 You never need to declare these yourself unless you want to override one.
 
@@ -113,8 +113,8 @@ To serve assets from another bundle (e.g. sharing a design system's CSS into an
 
 ```json title="src/auth/config/statics.json"
 {
-  "css"        : "{bundlePath}/public/css",
-  "js"         : "{bundlePath}/public/js",
+  "css"        : "${bundlePath}/public/css",
+  "js"         : "${bundlePath}/public/js",
   "shared/css" : "/absolute/path/to/dashboard/public/css"
 }
 ```
@@ -125,7 +125,7 @@ To share across **all** bundles without duplication, use `shared/config/statics.
 
 ```json title="shared/config/statics.json"
 {
-  "js/vendor": "{bundlePath}/../../shared/public/vendor/js"
+  "js/vendor": "${bundlePath}/../../shared/public/vendor/js"
 }
 ```
 
@@ -135,11 +135,11 @@ To share across **all** bundles without duplication, use `shared/config/statics.
 
 ```json title="src/dashboard/config/statics.json"
 {
-  "css"       : "{bundlePath}/public/css",
-  "js"        : "{bundlePath}/public/js",
-  "img"       : "{bundlePath}/public/img",
-  "js/vendor" : "{bundlePath}/public/vendor/js",
-  "fonts"     : "{bundlePath}/public/fonts",
-  "downloads" : "{tmpPath}/downloads"
+  "css"       : "${bundlePath}/public/css",
+  "js"        : "${bundlePath}/public/js",
+  "img"       : "${bundlePath}/public/img",
+  "js/vendor" : "${bundlePath}/public/vendor/js",
+  "fonts"     : "${bundlePath}/public/fonts",
+  "downloads" : "${tmpPath}/downloads"
 }
 ```
