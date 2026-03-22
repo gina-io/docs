@@ -41,10 +41,17 @@ User-managed config files under your bundle's `config/` directory must be
 updated manually.
 
 :::note Unaffected syntax
-- Variables containing dots (`{gina.core}`, `{gina.utils}`) — never processed
-  by whisper; leave them as-is.
-- The `{src:...}` wrapper syntax in `templates.json` — not processed by whisper;
-  leave it as-is.
+- **Dot-notation path references** (`{gina.core}`, `{gina.utils}`) — whisper
+  only matches `${identifier}` where the identifier is word characters (`\w+`).
+  Dots fall outside that set, so dot-notation is never replaced regardless of
+  whether `$` is present. Leave them as-is.
+- **The `{src:...}` wrapper** in `templates.json` — this is a template
+  file-include directive, not a whisper variable. The outer `{src:` prefix is
+  literal and left untouched. Variables _inside_ the wrapper still use the
+  `${variable}` format and are replaced normally:
+  ```json
+  "pluginLoader": "{src:${gina}/framework/v${version}/core/asset/plugin/dist/vendor/gina/js/gina.onload.min.js}"
+  ```
 :::
 
 ---
