@@ -276,6 +276,10 @@ blockquote {
 }
 
 /* ─── Pagination nav ──────────────────────────────────────────────── */
+.pagination-nav {
+  margin-top: 1rem;
+}
+
 .pagination-nav__link {
   border-color: #e5e5e5;
   border-radius: 4px;

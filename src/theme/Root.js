@@ -20,6 +20,7 @@ const NAV_ICONS = {
   // api _category_.json label is "API Reference"
   'api reference': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
   'api': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
+  'globals': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg>`,
   'migration guide': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>`,
 };
 
@@ -375,24 +376,29 @@ function SidebarManager() {
 // ── Diagram zoom modal ────────────────────────────────────────────────────────
 
 function DiagramModal({ svgContent: { html, dark }, onClose }) {
-  const [scale, setScale]   = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const contentRef = useRef(null);
   const dragRef    = useRef({ active: false, x: 0, y: 0 });
-  const stateRef   = useRef({ scale: 1, offset: { x: 0, y: 0 } });
+  const scaleRef   = useRef(1);
+  const offsetRef  = useRef({ x: 0, y: 0 });
 
   const PAN_STEP = 40;
 
+  const applyTransform = () => {
+    if (!contentRef.current) return;
+    const { x, y } = offsetRef.current;
+    contentRef.current.style.transform = `translate(${x}px, ${y}px) scale(${scaleRef.current})`;
+  };
+
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape')             { onClose(); return; }
-      if (e.key === '=' || e.key === '+') { setScale(s => Math.min(6, +(s + 0.2).toFixed(2))); return; }
-      if (e.key === '-')                  { setScale(s => Math.max(0.2, +(s - 0.2).toFixed(2))); return; }
-      if (e.key === '0')                  { setScale(1); setOffset({ x: 0, y: 0 }); return; }
-      if (e.key === 'ArrowLeft')          { setOffset(o => ({ ...o, x: o.x + PAN_STEP })); return; }
-      if (e.key === 'ArrowRight')         { setOffset(o => ({ ...o, x: o.x - PAN_STEP })); return; }
-      if (e.key === 'ArrowUp')            { setOffset(o => ({ ...o, y: o.y + PAN_STEP })); return; }
-      if (e.key === 'ArrowDown')          { setOffset(o => ({ ...o, y: o.y - PAN_STEP })); return; }
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === '=' || e.key === '+') { scaleRef.current = Math.min(6, +(scaleRef.current + 0.2).toFixed(2)); applyTransform(); return; }
+      if (e.key === '-')                  { scaleRef.current = Math.max(0.2, +(scaleRef.current - 0.2).toFixed(2)); applyTransform(); return; }
+      if (e.key === '0')                  { scaleRef.current = 1; offsetRef.current = { x: 0, y: 0 }; applyTransform(); return; }
+      if (e.key === 'ArrowLeft')          { offsetRef.current.x += PAN_STEP; applyTransform(); return; }
+      if (e.key === 'ArrowRight')         { offsetRef.current.x -= PAN_STEP; applyTransform(); return; }
+      if (e.key === 'ArrowUp')            { offsetRef.current.y += PAN_STEP; applyTransform(); return; }
+      if (e.key === 'ArrowDown')          { offsetRef.current.y -= PAN_STEP; applyTransform(); return; }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -401,43 +407,46 @@ function DiagramModal({ svgContent: { html, dark }, onClose }) {
   useEffect(() => {
     const onWheel = (e) => {
       e.preventDefault();
-      const { scale: s, offset: o } = stateRef.current;
-      const d         = e.deltaY < 0 ? 0.12 : -0.12;
-      const newScale  = Math.min(6, Math.max(0.2, +(s + d).toFixed(2)));
-      const ratio     = newScale / s;
-      const cx        = window.innerWidth  / 2;
-      const cy        = window.innerHeight / 2;
-      const newOffset = {
+      const s = scaleRef.current;
+      const o = offsetRef.current;
+      const d        = e.deltaY < 0 ? 0.12 : -0.12;
+      const newScale = Math.min(6, Math.max(0.2, +(s + d).toFixed(2)));
+      const ratio    = newScale / s;
+      const cx       = window.innerWidth  / 2;
+      const cy       = window.innerHeight / 2;
+      scaleRef.current  = newScale;
+      offsetRef.current = {
         x: (e.clientX - cx) * (1 - ratio) + o.x * ratio,
         y: (e.clientY - cy) * (1 - ratio) + o.y * ratio,
       };
-      stateRef.current = { scale: newScale, offset: newOffset };
-      setScale(newScale);
-      setOffset(newOffset);
+      applyTransform();
     };
     window.addEventListener('wheel', onWheel, { passive: false });
     return () => window.removeEventListener('wheel', onWheel);
   }, []);
 
-  const onMouseDown = (e) => {
+  const onPointerDown = (e) => {
     if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, x: e.clientX, y: e.clientY };
     e.currentTarget.style.cursor = 'grabbing';
   };
 
-  const onMouseMove = (e) => {
+  const onPointerMove = (e) => {
     if (!dragRef.current.active) return;
-    setOffset(o => ({
-      x: o.x + (e.clientX - dragRef.current.x),
-      y: o.y + (e.clientY - dragRef.current.y),
-    }));
+    offsetRef.current = {
+      x: offsetRef.current.x + (e.clientX - dragRef.current.x),
+      y: offsetRef.current.y + (e.clientY - dragRef.current.y),
+    };
     dragRef.current.x = e.clientX;
     dragRef.current.y = e.clientY;
+    applyTransform();
   };
 
-  const onMouseUp = (e) => {
+  const onPointerUp = (e) => {
     dragRef.current.active = false;
-    if (e.currentTarget) e.currentTarget.style.cursor = 'grab';
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    e.currentTarget.style.cursor = 'grab';
   };
 
   return (
@@ -455,14 +464,20 @@ function DiagramModal({ svgContent: { html, dark }, onClose }) {
         aria-label="Close"
         style={{
           position: 'fixed', top: 14, right: 18,
-          background: '#fff', color: '#222', border: 'none', borderRadius: '50%',
-          width: 34, height: 34, fontSize: 20, lineHeight: 1,
+          background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
+          borderRadius: '50%', width: 36, height: 36,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.45)',
+          backdropFilter: 'blur(6px)', transition: 'background 0.15s',
           zIndex: 10001,
         }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
       >
-        ×
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="1" y1="1" x2="11" y2="11" />
+          <line x1="11" y1="1" x2="1" y2="11" />
+        </svg>
       </button>
       <div
         style={{
@@ -478,13 +493,13 @@ function DiagramModal({ svgContent: { html, dark }, onClose }) {
       <div
         ref={contentRef}
         onClick={e => e.stopPropagation()}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
         style={{
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+          transform: 'translate(0px, 0px) scale(1)',
           transformOrigin: 'center center',
+          willChange: 'transform',
           background: dark ? '#1e1e1e' : '#fff',
           borderRadius: 8, padding: 24,
           cursor: 'grab', userSelect: 'none',
