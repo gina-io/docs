@@ -92,6 +92,7 @@ const config = {
             docId: 'roadmap',
             position: 'left',
             label: 'Roadmap',
+            className: 'navbar-roadmap-link',
           },
           {
             label: 'v' + ginaVersion,
