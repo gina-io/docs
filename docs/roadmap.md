@@ -73,7 +73,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 
 ## Connectors
 
-New database connectors follow the same interface as the existing Couchbase/MongoDB connectors: declared in `connectors.json`, acquired via `getConnection()`.
+New database connectors follow the same interface as the existing Couchbase connector: declared in `connectors.json`, acquired via `getConnection()`.
 
 | Status | Connector | Version | Target | Notes |
 | --- | --- | --- | --- | --- |
