@@ -88,6 +88,12 @@ const config = {
             label: 'Docs',
           },
           {
+            type: 'doc',
+            docId: 'roadmap',
+            position: 'left',
+            label: 'Roadmap',
+          },
+          {
             label: 'v' + ginaVersion,
             href: 'https://github.com/Rhinostone/gina/releases',
             position: 'right',
@@ -130,7 +136,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © 2009-${new Date().getFullYear()} Rhinostone. Built with Docusaurus.`,
+        copyright: `Copyright © 2009-${new Date().getFullYear()} Rhinostone.`,
       },
       prism: {
         theme: prismThemes.github,
