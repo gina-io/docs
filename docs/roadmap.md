@@ -17,7 +17,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Apr 2026** | `0.1.8` ✅ | Scaffold correctness · K8s support · Dependency injection · Automatic version migration |
 | **Q2 2026** | `0.2.0` | Stability · WatcherService · Redis & SQLite connectors · K8s session storage · Startup cache · Pointer compression · Couchbase v2 deprecation |
 | **Q3 2026** | `0.3.0` | Async/await · Dev hot-reload · MySQL & PostgreSQL connectors · AI Phase 2 · Tutorials · Mobile backend guide · Route radix tree · Connector peerDependencies |
-| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Advanced tutorial · Website redesign · Bun investigation · Couchbase v2 removal |
+| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
@@ -41,7 +41,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | --- | --- | --- | --- |
 | 📋 | **Per-request controller instances** — Each HTTP request gets its own isolated controller instance with its own request state. Removes dead singleton infrastructure and fixes edge-case memory retention in error paths. | `0.2.0` | Q2 2026 |
 | 📋 | **Entity `_arguments` buffer scoped to call** — Move the event result buffer from the entity to the individual call, preventing concurrent callers from sharing state. | `0.2.0` | Q2 2026 |
-| 📋 | **Retire `freeMemory`** — Once per-request instances land, replace the legacy `freeMemory` helper with explicit nulling at response exit points. | `0.2.0` | Q2 2026 |
+| ✅ | **Retire `freeMemory`** — Once per-request instances land, replace the legacy `freeMemory` helper with explicit nulling at response exit points. | `0.2.0` | Q2 2026 |
 
 ### Phase 2 — Async
 
@@ -168,6 +168,7 @@ Windows compatibility is a hard requirement for `1.0.0`. The alpha scope covers 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
 | 📋 | **Official website redesign + docs integration** — Refactor gina.io as a proper project homepage (landing page, feature highlights, showcase) with the documentation fully integrated. Single coherent web presence. Prerequisite: tutorials complete. | `0.4.0` | Q4 2026 |
+| 📋 | **Docs offline ZIP** — One-click download of the complete gina.io documentation as a static HTML ZIP archive. Generated at deploy time by the Docusaurus build pipeline — no server-side logic required. Targeted at users in regions with limited or expensive internet access (offline-first for the African market). | `0.4.0` | Q4 2026 |
 
 ---
 
