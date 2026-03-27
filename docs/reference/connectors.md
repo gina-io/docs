@@ -113,6 +113,103 @@ is independently available to the model layer.
 
 ---
 
+## Redis
+
+Used as a **session store** for multi-pod and K8s deployments.
+Requires `ioredis` installed in your project: `npm install ioredis`.
+
+See [Sessions guide](../guides/sessions#redis-production--multi-pod) for wiring instructions.
+
+### Standalone
+
+```json title="src/api/config/connectors.json"
+{
+  "myRedis": {
+    "connector": "redis",
+    "host"     : "127.0.0.1",
+    "port"     : 6379,
+    "password" : "",
+    "ttl"      : 86400,
+    "prefix"   : "sess:"
+  }
+}
+```
+
+### Redis Cluster
+
+```json
+{
+  "myRedis": {
+    "connector": "redis",
+    "cluster"  : [
+      { "host": "node1.redis.internal", "port": 6379 },
+      { "host": "node2.redis.internal", "port": 6379 }
+    ],
+    "password" : "${REDIS_PASSWORD}",
+    "tls"      : true,
+    "ttl"      : 86400
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"redis"` | — | Selects the Redis connector |
+| `host` | string | `"127.0.0.1"` | Redis host (standalone mode) |
+| `port` | number | `6379` | Redis port |
+| `db` | number | `0` | Redis DB index |
+| `password` | string | — | `AUTH` password |
+| `tls` | boolean | `false` | Enable TLS. Required for Upstash, ElastiCache, Cloud Memorystore. |
+| `cluster` | array | — | Cluster nodes `[{ host, port }, ...]`. When present, standalone fields are ignored. |
+| `ttl` | number | `86400` | Session TTL in seconds |
+| `prefix` | string | `"sess:"` | Key prefix in Redis |
+
+---
+
+## SQLite
+
+Used as a **session store** for development, staging, and single-pod production.
+Uses the Node.js built-in `node:sqlite` module — **zero npm dependencies**.
+Requires Node.js ≥ 22.5.0.
+
+See [Sessions guide](../guides/sessions#sqlite-dev--staging--single-pod) for wiring instructions.
+
+### In-memory (dev)
+
+```json title="src/api/config/connectors.json"
+{
+  "myDb": {
+    "connector": "sqlite",
+    "database" : ":memory:",
+    "ttl"      : 86400
+  }
+}
+```
+
+### File-based (staging / single-pod production)
+
+```json
+{
+  "myDb": {
+    "connector"      : "sqlite",
+    "database"       : "/app/data/sessions.db",
+    "ttl"            : 86400,
+    "prefix"         : "sess:",
+    "cleanupInterval": 900
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"sqlite"` | — | Selects the SQLite connector |
+| `database` | string | `~/.gina/{v}/sessions-{bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
+| `ttl` | number | `86400` | Session TTL in seconds |
+| `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
+| `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable. |
+
+---
+
 ## Environment overlay
 
 Use `connectors.dev.json` to point to a local database during development

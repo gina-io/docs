@@ -152,6 +152,14 @@ gina-container <bundle> @<project>
 
 ---
 
+## Base image
+
+The examples below use `node:22-slim`. For production, consider a pointer-compressed
+base image — see [V8 pointer compression](#v8-pointer-compression) for details and
+a ~50% memory reduction at no API cost.
+
+---
+
 ## Dockerfile — bootstrap at build time
 
 The simplest pattern bakes `~/.gina/` into the image during `docker build`.
@@ -159,6 +167,7 @@ This works well when the bundle, env, and port config are fixed per image.
 
 ```dockerfile
 FROM node:22-slim
+# or: FROM platformatic/node-caged:22   (pointer compression, ~50% less heap)
 
 # Install gina globally
 RUN npm install -g gina
@@ -194,6 +203,7 @@ in the entrypoint instead:
 
 ```dockerfile
 FROM node:22-slim
+# or: FROM platformatic/node-caged:22
 
 RUN npm install -g gina
 
@@ -362,3 +372,265 @@ volumes:
     secret:
       secretName: myproject-api-tls
 ```
+
+---
+
+## V8 pointer compression
+
+Node.js built with `--experimental-enable-pointer-compression` uses 32-bit offsets
+instead of 64-bit pointers inside the V8 heap. The result is a consistent **~50%
+reduction in heap memory** for all pointer-heavy structures — objects, arrays,
+routing tables, template caches, entity results.
+
+Gina detects this at startup and logs:
+
+```
+[gina] V8 pointer compression active — heap limit: 4096 MB per isolate
+```
+
+It also sets `process.env.GINA_V8_POINTER_COMPRESSED=true` so connectors and
+bundle code can react to it.
+
+### Ready-to-use images
+
+| Image | Pointer compression | Full ICU | Notes |
+|---|---|---|---|
+| `node:22-slim` | ✗ | ✗ | Official image, standard build |
+| `platformatic/node-caged:22` | ✓ | ✗ | Pre-built, Debian bookworm |
+| Custom build (see below) | ✓ | ✓ | Recommended for production |
+
+`full-icu` matters for gina's locale and I18n system. `platformatic/node-caged`
+uses the default `small-icu` — dates, number formatting, and currency may behave
+unexpectedly without the full ICU data. If your bundles use `region`, `culture`,
+or `Intl` APIs, use a custom build or add `full-icu` as an npm package.
+
+### Building your own pointer-compressed Node.js image
+
+```dockerfile
+FROM debian:bookworm-slim AS build
+
+ARG NODE_VERSION=22.14.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3 ca-certificates curl xz-utils gnupg ccache \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}.tar.xz" \
+    && tar -xJf "node-v${NODE_VERSION}.tar.xz" -C /usr/src \
+    && rm "node-v${NODE_VERSION}.tar.xz"
+
+WORKDIR /usr/src/node-v${NODE_VERSION}
+RUN CC="ccache gcc" CXX="ccache g++" \
+    ./configure \
+        --prefix=/usr/local \
+        --with-intl=full-icu \
+        --experimental-enable-pointer-compression \
+    && make -j$(nproc) \
+    && make install DESTDIR=/node-dist
+
+FROM debian:bookworm-slim AS runtime
+COPY --from=build /node-dist/usr/local /usr/local
+RUN groupadd --gid 1000 node \
+    && useradd --uid 1000 --gid node --shell /bin/bash --create-home node
+USER node
+CMD ["node"]
+```
+
+For ARM64 hosts, add `-march=armv8-a+crypto` to `CFLAGS`/`CXXFLAGS` to enable
+hardware AES-GCM and SHA-2 acceleration — every TLS handshake on HTTP/2 benefits.
+
+### The 4 GB heap ceiling
+
+Pointer compression trades the unlimited heap of a standard build for a hard
+**4 GB ceiling per V8 isolate**. In gina's model:
+
+- Each bundle is a separate OS process — each gets its own 4 GB.
+- The libuv thread pool (`UV_THREADPOOL_SIZE`) uses OS threads, not V8 isolates —
+  they do **not** count against the 4 GB.
+- Setting `--max-old-space-size` above `4096` has no effect and is silently ignored.
+
+**When 4 GB is enough (most cases)**
+
+A typical gina bundle — routing table, swig template cache, active sessions,
+recent entity results — uses well under 1 GB at any realistic request volume.
+The 50% memory saving means you can run twice as many bundle pods on the same nodes.
+
+**When you might approach the ceiling**
+
+- Holding very large entity result sets in-process (millions of objects)
+- In-process session store with many long-lived sessions
+- Deeply nested template data passed to `render()`
+
+**How to scale past 4 GB if needed**
+
+- Split load across multiple bundle processes (each gets its own 4 GB)
+- Move sessions to Redis (#CN1) — no heap usage per session
+- Move cache to Redis or SQLite (#CN2) — keep the heap for request processing only
+
+### Native addon compatibility
+
+Gina itself is pure JavaScript and works without any changes on pointer-compressed
+builds. If your bundles use native addons, check the ABI:
+
+| ABI | Compatible | Notes |
+|---|---|---|
+| **N-API** | ✓ | Stable ABI, pointer-compression-aware. All new gina connectors use N-API libraries only. |
+| **NAN** | ✗ | Uses raw V8 pointers — will segfault. Avoid packages that depend on `nan`. |
+
+The Couchbase v2 connector (`core/connectors/couchbase/v2/`) uses a NAN-based
+native binary and is **incompatible** with pointer-compressed Node.js. Use the
+v3 or v4 connector instead — both use N-API. Gina logs a warning at startup
+when `GINA_V8_POINTER_COMPRESSED=true` and the v2 connector is loaded.
+
+---
+
+## Session storage
+
+The default in-memory session store is **per-process**. In a multi-pod
+deployment, each pod maintains its own independent session state. When the load
+balancer routes a request to a different pod than the one that created the
+session, the session is not found and the user is logged out.
+
+The fix is to move sessions to a **shared external store** that all pods can
+reach — Redis is the standard choice for this.
+
+### Redis — multi-pod
+
+```bash
+npm install ioredis
+```
+
+Add a Redis connector to your bundle's `connectors.json`:
+
+```json title="src/api/config/connectors.json"
+{
+  "myRedis": {
+    "connector": "redis",
+    "host"     : "redis.internal",
+    "port"     : 6379,
+    "password" : "${REDIS_PASSWORD}",
+    "tls"      : true,
+    "ttl"      : 86400,
+    "prefix"   : "sess:"
+  }
+}
+```
+
+Wire it in `bundle/index.js`:
+
+```js title="src/api/index.js"
+var myapp        = require('gina');
+var lib          = myapp.lib;
+var session      = require('express-session');
+var SessionStore = lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'myRedis';
+    var RedisStore = new SessionStore(session);
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new RedisStore(),
+        cookie           : { secure: true, maxAge: 86400000 }
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.start();
+```
+
+### K8s Secrets for credentials
+
+Store the Redis password and session secret as K8s Secrets — never in
+ConfigMaps or env vars hardcoded in the manifest:
+
+```bash
+kubectl create secret generic myproject-secrets \
+  --from-literal=session-secret=$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))") \
+  --from-literal=redis-password=<your-redis-password>
+```
+
+Reference them in the Pod spec:
+
+```yaml
+env:
+  - name: SESSION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: myproject-secrets
+        key: session-secret
+  - name: REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: myproject-secrets
+        key: redis-password
+```
+
+### Managed Redis providers
+
+| Provider | `host` | `tls` | Notes |
+|---|---|---|---|
+| **Upstash** | `*.upstash.io` | `true` | Free tier available, global replicas |
+| **AWS ElastiCache** | `*.cache.amazonaws.com` | `true` | Use Cluster mode for HA |
+| **GCP Cloud Memorystore** | `10.x.x.x` (VPC internal) | `false` | TLS optional, VPC peering required |
+| **Azure Cache for Redis** | `*.redis.cache.windows.net` | `true` | |
+
+For Redis Cluster mode (ElastiCache with cluster enabled):
+
+```json
+{
+  "myRedis": {
+    "connector": "redis",
+    "cluster"  : [
+      { "host": "node1.cache.amazonaws.com", "port": 6379 },
+      { "host": "node2.cache.amazonaws.com", "port": 6379 }
+    ],
+    "password" : "${REDIS_PASSWORD}",
+    "tls"      : true,
+    "ttl"      : 86400
+  }
+}
+```
+
+### Full Deployment with Redis
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myproject-api
+spec:
+  replicas: 3
+  template:
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: api
+          image: myregistry/myproject-api:latest
+          envFrom:
+            - configMapRef:
+                name: myproject-gina-config
+          env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: myproject-secrets
+                  key: session-secret
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: myproject-secrets
+                  key: redis-password
+          ports:
+            - containerPort: 3100
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 3"]
+```
+
+For the full sessions guide including SQLite (single-pod/dev), cookie options,
+and controller usage see [Sessions](./sessions).
