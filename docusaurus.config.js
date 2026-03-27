@@ -88,8 +88,8 @@ const config = {
             label: 'Docs',
           },
           {
-            type: 'doc',
-            docId: 'roadmap',
+            type: 'docSidebar',
+            sidebarId: 'roadmapSidebar',
             position: 'left',
             label: 'Roadmap',
             className: 'navbar-roadmap-link',
