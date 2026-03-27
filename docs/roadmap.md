@@ -15,9 +15,9 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | Period | Version | Focus |
 | --- | --- | --- |
 | **Apr 2026** | `0.1.8` ✅ | Scaffold correctness · K8s support · Dependency injection · Automatic version migration |
-| **Q2 2026** | `0.2.0` | Stability · WatcherService · Redis & SQLite connectors · K8s session storage · Startup cache |
-| **Q3 2026** | `0.3.0` | Async/await · Dev hot-reload · MySQL & PostgreSQL connectors · AI Phase 2 · Tutorials · Mobile backend guide · Route radix tree |
-| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Advanced tutorial · Website redesign · Bun investigation |
+| **Q2 2026** | `0.2.0` | Stability · WatcherService · Redis & SQLite connectors · K8s session storage · Startup cache · Pointer compression · Couchbase v2 deprecation |
+| **Q3 2026** | `0.3.0` | Async/await · Dev hot-reload · MySQL & PostgreSQL connectors · AI Phase 2 · Tutorials · Mobile backend guide · Route radix tree · Connector peerDependencies |
+| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Advanced tutorial · Website redesign · Bun investigation · Couchbase v2 removal |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
@@ -39,7 +39,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Per-request controller instances** — Each request gets its own controller instance, eliminating shared mutable state under concurrency. | `0.2.0` | Q2 2026 |
+| 📋 | **Per-request controller instances** — Each HTTP request gets its own isolated controller instance with its own request state. Removes dead singleton infrastructure and fixes edge-case memory retention in error paths. | `0.2.0` | Q2 2026 |
 | 📋 | **Entity `_arguments` buffer scoped to call** — Move the event result buffer from the entity to the individual call, preventing concurrent callers from sharing state. | `0.2.0` | Q2 2026 |
 | 📋 | **Retire `freeMemory`** — Once per-request instances land, replace the legacy `freeMemory` helper with explicit nulling at response exit points. | `0.2.0` | Q2 2026 |
 
@@ -71,6 +71,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | 📋 | **ESM compatibility layer** — Dual CJS/ESM entry points via `"exports"` in `package.json`. Framework internals stay CJS; public API gets ESM re-exports. | `0.5.0` | Q1 2027 |
 | 📋 | **Pluggable template engine** — Swig 1.4.2 stays fully integrated and remains the default. Nunjucks added as a supported alternative (opt-in per project via config). The render layer is abstracted behind a common interface so both engines co-exist. Switching to Nunjucks requires a per-project migration guide (breaking differences: `{% parent %}` → `{{ super() }}`, filter renames, autoescape default, `date` format strings, no `{% spaceless %}` — see docs). | `0.5.0` | Q1 2027 |
 | 📋 | **Structured logging** — JSON log output (`{ level, message, bundle, requestId, durationMs }`). Additive — existing consumers are unaffected. Enables log aggregation (Loki, Datadog, CloudWatch). | `0.5.0` | Q1 2027 |
+| 📋 | **Research `AsyncLocalStorage` for request context** — Evaluate `node:async_hooks` `AsyncLocalStorage` as a replacement for the `local` closure pattern, giving true async isolation across `setTimeout`, Promises, and `async/await` chains without any closure threading. Output: decision doc + proof-of-concept branch. | `0.5.0` | Q1 2027 |
 
 ---
 
@@ -86,6 +87,9 @@ New database connectors follow the same interface as the existing Couchbase conn
 | 📋 | **PostgreSQL** | `0.3.0` | Q3 2026 | ORM connector. Client: `pg` (node-postgres). |
 | 📋 | **ScyllaDB** | `0.4.0` | Q4 2026 | Cassandra-compatible wide-column store. Client: `@scylladb/scylla-driver`. |
 | 📋 | **MongoDB** | `0.4.0` | Q4 2026 | Document store connector. Client: `mongodb` (official driver). Interface approach TBD — MongoDB's document model differs from the N1QL/SQL pattern used by existing connectors. |
+| 📋 | **Couchbase SDK v2 deprecation** | `0.2.0` | Q2 2026 | Couchbase Server SDK v2 reached end-of-life in 2021. Starting in `0.2.0`, the connector logs a deprecation warning at connection time. When V8 pointer compression is active, a fatal error is also emitted (v2 uses NAN bindings, which are incompatible and can cause a segfault). Upgrade path: set `sdk.version` to `3` or `4` in your bundle's `connectors.json`. |
+| 📋 | **Couchbase SDK v2 removal** | `0.4.0` | Q4 2026 | `connector.v2.js` removed in `0.4.0`. The default falls back to v3 when `sdk.version` is unset. Migration guide in `CHANGELOG.md`. |
+| 📋 | **`peerDependencies` for connector clients** | `0.3.0` | Q3 2026 | Connector client libraries (`ioredis`, `mysql2`, `pg`, `mongodb`, `@scylladb/scylla-driver`, `couchbase`) are loaded from the user's project — gina has zero runtime npm dependencies. `peerDependencies` (all optional) will signal the tested version range and surface an `npm install` compatibility warning when a user pins an untested version. |
 
 ---
 
@@ -134,6 +138,7 @@ New database connectors follow the same interface as the existing Couchbase conn
 | 📋 | **`NODE_COMPILE_CACHE` — V8 bytecode startup cache** | `0.2.0` | Q2 2026 | Node.js 22.8+ caches compiled V8 bytecode to disk. Set once at startup — 30–60% faster cold start on subsequent runs with zero code changes to user bundles. No-op on Node < 22.8, so safe to ship unconditionally. |
 | 📋 | **Route radix tree — compile `routing.json` at startup** | `0.3.0` | Q3 2026 | Current router does linear matching against `routing.json` on every request. Pre-compile routes into a radix tree at bundle startup for O(log n) matching. 2–3x faster routing layer. Internal change — no user-facing API change. |
 | 📋 | **Bun runtime compatibility investigation** | `0.4.0` | Q4 2026 | Prototype Gina under Bun. Two blockers to verify: `require.cache` deletion (dev hot-reload) and `node:http2` completeness. If both pass, Bun gives 3–10x faster startup and meaningful throughput gains. Deliverable: a compatibility report. |
+| 📋 | **V8 pointer compression support** | `0.2.0` | Q2 2026 | Node.js built with `--experimental-enable-pointer-compression` (e.g. [node-caged](https://github.com/platformatic/node-caged) or a custom build) delivers ~50% heap memory reduction across all pointer-heavy structures. Gina is pure JS — compatible out of the box. Adds: startup detection + `GINA_V8_POINTER_COMPRESSED` env var, Dockerfile guide with custom build recipe, 4 GB ceiling documentation, N-API-only connector policy. |
 
 ---
 
