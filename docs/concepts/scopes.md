@@ -93,3 +93,74 @@ Certificate paths include the scope name:
 ```
 
 See [HTTPS and HTTP/2](../guides/https) for the full certificate setup guide.
+
+---
+
+## Scopes and data isolation
+
+Scopes extend to the data layer. When a bundle uses a Couchbase connector, every
+document written to the database is stamped with a `_scope` field that matches the
+active scope. This lets multiple environments share the same Couchbase cluster and
+bucket without data leaking between them.
+
+### How it works
+
+The connector reads the `scope` field from `connectors.json` (or falls back to
+`process.env.NODE_SCOPE`) and stamps it on every document at insert time. N1QL
+queries filter on it automatically via the `$scope` placeholder:
+
+```sql
+SELECT c.*
+FROM myapp AS c USE KEYS [$1]
+WHERE c._collection = 'invoice'
+AND   c._scope      = $scope
+```
+
+`$scope` is replaced with the connector's resolved scope value before the query is
+dispatched — the same SQL file works unchanged across all environments.
+
+### Adding `scope` to a connector
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol": "couchbase://",
+    "host":     "127.0.0.1",
+    "database": "myapp",
+    "username": "appuser",
+    "password": "secret",
+    "scope":    "local"
+  }
+}
+```
+
+When `scope` is omitted the connector falls back to `process.env.NODE_SCOPE`, so
+development environments usually work without setting it explicitly.
+
+### Scope values
+
+| Value | Environment |
+|---|---|
+| `local` | Local development |
+| `beta` | Staging / beta |
+| `production` | Production |
+| `testing` | Automated test runs — wiped before each suite |
+
+### Backfilling existing documents
+
+Documents created before `_scope` was introduced will have the field missing. Run
+the backfill script once per environment to stamp them:
+
+```bash
+node script/backfill-scope.js --scope=local --host=localhost:8093
+```
+
+The script updates all documents where `_scope IS MISSING` and is safe to run
+multiple times — subsequent runs are no-ops.
+
+### Why not separate buckets?
+
+Couchbase Community Edition is capped at five buckets. `_scope` achieves the same
+isolation without consuming a bucket slot, following the same pattern as
+`_collection` (the document type discriminator already used throughout Gina's
+entity system).

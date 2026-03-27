@@ -151,6 +151,8 @@ Each page is auto-generated from JSDoc at build time.
 | Module | Description |
 |---|---|
 ${tableRows}
+
+For globally injected functions (no \`require()\` needed), see [Globals](/globals).
 `;
 
 fs.writeFileSync(path.join(OUTPUT_DIR, 'index.md'), indexContent);
