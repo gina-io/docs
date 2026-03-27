@@ -33,7 +33,8 @@ to acquire a database connection. The connector type is determined by the
     "database" : "myapp",
     "username" : "appuser",
     "password"  : "secret",
-    "ping"     : "2m"
+    "ping"     : "2m",
+    "scope"    : "production"
   }
 }
 ```
@@ -46,6 +47,7 @@ to acquire a database connection. The connector type is determined by the
 | `username` | string | Couchbase RBAC username |
 | `password` | string | RBAC password |
 | `ping` | string | Interval to ping the cluster and verify connectivity (e.g. `"2m"`, `"30s"`) |
+| `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
 
 ### Multi-host clusters
 
