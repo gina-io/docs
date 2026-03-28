@@ -3,7 +3,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import readingTimePlugin from './src/remark/reading-time.js';
 
 // Updated automatically by gina's post_publish script on each release.
-const ginaVersion = '0.1.9-alpha.1';
+const ginaVersion = '0.1.9-alpha.2';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -45,6 +45,10 @@ const config = {
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/gina-io/docs/tree/main/',
           remarkPlugins: [readingTimePlugin],
+          async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
+            const items = await defaultSidebarItemsGenerator(args);
+            return items.filter(item => !(item.type === 'doc' && item.id === 'roadmap'));
+          },
         },
         blog: {
           showReadingTime: true,
