@@ -40,7 +40,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Per-request controller instances** — Each HTTP request gets its own isolated controller instance with its own request state. Removes dead singleton infrastructure and fixes edge-case memory retention in error paths. | `0.2.0` | Q2 2026 |
+| ✅ | **Per-request controller instances** — Each HTTP request gets its own isolated controller instance with its own request state. Removes dead singleton infrastructure and fixes edge-case memory retention in error paths. | `0.2.0` | Q2 2026 |
 | 📋 | **Entity `_arguments` buffer scoped to call** — Move the event result buffer from the entity to the individual call, preventing concurrent callers from sharing state. | `0.2.0` | Q2 2026 |
 | ✅ | **Retire `freeMemory`** — Once per-request instances land, replace the legacy `freeMemory` helper with explicit nulling at response exit points. | `0.2.0` | Q2 2026 |
 
