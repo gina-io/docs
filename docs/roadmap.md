@@ -162,7 +162,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **JSON Schemas for config files** — Machine-readable schemas for `routing.json`, `connectors.json`, `app.json`, `settings.json`, `app.crons.json`. Adds `"$schema"` references to generated scaffold files. Free validation and autocomplete in any editor that supports JSON Schema. | `0.2.0` | Q2 2026 |
+| ✅ | **JSON Schemas for config files** — Machine-readable schemas for `routing.json`, `connectors.json`, `app.json`, `settings.json`, `app.crons.json`. Adds `"$schema"` references to generated scaffold files. Free validation and autocomplete in any editor that supports JSON Schema. | `0.2.0` | Q2 2026 |
 | 📋 | **TypeScript declaration files** — Cross-listed with Modernisation Phase 4. Essential for AI code generation accuracy. | `0.4.0` | Q4 2026 |
 
 ### Phase 2 — Gina apps can use AI
