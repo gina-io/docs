@@ -3,13 +3,13 @@ id: path
 title: Path Helper
 sidebar_label: Path
 sidebar_position: 2
+description: Global path constructor and named-path registry for the Gina framework, wrapping Node.js fs and path modules with cross-platform file-system operations.
 ---
 
 # Path Helper
 
 The path helper injects the global `_()` constructor and the named-path registry
-functions. It wraps Node's `path` and `fs` modules with a cross-platform,
-EventEmitter-based API for file-system operations.
+functions (`setPath`, `getPath`, `setPaths`, `getPaths`). It wraps Node's `path` and `fs` modules with a cross-platform, EventEmitter-based API for file-system operations, available everywhere in bundle code without a `require()` call.
 
 ---
 

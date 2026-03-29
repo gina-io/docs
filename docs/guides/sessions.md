@@ -1,5 +1,8 @@
 ---
+title: Sessions
+sidebar_label: Sessions
 sidebar_position: 4.5
+description: Configure session management in Gina with express-session — in-memory, SQLite, and Redis stores, cookie options, secrets, and Kubernetes deployment.
 ---
 
 # Sessions
@@ -7,6 +10,7 @@ sidebar_position: 4.5
 Gina uses [`express-session`](https://github.com/expressjs/session) for session
 management. Sessions are opt-in — you wire the middleware yourself in
 `bundle/index.js` so you control exactly how they behave.
+Three store backends are supported out of the box: in-memory for local development, SQLite for single-process deployments, and Redis for horizontally scaled production clusters.
 
 ---
 

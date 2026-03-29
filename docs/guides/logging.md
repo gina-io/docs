@@ -1,5 +1,8 @@
 ---
+title: Logging
+sidebar_label: Logging
 sidebar_position: 5
+description: How logging works in Gina, the Node.js MVC framework — RFC 5424 severity levels, hierarchy-based filtering, multi-bundle group isolation, the MQ tail transport, and log configuration.
 ---
 
 # Logging
@@ -7,7 +10,7 @@ sidebar_position: 5
 Gina's logger is a multi-group, multi-transport structured logger built on top of
 Node.js `process.emit`. It replaces the global `console` object so your bundle code
 calls `console.info(...)`, `console.err(...)`, etc. as normal — with full control
-over what gets shown, where, and at what severity.
+over what gets shown, where, and at what severity. Because each Gina bundle runs as a separate Node.js process, log groups are isolated per bundle, and `gina tail` aggregates them into a single real-time stream on port 8125.
 
 ---
 

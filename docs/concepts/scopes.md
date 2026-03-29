@@ -1,12 +1,15 @@
 ---
+title: Scopes
+sidebar_label: Scopes
 sidebar_position: 3
+description: Scopes in Gina isolate configuration, certificates, and data across deployment targets like local, staging, and production — enabling safe multi-environment operation on a single cluster.
 ---
 
 # Scopes
 
 A **scope** is a named deployment target within a project. Scopes let you maintain
 separate configurations, certificate paths, and build outputs for different
-deployment destinations — for example `local`, `production`, or `staging`.
+deployment destinations — for example `local`, `production`, or `staging`. Unlike plain environment variables, scopes are enforced at the data layer: every document written through a Gina connector is stamped with the active scope, preventing cross-environment data leaks even when environments share the same database cluster.
 
 Every project starts with two default scopes: `local` and `production`.
 

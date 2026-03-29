@@ -3,12 +3,13 @@ id: text
 title: Text Helper
 sidebar_label: Text
 sidebar_position: 9
+description: Global i18n translation stub and String.prototype trimming utilities for the Gina framework, injected at startup without require().
 ---
 
 # Text Helper
 
 The text helper injects the `__()` translation stub and extends `String.prototype`
-with trimming utilities.
+with trimming utilities. Both are available globally in bundle code after framework startup, providing a forward-compatible i18n entry point and convenience methods for whitespace handling.
 
 ---
 

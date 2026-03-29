@@ -1,10 +1,13 @@
 ---
+title: Installation
+sidebar_label: Installation
 sidebar_position: 1
+description: Install the Gina Node.js MVC framework globally via npm — with a custom prefix, a classical global install, or a local per-project setup.
 ---
 
 # Installation
 
-Gina is distributed via npm. Because it acts as both a framework and a deployment environment, it is recommended to install it **globally**.
+Gina is distributed via npm. Because it acts as both a framework and a deployment environment, it is recommended to install it **globally**. A global install gives you the `gina` CLI, which manages projects, bundles, ports, and the framework socket server from any directory on your machine.
 
 ## Method 1 — Custom prefix (recommended)
 

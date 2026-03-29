@@ -1,8 +1,13 @@
 ---
+title: Projects and Bundles
+sidebar_label: Projects and Bundles
 sidebar_position: 1
+description: Gina organises code into projects and bundles — a project groups related services, while each bundle runs as an independent Node.js process with its own port and lifecycle.
 ---
 
 # Projects and bundles
+
+Projects and bundles are the two core organisational units in Gina. A project represents your domain (a website, product, or service group), and each bundle inside it is a standalone Node.js application with its own process, port, and configuration. This separation lets you run a frontend, an API, and an admin panel side by side without a custom process manager.
 
 ## Projects
 

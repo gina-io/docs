@@ -3,13 +3,14 @@ id: task
 title: Task Helper
 sidebar_label: Task
 sidebar_position: 6
+description: Global run() function for executing shell commands from Gina bundle code, with EventEmitter-based streaming output and completion callbacks.
 ---
 
 # Task Helper
 
 The task helper injects the global `run()` function for executing shell commands
 from within bundle code. It wraps `child_process.spawn` and provides an
-EventEmitter-based interface for streaming output and completion callbacks.
+EventEmitter-based interface for streaming output and completion callbacks. No `require()` call is needed — `run()` is available globally after framework startup.
 
 ---
 

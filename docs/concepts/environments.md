@@ -1,10 +1,13 @@
 ---
+title: Environments
+sidebar_label: Environments
 sidebar_position: 2
+description: Gina separates framework environments from project environments, giving you independent control over dev/prod modes, hot-reload, and per-bundle build output.
 ---
 
 # Environments
 
-Gina has two independent concepts of "environment": one for the **framework itself**, and one for your **project and bundles**.
+Gina has two independent concepts of "environment": one for the **framework itself**, and one for your **project and bundles**. Understanding the distinction is important because the framework environment controls hot-reload and logging behaviour, while project environments control hostnames, ports, and build output for each bundle.
 
 ---
 

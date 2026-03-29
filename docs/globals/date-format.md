@@ -3,14 +3,13 @@ id: date-format
 title: Date Format Helper
 sidebar_label: Date Format
 sidebar_position: 4
+description: Global date formatting, calendar arithmetic, and fiscal period utilities for the Gina framework, available as dateFormat and on Date.prototype.
 ---
 
 # Date Format Helper
 
 The date format helper provides date formatting, calendar arithmetic, and fiscal
-period utilities. It is exposed as the global `dateFormat` object and also wired
-onto `Date.prototype` by the [Prototypes helper](./prototypes.md), so all methods are
-available directly on any `Date` instance.
+period utilities for the Gina framework. It is exposed as the global `dateFormat` object and also wired onto `Date.prototype` by the [Prototypes helper](./prototypes.md), so all methods are available directly on any `Date` instance without a `require()` call.
 
 ---
 
@@ -21,7 +20,7 @@ Sets the locale used for day and month names.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `date` | `Date` | Reference date (sets initial locale context) |
-| `culture` | `string` | 5-char culture code (`'en-US'`, `'fr-FR'`) or 2-char language code (`'fr'`) |
+| `culture` | `string` | 5-char culture code (`'en-CM'`, `'fr-CM'`) or 2-char language code (`'fr'`) |
 
 Built-in locales: `en` (default), `fr`.
 

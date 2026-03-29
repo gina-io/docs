@@ -1,12 +1,14 @@
 ---
+title: K8s and Docker
+sidebar_label: K8s & Docker
 sidebar_position: 7
+description: How to run Gina bundles in Docker containers and Kubernetes pods — gina-init bootstrap, gina-container foreground launcher, signal propagation, V8 pointer compression, and Redis session storage.
 ---
 
 # K8s and Docker
 
 Running a Gina bundle inside a Docker container or a Kubernetes pod requires a
-different launch strategy than a typical workstation setup. Two dedicated
-binaries replace the usual `gina bundle:start` + `gina tail` pair:
+different launch strategy than a typical workstation setup. Because each Gina bundle runs as an independent Node.js process, the container must handle signal propagation and graceful shutdown correctly. Two dedicated binaries replace the usual `gina bundle:start` + `gina tail` pair:
 
 | Binary | Role |
 |---|---|

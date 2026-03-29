@@ -1,8 +1,13 @@
 ---
+title: Add a Bundle and Go Live
+sidebar_label: First Bundle
 sidebar_position: 3
+description: Add your first bundle to a Gina project, start it on its own port, and serve JSON or HTML responses — all managed by the Gina CLI.
 ---
 
 # Add a bundle and go live
+
+Once you have a registered project, the next step is to add a bundle. A bundle is Gina's unit of deployment — each one runs as its own Node.js process with a dedicated port and independent lifecycle, so you can start, stop, and restart services individually.
 
 ## What is a bundle?
 

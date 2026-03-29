@@ -3,13 +3,13 @@ id: data
 title: Data Helper
 sidebar_label: Data
 sidebar_position: 7
+description: Global functions for parsing URL-encoded and JSON request bodies and encoding RFC 5987 header values in the Gina framework.
 ---
 
 # Data Helper
 
 The data helper injects two global functions for parsing HTTP request bodies and
-encoding file name characters. It is used internally by the framework's request
-pipeline and is available in bundle code for manual body processing.
+encoding file name characters. It is used internally by the framework's HTTP/2 request pipeline and is available in bundle code for manual body processing.
 
 ---
 

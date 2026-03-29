@@ -1,8 +1,15 @@
 ---
+title: Troubleshooting
+sidebar_label: Troubleshooting
 sidebar_position: 8
+description: Solutions for common Gina issues — resetting settings, fixing bundle start failures, resolving port conflicts, and troubleshooting HTTPS certificate errors.
 ---
 
 # Troubleshooting
+
+This page covers the most common issues encountered when developing with Gina, including broken settings, bundles that will not start, port conflicts, and certificate errors. Each section includes the recommended fix so you can get back to working quickly.
+
+---
 
 ## My settings are broken / I need a fresh start
 

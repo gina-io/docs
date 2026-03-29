@@ -1,13 +1,13 @@
 ---
+title: Middleware
+sidebar_label: Middleware
 sidebar_position: 4
+description: How middleware works in Gina, the Node.js MVC framework — writing middleware functions, global vs per-route chains, bundle-local and shared resolution, and the done callback pattern.
 ---
 
 # Middleware
 
-Middleware functions run between route matching and the controller action. They are the
-right place for cross-cutting concerns that span multiple routes: authentication, session
-enrichment, feature flags, maintenance mode checks, and anything else that should happen
-before a controller takes over.
+Middleware functions run between route matching and the controller action in a Gina bundle. They are the right place for cross-cutting concerns that span multiple routes: authentication, session enrichment, feature flags, maintenance mode checks, and anything else that should happen before a controller takes over. Middleware is configured per route in `routing.json` or globally via `routing.global.json`, and each function in the chain can either advance to the next step or terminate the request early.
 
 ---
 

@@ -3,6 +3,7 @@ id: prototypes
 title: Prototypes
 sidebar_label: Prototypes
 sidebar_position: 5
+description: Built-in prototype extensions for Array, Object, JSON, and Date in the Gina framework, applied at startup and available globally in bundle code.
 ---
 
 # Prototypes
@@ -10,7 +11,7 @@ sidebar_position: 5
 The prototypes helper extends the built-in JavaScript globals (`Array`, `Object`,
 `JSON`, `Date`) with utility methods and wires the [Date Format](./date-format.md)
 helper onto `Date.prototype`. Extensions are applied at framework startup and are
-available everywhere in bundle code.
+available everywhere in bundle code without any `require()` call.
 
 ---
 

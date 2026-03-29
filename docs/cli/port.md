@@ -3,12 +3,12 @@ id: cli-port
 title: port
 sidebar_label: port
 sidebar_position: 6
+description: CLI reference for gina port commands — list, set, and reset port assignments for bundles in a Gina project.
 ---
 
 # `gina port`
 
-Manage port assignments for bundles. Ports are allocated automatically when a
-bundle is added and stored in `~/.gina/<version>/projects.json`.
+Manage port assignments for bundles. Each bundle runs as an independent Node.js process on its own port, allocated automatically when the bundle is added and stored in `~/.gina/<version>/projects.json`. These commands let you list current assignments, override a specific port, or reallocate all ports from a given starting number.
 
 See [Ports](../concepts/ports) for background on how Gina assigns and manages ports.
 

@@ -1,12 +1,13 @@
 ---
+title: Controllers
+sidebar_label: Controllers
 sidebar_position: 1.5
+description: How controllers work in Gina, the Node.js MVC framework — action methods, response rendering, request data, namespace controllers, and the per-request instance lifecycle.
 ---
 
 # Controllers
 
-A controller is where request handling logic lives. It receives the matched route, reads
-request data, calls queries or services, and terminates the request with a render or
-response method.
+A controller is where request handling logic lives in a Gina bundle. It receives the matched route, reads request data, calls queries or services, and terminates the request with a render or response method. Every incoming HTTP request gets its own controller instance, so action methods can safely use local variables without worrying about concurrent request interference.
 
 ---
 
@@ -62,18 +63,17 @@ The route that calls `this.home` looks like this in `routing.json`:
 
 ---
 
-## The singleton — no per-request state on `this`
+## Per-request instances — no shared state on `this`
 
-The controller is a **singleton**. Every incoming request uses the same instance. Do not
-store per-request data on `this` in the constructor:
+Each incoming request gets a **fresh controller instance** created via the framework's `inherits()` mechanism. Even so, you should not store per-request data on `this` in the constructor — keep state local to the action function for clarity and safety:
 
 ```js
-// WRONG — data is shared across all concurrent requests
+// WRONG — constructor-level state is unclear and error-prone
 var FrontendController = function() {
   this.currentUser = null;
 
   this.profile = function(req, res, next) {
-    this.currentUser = req.session.user;  // overwritten by the next request mid-flight
+    this.currentUser = req.session.user;  // works, but obscures intent — use a local variable instead
     self.render({ user: this.currentUser });
   };
 };

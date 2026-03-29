@@ -1,8 +1,13 @@
 ---
+title: Create Your First Project
+sidebar_label: First Project
 sidebar_position: 2
+description: Create and register your first Gina project — start the framework socket server, scaffold a project directory, and configure the development hostname.
 ---
 
 # Create your first project
+
+This page walks you through starting the Gina framework server, registering a new project, and setting up hostname configuration for local development. By the end you will have a project directory ready for adding bundles.
 
 ## Start the framework
 

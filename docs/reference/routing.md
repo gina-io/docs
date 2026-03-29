@@ -2,12 +2,12 @@
 title: routing.json
 sidebar_label: routing.json
 sidebar_position: 3
+description: Reference for routing.json — maps URL patterns to controller actions in a Gina bundle, with support for parameters, regex requirements, middleware chains, scopes, and response caching.
 ---
 
 # routing.json
 
-Maps URLs to controller actions. Every HTTP request the bundle receives
-is matched against the rules declared here.
+Maps URLs to controller actions. Every HTTP request the bundle receives is matched against the rules declared here. Each rule defines a URL pattern, the HTTP method, an optional middleware chain, parameter requirements, and the controller method that handles the request.
 
 ```
 src/<bundle>/config/routing.json

@@ -1,41 +1,31 @@
-# Website
+# Gina — Documentation
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+Official documentation for [Gina](https://github.com/Rhinostone/gina),
+an MVC framework for Node.js with built-in HTTP/2, multi-bundle
+architecture, and scope-based data isolation — no Express dependency.
 
-## Installation
+**Read the docs → [gina.io/docs](https://gina.io/docs/)**
 
-```bash
-yarn
-```
+---
 
-## Local Development
+## Contributing
 
-```bash
-yarn start
-```
+Found a typo or want to improve a page? Every doc page has an
+**Edit this page** link at the bottom — the quickest way to suggest a fix.
 
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
+For larger contributions (new guides, restructuring), open an issue on
+[Rhinostone/gina](https://github.com/Rhinostone/gina/issues) first to
+discuss scope.
 
-## Build
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to run the site locally
+and how the deploy pipeline works.
 
-```bash
-yarn build
-```
-
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
-
-## Deployment
-
-Using SSH:
+## Running Locally
 
 ```bash
-USE_SSH=true yarn deploy
+npm install
+npm start       # http://localhost:3000/docs/
+npm run build   # production build → build/
 ```
 
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> yarn deploy
-```
-
-If you are using GitHub pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.
+**Requirements:** Node.js ≥ 20

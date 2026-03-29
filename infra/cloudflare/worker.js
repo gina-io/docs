@@ -86,6 +86,24 @@ export default {
       return handleVote(request, env);
     }
 
+    // Proxy /roadmap → Vercel /roadmap (URL stays clean).
+    // HTMLRewriter replaces the Docusaurus-generated canonical (/docs/roadmap)
+    // with the clean URL so search engines and AI engines see a single canonical.
+    if (url.pathname === '/roadmap') {
+      const response = await fetch('https://gina-io-docs.vercel.app/roadmap' + url.search, {
+        method:  request.method,
+        headers: request.headers,
+        body:    request.body,
+      });
+      return new HTMLRewriter()
+        .on('link[rel="canonical"]', {
+          element(el) {
+            el.setAttribute('href', 'https://gina.io/roadmap');
+          },
+        })
+        .transform(response);
+    }
+
     // Strip /docs prefix and proxy to Vercel.
     // Docusaurus baseUrl '/docs/' embeds '/docs/' into all asset/page paths, so
     // the browser always requests gina.io/docs/*, Worker strips to /*, Vercel
