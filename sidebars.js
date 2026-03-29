@@ -23,6 +23,10 @@ const sidebars = {
   // so Docusaurus treats it as "in" this sidebar, making only the Roadmap
   // navbar item active (not Docs) when visiting /docs/roadmap.
   roadmapSidebar: ['roadmap'],
+
+  // Standalone sidebar for the support page.
+  // support.md sets `displayed_sidebar: supportSidebar` in its frontmatter.
+  supportSidebar: ['support'],
 };
 
 export default sidebars;
