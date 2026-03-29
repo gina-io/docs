@@ -21,7 +21,7 @@
     "@mdx-js/react": "^3.0.0",
     "clsx": "^2.0.0",
     "handlebars": "^4.7.9",
-    "picomatch": "^2.3.2",
+    "picomatch": "^4.0.4",
     "prism-react-renderer": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
