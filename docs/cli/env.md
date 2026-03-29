@@ -3,13 +3,12 @@ id: cli-env
 title: env
 sidebar_label: env
 sidebar_position: 5
+description: CLI reference for gina env commands — list, add, remove, switch environments and manage environment variables for Gina bundles.
 ---
 
 # `gina env`
 
-Manage environments and environment variables. Environments control how bundles
-are built and run (e.g. `dev`, `prod`). Configuration is stored in `env.json`
-at the project root.
+Manage environments and environment variables. Environments control how bundles are built and run (for example, `dev` or `prod`), and each environment can carry its own set of key-value variables. Configuration is stored in `env.json` at the project root.
 
 ---
 
@@ -90,6 +89,21 @@ Remove an environment variable.
 
 ```bash
 gina env:unset <key>
+```
+
+---
+
+## `env:link-dev`
+
+Link an environment to the dev slot (`dev_env`) for a project. If `def_env`
+was previously the development environment, it is promoted to the new default.
+
+```bash
+gina env:link-dev <env> [@<project>]
+```
+
+```bash
+gina env:link-dev staging @myproject
 ```
 
 ---

@@ -4,12 +4,12 @@ title: CLI Reference
 sidebar_label: Overview
 sidebar_position: 1
 slug: /cli
+description: Complete CLI reference for the gina command — manage projects, bundles, the framework socket server, environments, ports, and scopes from the terminal.
 ---
 
 # CLI Reference
 
-The `gina` CLI is the primary interface for managing projects, bundles, the
-framework server, environments, ports, and scopes.
+The `gina` CLI is the primary interface for managing projects, bundles, the framework server, environments, ports, and scopes. Commands are organised into namespaces (e.g. `bundle`, `project`, `framework`) and follow a consistent `gina <namespace>:<action>` syntax.
 
 ## Syntax
 
@@ -30,6 +30,9 @@ to identify which project the command targets.
 | [`env`](./env.md) | Environments and environment variables |
 | [`port`](./port.md) | Port assignment and reallocation |
 | [`scope`](./scope.md) | Build scopes and bundle symlinks |
+| [`view`](./view.md) | Scaffold HTML view templates into a bundle |
+| [`cache`](./cache.md) | Inspect in-memory cache stats for running bundles |
+| [`protocol`](./protocol.md) | HTTP protocol and scheme configuration |
 
 ## Online vs offline commands
 
