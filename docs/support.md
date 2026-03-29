@@ -16,7 +16,7 @@ Gina is free, open-source software. It is developed and maintained by [Rhinoston
 
 The most direct way to support Gina is through GitHub Sponsors.
 
-[Sponsor Rhinostone on GitHub →](https://github.com/sponsors/Rhinostone)
+[Sponsor Gina on GitHub →](https://github.com/sponsors/gina-automator)
 
 Recurring sponsorships of any amount are welcome. Even $5/month makes a meaningful difference for a small open-source project.
 
