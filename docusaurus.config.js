@@ -47,7 +47,7 @@ const config = {
           remarkPlugins: [readingTimePlugin],
           async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
             const items = await defaultSidebarItemsGenerator(args);
-            return items.filter(item => !(item.type === 'doc' && item.id === 'roadmap'));
+            return items.filter(item => !(item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')));
           },
         },
         blog: {
@@ -128,6 +128,14 @@ const config = {
               {
                 label: 'GitHub Issues',
                 href: 'https://github.com/Rhinostone/gina/issues',
+              },
+              {
+                label: 'GitHub Discussions',
+                href: 'https://github.com/Rhinostone/gina/discussions',
+              },
+              {
+                label: 'Support Gina',
+                to: '/support',
               },
             ],
           },
