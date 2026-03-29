@@ -3,13 +3,12 @@ id: config-reference
 title: Configuration Reference
 sidebar_label: Overview
 sidebar_position: 1
+description: Complete reference for every JSON config file in a Gina bundle — app.json, routing.json, settings.json, connectors.json, templates.json, statics.json, security.json, and their environment overlays.
 ---
 
 # Configuration Reference
 
-Every bundle in a gina project is configured through a set of JSON files in its `config/`
-directory. There is no configuration in code — routing, server settings, templates, and
-database connections are all declared in these files.
+Every bundle in a Gina project is configured through a set of JSON files in its `config/` directory. There is no configuration in code — routing, server settings, templates, and database connections are all declared in these files. This page lists every config file, explains the naming convention and environment overlay system, and documents the path template variables available inside config values.
 
 ```
 src/
@@ -23,7 +22,8 @@ src/
         ├── statics.json
         ├── templates.json
         ├── connectors.json
-        └── security.json
+        ├── security.json
+        └── watchers.json
 ```
 
 ---
@@ -43,6 +43,7 @@ src/
 | [`templates.json`](./templates) | — | Page template definitions (stylesheets, scripts, layouts) |
 | [`connectors.json`](./connectors) | — | Database connector configuration |
 | [`security.json`](./security) | — | Session expiry overrides |
+| [`watchers.json`](./watchers) | — | File watchers — event-driven change detection, no polling |
 
 ---
 
