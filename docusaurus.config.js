@@ -100,11 +100,11 @@ const config = {
           },
           {
             label: 'v' + ginaVersion,
-            href: 'https://github.com/Rhinostone/gina/releases',
+            href: 'https://github.com/gina-io/gina/releases',
             position: 'right',
           },
           {
-            href: 'https://github.com/Rhinostone/gina',
+            href: 'https://github.com/gina-io/gina',
             label: 'GitHub',
             position: 'right',
           },
@@ -127,11 +127,11 @@ const config = {
             items: [
               {
                 label: 'GitHub Issues',
-                href: 'https://github.com/Rhinostone/gina/issues',
+                href: 'https://github.com/gina-io/gina/issues',
               },
               {
                 label: 'GitHub Discussions',
-                href: 'https://github.com/Rhinostone/gina/discussions',
+                href: 'https://github.com/gina-io/gina/discussions',
               },
               {
                 label: 'Support Gina',
