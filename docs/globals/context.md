@@ -3,13 +3,12 @@ id: context
 title: Context Helper
 sidebar_label: Context
 sidebar_position: 3
+description: Global key/value context registry for the Gina framework, providing setContext, getContext, getConfig, whisper, and define functions injected at startup.
 ---
 
 # Context Helper
 
-The context helper is the framework's global key/value registry. It stores named
-paths, environment variables, bundle references, and arbitrary data that needs to
-be shared across modules without explicit `require()` chains.
+The context helper is the framework's global key/value registry, injected at startup without any `require()` call. It stores named paths, environment variables, bundle references, and arbitrary data that needs to be shared across modules throughout your application.
 
 All functions are injected globally at startup. They are available everywhere in
 your bundle code.

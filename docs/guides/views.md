@@ -1,8 +1,15 @@
 ---
+title: Views and Templates
+sidebar_label: Views
 sidebar_position: 3
+description: Add HTML template support to a Gina bundle using the Swig template engine — layout inheritance, variable interpolation, and switching between JSON and HTML rendering.
 ---
 
 # Views and templates
+
+Gina bundles render JSON by default, but adding HTML template support takes a single CLI command. Templates are powered by the vendored Swig engine, which uses a Jinja2/Django-like syntax for variable interpolation, conditionals, loops, and layout inheritance.
+
+---
 
 ## Adding views to a bundle
 

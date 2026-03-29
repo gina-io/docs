@@ -1,5 +1,8 @@
 ---
+title: Testing
+sidebar_label: Testing
 sidebar_position: 8
+description: Unit test Gina controllers and entities without a running server using constructor injection and createTestInstance for isolated, mock-driven tests.
 ---
 
 # Testing
@@ -7,6 +10,7 @@ sidebar_position: 8
 Gina provides two purpose-built APIs for unit testing without a running server:
 **entity constructor injection** for model layer tests and
 **`createTestInstance`** for controller tests.
+Both mechanisms use Node's native `node:test` runner with zero external dependencies, letting you verify entity logic against mock connectors and controller actions against mock request/response objects.
 
 ---
 

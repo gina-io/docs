@@ -1,0 +1,335 @@
+---
+title: connectors.json
+sidebar_label: connectors.json
+sidebar_position: 7
+description: Configure database connections for Gina bundles using connectors.json. Reference for Couchbase, MongoDB, Redis, and SQLite — field definitions, multi-node clusters, TLS, and per-environment overrides.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# connectors.json
+
+`connectors.json` declares the database connections available to a bundle's model layer.
+Each key in the file is a **connector name** — the model layer uses that name to acquire
+a live connection at runtime. The connector type is determined by the `protocol` field
+(Couchbase, MongoDB) or the `connector` field (Redis, SQLite).
+
+```
+src/<bundle>/config/connectors.json
+```
+
+Multiple connectors can coexist in the same file and are each independently available
+to any model in the bundle.
+
+---
+
+## Supported connectors
+
+| Connector | Type | Primary use | Status |
+|---|---|---|---|
+| [Couchbase](#couchbase) | Document store (N1QL) | Primary application data | ✅ Available (v2 · v3 · v4) |
+| [MongoDB](#mongodb) | Document store | Primary application data | ✅ Available |
+| [Redis](#redis) | Key-value store | Session store — multi-pod, K8s | ✅ Available |
+| [SQLite](#sqlite) | Embedded relational | Session store — dev, staging, single-pod | ✅ Available (Node ≥ 22.5) |
+| MySQL / MariaDB | Relational | Primary application data | Planned — 0.2.0 |
+| PostgreSQL | Relational | Primary application data | Planned — 0.2.0 |
+| ScyllaDB | Wide-column | High-throughput application data | Planned — 0.4.0 |
+
+---
+
+## Data connectors
+
+Data connectors back the model layer directly — entities read and write through them
+using Gina's ORM. Declare them under any key name; the framework resolves the connector
+type from the `protocol` value.
+
+### Couchbase
+
+Gina ships with built-in connectors for Couchbase SDK v2, v3, and v4. The correct
+version is selected automatically based on the `couchbase` npm package installed in your
+project. All SDK versions share the same `connectors.json` schema.
+
+Use Couchbase when your application requires N1QL queries, document-level scope
+isolation across environments, or multi-node cluster failover.
+
+<Tabs>
+  <TabItem value="single" label="Single node">
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol" : "couchbase://",
+    "host"     : "db1.example.com",
+    "database" : "myapp",
+    "username" : "appuser",
+    "password"  : "secret",
+    "ping"     : "2m",
+    "scope"    : "production"
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="cluster" label="Cluster">
+
+Pass a comma-separated list of node addresses. The SDK uses all nodes for load
+balancing and automatic failover.
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol" : "couchbase://",
+    "host"     : "db1.example.com,db2.example.com,db3.example.com",
+    "database" : "myapp",
+    "username" : "appuser",
+    "password"  : "secret",
+    "ping"     : "2m"
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="tls" label="TLS">
+
+Use `couchbases://` (with a trailing `s`) to enable TLS on the connection. Required
+for Couchbase Cloud and Capella deployments.
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol" : "couchbases://",
+    "host"     : "cb.xxxxx.cloud.couchbase.com",
+    "database" : "myapp",
+    "username" : "appuser",
+    "password"  : "${COUCHBASE_PASSWORD}",
+    "ping"     : "2m"
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Description |
+|---|---|---|
+| `protocol` | `"couchbase://"` \| `"couchbases://"` | `couchbase://` for unencrypted, `couchbases://` for TLS |
+| `host` | string | Cluster node address(es). Comma-separated for multi-node clusters |
+| `database` | string | Couchbase bucket name |
+| `username` | string | Couchbase RBAC username |
+| `password` | string | RBAC password. Supports `${ENV_VAR}` substitution |
+| `ping` | string | Interval to verify cluster connectivity (e.g. `"2m"`, `"30s"`) |
+| `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
+
+---
+
+### MongoDB
+
+Gina's MongoDB connector supports both self-hosted and Atlas deployments. Use
+`mongodb+srv://` for Atlas and DNS-seeded connection strings.
+
+```json title="src/api/config/connectors.json"
+{
+  "mongodb": {
+    "protocol" : "mongodb://",
+    "host"     : "127.0.0.1:27017",
+    "database" : "myapp"
+  }
+}
+```
+
+**Field reference**
+
+| Field | Type | Description |
+|---|---|---|
+| `protocol` | `"mongodb://"` \| `"mongodb+srv://"` | Use `mongodb+srv://` for Atlas and DNS seedlist connections |
+| `host` | string | Host and port for self-hosted, or Atlas cluster hostname for SRV |
+| `database` | string | Database name |
+
+---
+
+## Session store connectors
+
+Session store connectors back Gina's session layer. They do not expose an ORM and are
+not used directly by model entities. Choose one based on your deployment topology.
+
+### Redis
+
+Redis is the recommended session store for **multi-pod and Kubernetes deployments**.
+It provides a shared, persistent session layer across all replicas, surviving pod
+restarts and rolling deployments.
+
+Requires `ioredis` installed in your project:
+
+```bash
+npm install ioredis
+```
+
+See the [Sessions guide](../guides/sessions#redis-production--multi-pod) for wiring instructions.
+
+<Tabs>
+  <TabItem value="standalone" label="Standalone">
+
+```json title="src/api/config/connectors.json"
+{
+  "myRedis": {
+    "connector": "redis",
+    "host"     : "127.0.0.1",
+    "port"     : 6379,
+    "password" : "",
+    "ttl"      : 86400,
+    "prefix"   : "sess:"
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="cluster" label="Cluster">
+
+```json title="src/api/config/connectors.json"
+{
+  "myRedis": {
+    "connector": "redis",
+    "cluster"  : [
+      { "host": "node1.redis.internal", "port": 6379 },
+      { "host": "node2.redis.internal", "port": 6379 }
+    ],
+    "password" : "${REDIS_PASSWORD}",
+    "tls"      : true,
+    "ttl"      : 86400
+  }
+}
+```
+
+`tls: true` is required for Upstash, AWS ElastiCache, and Google Cloud Memorystore.
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"redis"` | — | Selects the Redis connector |
+| `host` | string | `"127.0.0.1"` | Redis host (standalone mode only) |
+| `port` | number | `6379` | Redis port (standalone mode only) |
+| `db` | number | `0` | Redis DB index |
+| `password` | string | — | `AUTH` password. Supports `${ENV_VAR}` substitution |
+| `tls` | boolean | `false` | Enable TLS. Required for Upstash, ElastiCache, and Cloud Memorystore |
+| `cluster` | array | — | Cluster nodes `[{ host, port }, ...]`. When present, standalone `host` and `port` are ignored |
+| `ttl` | number | `86400` | Session TTL in seconds |
+| `prefix` | string | `"sess:"` | Key prefix in Redis |
+
+---
+
+### SQLite
+
+SQLite is the recommended session store for **development, staging, and single-pod
+production**. It uses the Node.js built-in `node:sqlite` module — zero npm dependencies.
+Requires Node.js ≥ 22.5.0.
+
+See the [Sessions guide](../guides/sessions#sqlite-dev--staging--single-pod) for wiring instructions.
+
+<Tabs>
+  <TabItem value="memory" label="In-memory (dev)">
+
+Sessions are stored in process memory. Fast, zero setup, and automatically cleared on
+server restart — ideal for local development.
+
+```json title="src/api/config/connectors.json"
+{
+  "myDb": {
+    "connector": "sqlite",
+    "database" : ":memory:",
+    "ttl"      : 86400
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="file" label="File-based (staging / production)">
+
+Sessions are persisted to disk and survive server restarts. Use for staging and
+single-pod production where a shared Redis instance is not available.
+
+```json title="src/api/config/connectors.json"
+{
+  "myDb": {
+    "connector"      : "sqlite",
+    "database"       : "/app/data/sessions.db",
+    "ttl"            : 86400,
+    "prefix"         : "sess:",
+    "cleanupInterval": 900
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"sqlite"` | — | Selects the SQLite connector |
+| `database` | string | `~/.gina/{v}/sessions-{bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
+| `ttl` | number | `86400` | Session TTL in seconds |
+| `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
+| `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable |
+
+---
+
+## Using multiple connectors
+
+A bundle can declare any number of connectors. Each key is independently available to
+every model in the bundle.
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol" : "couchbase://",
+    "host"     : "db1.example.com",
+    "database" : "primary",
+    "username" : "appuser",
+    "password"  : "secret"
+  },
+  "mongodb": {
+    "protocol" : "mongodb://",
+    "host"     : "127.0.0.1:27017",
+    "database" : "analytics"
+  }
+}
+```
+
+---
+
+## Environment overlay
+
+Use `connectors.{env}.json` to override specific fields for a given environment without
+duplicating the full config. The `{env}` segment must match `NODE_ENV`.
+
+```json title="src/api/config/connectors.dev.json"
+{
+  "couchbase": {
+    "host"    : "127.0.0.1",
+    "database": "myapp_dev",
+    "ping"    : "5m"
+  }
+}
+```
+
+Only the declared keys are overridden — the base `connectors.json` supplies all other
+fields unchanged.
+
+---
+
+## Credentials and secrets
+
+:::caution Never commit credentials to version control
+Use environment variables or a secrets manager to inject passwords at runtime.
+Reference them using `${ENV_VAR}` syntax in any string field. If the file contains
+literal passwords, add it to `.gitignore` and distribute it out of band — secrets
+manager, deployment pipeline, or manual copy per environment.
+:::

@@ -2,6 +2,7 @@
 title: settings.json
 sidebar_label: settings.json
 sidebar_position: 4
+description: Reference for settings.json and its server, locale, cache, upload, and WebSocket sub-files — the full server configuration surface for a Gina bundle.
 ---
 
 # settings.json
@@ -38,11 +39,11 @@ The primary server settings file.
     "address"  : "0.0.0.0"
   },
   "locale": {
-    "region"              : "en_US",
-    "preferedLanguages"   : ["en-US"],
+    "region"              : "en_CM",
+    "preferedLanguages"   : ["en-CM", "en"],
     "firstDayOfWeek"      : 1,
     "calendar"            : "gregorian",
-    "24HourTimeFormat"    : false
+    "24HourTimeFormat"    : true
   },
   "cache": {
     "enable": false
@@ -69,8 +70,8 @@ Locale settings are used by the i18n layer, date/number formatting, and currency
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `region` | string | `"EN"` | Locale code. Format: `"lang_COUNTRY"` (e.g. `"fr_FR"`, `"en_US"`) |
-| `preferedLanguages` | string[] | `["en-US"]` | Accepted-Language preference order |
+| `region` | string | `"EN"` | Locale code. Format: `"lang_COUNTRY"` (e.g. `"en_CM"`, `"fr_CM"`, `"fr_FR"`) |
+| `preferedLanguages` | string[] | `["en-CM", "en"]` | Accepted-Language preference order |
 | `firstDayOfWeek` | `0`–`6` | `1` | `0` = Sunday, `1` = Monday |
 | `calendar` | string | `"gregorian"` | Calendar system |
 | `24HourTimeFormat` | boolean | `true` | Use 24-hour time format |

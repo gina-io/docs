@@ -3,12 +3,13 @@ id: json
 title: JSON Helper
 sidebar_label: JSON
 sidebar_position: 8
+description: Global requireJSON() function for loading JSON files with comment stripping and detailed parse-error diagnostics in the Gina framework.
 ---
 
 # JSON Helper
 
 The JSON helper injects the global `requireJSON()` function for loading JSON
-files with comment support and helpful parse-error messages.
+files with comment support and helpful parse-error messages. It is available everywhere in bundle code without a `require()` call, and it handles dev-mode cache busting so JSON file changes are picked up on the next request.
 
 ---
 

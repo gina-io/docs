@@ -2,12 +2,12 @@
 title: statics.json
 sidebar_label: statics.json
 sidebar_position: 5
+description: Reference for statics.json — maps URL paths to filesystem directories so a Gina bundle can serve CSS, images, JavaScript, and font files without routing through a controller.
 ---
 
 # statics.json
 
-Maps URL paths to filesystem directories so the server knows where to find
-static assets (CSS, images, JavaScript, font files, etc.).
+Maps URL paths to filesystem directories so the server knows where to find static assets (CSS, images, JavaScript, font files, etc.). Requests matching a declared static path bypass the router and controller entirely, and the file is served directly from the mapped directory.
 
 ```
 src/<bundle>/config/statics.json

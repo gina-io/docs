@@ -2,12 +2,12 @@
 title: security.json
 sidebar_label: security.json
 sidebar_position: 8
+description: Reference for security.json — configures per-bundle session expiry and remember-me duration in a Gina application without storing secrets.
 ---
 
 # security.json
 
-Overrides session expiry settings on a per-bundle basis. This file holds only
-**non-secret** values — durations and policy flags, not keys or passwords.
+Overrides session expiry settings on a per-bundle basis. This file holds only **non-secret** values — durations and policy flags, not keys or passwords. Use it to give different bundles different session lifetimes (for example, a short idle timeout on a dashboard and a longer-lived session on an API).
 
 ```
 src/<bundle>/config/security.json

@@ -1,12 +1,15 @@
 ---
+title: Caching
+sidebar_label: Caching
 sidebar_position: 2
+description: How to cache rendered HTML and JSON responses in Gina, the Node.js MVC framework — memory and file-system backends, TTL modes, sliding windows, and event-driven invalidation.
 ---
 
 # Caching
 
 Gina can cache rendered HTML pages and JSON responses so that repeated
 requests to the same URL are served directly from memory or disk, bypassing
-the controller and template engine entirely.
+the controller and template engine entirely. Caching is configured per route in `routing.json` and controlled at the server level in `settings.json`, giving you fine-grained control over what is cached, for how long, and when entries are evicted.
 
 ```mermaid
 flowchart LR
@@ -241,9 +244,9 @@ inspecting server logs.
 
 ## Server-level cache config
 
-The `cache` block in `settings.server.json` controls global cache behavior:
+The `cache` block in `settings.json` controls global cache behavior:
 
-```json
+```json title="src/<bundle>/config/settings.json"
 {
   "cache": {
     "enable": "true",

@@ -2,12 +2,13 @@
 title: app.json
 sidebar_label: app.json
 sidebar_position: 2
+description: Reference for app.json — the required config file that declares a Gina bundle's identity, version, inter-bundle proxy connections, and application-level constants.
 ---
 
 # app.json
 
 Declares the bundle's identity and wires it to the rest of the project.
-Every bundle must have an `app.json`.
+Every bundle must have an `app.json` in its `config/` directory. It is the first file the framework reads when loading a bundle, and it determines the bundle name, version, proxy connections to other bundles, and any application-level constants accessible via `getConfig()`.
 
 ```
 src/<bundle>/config/app.json

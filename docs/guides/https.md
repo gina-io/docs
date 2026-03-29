@@ -1,12 +1,15 @@
 ---
+title: HTTPS and HTTP/2
+sidebar_label: HTTPS & HTTP/2
 sidebar_position: 6
+description: How to enable HTTPS and HTTP/2 in Gina, the Node.js MVC framework — certificate setup, protocol negotiation, h2c cleartext mode, and connection tuning.
 ---
 
 # HTTPS and HTTP/2
 
 ## Overview
 
-Gina supports HTTPS and an experimental HTTP/2 implementation. Each bundle or service requires its own certificate (or a wildcard certificate with symlinks).
+Gina uses HTTP/2 as its default protocol and supports HTTPS out of the box. Each bundle or service requires its own certificate (or a wildcard certificate with symlinks). Once HTTPS is configured, HTTP/2 is enabled automatically with no additional steps.
 
 ---
 
@@ -149,6 +152,55 @@ ln -s ~/.gina/certificates/scopes/local/myproject.app \
 
 ## HTTP/2
 
-HTTP/2 requires HTTPS to be enabled first. Once HTTPS is working, Gina's experimental HTTP/2 implementation can be enabled via your bundle's server settings.
+HTTP/2 is enabled automatically once HTTPS is configured. There is nothing extra to turn on.
 
-> HTTP/2 support is experimental in the current alpha.
+When a client connects, Gina negotiates `h2` via ALPN. If the client does not support HTTP/2, it falls back to `http/1.1` — controlled by the `allowHTTP1` setting (default `true`). See the [server settings reference](../reference/settings#server) for the full field list.
+
+### What Gina handles for you
+
+- **Protocol negotiation** — `h2` via TLS ALPN, automatic `http/1.1` fallback
+- **Session multiplexing** — multiple concurrent requests share a single TCP connection; the framework manages session reuse, idle eviction (120s), and dead-session detection
+- **GOAWAY** — if the remote peer closes the connection mid-flight, the request is retried transparently once
+- **Forbidden headers** — `Connection`, `Transfer-Encoding`, and other HTTP/1.1-only headers are stripped automatically; you do not need to sanitise them
+
+### What is different for your code
+
+**Pseudo-headers replace standard headers.** On HTTP/2 requests, the client sends `:authority` instead of `Host`, `:method` instead of `Method`, and so on. Gina normalises these for you — `req.headers.host` and `req.method` work as expected in controllers.
+
+**Status messages are suppressed.** HTTP/2 does not transmit a status reason phrase (RFC 9113 §8.3.1). `res.statusMessage` is ignored on HTTP/2 connections. Use meaningful status codes instead.
+
+**`req.headers[':authority']`** is available if you need the raw HTTP/2 pseudo-header value (e.g. for SNI-aware routing or multi-tenant host detection).
+
+### h2c — cleartext HTTP/2
+
+HTTP/2 without TLS is available for internal services behind a TLS-terminating load balancer (nginx, Caddy, Cloudflare) or for local development without a certificate:
+
+```json title="src/api/config/settings.json"
+{
+  "server": {
+    "engine"  : "isaac",
+    "protocol": "http/2.0",
+    "scheme"  : "http"
+  }
+}
+```
+
+h2c does not use ALPN. The client must explicitly request HTTP/2 (e.g. `--http2-prior-knowledge` with curl). It is not suitable for direct browser traffic.
+
+### Connection settings
+
+The most common settings to tune, set in `settings.json`:
+
+| Setting | Default | When to change |
+|---|---|---|
+| `allowHTTP1` | `true` | Set `false` on internal h2-only services to reject HTTP/1.1 clients |
+| `keepAliveTimeout` | `"5s"` | Increase for long-lived API clients or mobile connections |
+| `headersTimeout` | `"5500ms"` | Must stay above `keepAliveTimeout`; increase if slow clients time out during header send |
+
+Full reference: [settings.json → server](../reference/settings#server).
+
+### Coming in 0.3.0
+
+**103 Early Hints** — `Link: <url>; rel=preload` headers will be sent as an informational response before the final HTML, allowing the browser to start fetching CSS and JS while the template is still rendering. No action needed on your part — the framework handles it automatically for bundles that declare static assets.
+
+**Configurable stream limits** — `maxConcurrentStreams` and `initialWindowSize` will be movable to `settings.server.json` per bundle.

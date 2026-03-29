@@ -3,13 +3,14 @@ id: globals-overview
 title: Globals
 sidebar_label: Overview
 slug: /globals
+description: Reference for all globally injected functions and prototypes in the Gina framework, including path helpers, context registry, date formatting, and more.
 ---
 
 # Globals
 
 These modules are bootstrapped at framework startup and inject functions directly
 into the global scope. No `require()` call is needed — they are available
-everywhere in your bundle code.
+everywhere in your bundle code. This is a core design principle of the Gina framework: common utilities like `_()`, `getContext()`, `requireJSON()`, and `dateFormat` are wired into the global scope by `gna.js` and the helpers bootstrap so that bundle code stays concise.
 
 | Global | Injected names | Description |
 |--------|---------------|-------------|

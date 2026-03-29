@@ -3,12 +3,12 @@ id: cli-bundle
 title: bundle
 sidebar_label: bundle
 sidebar_position: 2
+description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, and list bundles within a Gina project.
 ---
 
 # `gina bundle`
 
-Manage individual bundles within a project. All commands require `@<project>`
-to identify the target project.
+Manage individual bundles within a project. Bundles are independent Node.js processes, and these commands let you start, stop, restart, build, scaffold, and list them. All commands require `@<project>` to identify the target project.
 
 ---
 

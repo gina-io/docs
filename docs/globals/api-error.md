@@ -3,13 +3,14 @@ id: api-error
 title: ApiError
 sidebar_label: ApiError
 sidebar_position: 10
+description: Global constructor for structured API error responses in the Gina framework, supporting server errors and field-level client validation errors.
 ---
 
 # ApiError
 
 `ApiError` is a global constructor for structured error objects used in API
 responses. It distinguishes between **server errors** (unexpected failures) and
-**client errors** (validation failures tied to specific form fields).
+**client errors** (validation failures tied to specific form fields). The constructor is injected globally at startup and requires no `require()` call.
 
 The constructor is injected globally by the framework when the Validator plugin
 is loaded, or directly from the helpers bootstrap as a fallback.

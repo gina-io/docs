@@ -1,11 +1,15 @@
 ---
+title: Routing
+sidebar_label: Routing
 sidebar_position: 1
+description: How Gina routes HTTP requests — URL patterns, parameter validation, namespaces, scopes, query timeouts, global middleware, and reverse routing via routing.json.
 ---
 
 # Routing
 
 Every HTTP request that arrives at a bundle is matched against that bundle's routing table.
 Routes are declared in `src/<bundle>/config/routing.json` — they are not registered in code.
+The router evaluates rules in order, checking scope, URL pattern, parameter requirements, and HTTP method before handing execution to the matched controller action through the middleware chain.
 
 ---
 

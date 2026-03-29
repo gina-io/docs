@@ -1,14 +1,19 @@
 ---
+title: Ports
+sidebar_label: Ports
 sidebar_position: 4
+description: How Gina allocates and manages ports for bundles — automatic assignment from port 3100, manual overrides, and the reserved framework ports 8124 and 8125.
 ---
 
 # Ports
 
 Gina assigns ports to bundles automatically. Each bundle in a project gets a
-distinct port per environment, tracked in the project registry.
+distinct port per environment, tracked in the project registry. The framework
+socket server itself listens on port 8124, and the message queue / log tail
+listener uses port 8125 — both are reserved and cannot be assigned to bundles.
 
-The default starting port is `3100`. Additional bundles in the same project
-receive the next available ports above that.
+The default starting port for bundles is `3100`. Additional bundles in the same
+project receive the next available ports above that.
 
 ---
 

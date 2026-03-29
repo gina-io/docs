@@ -1,10 +1,29 @@
 ---
+title: What is Gina?
+sidebar_label: What is Gina?
 sidebar_position: 1
+description: Gina is a Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency required.
 ---
 
 # What is Gina?
 
-**Gina I/O** is a Node.js MVC and event-driven framework for building web applications and services.
+**Gina** is a Node.js MVC and event-driven framework for building web applications and services. It ships with its own HTTP/2 server, a multi-bundle process model, scope-based data isolation, and a CLI that manages the full lifecycle of your projects — from scaffolding to deployment.
+
+## Why Gina?
+
+Most Node.js frameworks give you request routing and leave the rest to you. Gina gives you the full picture from day one: project structure, multi-service lifecycle, HTTP/2, and scope-based data isolation — without pulling in Express.
+
+**Multi-bundle architecture out of the box.** Running a frontend, an API, and an admin panel as separate services is a first-class concept in Gina, not an afterthought. Each bundle gets its own process, port, and lifecycle. `gina bundle:start api @myproject` is all it takes — no Docker Compose, no custom process manager.
+
+**HTTP/2 without configuration.** Gina's built-in server negotiates HTTP/2 (with HTTP/1.1 fallback), handles session multiplexing, and manages connection errors transparently. You don't configure any of it — it just works.
+
+**Structure without boilerplate overhead.** Gina enforces MVC conventions (controllers, entities, `routing.json`, templates) so every project looks the same and every developer on the team knows where to look. There is no "how should we structure this?" discussion.
+
+**Scope-based data isolation.** `local`, `beta`, and `production` are first-class data scopes, not just environment variables. Your staging environment can share a database with production without contaminating data — the framework enforces the partition at query time.
+
+**No Express dependency.** Gina is compatible with Express middleware but does not depend on it. You are not carrying the Express security surface, the callback-first API, or the middleware assembly overhead.
+
+> **When Gina is not the right choice:** if you need a large plugin ecosystem, TypeScript out of the box, or a framework with a large community and Stack Overflow answers for every edge case — Express, Fastify, or NestJS are safer bets today. Gina is the right choice when you want a structured, opinionated foundation that handles the infrastructure decisions so you can focus on your application.
 
 ## Philosophy
 

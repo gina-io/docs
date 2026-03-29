@@ -2,12 +2,12 @@
 title: templates.json
 sidebar_label: templates.json
 sidebar_position: 6
+description: Reference for templates.json — declares the layout, stylesheets, and scripts for each page in a Gina bundle, with a shared _common baseline inherited by all pages.
 ---
 
 # templates.json
 
-Defines the stylesheets, scripts, and layout used by each page in the bundle.
-Every bundle that renders HTML should have a `templates.json`.
+Defines the stylesheets, scripts, and layout used by each page in the bundle. Every bundle that renders HTML should have a `templates.json` in its `config/` directory. The special `_common` key provides a baseline inherited by all pages, and per-page entries can override the layout or append additional assets.
 
 ```
 src/<bundle>/config/templates.json

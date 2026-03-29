@@ -1,17 +1,20 @@
 ---
+title: Architecture
+sidebar_label: Architecture
 sidebar_position: 5
+description: How a Gina application is structured — projects, bundles, the MVC request lifecycle, the framework socket server, HTTP/2, scopes, and the global context injected at startup.
 ---
 
 # Architecture
 
-This page describes how a Gina application is structured and how its parts
-fit together at runtime.
+Gina organises server-side code around three nested concepts: **projects**, **bundles**,
+and **the framework itself**. Each bundle runs as an independent Node.js process with its
+own HTTP/2 server, port, config, and lifecycle. The framework coordinates them through a
+background socket server and injects a shared global context into every module at startup.
 
 ---
 
 ## Projects and bundles
-
-Gina organises code into **projects** and **bundles**.
 
 - A **project** is a collection of bundles. It maps one-to-one to a domain or
   product (e.g. `myproject`).
@@ -83,11 +86,12 @@ stateDiagram-v2
 ## HTTP request lifecycle
 
 Routes are declared in `src/<bundle>/config/routing.json` — they are not
-registered in code.
+registered in code. Each bundle serves HTTP/2 by default; HTTP/1.1 clients are
+accepted on the same port via protocol negotiation.
 
 ```mermaid
 flowchart TD
-    REQ["HTTP request"] --> ROUTER["core/router.js<br/>match URL against routing.json"]
+    REQ["HTTP/2 request"] --> ROUTER["core/router.js<br/>match URL against routing.json"]
     ROUTER --> CTRL["core/controller.js<br/>session · auth · request data"]
     CTRL --> ACTION["Controller action<br/>this.home = function(req, res, next)"]
     ACTION --> HTML["self.render(data)<br/>HTML via Swig template"]
@@ -120,6 +124,22 @@ flowchart LR
 
 ---
 
+## Environments and scopes
+
+Gina uses two orthogonal axes to isolate configuration and data:
+
+- **Environments** (`NODE_ENV`) control which config files are active — `dev`,
+  `staging`, `prod`, etc. Environment-specific files like `connectors.dev.json`
+  are merged over the base config at startup.
+- **Scopes** control data isolation within an environment. A scope (e.g.
+  `local`, `beta`, `production`) is stamped on every database document at insert
+  time and used to filter queries, so multiple deployments can share the same
+  database bucket without data leaking between them.
+
+See [Environments](./environments) and [Scopes](./scopes) for the full reference.
+
+---
+
 ## Configuration files
 
 | File | Purpose |
@@ -128,8 +148,10 @@ flowchart LR
 | `manifest.json` | Bundle manifest — versions and build info |
 | `config/app.json` | Application metadata (name, version) |
 | `config/routing.json` | URL routing rules |
-| `config/settings.json` | Bundle settings (region, timezone, locales) |
-| `config/settings.server.json` | Server options (port, protocol, HTTP/2) |
+| `config/settings.json` | Server engine, protocol, locale, upload, cache |
+| `config/settings.server.json` | Server-side overrides — webroot, CORS |
+| `config/settings.server.credentials.json` | TLS certificate paths |
+| `config/connectors.json` | Database connector declarations |
 | `config/statics.json` | Static file serving rules |
 
 ---
@@ -144,8 +166,11 @@ Gina injects a set of helpers into every module at startup — no `require()` ne
 | `requireJSON(path)` | Load and cache a JSON file |
 | `getEnvVar(key)` | Read an environment variable |
 | `setEnvVar(key, val)` | Write an environment variable |
+| `setPath(name, pathObj)` | Register a named path |
+| `getPath(name)` | Retrieve a named path |
 | `getContext(key)` | Read a global context value |
 | `setContext(key, value)` | Write a global context value |
+| `define(key, value)` | Define a non-enumerable global property |
 
 ---
 

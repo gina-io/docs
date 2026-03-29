@@ -1,13 +1,17 @@
 ---
+title: Migration Guide
+sidebar_label: Migration Guide
 sidebar_position: 99
+description: Step-by-step upgrade notes for migrating between Gina framework versions, covering breaking changes, new config fields, and required actions.
 ---
 
-# Migration guide
+# Migration Guide
 
 Step-by-step notes for upgrading between Gina versions. Each section lists only
 the changes that require action on your part. Additive changes (new optional
 fields, new features) are noted for awareness but do not require any change to
-existing code.
+existing code. Start from the section that matches your current version and work
+upward to the target version.
 
 ---
 

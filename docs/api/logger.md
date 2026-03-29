@@ -2,13 +2,12 @@
 id: logger
 title: Logger
 sidebar_label: Logger
+description: Multi-stream structured logging API for the Gina framework with syslog severity levels, runtime hierarchy control, and pluggable transport containers.
 ---
 
 # Logger API reference
 
-The Gina logger replaces the global `console` object. Your bundle code calls
-`console.info(...)`, `console.err(...)`, etc. as normal — the logger routes
-each call through a severity filter and a transport pipeline.
+The Gina logger replaces the global `console` object at startup, routing every call through a severity filter and a pluggable transport pipeline. Your bundle code calls `console.info(...)`, `console.err(...)`, etc. as normal — the logger handles level filtering, formatting, and delivery to stdout, the MQ tail stream, and optional file containers.
 
 For conceptual background, usage examples, and `gina tail` workflow guidance,
 see the [Logging guide](/guides/logging).
