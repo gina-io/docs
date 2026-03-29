@@ -3,7 +3,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import readingTimePlugin from './src/remark/reading-time.js';
 
 // Updated automatically by gina's post_publish script on each release.
-const ginaVersion = '0.2.0';
+const ginaVersion = '0.2.1-alpha.1';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
