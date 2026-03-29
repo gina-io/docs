@@ -3,14 +3,14 @@ id: cli-framework
 title: framework
 sidebar_label: framework
 sidebar_position: 4
+description: CLI reference for gina framework commands — start, stop, and restart the socket server, tail live logs, set the log level, and manage the framework version.
 ---
 
 # `gina framework`
 
 Manage the Gina framework socket server and framework-level settings.
 
-The framework server listens on port `8124` and acts as the dispatcher for all
-online commands. It must be running before you can start or stop bundles.
+The framework server listens on port `8124` and acts as the dispatcher for all online commands (such as starting and stopping bundles). It must be running before you can issue any online command. Port `8125` serves the MQ listener used by `gina tail` to stream live log output.
 
 ---
 
@@ -103,19 +103,72 @@ filtering and workflow tips.
 
 ## `framework:set`
 
-Persist a framework-level setting to `~/.gina/<version>/settings.json`.
+Persist a framework-level setting to `~/.gina/main.json` and/or
+`~/.gina/<version>/settings.json`.
 
 ```bash
-gina framework:set --log-level=<level>
+gina framework:set --<flag>=<value>
 ```
 
-| Flag | Values | Description |
-|------|--------|-------------|
-| `--log-level` | `trace` `debug` `info` `warn` `error` `fatal` | Default log level for all bundles |
+| Flag | Description |
+|------|-------------|
+| `--log-level` | Default log level (`trace` `debug` `info` `warn` `error` `fatal`) |
+| `--env` | Default environment |
+| `--scope` | Default scope |
+| `--port` | Framework socket port (default `8124`) |
+| `--mq-port` | MQ listener port (default `8125`) |
+| `--debug-port` | Node.js inspector port |
+| `--host-v4` | IPv4 host address |
+| `--hostname` | Hostname |
+| `--culture` | Default culture (e.g. `en_US`) |
+| `--timezone` | Default timezone (e.g. `America/New_York`) |
+| `--prefix` | Framework install prefix path |
+| `--global-mode` | Enable/disable global mode |
 
 ```bash
 gina framework:set --log-level=debug
-gina framework:set --log-level=info
+gina framework:set --culture=en_US --timezone=America/New_York
+```
+
+---
+
+## `framework:link`
+
+Symlink the globally installed `gina` package into a project's
+`node_modules/gina`. Requires Gina to be installed globally.
+
+```bash
+gina framework:link @<project>
+gina framework:link @<project> --prefix=<path>
+```
+
+```bash
+gina framework:link @myproject
+```
+
+---
+
+## `framework:link-node-modules`
+
+Symlink a project's `node_modules` directory to `~/<project>/lib/node_modules`,
+allowing node_modules to be shared across scopes (e.g. Docker and localhost).
+
+```bash
+gina framework:link-node-modules @<project>
+```
+
+---
+
+## `gina .` — open a directory in Terminal (macOS)
+
+Opens a Gina-related directory in a new `Terminal.app` window.
+
+```bash
+gina .                  # framework install dir (default)
+gina . home             # ~/.gina/
+gina . framework        # framework install dir
+gina . services         # services/ dir
+gina . lib              # framework lib/ dir
 ```
 
 ---
