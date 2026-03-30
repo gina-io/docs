@@ -3,6 +3,10 @@ title: Projects and Bundles
 sidebar_label: Projects and Bundles
 sidebar_position: 1
 description: Gina organises code into projects and bundles — a project groups related services, while each bundle runs as an independent Node.js process with its own port and lifecycle.
+level: beginner
+prereqs:
+  - Gina installed
+  - gina CLI basics
 ---
 
 # Projects and bundles
@@ -81,6 +85,51 @@ You can reset port allocation:
 ```bash
 gina port:reset @myproject --start-from=3100
 ```
+
+---
+
+## Per-bundle framework version
+
+Each bundle can be pinned to a specific installed gina version, independent of
+the socket server. This lets you upgrade one bundle at a time without stopping
+the rest of the project.
+
+Declare `gina_version` on the bundle entry in `manifest.json`:
+
+```jsonc title="manifest.json"
+{
+  "bundles": {
+    "api": {
+      "version":      "0.0.1",
+      "gina_version": "0.2.0",     // this bundle runs under 0.2.0
+      "src":          "src/api"
+    },
+    "frontend": {
+      "version":      "0.0.1",
+      "gina_version": "0.2.1",     // this bundle runs under 0.2.1
+      "src":          "src/frontend"
+    }
+  }
+}
+```
+
+**Priority order** (highest wins):
+
+1. `--gina-version=<version>` CLI flag at start time
+2. `gina_version` in `manifest.json` for the bundle
+3. The socket server's running version (default — no declaration needed)
+
+**Isolation:** each spawned bundle process gets its own `GINA_VERSION`,
+`GINA_FRAMEWORK_DIR`, and `GINA_CORE` overrides derived from the resolved
+version. The socket server and other bundles are unaffected.
+
+**Validation:** the declared version is checked against the tracked version
+registry in `~/.gina/main.json` before the process is spawned. An emergency log
+is emitted and start is aborted if the version is not installed.
+
+`gina bundle:add` writes `gina_version` automatically (set to the current
+framework version). See the [bundle CLI reference](../cli/bundle.md#per-bundle-framework-version)
+for the full flag documentation.
 
 ---
 
