@@ -4,6 +4,7 @@ title: Globals
 sidebar_label: Overview
 slug: /globals
 description: Reference for all globally injected functions and prototypes in the Gina framework, including path helpers, context registry, date formatting, and more.
+level: beginner
 ---
 
 # Globals
@@ -14,7 +15,7 @@ everywhere in your bundle code. This is a core design principle of the Gina fram
 
 | Global | Injected names | Description |
 |--------|---------------|-------------|
-| [Path](./path.md) | `_()`, `setPath`, `getPath`, `setPaths`, `getPaths` | Path normalisation, file-system operations, named path registry |
+| [Path](./path.md) | `_()`, `setPath`, `getPath`, `setPaths`, `getPaths`, `onCompleteCall` | Path normalisation, file-system operations, named path registry, async EventEmitter adapter |
 | [Context](./context.md) | `setContext`, `getContext`, `resetContext`, `getConfig`, `getLib`, `whisper`, `define`, `getDefined`, `isWin32` | Global key/value context registry and template variable substitution |
 | [Date format](./date-format.md) | `dateFormat` | Date formatting, calendar arithmetic, fiscal helpers |
 | [Prototypes](./prototypes.md) | Extensions on `Array`, `Object`, `JSON`, `Date`, `__stack` | Built-in prototype utilities |

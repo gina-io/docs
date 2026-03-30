@@ -3,6 +3,10 @@ title: Migration Guide
 sidebar_label: Migration Guide
 sidebar_position: 99
 description: Step-by-step upgrade notes for migrating between Gina framework versions, covering breaking changes, new config fields, and required actions.
+level: intermediate
+prereqs:
+  - Existing Gina project
+  - Version changelog
 ---
 
 # Migration Guide
@@ -12,6 +16,159 @@ the changes that require action on your part. Additive changes (new optional
 fields, new features) are noted for awareness but do not require any change to
 existing code. Start from the section that matches your current version and work
 upward to the target version.
+
+---
+
+## 0.2.1 → 0.3.0
+
+### `self.query()` — non-2xx errors now always reach the callback
+
+:::caution Behavior change
+In 0.2.x, when an upstream service returned a non-2xx status, `self.query()` called
+`self.throwError()` **internally**, bypassing the callback entirely. The error page was
+shown automatically and the callback never fired.
+
+In 0.3.0, the callback **always fires** for non-2xx responses. The controller action is
+responsible for deciding what to do with the error.
+:::
+
+**What you need to do:**
+
+If your callback has an error branch, it continues to work — just change the terminal call:
+
+```js
+// Before (0.2.x) — callback never fired on non-2xx; throwError was called internally
+self.query(opt, function(err, data) {
+  if (err) {
+    // This line was unreachable in 0.2.x
+    return self.throwError(res, 502, err);
+  }
+  self.render(data);
+});
+
+// After (0.3.0) — callback always fires; use self.render(err) to show the error page
+self.query(opt, function(err, data) {
+  if (err) {
+    return self.render(err);   // render() intercepts non-2xx and routes to throwError automatically
+  }
+  self.render(data);
+});
+```
+
+If your callback had **no error branch** (relying on the automatic `throwError`), add one:
+
+```js
+// Before (0.2.x) — errors were silently handled internally
+self.query(opt, function(err, data) {
+  self.render(data);
+});
+
+// After (0.3.0) — errors reach the callback; handle them explicitly
+self.query(opt, function(err, data) {
+  if (err) return self.render(err);
+  self.render(data);
+});
+```
+
+See the [controller guide](./guides/controller.md#outgoing-requests) for the full error
+shape and handling options.
+
+---
+
+### Async controller actions
+
+:::note Additive — no action required
+Existing sync controller actions continue to work exactly as before.
+:::
+
+Controller actions can now be declared `async`. The router automatically attaches
+`.catch()` to any thenable returned by an action and routes the rejection to
+`throwError(response, 500, ...)` — you do not need to wrap every action in
+`try/catch` to prevent unhandled-rejection crashes.
+
+```js
+// Before (sync — still fully supported, no change needed)
+var Controller = function() {
+    var self = this;
+
+    this.home = function(req, res, next) {
+        self.renderJSON({ ok: true });
+    };
+};
+module.exports = Controller;
+```
+
+```js
+// After (async — opt in per action)
+var db = getModel('blog'); // your database, schema, or bucket name
+
+var Controller = function() {
+    var self = this;
+
+    this.home = async function(req, res, next) {
+        var user = await db.userEntity.getById(req.session.user.id);
+        self.renderJSON({ ok: true, user: user });
+    };
+};
+module.exports = Controller;
+```
+
+Entity methods (`await entity.method()`) already worked since 0.2.0 — they
+return a native Promise with an `.onComplete(cb)` shim for backwards
+compatibility.
+
+### `onCompleteCall(emitter)` — new global helper
+
+For PathObject file operations (`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands,
+which fire `.onComplete(cb)` rather than returning a Promise, use the new global
+`onCompleteCall()` adapter:
+
+```js
+var Controller = function() {
+    var self = this;
+
+    this.upload = async function(req, res, next) {
+        await onCompleteCall( _(self.uploadDir).mkdir() );
+        self.renderJSON({ ok: true });
+    };
+};
+module.exports = Controller;
+```
+
+No require needed — `onCompleteCall` is injected globally by the path helper.
+
+---
+
+## 0.2.0 → 0.2.1
+
+### `gina_version` in `manifest.json` — per-bundle framework version pin
+
+:::note Additive — no action required
+Bundles without a `gina_version` entry continue to use the socket server's
+running version, exactly as before.
+:::
+
+A new optional `gina_version` field on each bundle entry in `manifest.json` pins
+that bundle to a specific installed gina version. The socket server is unaffected.
+
+```jsonc title="manifest.json"
+{
+  "bundles": {
+    "api": {
+      "version":      "0.0.1",
+      "gina_version": "0.2.1-alpha.3",   // ← new optional field
+      "src":          "src/api"
+    }
+  }
+}
+```
+
+`bundle:add` now writes `gina_version` automatically (set to the current
+framework version at scaffold time). Existing bundles are unchanged.
+
+The `--gina-version=<version>` flag on `bundle:start` overrides the manifest
+declaration at start time. See the [bundle CLI reference](./cli/bundle.md#per-bundle-framework-version)
+for the full priority order and isolation behaviour.
 
 ---
 

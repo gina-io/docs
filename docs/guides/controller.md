@@ -3,6 +3,10 @@ title: Controllers
 sidebar_label: Controllers
 sidebar_position: 1.5
 description: How controllers work in Gina, the Node.js MVC framework — action methods, response rendering, request data, namespace controllers, and the per-request instance lifecycle.
+level: beginner
+prereqs:
+  - Projects and bundles
+  - routing.json basics
 ---
 
 # Controllers
@@ -120,6 +124,27 @@ this.home = function(req, res, next) {
 
 Template variables are accessed with `{{ title }}`, `{{ message }}`, etc. See
 [Views and templates](./views) for the full template guide.
+
+:::note Error interception
+If `data.status` is non-2xx **and** `data.error` is defined, `render()` does not execute the
+template — it intercepts the call and routes to `throwError()` instead, showing the configured
+error page. This means you can pass an upstream error object directly to `render()` and the
+framework will display the error page automatically:
+
+```js
+self.query(opt, function(err, data) {
+  if (err) {
+    // err has { status, error, message } — render() intercepts and shows the error page
+    return self.render(err);
+  }
+  self.render(data);
+});
+```
+
+The actual error reason is logged at the point of interception. If you need to handle the
+error in the action instead (degraded mode, fallback data), pass a 2xx-compatible data object
+to `render()`, or call `self.throwError(err)` explicitly.
+:::
 
 ### `self.renderJSON(data)`
 
@@ -278,7 +303,7 @@ this.invoice = function(req, res, next) {
   self.query(
     { hostname: 'api-internal', path: '/invoices/' + id },
     function(err, data) {
-      if (err) return self.throwError(res, 502, err);
+      if (err) return self.render(err);   // render() intercepts and shows the error page
       self.renderJSON(data);
     }
   );
@@ -297,22 +322,120 @@ Key options:
 
 When the callback is omitted, `self.query()` returns a Promise.
 
+**Error shape**
+
+When the upstream returns a non-2xx status, the callback receives a plain object —
+not an `Error` instance:
+
+```js
+{
+  status:  502,           // HTTP status code from the upstream response
+  error:   "Bad Gateway", // human-readable label for the status
+  message: "..."          // upstream response body or reason phrase
+}
+```
+
+When the connection itself fails (TCP error, timeout), the callback receives a
+native `Error` with a `.stack` property.
+
+**Handling errors**
+
+```js
+self.query(opt, function(err, data) {
+  if (err) {
+    // Option A — show the framework error page automatically
+    return self.render(err);
+
+    // Option B — custom degraded response
+    // return self.renderJSON({ status: 200, items: [], degraded: true });
+
+    // Option C — explicit error page with a specific code
+    // return self.throwError(err.status || 500, err.message);
+  }
+  self.render(data);
+});
+```
+
 ---
 
 ## Async actions
 
-Actions can be declared `async`. Wrap them in `try/catch` and call `self.throwError`
-explicitly — do not let rejections propagate silently:
+Actions can be declared `async`. The router automatically attaches `.catch()` to
+any thenable returned by an action — unhandled rejections become `500` responses
+rather than crashing the process. You can still add an explicit `try/catch` when
+you want to map specific errors to different status codes.
 
 ```js
-this.report = async function(req, res, next) {
-  try {
-    var data = await self.query({ hostname: 'api-internal', path: '/report/' + req.routing.param.id });
-    self.renderJSON(data);
-  } catch (err) {
-    self.throwError(res, 500, err);
-  }
+// Minimal async action — router handles unhandled rejections automatically
+var Controller = function() {
+    var self = this;
+
+    this.report = async function(req, res, next) {
+        var data = await self.query({
+            hostname: 'api-internal',
+            path: '/report/' + req.routing.param.id
+        });
+        self.renderJSON(data);
+    };
 };
+module.exports = Controller;
+```
+
+```js
+// Explicit try/catch when you want fine-grained status codes
+var Controller = function() {
+    var self = this;
+
+    this.report = async function(req, res, next) {
+        try {
+            var data = await self.query({
+                hostname: 'api-internal',
+                path: '/report/' + req.routing.param.id
+            });
+            self.renderJSON(data);
+        } catch (err) {
+            self.throwError(res, err.statusCode || 500, err);
+        }
+    };
+};
+module.exports = Controller;
+```
+
+### `await` with entity methods
+
+Entity methods return a native Promise — use `await` directly:
+
+```js
+var db = getModel('blog'); // your database, schema, or bucket name
+
+var Controller = function() {
+    var self = this;
+
+    this.profile = async function(req, res, next) {
+        var user = await db.userEntity.getById(req.session.user.id);
+        self.renderJSON(user);
+    };
+};
+module.exports = Controller;
+```
+
+### `await` with PathObject and Shell — `onCompleteCall()`
+
+PathObject file operations (`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands fire
+an `.onComplete(cb)` event instead of returning a Promise. Wrap them with the
+global [`onCompleteCall(emitter)`](../globals/path.md#onCompleteCallemitter) adapter:
+
+```js
+var Controller = function() {
+    var self = this;
+
+    this.upload = async function(req, res, next) {
+        // mkdir returns an EventEmitter; onCompleteCall wraps it in a Promise
+        await onCompleteCall( _(self.uploadDir).mkdir() );
+        self.renderJSON({ ok: true });
+    };
+};
+module.exports = Controller;
 ```
 
 ---
