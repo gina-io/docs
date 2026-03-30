@@ -4,6 +4,10 @@ title: Path Helper
 sidebar_label: Path
 sidebar_position: 2
 description: Global path constructor and named-path registry for the Gina framework, wrapping Node.js fs and path modules with cross-platform file-system operations.
+level: intermediate
+prereqs:
+  - Controllers
+  - async/await
 ---
 
 # Path Helper
@@ -257,6 +261,51 @@ Replaces the entire paths registry with the provided object.
 ### `getPaths()`
 
 Returns the entire paths registry as an object.
+
+---
+
+## `onCompleteCall(emitter)`
+
+Wraps an EventEmitter that exposes `.onComplete(cb)` into a native Promise.
+Use this in `async` controller actions to `await` PathObject file operations
+(`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands, which fire an
+`.onComplete(err, result)` event rather than returning a Promise.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `emitter` | `EventEmitter` | Any object with an `.onComplete(cb)` method |
+
+**Returns** `Promise<*>` — resolves with the operation result, rejects on error.
+
+```js
+// Await a PathObject mkdir() from an async controller action
+var Controller = function() {
+    var self = this;
+
+    this.upload = async function(req, res, next) {
+        // mkdir() returns an EventEmitter; onCompleteCall wraps it in a Promise
+        await onCompleteCall( _(self.uploadDir).mkdir() );
+        self.renderJSON({ ok: true });
+    };
+};
+module.exports = Controller;
+```
+
+```js
+// Await a file copy
+await onCompleteCall( _(srcPath).cp(destPath) );
+
+// Await a file remove
+await onCompleteCall( _(tmpFile).rm() );
+```
+
+No `require()` needed — `onCompleteCall` is injected globally by the path helper
+alongside `_()`.
+
+:::note Entities do not need onCompleteCall
+Entity methods already return a native Promise (with an `.onComplete(cb)` shim
+for backwards compatibility). Use `await entity.method()` directly.
+:::
 
 ---
 
