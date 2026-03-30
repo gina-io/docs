@@ -423,7 +423,7 @@ module.exports = Controller;
 
 PathObject file operations (`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands fire
 an `.onComplete(cb)` event instead of returning a Promise. Wrap them with the
-global [`onCompleteCall(emitter)`](../globals/path.md#onCompleteCallemitter) adapter:
+global [`onCompleteCall(emitter)`](../globals/async.md#oncompletecallemitter) adapter:
 
 ```js
 var Controller = function() {
