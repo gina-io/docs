@@ -7,7 +7,6 @@ description: Global path constructor and named-path registry for the Gina framew
 level: intermediate
 prereqs:
   - Controllers
-  - async/await
 ---
 
 # Path Helper
@@ -264,52 +263,8 @@ Returns the entire paths registry as an object.
 
 ---
 
-## `onCompleteCall(emitter)`
-
-Wraps an EventEmitter that exposes `.onComplete(cb)` into a native Promise.
-Use this in `async` controller actions to `await` PathObject file operations
-(`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands, which fire an
-`.onComplete(err, result)` event rather than returning a Promise.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `emitter` | `EventEmitter` | Any object with an `.onComplete(cb)` method |
-
-**Returns** `Promise<*>` — resolves with the operation result, rejects on error.
-
-```js
-// Await a PathObject mkdir() from an async controller action
-var Controller = function() {
-    var self = this;
-
-    this.upload = async function(req, res, next) {
-        // mkdir() returns an EventEmitter; onCompleteCall wraps it in a Promise
-        await onCompleteCall( _(self.uploadDir).mkdir() );
-        self.renderJSON({ ok: true });
-    };
-};
-module.exports = Controller;
-```
-
-```js
-// Await a file copy
-await onCompleteCall( _(srcPath).cp(destPath) );
-
-// Await a file remove
-await onCompleteCall( _(tmpFile).rm() );
-```
-
-No `require()` needed — `onCompleteCall` is injected globally by the path helper
-alongside `_()`.
-
-:::note Entities do not need onCompleteCall
-Entity methods already return a native Promise (with an `.onComplete(cb)` shim
-for backwards compatibility). Use `await entity.method()` directly.
-:::
-
----
-
 ## See also
 
 - [Context helper](./context.md) — `setContext` / `getContext` where path registry data is stored
 - [Prototypes](./prototypes.md) — `__stack` and other globals
+- [Async Utilities](./async.md) — `onCompleteCall` for awaiting PathObject and Shell operations
