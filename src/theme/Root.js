@@ -410,8 +410,13 @@ function DiagramModal({ svgContent: { html, dark }, onClose }) {
       e.preventDefault();
       const s = scaleRef.current;
       const o = offsetRef.current;
-      const d        = e.deltaY < 0 ? 0.12 : -0.12;
-      const newScale = Math.min(6, Math.max(0.2, +(s + d).toFixed(2)));
+      // Normalize across deltaMode (pixels / lines / pages) then scale
+      // exponentially so slow trackpad gestures stay gentle and fast ones
+      // stay responsive, without the fixed-step violence of additive zoom.
+      const raw      = e.deltaMode === 1 ? e.deltaY * 15 :
+                       e.deltaMode === 2 ? e.deltaY * 300 : e.deltaY;
+      const factor   = Math.exp(-raw * 0.003);
+      const newScale = Math.min(6, Math.max(0.2, s * factor));
       const ratio    = newScale / s;
       const cx       = window.innerWidth  / 2;
       const cy       = window.innerHeight / 2;
