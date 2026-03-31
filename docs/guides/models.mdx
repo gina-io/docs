@@ -2,12 +2,16 @@
 title: Models and entities
 sidebar_label: Models
 sidebar_position: 2.5
-description: How the Gina model layer works — entity classes, SQL files, @param/@return annotations, scope-based data isolation, and calling entity methods from controllers.
+description: How Gina's model layer works — entity classes, SQL files, Couchbase N1QL and SQLite query patterns, @param/@return/@options annotations, scope-based data isolation, and calling entity methods with async/await from controllers.
+keywords: [gina models, entity classes, couchbase n1ql, sqlite orm, getModel, sql annotations, scope isolation, node.js mvc]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
   - '[connectors.json reference](/reference/connectors)'
 ---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Models and entities
 
@@ -39,32 +43,59 @@ flowchart LR
 
 ## Directory layout
 
+The framework derives entity names and method names entirely from the file system. Place
+a file at the right path and the entity method appears automatically — no registration,
+no boilerplate.
+
+<Tabs>
+  <TabItem value="couchbase" label="Couchbase (N1QL)" default>
+
 ```
 src/<bundle>/models/
   <database>/
     entities/
       user.js          ← UserEntity class
       order.js         ← OrderEntity class
-    n1ql/              ← Couchbase N1QL queries
+    n1ql/
       user/
-        getById.sql
-        update.sql
+        getById.sql    → db.userEntity.getById()
+        update.sql     → db.userEntity.update()
       order/
-        getByUserId.sql
-    sql/               ← SQLite queries
-      user/
-        getById.sql
-        update.sql
+        getByUserId.sql → db.orderEntity.getByUserId()
 ```
 
-The framework derives entity names and method names entirely from the file system:
+N1QL query files live under `n1ql/`. The subdirectory name matches the entity file name;
+the SQL file name (without `.sql`) becomes the method name.
+
+  </TabItem>
+  <TabItem value="sqlite" label="SQLite">
+
+```
+src/<bundle>/models/
+  <database>/
+    entities/
+      user.js          ← UserEntity class
+      order.js         ← OrderEntity class
+    sql/
+      user/
+        getById.sql    → db.userEntity.getById()
+        update.sql     → db.userEntity.update()
+      order/
+        getByUserId.sql → db.orderEntity.getByUserId()
+```
+
+SQL query files live under `sql/`. The same naming convention applies: subdirectory →
+entity, file name → method. Statements are pre-compiled at startup via `conn.prepare()`.
+
+  </TabItem>
+</Tabs>
 
 ```mermaid
 flowchart TD
     subgraph files["File system"]
         EF["entities/user.js"]
-        SF1["n1ql/user/getById.sql"]
-        SF2["n1ql/user/update.sql"]
+        SF1["n1ql/ or sql/ · user/getById.sql"]
+        SF2["n1ql/ or sql/ · user/update.sql"]
     end
 
     subgraph api["Runtime API"]
@@ -79,9 +110,6 @@ flowchart TD
     ENT --- M1
     ENT --- M2
 ```
-
-The subdirectory name under `n1ql/` or `sql/` must match the entity file name (without
-`.js`). The SQL file name (without `.sql`) becomes the method name.
 
 ---
 
@@ -158,18 +186,20 @@ wrapped — they have no `.onComplete()` and no Promise return.
 
 ## SQL files
 
-SQL files are the primary way to define entity methods. Drop a file at the right path
-and the framework creates the method automatically — no registration, no boilerplate.
+Drop a file at the right path and the framework creates the method automatically.
 
-### Couchbase (N1QL)
+<Tabs>
+  <TabItem value="couchbase" label="Couchbase (N1QL)" default>
+
+**Path convention**
 
 ```
 models/<database>/n1ql/<EntityName>/<methodName>.sql
 ```
 
-```sql
--- models/mydb/n1ql/user/getById.sql
+**Example — single row by ID**
 
+```sql
 /*
  * @param  {string} $1
  * @return {object}
@@ -180,32 +210,41 @@ WHERE t.id = $1
   AND t._scope = $scope
 ```
 
-This produces `db.userEntity.getById(id)`.
+Positional parameters use `$1`, `$2`, `$3`, … notation. The special `$scope` placeholder
+is **not** a positional parameter — it is replaced with the literal scope value before the
+query reaches Couchbase (e.g. `AND t._scope = 'production'`).
 
-For complex queries split across multiple files, use a subdirectory with a `_main.sql`
-entry point:
+**Multi-file queries with `@include`**
+
+Complex queries can be split across files using a subdirectory and a `_main.sql` entry point:
 
 ```
 n1ql/user/getOrderSummary/
   _main.sql
-  totals.sql          ← referenced via @include in _main.sql
+  totals.sql
 ```
 
-`_main.sql` can pull in sub-files with:
+`_main.sql` pulls in sub-files at build time:
 
 ```sql
 @include './totals.sql';
 ```
 
-### SQLite
+In dev mode, SQL files are re-read from disk on every call — changes take effect without
+restarting the bundle.
+
+  </TabItem>
+  <TabItem value="sqlite" label="SQLite">
+
+**Path convention**
 
 ```
 models/<database>/sql/<EntityName>/<methodName>.sql
 ```
 
-```sql
--- models/mydb/sql/user/getById.sql
+**Example — single row by ID**
 
+```sql
 /*
  * @param  {string} ?
  * @return {object}
@@ -213,8 +252,17 @@ models/<database>/sql/<EntityName>/<methodName>.sql
 SELECT * FROM users WHERE id = ?
 ```
 
-SQLite uses `?` positional placeholders. Statements are pre-compiled at startup via
-`conn.prepare()` — the compiled statement is reused on every call.
+SQLite uses `?` positional placeholders (standard SQLite syntax). Statements are
+pre-compiled at startup via `conn.prepare()` — the compiled statement is reused on every
+call, giving the best performance for repeated queries.
+
+There is no `$scope` substitution for SQLite queries. Scope filtering, if needed, must be
+written as a plain `?` parameter.
+
+`@include` directives are not supported for SQLite.
+
+  </TabItem>
+</Tabs>
 
 ---
 
@@ -230,10 +278,12 @@ flowchart LR
     C -->|"returns"| D["Promise\n+ .onComplete()"]
 ```
 
-### `@param`
+<Tabs>
+  <TabItem value="couchbase" label="Couchbase (N1QL)" default>
 
-Declares positional parameters and their types. Types are used to cast arguments before
-the query runs.
+All four annotations are supported.
+
+**`@param` — parameter types and casting**
 
 ```sql
 /*
@@ -243,13 +293,10 @@ the query runs.
  */
 ```
 
-Supported types: `string`, `number` / `integer` (parsed as integer), `float`.
+Supported types: `string`, `number` / `integer` (parsed as integer), `float`. Types are
+used to cast arguments before the query runs.
 
-For SQLite, use `?` in the query body — the `@param` count determines binding order.
-
-### `@return`
-
-Controls what the framework extracts from the result set.
+**`@return` — result shape**
 
 | Annotation | What is returned |
 |---|---|
@@ -257,11 +304,9 @@ Controls what the framework extracts from the result set.
 | `@return {array}` | All rows (default for SELECT) |
 | `@return {boolean}` | `true` if any row exists (SELECT) or any rows were affected (write) |
 | `@return {number}` | Numeric value of the first key of the first row — for `COUNT(*)` queries |
-| *(omitted on write)* | `{ changes, lastInsertRowid }` (SQLite) or raw result (Couchbase) |
+| *(omitted on write)* | Raw Couchbase mutation result |
 
-### `@options` (Couchbase only)
-
-Sets Couchbase query options. The most common use is scan consistency:
+**`@options` — query-level settings**
 
 ```sql
 /*
@@ -270,9 +315,55 @@ Sets Couchbase query options. The most common use is scan consistency:
 SELECT ...
 ```
 
-`request_plus` forces the cluster to index all mutations before the query runs. Use it
-when a query must see a document that was just written in the same request. The default
-is `not_bounded` (fastest, eventual consistency), which is appropriate for most reads.
+`request_plus` forces the cluster to index all mutations before the query runs — use it
+when a query must see a document written in the same request. The default is `not_bounded`
+(fastest, eventual consistency), which is appropriate for most reads.
+
+**`@include` — sub-file composition**
+
+```sql
+/*
+ * Complex aggregation — pulls in shared sub-queries
+ */
+@include './totals.sql';
+@include './filters.sql';
+
+SELECT ...
+```
+
+Included files are expanded inline at load time. Paths are resolved relative to the
+including file.
+
+  </TabItem>
+  <TabItem value="sqlite" label="SQLite">
+
+`@param` and `@return` are supported. `@options` and `@include` are not available for
+SQLite.
+
+**`@param` — parameter types and casting**
+
+```sql
+/*
+ * @param {string}  ?   user id
+ * @param {integer} ?   page number
+ */
+```
+
+Use `?` in the query body — the `@param` declaration order determines binding. Supported
+types: `string`, `number` / `integer`, `float`.
+
+**`@return` — result shape**
+
+| Annotation | What is returned |
+|---|---|
+| `@return {object}` | First row via `stmt.get()`, or `null` if empty |
+| `@return {array}` | All rows via `stmt.all()` (default for SELECT) |
+| `@return {boolean}` | `true` if `length > 0` (SELECT) or `changes > 0` (write) |
+| `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
+| *(omitted on write)* | `{ changes, lastInsertRowid }` |
+
+  </TabItem>
+</Tabs>
 
 ---
 
@@ -296,8 +387,6 @@ sequenceDiagram
     E-->>C: Promise resolved → user object
     C->>C: self.renderJSON(user)
 ```
-
-Choose whichever call style fits the surrounding code.
 
 ### `await` (preferred in async actions)
 
@@ -329,23 +418,14 @@ this.profile = function(req, res, next) {
 };
 ```
 
-### Multiple awaits in sequence
+### Sequential and parallel awaits
 
 ```js
-this.dashboard = async function(req, res, next) {
-    var db      = getModel('mydb');
-    var userId  = req.session.user.id;
+// Sequential — second query runs after the first resolves
+var user   = await db.userEntity.getById(userId);
+var orders = await db.orderEntity.getByUserId(userId);
 
-    var user    = await db.userEntity.getById(userId);
-    var orders  = await db.orderEntity.getByUserId(userId);
-
-    self.render({ user: user, orders: orders });
-};
-```
-
-### Parallel awaits
-
-```js
+// Parallel — both queries run simultaneously
 var [user, orders] = await Promise.all([
     db.userEntity.getById(userId),
     db.orderEntity.getByUserId(userId)
@@ -357,9 +437,8 @@ var [user, orders] = await Promise.all([
 ## Scope-based data isolation
 
 Every entity prototype gets a `_scope` property injected from the connector configuration
-or from `process.env.NODE_SCOPE`. In Couchbase N1QL files, the special placeholder
-`$scope` is replaced with the literal scope value before the query is sent — it is **not**
-a positional parameter.
+or from `process.env.NODE_SCOPE`. Scope ensures that a single database or table serves
+multiple logical environments (local, beta, production) without cross-contamination.
 
 ```mermaid
 flowchart LR
@@ -367,6 +446,12 @@ flowchart LR
     B -->|"$scope in .sql file"| C["WHERE t._scope = 'production'"]
     C -->|"query sent to DB"| D["Only production\ndocuments returned"]
 ```
+
+<Tabs>
+  <TabItem value="couchbase" label="Couchbase (N1QL)" default>
+
+`$scope` is a string replacement — not a bound parameter — so it does not shift `$1`,
+`$2` numbering:
 
 ```sql
 -- authoring time
@@ -378,14 +463,36 @@ WHERE t.id = $1
 SELECT * FROM `mydb` t WHERE t.id = 'abc123' AND t._scope = 'production'
 ```
 
-When writing a document from a JS entity method, stamp `_scope` and `_collection`
-explicitly so the document is visible to future N1QL queries:
+When **writing** a document, stamp `_scope` and `_collection` explicitly so future N1QL
+queries can find it:
 
 ```js
 rec._scope      = self._scope;
 rec._collection = self._collection;
 conn.insert(rec.id, rec, cb);
 ```
+
+  </TabItem>
+  <TabItem value="sqlite" label="SQLite">
+
+SQLite does not use `$scope` substitution. If your schema requires scope filtering, add
+a regular column and pass the scope as a `?` parameter:
+
+```sql
+/*
+ * @param {string} ?   user id
+ * @param {string} ?   scope
+ * @return {object}
+ */
+SELECT * FROM users WHERE id = ? AND scope = ?
+```
+
+```js
+var user = await db.userEntity.getById(id, self._scope);
+```
+
+  </TabItem>
+</Tabs>
 
 See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) for the
 full conceptual explanation.
