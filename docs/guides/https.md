@@ -3,6 +3,10 @@ title: HTTPS and HTTP/2
 sidebar_label: HTTPS & HTTP/2
 sidebar_position: 6
 description: How to enable HTTPS and HTTP/2 in Gina, the Node.js MVC framework — certificate setup, protocol negotiation, h2c cleartext mode, and connection tuning.
+level: intermediate
+prereqs:
+  - settings.json
+  - TLS certificate basics
 ---
 
 # HTTPS and HTTP/2

@@ -3,6 +3,10 @@ title: security.json
 sidebar_label: security.json
 sidebar_position: 8
 description: Reference for security.json — configures per-bundle session expiry and remember-me duration in a Gina application without storing secrets.
+level: intermediate
+prereqs:
+  - settings.json
+  - HTTPS guide
 ---
 
 # security.json

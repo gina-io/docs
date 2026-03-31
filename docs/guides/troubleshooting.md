@@ -3,6 +3,11 @@ title: Troubleshooting
 sidebar_label: Troubleshooting
 sidebar_position: 8
 description: Solutions for common Gina issues — resetting settings, fixing bundle start failures, resolving port conflicts, and troubleshooting HTTPS certificate errors.
+level: intermediate
+prereqs:
+  - Controllers
+  - gina CLI
+  - Framework logs
 ---
 
 # Troubleshooting

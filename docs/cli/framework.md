@@ -4,6 +4,9 @@ title: framework
 sidebar_label: framework
 sidebar_position: 4
 description: CLI reference for gina framework commands — start, stop, and restart the socket server, tail live logs, set the log level, and manage the framework version.
+level: intermediate
+prereqs:
+  - Gina installed globally
 ---
 
 # `gina framework`

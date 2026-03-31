@@ -4,6 +4,10 @@ title: scope
 sidebar_label: scope
 sidebar_position: 7
 description: CLI reference for gina scope commands — list, add, remove, switch scopes, and create local or production symlinks for Gina bundles.
+level: intermediate
+prereqs:
+  - Scopes concept
+  - Environments
 ---
 
 # `gina scope`

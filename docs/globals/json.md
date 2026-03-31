@@ -4,6 +4,9 @@ title: JSON Helper
 sidebar_label: JSON
 sidebar_position: 8
 description: Global requireJSON() function for loading JSON files with comment stripping and detailed parse-error diagnostics in the Gina framework.
+level: beginner
+prereqs:
+  - Controllers
 ---
 
 # JSON Helper

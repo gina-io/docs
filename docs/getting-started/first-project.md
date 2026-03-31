@@ -3,6 +3,9 @@ title: Create Your First Project
 sidebar_label: First Project
 sidebar_position: 2
 description: Create and register your first Gina project — start the framework socket server, scaffold a project directory, and configure the development hostname.
+level: beginner
+prereqs:
+  - Gina installed globally (npm install -g gina)
 ---
 
 # Create your first project

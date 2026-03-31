@@ -3,6 +3,9 @@ title: settings.json
 sidebar_label: settings.json
 sidebar_position: 4
 description: Reference for settings.json and its server, locale, cache, upload, and WebSocket sub-files — the full server configuration surface for a Gina bundle.
+level: intermediate
+prereqs:
+  - Projects and bundles
 ---
 
 # settings.json

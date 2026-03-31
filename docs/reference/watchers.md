@@ -3,6 +3,10 @@ title: watchers.json
 sidebar_label: watchers.json
 sidebar_position: 9
 description: Reference for watchers.json — declare file watchers for a Gina bundle. Native fs.watch integration with no polling. Foundation for dev-mode hot-reload.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - Dev mode
 ---
 
 # watchers.json

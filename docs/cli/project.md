@@ -4,6 +4,9 @@ title: project
 sidebar_label: project
 sidebar_position: 3
 description: CLI reference for gina project commands — register, remove, list, start, stop, and build Gina projects and all their bundles.
+level: beginner
+prereqs:
+  - Gina installed globally
 ---
 
 # `gina project`

@@ -1,0 +1,94 @@
+.wrapper {
+  margin-bottom: 1.75rem;
+}
+
+/* ─── Meta row: reading time + level badge ─────────────────────────── */
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.readingTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ifm-color-emphasis-500);
+}
+
+.levelBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Light mode */
+.levelBeginner {
+  background: #e6f4ea;
+  color: #1a6e2c;
+}
+.levelIntermediate {
+  background: #fff3cd;
+  color: #7a5800;
+}
+.levelExpert {
+  background: #fde8e8;
+  color: #b91c1c;
+}
+
+/* Dark mode */
+[data-theme='dark'] .levelBeginner {
+  background: rgba(34, 197, 94, 0.14);
+  color: #4ade80;
+}
+[data-theme='dark'] .levelIntermediate {
+  background: rgba(240, 176, 54, 0.14);
+  color: var(--gina-amber);
+}
+[data-theme='dark'] .levelExpert {
+  background: rgba(239, 68, 68, 0.14);
+  color: #f87171;
+}
+
+/* ─── Prerequisites note ───────────────────────────────────────────── */
+
+.prereqs {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.9rem 0.55rem 1rem;
+  border-radius: 6px;
+  background: var(--ifm-color-emphasis-100);
+  border-left: 3px solid var(--ifm-color-emphasis-300);
+  font-size: 13px;
+}
+
+.prereqsLabel {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.prereqsList {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.prereqsList li {
+  margin-bottom: 0.15rem;
+}
+
+.prereqsList li:last-child {
+  margin-bottom: 0;
+}

@@ -4,6 +4,10 @@ title: Task Helper
 sidebar_label: Task
 sidebar_position: 6
 description: Global run() function for executing shell commands from Gina bundle code, with EventEmitter-based streaming output and completion callbacks.
+level: intermediate
+prereqs:
+  - Controllers
+  - async/await
 ---
 
 # Task Helper

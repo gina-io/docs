@@ -3,6 +3,10 @@ title: Ports
 sidebar_label: Ports
 sidebar_position: 4
 description: How Gina allocates and manages ports for bundles — automatic assignment from port 3100, manual overrides, and the reserved framework ports 8124 and 8125.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - gina CLI
 ---
 
 # Ports

@@ -4,6 +4,10 @@ title: cache
 sidebar_label: cache
 sidebar_position: 9
 description: CLI reference for gina cache commands — inspect in-memory cache statistics for running Gina bundles.
+level: intermediate
+prereqs:
+  - Caching guide
+  - Running bundle
 ---
 
 # `gina cache`

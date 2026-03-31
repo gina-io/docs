@@ -4,6 +4,7 @@ title: Configuration Reference
 sidebar_label: Overview
 sidebar_position: 1
 description: Complete reference for every JSON config file in a Gina bundle — app.json, routing.json, settings.json, connectors.json, templates.json, statics.json, security.json, and their environment overlays.
+level: beginner
 ---
 
 # Configuration Reference

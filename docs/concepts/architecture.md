@@ -3,6 +3,10 @@ title: Architecture
 sidebar_label: Architecture
 sidebar_position: 5
 description: How a Gina application is structured — projects, bundles, the MVC request lifecycle, the framework socket server, HTTP/2, scopes, and the global context injected at startup.
+level: beginner
+prereqs:
+  - Basic Node.js
+  - MVC pattern
 ---
 
 # Architecture
