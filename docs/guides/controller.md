@@ -509,10 +509,26 @@ this.login = function(req, res, next) {
 
 ## 103 Early Hints
 
-`self.setEarlyHints(links)` sends a `103 Early Hints` informational response
-immediately when called. Call it at the start of an action — before the terminal
-method — so the browser can start preloading resources while the server is still
-preparing the response.
+The framework sends `103 Early Hints` in two ways: **automatically** for the
+bundle's known CSS/JS resources, and **manually** via `self.setEarlyHints(links)`
+for anything else.
+
+### Automatic (zero config)
+
+When `render()` is called over HTTP/2 in production mode, the framework sends a
+103 automatically with the CSS and JS preload links it already collected for
+the page — before `getAssets()` runs and before Swig compiles the template. The
+browser can start loading stylesheet and script files during the entire render
+latency window with no developer action required.
+
+The same `Link` headers are also included on the final `200` response for proxies
+and CDNs that may have missed the informational response.
+
+### Manual: `self.setEarlyHints(links)`
+
+Call this at the start of an action for resources the framework cannot know about
+— API-driven images, fonts selected at runtime, above-the-fold hero images, etc.
+The 103 is sent immediately when called.
 
 | Transport | Mechanism |
 |---|---|
@@ -524,14 +540,15 @@ are joined with `', '` into one header.
 
 ```js
 this.home = function(req, res, next) {
-    // Send 103 before any slow work begins
+    // Hint resources the framework doesn't know about
     self.setEarlyHints([
-        '</css/app.css>; rel=preload; as=style',
-        '</js/app.js>;  rel=preload; as=script'
+        '</fonts/Inter.woff2>; rel=preload; as=font; crossorigin',
+        '</img/hero.webp>; rel=preload; as=image'
     ]);
 
-    // ... fetch data, build page context ...
+    // ... fetch data ...
     self.render({ title: 'Home' });
+    // ↑ also auto-sends 103 for bundle CSS/JS before Swig compiles
 };
 ```
 
@@ -545,13 +562,15 @@ self
 
 **Behaviour:**
 - Silent no-op when headers have already been sent (guards against double-call).
-- Silent no-op on Node.js versions before 18.11 that don't support `writeEarlyHints`.
+- Silent no-op on Node.js < 18.11 that don't support `writeEarlyHints`.
 - Errors from the underlying write are caught and discarded — a hint failure never
   affects the main response.
 
 :::note HTTP/2 only delivers measurable gains
 Browsers only act on 103 responses over HTTPS/HTTP/2 connections. On plain HTTP/1.1
-the informational response is still sent but many browsers ignore it.
+the informational response is still sent but many browsers ignore it. The automatic
+103 from CSS/JS hints only fires in HTTP/2 non-dev mode (dev mode uses per-request
+cache eviction, not the preload list).
 :::
 
 ---
