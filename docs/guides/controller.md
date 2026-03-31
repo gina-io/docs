@@ -5,8 +5,8 @@ sidebar_position: 1.5
 description: How controllers work in Gina, the Node.js MVC framework — action methods, response rendering, request data, namespace controllers, and the per-request instance lifecycle.
 level: beginner
 prereqs:
-  - Projects and bundles
-  - routing.json basics
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+  - '[routing.json basics](/guides/routing)'
 ---
 
 # Controllers

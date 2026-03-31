@@ -5,8 +5,8 @@ sidebar_position: 3
 description: Scopes in Gina isolate configuration, certificates, and data across deployment targets like local, staging, and production — enabling safe multi-environment operation on a single cluster.
 level: intermediate
 prereqs:
-  - Environments
-  - Projects and bundles
+  - '[Environments](/concepts/environments)'
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
 # Scopes

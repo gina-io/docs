@@ -1,5 +1,14 @@
 import React from 'react';
+import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
+
+// Parse "[label](url)" from a prereq string.
+// Returns { label, url, external } or null if plain text.
+function parseLink(item) {
+  const m = item.match(/^\[(.+?)\]\((.+?)\)$/);
+  if (!m) return null;
+  return { label: m[1], url: m[2], external: /^https?:\/\//.test(m[2]) };
+}
 
 const LEVEL_CONFIG = {
   beginner:     { label: 'Beginner',     className: styles.levelBeginner },
@@ -42,9 +51,16 @@ export default function DocMeta({ minutes, level, prereqs }) {
         <div className={styles.prereqs}>
           <span className={styles.prereqsLabel}>Prerequisites</span>
           <ul className={styles.prereqsList}>
-            {prereqList.map((item, i) => (
-              <li key={i}>{item}</li>
-            ))}
+            {prereqList.map((item, i) => {
+              const link = parseLink(item);
+              if (!link) return <li key={i}>{item}</li>;
+              if (link.external) return (
+                <li key={i}>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+                </li>
+              );
+              return <li key={i}><Link to={link.url}>{link.label}</Link></li>;
+            })}
           </ul>
         </div>
       )}

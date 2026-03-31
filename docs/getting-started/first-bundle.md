@@ -5,7 +5,7 @@ sidebar_position: 3
 description: Add your first bundle to a Gina project, start it on its own port, and serve JSON or HTML responses — all managed by the Gina CLI.
 level: beginner
 prereqs:
-  - Project created with gina project:add
+  - '[Project created with gina project:add](/getting-started/first-project)'
 ---
 
 # Add a bundle and go live

@@ -5,8 +5,8 @@ sidebar_position: 4
 description: How middleware works in Gina, the Node.js MVC framework — writing middleware functions, global vs per-route chains, bundle-local and shared resolution, and the done callback pattern.
 level: intermediate
 prereqs:
-  - Controllers
-  - routing.json
+  - '[Controllers](/guides/controller)'
+  - '[routing.json](/guides/routing)'
 ---
 
 # Middleware

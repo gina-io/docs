@@ -5,8 +5,8 @@ sidebar_position: 1
 description: Install the Gina Node.js MVC framework globally via npm — with a custom prefix, a classical global install, or a local per-project setup.
 level: beginner
 prereqs:
-  - Node.js 18 or later
-  - npm or yarn
+  - '[Node.js 18 or later](https://nodejs.org/en/learn/getting-started/introduction-to-nodejs)'
+  - '[npm or yarn](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)'
 ---
 
 # Installation

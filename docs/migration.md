@@ -5,8 +5,8 @@ sidebar_position: 99
 description: Step-by-step upgrade notes for migrating between Gina framework versions, covering breaking changes, new config fields, and required actions.
 level: intermediate
 prereqs:
-  - Existing Gina project
-  - Version changelog
+  - '[Existing Gina project](/getting-started/first-project)'
+  - '[Version changelog](/migration)'
 ---
 
 # Migration Guide

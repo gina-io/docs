@@ -6,8 +6,8 @@ sidebar_position: 6
 description: CLI reference for gina port commands — list, set, and reset port assignments for bundles in a Gina project.
 level: intermediate
 prereqs:
-  - Projects and bundles
-  - Ports concept
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+  - '[Ports concept](/concepts/ports)'
 ---
 
 # `gina port`

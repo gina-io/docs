@@ -5,8 +5,8 @@ sidebar_position: 1
 description: Gina organises code into projects and bundles — a project groups related services, while each bundle runs as an independent Node.js process with its own port and lifecycle.
 level: beginner
 prereqs:
-  - Gina installed
-  - gina CLI basics
+  - '[Gina installed](/getting-started/installation)'
+  - '[gina CLI basics](/cli/)'
 ---
 
 # Projects and bundles

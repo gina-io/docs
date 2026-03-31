@@ -6,8 +6,8 @@ sidebar_position: 8
 description: CLI reference for gina view commands — scaffold HTML view templates into a Gina bundle.
 level: beginner
 prereqs:
-  - gina CLI
-  - Running bundle
+  - '[gina CLI](/cli/)'
+  - '[Running bundle](/cli/bundle)'
 ---
 
 # `gina view`

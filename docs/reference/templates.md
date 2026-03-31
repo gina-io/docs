@@ -5,8 +5,8 @@ sidebar_position: 6
 description: Reference for templates.json — declares the layout, stylesheets, and scripts for each page in a Gina bundle, with a shared _common baseline inherited by all pages.
 level: intermediate
 prereqs:
-  - Views guide
-  - Swig templates
+  - '[Views guide](/guides/views)'
+  - '[Swig templates](/guides/views)'
 ---
 
 # templates.json

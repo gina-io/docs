@@ -6,7 +6,7 @@ sidebar_position: 9
 description: Global i18n translation stub and String.prototype trimming utilities for the Gina framework, injected at startup without require().
 level: beginner
 prereqs:
-  - Controllers
+  - '[Controllers](/guides/controller)'
 ---
 
 # Text Helper

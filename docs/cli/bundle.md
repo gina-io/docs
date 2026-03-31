@@ -6,8 +6,8 @@ sidebar_position: 2
 description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, and list bundles within a Gina project.
 level: beginner
 prereqs:
-  - Gina project created
-  - manifest.json
+  - '[Gina project created](/getting-started/first-project)'
+  - '[manifest.json](/concepts/projects-and-bundles)'
 ---
 
 # `gina bundle`

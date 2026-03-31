@@ -6,8 +6,8 @@ sidebar_position: 9
 description: CLI reference for gina cache commands — inspect in-memory cache statistics for running Gina bundles.
 level: intermediate
 prereqs:
-  - Caching guide
-  - Running bundle
+  - '[Caching guide](/guides/caching)'
+  - '[Running bundle](/cli/bundle)'
 ---
 
 # `gina cache`
