@@ -25,16 +25,14 @@ connection, and scans the bundle's `models/` directory. For each entity class it
 SQL files in the matching subdirectory are converted into methods on that entity's
 prototype. By the time a controller action runs, all entity methods are ready to call.
 
-```
-Request → Controller action
-                 ↓
-           getModel('mydb')
-                 ↓
-           db.userEntity.getById(id)
-                 ↓
-           Framework executes SQL, returns Promise
-                 ↓
-           Controller renders result
+```mermaid
+flowchart LR
+    A["HTTP request"] --> B["Controller action"]
+    B --> C["getModel('mydb')"]
+    C --> D["db.userEntity\n.getById(id)"]
+    D --> E["SQL executed"]
+    E --> F["Promise resolved"]
+    F --> G["self.render(data)"]
 ```
 
 ---
@@ -59,13 +57,31 @@ src/<bundle>/models/
         update.sql
 ```
 
-The directory name under `entities/` determines the entity name. A file named `user.js`
-produces a class registered as `UserEntity`, accessible on the model object as
-`db.userEntity`.
+The framework derives entity names and method names entirely from the file system:
 
-SQL files live under `n1ql/` for Couchbase and `sql/` for SQLite. The subdirectory name
-must match the entity name; the file name (without `.sql`) becomes the method name on
-the entity.
+```mermaid
+flowchart TD
+    subgraph files["File system"]
+        EF["entities/user.js"]
+        SF1["n1ql/user/getById.sql"]
+        SF2["n1ql/user/update.sql"]
+    end
+
+    subgraph api["Runtime API"]
+        ENT["db.userEntity"]
+        M1["db.userEntity.getById()"]
+        M2["db.userEntity.update()"]
+    end
+
+    EF -->|"UserEntity → db.userEntity"| ENT
+    SF1 -->|"method name"| M1
+    SF2 -->|"method name"| M2
+    ENT --- M1
+    ENT --- M2
+```
+
+The subdirectory name under `n1ql/` or `sql/` must match the entity file name (without
+`.js`). The SQL file name (without `.sql`) becomes the method name.
 
 ---
 
@@ -175,7 +191,7 @@ n1ql/user/getOrderSummary/
   totals.sql          ← referenced via @include in _main.sql
 ```
 
-`_main.sql` can include sub-files with:
+`_main.sql` can pull in sub-files with:
 
 ```sql
 @include './totals.sql';
@@ -206,6 +222,13 @@ SQLite uses `?` positional placeholders. Statements are pre-compiled at startup 
 
 A block comment at the top of each SQL file carries metadata the framework reads at
 load time. All annotations are optional.
+
+```mermaid
+flowchart LR
+    A["SQL file\non disk"] -->|"parse on startup"| B["@param\n@return\n@options"]
+    B -->|"inject"| C["entity prototype\nmethod"]
+    C -->|"returns"| D["Promise\n+ .onComplete()"]
+```
 
 ### `@param`
 
@@ -255,8 +278,26 @@ is `not_bounded` (fastest, eventual consistency), which is appropriate for most 
 
 ## Calling entity methods
 
-All SQL-derived methods return a native Promise with an `.onComplete(cb)` shim. Choose
-whichever call style fits the surrounding code.
+All SQL-derived methods return a native Promise with an `.onComplete(cb)` shim. The
+sequence below shows what happens inside the framework on each call:
+
+```mermaid
+sequenceDiagram
+    participant C as Controller
+    participant E as Entity method
+    participant DB as Database
+
+    C->>E: db.userEntity.getById(id)
+    E-->>C: Promise (pending)
+    Note over E: deferred via setTimeout(0)
+    E->>DB: N1QL / SQL query
+    DB-->>E: result rows
+    E->>E: emit('user#getById', false, row)
+    E-->>C: Promise resolved → user object
+    C->>C: self.renderJSON(user)
+```
+
+Choose whichever call style fits the surrounding code.
 
 ### `await` (preferred in async actions)
 
@@ -320,15 +361,20 @@ or from `process.env.NODE_SCOPE`. In Couchbase N1QL files, the special placehold
 `$scope` is replaced with the literal scope value before the query is sent — it is **not**
 a positional parameter.
 
+```mermaid
+flowchart LR
+    A["NODE_SCOPE=production\nor connectors.json scope"] -->|"injected at startup"| B["entity._scope\n= 'production'"]
+    B -->|"$scope in .sql file"| C["WHERE t._scope = 'production'"]
+    C -->|"query sent to DB"| D["Only production\ndocuments returned"]
+```
+
 ```sql
+-- authoring time
 SELECT * FROM `mydb` t
 WHERE t.id = $1
   AND t._scope = $scope
-```
 
-At runtime with `NODE_SCOPE=production`, this becomes:
-
-```sql
+-- runtime (NODE_SCOPE=production)
 SELECT * FROM `mydb` t WHERE t.id = 'abc123' AND t._scope = 'production'
 ```
 
@@ -353,7 +399,7 @@ the same model. Use this for operations that span more than one domain object.
 
 ```js
 function OrderEntity() {
-    var self     = this;
+    var self       = this;
     var userEntity = self.getEntity('user');   // UserEntity instance
 
     this.placeOrder = function(rec) {
