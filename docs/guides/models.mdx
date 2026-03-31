@@ -47,7 +47,7 @@ The framework derives entity names and method names entirely from the file syste
 a file at the right path and the entity method appears automatically — no registration,
 no boilerplate.
 
-<Tabs>
+<Tabs groupId="database">
   <TabItem value="couchbase" label="Couchbase (N1QL)" default>
 
 ```
@@ -188,7 +188,7 @@ wrapped — they have no `.onComplete()` and no Promise return.
 
 Drop a file at the right path and the framework creates the method automatically.
 
-<Tabs>
+<Tabs groupId="database">
   <TabItem value="couchbase" label="Couchbase (N1QL)" default>
 
 **Path convention**
@@ -278,7 +278,7 @@ flowchart LR
     C -->|"returns"| D["Promise\n+ .onComplete()"]
 ```
 
-<Tabs>
+<Tabs groupId="database">
   <TabItem value="couchbase" label="Couchbase (N1QL)" default>
 
 All four annotations are supported.
@@ -447,7 +447,7 @@ flowchart LR
     C -->|"query sent to DB"| D["Only production\ndocuments returned"]
 ```
 
-<Tabs>
+<Tabs groupId="database">
   <TabItem value="couchbase" label="Couchbase (N1QL)" default>
 
 `$scope` is a string replacement — not a bound parameter — so it does not shift `$1`,
