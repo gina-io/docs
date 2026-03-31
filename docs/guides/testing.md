@@ -5,8 +5,8 @@ sidebar_position: 8
 description: Unit test Gina controllers and entities without a running server using constructor injection and createTestInstance for isolated, mock-driven tests.
 level: intermediate
 prereqs:
-  - Controllers
-  - Entity system
+  - '[Controllers](/guides/controller)'
+  - '[Entity system](/guides/models)'
 ---
 
 # Testing

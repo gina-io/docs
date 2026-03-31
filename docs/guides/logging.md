@@ -5,8 +5,8 @@ sidebar_position: 5
 description: How logging works in Gina, the Node.js MVC framework — RFC 5424 severity levels, hierarchy-based filtering, multi-bundle group isolation, the MQ tail transport, and log configuration.
 level: intermediate
 prereqs:
-  - Projects and bundles
-  - Environments
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+  - '[Environments](/concepts/environments)'
 ---
 
 # Logging

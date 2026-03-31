@@ -6,7 +6,7 @@ sidebar_position: 5
 description: Built-in prototype extensions for Array, Object, JSON, and Date in the Gina framework, applied at startup and available globally in bundle code.
 level: expert
 prereqs:
-  - JavaScript prototypes
+  - '[JavaScript prototypes](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Inheritance_and_the_prototype_chain)'
   - Framework internals
 ---
 

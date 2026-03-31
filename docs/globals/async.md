@@ -6,8 +6,8 @@ sidebar_position: 11
 description: Global async utility functions injected by the Gina framework — Promise adapters and helpers for bridging older callback-based APIs into async/await controller actions.
 level: intermediate
 prereqs:
-  - Controllers
-  - async/await
+  - '[Controllers](/guides/controller)'
+  - '[async/await](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Async_JS/Promises)'
 ---
 
 # Async Utilities

@@ -6,8 +6,8 @@ sidebar_position: 5
 description: CLI reference for gina env commands — list, add, remove, switch environments and manage environment variables for Gina bundles.
 level: intermediate
 prereqs:
-  - Projects and bundles
-  - env.json
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+  - '[env.json](/cli/env)'
 ---
 
 # `gina env`

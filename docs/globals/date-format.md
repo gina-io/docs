@@ -6,7 +6,7 @@ sidebar_position: 4
 description: Global date formatting, calendar arithmetic, and fiscal period utilities for the Gina framework, available as dateFormat and on Date.prototype.
 level: beginner
 prereqs:
-  - Controllers
+  - '[Controllers](/guides/controller)'
 ---
 
 # Date Format Helper

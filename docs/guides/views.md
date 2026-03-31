@@ -5,8 +5,8 @@ sidebar_position: 3
 description: Add HTML template support to a Gina bundle using the Swig template engine — layout inheritance, variable interpolation, and switching between JSON and HTML rendering.
 level: beginner
 prereqs:
-  - Controllers
-  - Swig template syntax
+  - '[Controllers](/guides/controller)'
+  - '[Swig template syntax](https://node-swig.github.io/swig-templates/docs/)'
 ---
 
 # Views and templates

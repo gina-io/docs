@@ -6,8 +6,8 @@ sidebar_position: 6
 description: Global run() function for executing shell commands from Gina bundle code, with EventEmitter-based streaming output and completion callbacks.
 level: intermediate
 prereqs:
-  - Controllers
-  - async/await
+  - '[Controllers](/guides/controller)'
+  - '[async/await](https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Async_JS/Promises)'
 ---
 
 # Task Helper

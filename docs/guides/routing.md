@@ -5,8 +5,8 @@ sidebar_position: 1
 description: How Gina routes HTTP requests — URL patterns, parameter validation, namespaces, scopes, query timeouts, global middleware, and reverse routing via routing.json.
 level: beginner
 prereqs:
-  - Projects and bundles
-  - Controllers
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+  - '[Controllers](/guides/controller)'
 ---
 
 # Routing

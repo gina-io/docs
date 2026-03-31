@@ -5,8 +5,8 @@ sidebar_position: 2
 description: How to cache rendered HTML and JSON responses in Gina, the Node.js MVC framework — memory and file-system backends, TTL modes, sliding windows, and event-driven invalidation.
 level: intermediate
 prereqs:
-  - routing.json
-  - Controllers
+  - '[routing.json](/guides/routing)'
+  - '[Controllers](/guides/controller)'
 ---
 
 # Caching

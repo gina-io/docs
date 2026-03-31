@@ -6,7 +6,7 @@ sidebar_position: 2
 description: Global path constructor and named-path registry for the Gina framework, wrapping Node.js fs and path modules with cross-platform file-system operations.
 level: intermediate
 prereqs:
-  - Controllers
+  - '[Controllers](/guides/controller)'
 ---
 
 # Path Helper

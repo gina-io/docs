@@ -5,8 +5,8 @@ sidebar_position: 3
 description: Reference for routing.json — maps URL patterns to controller actions in a Gina bundle, with support for parameters, regex requirements, middleware chains, scopes, and response caching.
 level: intermediate
 prereqs:
-  - Controllers
-  - URL patterns
+  - '[Controllers](/guides/controller)'
+  - '[URL patterns](/reference/routing)'
 ---
 
 # routing.json

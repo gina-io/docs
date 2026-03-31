@@ -5,10 +5,10 @@ sidebar_position: 7
 description: How to run Gina bundles in Docker containers and Kubernetes pods — gina-init bootstrap, gina-container foreground launcher, signal propagation, V8 pointer compression, and Redis session storage.
 level: expert
 prereqs:
-  - Docker
-  - Kubernetes
-  - gina CLI
-  - Linux process signals
+  - '[Docker](https://docs.docker.com/get-started/)'
+  - '[Kubernetes](https://kubernetes.io/docs/tutorials/kubernetes-basics/)'
+  - '[gina CLI](/cli/)'
+  - '[Linux process signals](https://man7.org/linux/man-pages/man7/signal.7.html)'
 ---
 
 # K8s and Docker

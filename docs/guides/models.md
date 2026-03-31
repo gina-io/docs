@@ -5,8 +5,8 @@ sidebar_position: 2.5
 description: How the Gina model layer works — entity classes, SQL files, @param/@return annotations, scope-based data isolation, and calling entity methods from controllers.
 level: intermediate
 prereqs:
-  - Controllers
-  - connectors.json reference
+  - '[Controllers](/guides/controller)'
+  - '[connectors.json reference](/reference/connectors)'
 ---
 
 # Models and entities
