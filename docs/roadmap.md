@@ -18,7 +18,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Apr 2026** | `0.1.8` ✅ | Scaffold correctness · K8s support · Dependency injection · Automatic version migration |
 | **Q2 2026** | `0.2.0` ✅ | Stability · WatcherService · Redis & SQLite connectors · K8s session storage · Startup cache · Pointer compression · Couchbase v2 deprecation · Couchbase security & critical bug fixes · HTTP/2 security hardening |
 | **Q3 2026** | `0.3.0` | Async/await · Dev hot-reload · MySQL & PostgreSQL connectors · AI Phase 2 · Tutorials · Mobile backend guide · Route radix tree · Connector peerDependencies · 103 Early Hints · HTTP/2 observability · Security & CVE page · Couchbase connector hardening · Beemaster Phase 1 |
-| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core |
+| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Prometheus metrics · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Beemaster admin |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
@@ -85,8 +85,8 @@ New database connectors follow the same interface as the existing Couchbase conn
 | --- | --- | --- | --- | --- |
 | ✅ | **Redis** | `0.2.0` | Q2 2026 | Session store and general-purpose cache. Client: `ioredis`. Required for K8s horizontal scaling. |
 | ✅ | **SQLite** | `0.2.0` | Q2 2026 | Three use cases: framework state storage (replaces JSON files under `~/.gina/`), session store for single-pod/dev deployments, and embedded ORM connector. Uses `node:sqlite` (Node.js built-in since v22.5.0 — zero npm deps). Session store done (v1 — 2026-03-27 · `96c5808a`); ORM connector done (v2 — 2026-03-28 · `08ead296`); state storage done (v3 — 2026-03-28 · `da5c55ba`). |
-| 📋 | **MySQL / MariaDB** | `0.3.0` | Q3 2026 | ORM connector. Client: `mysql2`. |
-| 📋 | **PostgreSQL** | `0.3.0` | Q3 2026 | ORM connector. Client: `pg` (node-postgres). |
+| ✅ | **MySQL / MariaDB** | `0.3.0` | Q1 2026 | ORM connector. Client: `mysql2`. Entity wiring, `sql/` layout, `?` placeholders, `@param`/`@return` annotations, native Promise + `.onComplete()`. |
+| ✅ | **PostgreSQL** | `0.3.0` | Q1 2026 | ORM connector. Client: `pg` (node-postgres). Entity wiring, `sql/` layout, `$1`/`$2` placeholders, `@param`/`@return` annotations, idle-client error guard, native Promise + `.onComplete()`. |
 | 📋 | **ScyllaDB** | `0.4.0` | Q4 2026 | Cassandra-compatible wide-column store. Client: `@scylladb/scylla-driver`. |
 | 📋 | **MongoDB** | `0.4.0` | Q4 2026 | Document store connector. Client: `mongodb` (official driver). Interface approach TBD — MongoDB's document model differs from the N1QL/SQL pattern used by existing connectors. |
 | ✅ | **Couchbase SDK v2 deprecation** | `0.2.0` | 2026-03-27 | Couchbase Server SDK v2 reached end-of-life in 2021. The connector now logs a deprecation warning at connection time. When V8 pointer compression is active, a fatal error is also emitted (v2 uses NAN bindings, which are incompatible and can cause a segfault). Upgrade path: set `sdk.version` to `3` or `4` in your bundle's `connectors.json`. |
@@ -139,6 +139,14 @@ A systematic audit of the Couchbase connector identified two critical security v
 
 ---
 
+## Observability
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| 📋 | **Prometheus metrics endpoint** — Built-in `/_gina/metrics` endpoint exposing Prometheus-format metrics. Opt-in via `app.json` (`"metrics": { "enabled": true }`). Collects Node.js process metrics (heap, GC, event loop lag) automatically via `prom-client.collectDefaultMetrics()`, and HTTP request metrics — count, latency histogram, and error count — labelled by route pattern sourced from `routing.json`. Route patterns (e.g. `/users/:id`) are used instead of raw URLs to prevent high-cardinality label explosion from path parameters. `prom-client` is loaded from the user project's `node_modules` (peer dependency, same pattern as `ioredis` and `mysql2`). Endpoint is IP-restricted by default; configurable in `app.json`. Each bundle self-reports on its own port — point Prometheus at `host:port/_gina/metrics` per bundle, no sidecar required. | `0.4.0` | Q4 2026 |
+
+---
+
 ## HTTP/2
 
 | Status | Feature | Version | Target | Notes |
@@ -170,7 +178,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **AI connector** — Declare an AI provider in `connectors.json` and acquire a client via `getConnection()`. Supported protocols: `anthropic://`, `openai://`. Follows the same pattern as database connectors. | `0.3.0` | Q3 2026 |
+| ✅ | **AI connector** — Declare any LLM provider in `connectors.json` via named protocol (`anthropic://`, `openai://`, `deepseek://`, `qwen://`, `groq://`, `mistral://`, `gemini://`, `xai://`, `perplexity://`, `ollama://`). Unified `.complete(messages, options)` normaliser + raw `.client` for advanced use. | `0.3.0` | Q1 2026 |
 | 📋 | **`renderStream` — streaming responses** — `self.renderStream(asyncIterable, contentType)` streams SSE or chunked JSON without buffering. Required for LLM token streaming without bypassing the render pipeline. | `0.3.0` | Q3 2026 |
 | 📋 | **Async job pattern for slow AI calls** — First-class "start job → return jobId → poll or webhook on completion" pattern integrated with the cron/queue infrastructure. Prevents LLM latency (1–30s) from blocking the response pipeline. | `0.4.0` | Q4 2026 |
 
