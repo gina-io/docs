@@ -2,7 +2,7 @@
 title: connectors.json
 sidebar_label: connectors.json
 sidebar_position: 7
-description: Configure database connections for Gina bundles using connectors.json. Reference for Couchbase, MongoDB, Redis, and SQLite — field definitions, multi-node clusters, TLS, and per-environment overrides.
+description: Configure database connections for Gina bundles using connectors.json. Reference for Couchbase, MongoDB, MySQL, PostgreSQL, Redis, SQLite, and AI providers (Anthropic, OpenAI, DeepSeek, Qwen, Groq, Mistral, Ollama) — field definitions, multi-node clusters, TLS, and per-environment overrides.
 level: intermediate
 prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
@@ -18,7 +18,7 @@ import TabItem from '@theme/TabItem';
 `connectors.json` declares the database connections available to a bundle's model layer.
 Each key in the file is a **connector name** — the model layer uses that name to acquire
 a live connection at runtime. The connector type is determined by the `protocol` field
-(Couchbase, MongoDB) or the `connector` field (Redis, SQLite).
+(Couchbase, MongoDB) or the `connector` field (Redis, SQLite, MySQL, PostgreSQL, AI).
 
 ```
 src/<bundle>/config/connectors.json
@@ -31,15 +31,90 @@ to any model in the bundle.
 
 ## Supported connectors
 
-| Connector | Type | Primary use | Status |
+| Connector | Type | Primary use | Distributed | Status |
+|---|---|---|---|---|
+| [Couchbase](#couchbase) | Document store (N1QL) | Primary application data | ✅ Yes — multi-node cluster, automatic failover | ✅ Available (v2 · v3 · v4) |
+| [MongoDB](#mongodb) | Document store | Primary application data | ✅ Yes — replica sets, sharding | ✅ Available |
+| [MySQL / MariaDB](#mysql) | Relational | Primary application data | ⚠️ Partial — single server by default; Galera Cluster or managed service for multi-node | ✅ Available (v0.3.0) |
+| [PostgreSQL](#postgresql) | Relational | Primary application data | ⚠️ Partial — single server by default; Patroni or managed service for multi-node | ✅ Available (v0.3.0) |
+| [Redis](#redis) | Key-value store | Session store | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
+| [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
+| [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
+| ScyllaDB | Wide-column | High-throughput application data | ✅ Yes — distributed by design | Planned — 0.4.0 |
+
+---
+
+## Choosing the right connector
+
+### Start with the deployment model
+
+The single most important question before picking a connector is whether your application
+will run on more than one process or pod. SQLite is a file — two processes writing to it
+simultaneously will corrupt data. Everything else in the table supports concurrent access.
+
+```mermaid
+flowchart TD
+    A[New project] --> B{Multiple pods?}
+    B -->|Yes| C{Purpose?}
+    B -->|No — single pod| D{Data model?}
+    C -->|Session state| E[Redis]
+    C -->|Primary data| F{Data model?}
+    F -->|Flexible / JSON| G{Need N1QL or scope isolation?}
+    F -->|Structured / relational| H[PostgreSQL or MySQL]
+    G -->|Yes| I[Couchbase]
+    G -->|No| J[MongoDB]
+    D -->|Relational| K[SQLite or PostgreSQL / MySQL]
+    D -->|Document| J
+```
+
+### By project type
+
+**Simple REST API or web app — starting out**
+Use **PostgreSQL** (or MySQL if your team already knows it). Relational, widely understood,
+straightforward schema migrations. Move to a distributed setup later with Patroni or a
+managed cloud service when you need it.
+
+**Multi-tenant SaaS or environment-scoped data**
+Use **Couchbase**. Gina's scope system was designed around Couchbase's N1QL — every entity
+query automatically filters by `_scope`, giving you hard data isolation between `local`,
+`beta`, and `production` environments in a shared cluster without schema duplication.
+
+**High-traffic app with flexible data shapes**
+Use **MongoDB** for primary data. Document model, horizontal scaling via replica sets and
+sharding, no schema migrations for evolving data structures.
+
+**Session state in a multi-pod / K8s deployment**
+Use **Redis**. It is the only session store that works correctly when multiple pods handle
+requests from the same user. SQLite sessions are local to the pod that wrote them —
+requests routed to a different pod will appear logged out.
+
+**Local development or low-traffic staging**
+Use **SQLite**. Zero setup, no server process, no credentials. Switch to PostgreSQL or
+Redis for production with only a `connectors.json` change — no application code changes.
+
+**AI-powered features**
+Use the **AI connector** alongside any data connector. It is stateless and does not replace
+a database — it adds LLM calls to controllers. Start with `ollama://` locally (no API key,
+no cost) and switch to a cloud provider by updating `connectors.json`.
+
+### Session store decision
+
+| Situation | Recommended |
+|---|---|
+| Single pod, local dev | SQLite — zero setup |
+| Single pod, production | SQLite — fine if you never scale horizontally |
+| Multiple pods / K8s | Redis — shared state across all pods |
+| Already using Redis for caching | Redis — reuse the same instance |
+
+### Quick comparison — relational connectors
+
+| | SQLite | MySQL | PostgreSQL |
 |---|---|---|---|
-| [Couchbase](#couchbase) | Document store (N1QL) | Primary application data | ✅ Available (v2 · v3 · v4) |
-| [MongoDB](#mongodb) | Document store | Primary application data | ✅ Available |
-| [Redis](#redis) | Key-value store | Session store — multi-pod, K8s | ✅ Available |
-| [SQLite](#sqlite) | Embedded relational | Session store — dev, staging, single-pod | ✅ Available (Node ≥ 22.5) |
-| MySQL / MariaDB | Relational | Primary application data | Planned — 0.2.0 |
-| PostgreSQL | Relational | Primary application data | Planned — 0.2.0 |
-| ScyllaDB | Wide-column | High-throughput application data | Planned — 0.4.0 |
+| Setup | None (file) | Server + credentials | Server + credentials |
+| Multi-pod | ❌ No | ✅ Yes | ✅ Yes |
+| JSON column support | Limited | Yes (5.7+) | Yes (JSONB) |
+| Full-text search | Basic | Yes | Yes (tsvector) |
+| Recommended for | Dev / staging | Teams familiar with MySQL | Greenfield / production |
 
 ---
 
@@ -155,6 +230,191 @@ Gina's MongoDB connector supports both self-hosted and Atlas deployments. Use
 
 ---
 
+### MySQL
+
+Gina's MySQL connector uses a `mysql2` connection pool. Install `mysql2` in your project:
+
+```bash
+npm install mysql2
+```
+
+<Tabs>
+  <TabItem value="basic" label="Basic">
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector"      : "mysql",
+    "host"           : "127.0.0.1",
+    "port"           : 3306,
+    "database"       : "mydb",
+    "username"       : "root",
+    "password"       : "${MYSQL_PASSWORD}",
+    "connectionLimit": 10
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="ssl" label="TLS / SSL">
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector"      : "mysql",
+    "host"           : "db.example.com",
+    "port"           : 3306,
+    "database"       : "mydb",
+    "username"       : "appuser",
+    "password"       : "${MYSQL_PASSWORD}",
+    "connectionLimit": 20,
+    "ssl"            : { "rejectUnauthorized": true }
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"mysql"` | — | Selects the MySQL connector |
+| `host` | string | `"127.0.0.1"` | MySQL server host |
+| `port` | number | `3306` | MySQL server port |
+| `database` | string | — | MySQL database name. Also names the model directory (`models/<database>/`) |
+| `username` | string | — | MySQL user |
+| `password` | string | `""` | MySQL password. Supports `${ENV_VAR}` substitution |
+| `connectionLimit` | number | `10` | Maximum number of connections in the pool |
+| `ssl` | object | — | SSL options passed directly to `mysql2`. See [mysql2 SSL docs](https://github.com/sidorares/node-mysql2#ssl-options) |
+
+---
+
+### PostgreSQL
+
+Gina's PostgreSQL connector uses a `pg` connection pool. Install `pg` in your project:
+
+```bash
+npm install pg
+```
+
+<Tabs>
+  <TabItem value="basic" label="Basic">
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector"        : "postgresql",
+    "host"             : "127.0.0.1",
+    "port"             : 5432,
+    "database"         : "mydb",
+    "username"         : "postgres",
+    "password"         : "${PGPASSWORD}",
+    "connectionLimit"  : 10
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="ssl" label="TLS / SSL">
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector"        : "postgresql",
+    "host"             : "db.example.com",
+    "port"             : 5432,
+    "database"         : "mydb",
+    "username"         : "appuser",
+    "password"         : "${PGPASSWORD}",
+    "connectionLimit"  : 20,
+    "idleTimeout"      : 30000,
+    "connectionTimeout": 2000,
+    "ssl"              : { "rejectUnauthorized": true }
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"postgresql"` | — | Selects the PostgreSQL connector |
+| `host` | string | `"127.0.0.1"` | PostgreSQL server host |
+| `port` | number | `5432` | PostgreSQL server port |
+| `database` | string | — | PostgreSQL database name. Also names the model directory (`models/<database>/`) |
+| `username` | string | — | PostgreSQL user |
+| `password` | string | `""` | PostgreSQL password. Supports `${ENV_VAR}` substitution |
+| `connectionLimit` | number | `10` | Maximum pool size (`pg.Pool` `max`) |
+| `idleTimeout` | number | `30000` | Milliseconds before an idle connection is closed (`idleTimeoutMillis`) |
+| `connectionTimeout` | number | `2000` | Milliseconds to wait for a connection before timing out (`connectionTimeoutMillis`) |
+| `ssl` | object | — | SSL options passed directly to `pg`. See [node-postgres SSL docs](https://node-postgres.com/features/ssl) |
+
+---
+
+## AI / LLM connectors {#ai}
+
+The AI connector exposes any LLM provider through `getModel()` in controllers.
+Unlike ORM connectors, it does not use entity files or SQL — `getModel()` returns
+an AI interface with a `.complete(messages, options)` method directly.
+
+See the **[AI connector guide](/guides/ai)** for full usage, all provider tabs, and
+controller examples. Field reference below.
+
+```json title="src/api/config/connectors.json"
+{
+  "claude": {
+    "connector" : "ai",
+    "protocol"  : "anthropic://",
+    "apiKey"    : "${ANTHROPIC_API_KEY}",
+    "model"     : "claude-opus-4-6"
+  },
+  "deepseek": {
+    "connector" : "ai",
+    "protocol"  : "deepseek://",
+    "apiKey"    : "${DEEPSEEK_API_KEY}",
+    "model"     : "deepseek-chat"
+  },
+  "local": {
+    "connector" : "ai",
+    "protocol"  : "ollama://",
+    "model"     : "mimo"
+  }
+}
+```
+
+**Supported protocols**
+
+| Protocol | SDK | Auto base URL |
+|---|---|---|
+| `anthropic://` | `@anthropic-ai/sdk` | `https://api.anthropic.com` |
+| `openai://` | `openai` | `https://api.openai.com/v1` |
+| `deepseek://` | `openai` | `https://api.deepseek.com/v1` |
+| `qwen://` | `openai` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `groq://` | `openai` | `https://api.groq.com/openai/v1` |
+| `mistral://` | `openai` | `https://api.mistral.ai/v1` |
+| `gemini://` | `openai` | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `xai://` | `openai` | `https://api.x.ai/v1` |
+| `perplexity://` | `openai` | `https://api.perplexity.ai` |
+| `ollama://` | `openai` | `http://localhost:11434/v1` |
+| `openai://` + `baseURL` | `openai` | your custom URL |
+
+**Field reference**
+
+| Field | Type | Description |
+|---|---|---|
+| `connector` | `"ai"` | Selects the AI connector |
+| `protocol` | string | Provider protocol — determines SDK and default base URL |
+| `apiKey` | string | API key. Supports `${ENV_VAR}` substitution. Omit for local Ollama |
+| `model` | string | Default model identifier used when `.complete()` is called without `options.model` |
+| `baseURL` | string | Override the provider's default base URL. Use for custom Ollama ports, corporate proxies, or unlisted OpenAI-compatible endpoints |
+
+---
+
 ## Session store connectors
 
 Session store connectors back Gina's session layer. They do not expose an ORM and are
@@ -165,6 +425,13 @@ not used directly by model entities. Choose one based on your deployment topolog
 Redis is the recommended session store for **multi-pod and Kubernetes deployments**.
 It provides a shared, persistent session layer across all replicas, surviving pod
 restarts and rolling deployments.
+
+:::note Valkey compatibility
+[Valkey](https://valkey.io/) (the Linux Foundation fork of Redis, BSD-licensed) is
+**wire-compatible** with Redis 7.2. The `ioredis` client connects to Valkey
+transparently — no connector change or config change needed. Point `host`/`port` at your
+Valkey instance and it works as-is.
+:::
 
 Requires `ioredis` installed in your project:
 
@@ -279,7 +546,7 @@ single-pod production where a shared Redis instance is not available.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `connector` | `"sqlite"` | — | Selects the SQLite connector |
-| `database` | string | `~/.gina/{v}/sessions-{bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
+| `database` | string | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
 | `ttl` | number | `86400` | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
 | `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable |
@@ -312,8 +579,8 @@ every model in the bundle.
 
 ## Environment overlay
 
-Use `connectors.{env}.json` to override specific fields for a given environment without
-duplicating the full config. The `{env}` segment must match `NODE_ENV`.
+Use `connectors.${env}.json` to override specific fields for a given environment without
+duplicating the full config. The `${env}` segment must match `NODE_ENV`.
 
 ```json title="src/api/config/connectors.dev.json"
 {
