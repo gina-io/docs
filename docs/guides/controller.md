@@ -507,6 +507,55 @@ this.login = function(req, res, next) {
 
 ---
 
+## 103 Early Hints
+
+`self.setEarlyHints(links)` sends a `103 Early Hints` informational response
+immediately when called. Call it at the start of an action — before the terminal
+method — so the browser can start preloading resources while the server is still
+preparing the response.
+
+| Transport | Mechanism |
+|---|---|
+| HTTP/2 | `stream.additionalHeaders({ ':status': 103, 'link': '...' })` |
+| HTTP/1.1 | `res.writeEarlyHints({ link: '...' })` (Node.js 18.11+) |
+
+`links` is a `Link` header value string or an array of strings. Multiple values
+are joined with `', '` into one header.
+
+```js
+this.home = function(req, res, next) {
+    // Send 103 before any slow work begins
+    self.setEarlyHints([
+        '</css/app.css>; rel=preload; as=style',
+        '</js/app.js>;  rel=preload; as=script'
+    ]);
+
+    // ... fetch data, build page context ...
+    self.render({ title: 'Home' });
+};
+```
+
+`setEarlyHints` returns `self` for optional chaining:
+
+```js
+self
+    .setEarlyHints('</css/critical.css>; rel=preload; as=style')
+    .setEarlyHints('</fonts/Inter.woff2>; rel=preload; as=font; crossorigin');
+```
+
+**Behaviour:**
+- Silent no-op when headers have already been sent (guards against double-call).
+- Silent no-op on Node.js versions before 18.11 that don't support `writeEarlyHints`.
+- Errors from the underlying write are caught and discarded — a hint failure never
+  affects the main response.
+
+:::note HTTP/2 only delivers measurable gains
+Browsers only act on 103 responses over HTTPS/HTTP/2 connections. On plain HTTP/1.1
+the informational response is still sent but many browsers ignore it.
+:::
+
+---
+
 ## Dev mode hot-reload
 
 In dev mode (`NODE_ENV_IS_DEV=true`) the framework automatically starts `WatcherService`
