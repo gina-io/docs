@@ -3,6 +3,10 @@ title: app.json
 sidebar_label: app.json
 sidebar_position: 2
 description: Reference for app.json — the required config file that declares a Gina bundle's identity, version, inter-bundle proxy connections, and application-level constants.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - Proxy configuration
 ---
 
 # app.json

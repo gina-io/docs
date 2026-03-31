@@ -3,6 +3,10 @@ title: Sessions
 sidebar_label: Sessions
 sidebar_position: 4.5
 description: Configure session management in Gina with express-session — in-memory, SQLite, and Redis stores, cookie options, secrets, and Kubernetes deployment.
+level: intermediate
+prereqs:
+  - Controllers
+  - settings.json
 ---
 
 # Sessions

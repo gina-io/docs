@@ -3,6 +3,10 @@ title: Views and Templates
 sidebar_label: Views
 sidebar_position: 3
 description: Add HTML template support to a Gina bundle using the Swig template engine — layout inheritance, variable interpolation, and switching between JSON and HTML rendering.
+level: beginner
+prereqs:
+  - Controllers
+  - Swig template syntax
 ---
 
 # Views and templates

@@ -3,6 +3,12 @@ title: K8s and Docker
 sidebar_label: K8s & Docker
 sidebar_position: 7
 description: How to run Gina bundles in Docker containers and Kubernetes pods — gina-init bootstrap, gina-container foreground launcher, signal propagation, V8 pointer compression, and Redis session storage.
+level: expert
+prereqs:
+  - Docker
+  - Kubernetes
+  - gina CLI
+  - Linux process signals
 ---
 
 # K8s and Docker

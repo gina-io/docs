@@ -4,6 +4,10 @@ title: port
 sidebar_label: port
 sidebar_position: 6
 description: CLI reference for gina port commands — list, set, and reset port assignments for bundles in a Gina project.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - Ports concept
 ---
 
 # `gina port`

@@ -4,6 +4,10 @@ title: Context Helper
 sidebar_label: Context
 sidebar_position: 3
 description: Global key/value context registry for the Gina framework, providing setContext, getContext, getConfig, whisper, and define functions injected at startup.
+level: expert
+prereqs:
+  - Framework architecture
+  - gna.js bootstrap
 ---
 
 # Context Helper

@@ -4,6 +4,9 @@ title: Data Helper
 sidebar_label: Data
 sidebar_position: 7
 description: Global functions for parsing URL-encoded and JSON request bodies and encoding RFC 5987 header values in the Gina framework.
+level: intermediate
+prereqs:
+  - Controllers
 ---
 
 # Data Helper

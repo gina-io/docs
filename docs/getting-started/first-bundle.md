@@ -3,6 +3,9 @@ title: Add a Bundle and Go Live
 sidebar_label: First Bundle
 sidebar_position: 3
 description: Add your first bundle to a Gina project, start it on its own port, and serve JSON or HTML responses — all managed by the Gina CLI.
+level: beginner
+prereqs:
+  - Project created with gina project:add
 ---
 
 # Add a bundle and go live

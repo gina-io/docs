@@ -4,6 +4,10 @@ title: protocol
 sidebar_label: protocol
 sidebar_position: 10
 description: CLI reference for gina protocol commands — list and set the HTTP protocol and scheme for Gina projects and bundles.
+level: intermediate
+prereqs:
+  - settings.json
+  - HTTP/2 basics
 ---
 
 # `gina protocol`

@@ -4,6 +4,10 @@ title: Prototypes
 sidebar_label: Prototypes
 sidebar_position: 5
 description: Built-in prototype extensions for Array, Object, JSON, and Date in the Gina framework, applied at startup and available globally in bundle code.
+level: expert
+prereqs:
+  - JavaScript prototypes
+  - Framework internals
 ---
 
 # Prototypes

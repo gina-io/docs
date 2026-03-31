@@ -4,6 +4,10 @@ title: ApiError
 sidebar_label: ApiError
 sidebar_position: 10
 description: Global constructor for structured API error responses in the Gina framework, supporting server errors and field-level client validation errors.
+level: intermediate
+prereqs:
+  - Controllers
+  - throwError
 ---
 
 # ApiError

@@ -3,6 +3,10 @@ title: Environments
 sidebar_label: Environments
 sidebar_position: 2
 description: Gina separates framework environments from project environments, giving you independent control over dev/prod modes, hot-reload, and per-bundle build output.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - settings.json
 ---
 
 # Environments

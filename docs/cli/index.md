@@ -5,6 +5,7 @@ sidebar_label: Overview
 sidebar_position: 1
 slug: /cli
 description: Complete CLI reference for the gina command — manage projects, bundles, the framework socket server, environments, ports, and scopes from the terminal.
+level: beginner
 ---
 
 # CLI Reference

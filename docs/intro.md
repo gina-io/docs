@@ -3,6 +3,7 @@ title: What is Gina?
 sidebar_label: What is Gina?
 sidebar_position: 1
 description: Gina is a Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency required.
+level: beginner
 ---
 
 # What is Gina?

@@ -3,6 +3,10 @@ title: statics.json
 sidebar_label: statics.json
 sidebar_position: 5
 description: Reference for statics.json — maps URL paths to filesystem directories so a Gina bundle can serve CSS, images, JavaScript, and font files without routing through a controller.
+level: intermediate
+prereqs:
+  - Projects and bundles
+  - Views guide
 ---
 
 # statics.json

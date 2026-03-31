@@ -3,6 +3,10 @@ title: Installation
 sidebar_label: Installation
 sidebar_position: 1
 description: Install the Gina Node.js MVC framework globally via npm — with a custom prefix, a classical global install, or a local per-project setup.
+level: beginner
+prereqs:
+  - Node.js 18 or later
+  - npm or yarn
 ---
 
 # Installation

@@ -1,5 +1,6 @@
-// Remark plugin — injects a ReadingTimeBadge component into every doc page.
+// Remark plugin — injects a DocMeta component into every doc page.
 // Runs at build time on all .md / .mdx files under /docs/.
+// Reads `level` and `prereqs` from frontmatter (file.data.frontMatter).
 
 function countWords(nodes) {
   let n = 0;
@@ -18,6 +19,9 @@ export default function readingTimePlugin() {
     if (!fp.includes('/docs/')) return;
 
     const minutes = Math.max(1, Math.round(countWords(tree.children) / 200));
+    const frontMatter = file.data?.frontMatter ?? {};
+    const level = frontMatter.level ?? null;
+    const prereqs = Array.isArray(frontMatter.prereqs) ? frontMatter.prereqs : null;
 
     // Find insertion point: after the first h1.
     // Docusaurus converts `# Title` to mdxJsxFlowElement{name:"header"} before
@@ -38,7 +42,7 @@ export default function readingTimePlugin() {
     // Import node — inlined ESTree AST required by MDX v3
     const importNode = {
       type: 'mdxjsEsm',
-      value: "import ReadingTimeBadge from '@site/src/components/ReadingTimeBadge';",
+      value: "import DocMeta from '@site/src/components/DocMeta';",
       data: {
         estree: {
           type: 'Program',
@@ -47,23 +51,21 @@ export default function readingTimePlugin() {
             type: 'ImportDeclaration',
             specifiers: [{
               type: 'ImportDefaultSpecifier',
-              local: { type: 'Identifier', name: 'ReadingTimeBadge' },
+              local: { type: 'Identifier', name: 'DocMeta' },
             }],
             source: {
               type: 'Literal',
-              value: '@site/src/components/ReadingTimeBadge',
-              raw: "'@site/src/components/ReadingTimeBadge'",
+              value: '@site/src/components/DocMeta',
+              raw: "'@site/src/components/DocMeta'",
             },
           }],
         },
       },
     };
 
-    // JSX element node — <ReadingTimeBadge minutes={N} />
-    const jsxNode = {
-      type: 'mdxJsxFlowElement',
-      name: 'ReadingTimeBadge',
-      attributes: [{
+    // Build JSX attributes — minutes is always present; level and prereqs are optional
+    const attributes = [
+      {
         type: 'mdxJsxAttribute',
         name: 'minutes',
         value: {
@@ -80,13 +82,58 @@ export default function readingTimePlugin() {
             },
           },
         },
-      }],
+      },
+    ];
+
+    if (level) {
+      // level is a plain string — pass as a JSX string attribute value
+      attributes.push({
+        type: 'mdxJsxAttribute',
+        name: 'level',
+        value: level,
+      });
+    }
+
+    if (prereqs) {
+      // prereqs is an array — pass as an expression attribute with an ArrayExpression
+      attributes.push({
+        type: 'mdxJsxAttribute',
+        name: 'prereqs',
+        value: {
+          type: 'mdxJsxAttributeValueExpression',
+          value: JSON.stringify(prereqs),
+          data: {
+            estree: {
+              type: 'Program',
+              sourceType: 'module',
+              body: [{
+                type: 'ExpressionStatement',
+                expression: {
+                  type: 'ArrayExpression',
+                  elements: prereqs.map((item) => ({
+                    type: 'Literal',
+                    value: item,
+                    raw: JSON.stringify(item),
+                  })),
+                },
+              }],
+            },
+          },
+        },
+      });
+    }
+
+    // JSX element node — <DocMeta minutes={N} [level="..."] [prereqs={[...]}] />
+    const jsxNode = {
+      type: 'mdxJsxFlowElement',
+      name: 'DocMeta',
+      attributes,
       children: [],
     };
 
-    // Insert import at position 0, then badge at pos+1 (accounting for the import)
+    // Insert import at position 0, then DocMeta at pos+1 (accounting for the import)
     const alreadyImported = tree.children.some(
-      (n) => n.type === 'mdxjsEsm' && (n.value ?? '').includes('ReadingTimeBadge'),
+      (n) => n.type === 'mdxjsEsm' && (n.value ?? '').includes('DocMeta'),
     );
     if (!alreadyImported) {
       tree.children.splice(0, 0, importNode);

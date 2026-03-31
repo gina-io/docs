@@ -3,6 +3,9 @@ id: logger
 title: Logger
 sidebar_label: Logger
 description: Multi-stream structured logging API for the Gina framework with syslog severity levels, runtime hierarchy control, and pluggable transport containers.
+level: beginner
+prereqs:
+  - Projects and bundles
 ---
 
 # Logger API reference
