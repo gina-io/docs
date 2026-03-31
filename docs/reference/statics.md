@@ -135,6 +135,54 @@ To share across **all** bundles without duplication, use `shared/config/statics.
 
 ---
 
+## Caching behaviour
+
+The static file server sends different cache headers depending on the environment.
+
+### Production (`NODE_ENV_IS_DEV` not set)
+
+Every static response includes `ETag` and `Last-Modified` headers. Subsequent requests
+from the browser are answered with **304 Not Modified** when the file has not changed —
+saving bandwidth and reducing latency for returning visitors.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant G as Gina (prod)
+
+    B->>G: GET /js/app.js
+    G-->>B: 200 OK<br/>ETag: "12345-1711900000000"<br/>Last-Modified: Tue, 01 Apr 2025 00:00:00 GMT
+
+    Note over B: File cached with ETag + Last-Modified
+
+    B->>G: GET /js/app.js<br/>If-None-Match: "12345-1711900000000"
+    G-->>B: 304 Not Modified<br/>(no body)
+```
+
+**ETag format** — `"<size>-<mtime>"` (size in bytes, mtime in milliseconds). This is a
+strong identity check: any change to the file produces a new ETag.
+
+**Precedence** — `If-None-Match` (ETag) is checked first. `If-Modified-Since` is only
+evaluated when `If-None-Match` is absent.
+
+### Dev mode (`NODE_ENV_IS_DEV=true`)
+
+All static responses carry `cache-control: no-cache, no-store, must-revalidate` —
+the browser never caches and always fetches fresh. This ensures that file edits are
+reflected immediately without a hard-reload.
+
+For `.js` and `.css` files that have a corresponding `.map` file, the `X-SourceMap`
+header is also set so browser DevTools can load the source map.
+
+### Summary
+
+| Environment | Headers sent | Browser behaviour |
+|---|---|---|
+| Production | `ETag`, `Last-Modified` | 304 on unchanged files |
+| Dev | `cache-control: no-cache, no-store, must-revalidate` + `X-SourceMap` (JS/CSS only) | Always re-fetches |
+
+---
+
 ## Extended example
 
 ```json title="src/dashboard/config/statics.json"
