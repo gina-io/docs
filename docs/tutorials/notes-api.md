@@ -60,17 +60,17 @@ flowchart LR
 ## Step 1 — Scaffold
 
 ```bash
-mkdir notes-api && cd notes-api
-gina project:add @notes-api
-gina bundle:add api @notes-api
+mkdir notes && cd notes
+gina project:add @notes
+gina bundle:add api @notes
 ```
 
-Open `notes-api/env.json` and set the `dev` hostname to `localhost` (see [First Project](/getting-started/first-project#env-json-and-hostnames)).
+Open `notes/env.json` and set the `dev` hostname to `localhost` (see [First Project](/getting-started/first-project#env-json-and-hostnames)).
 
 The two files you will edit:
 
 ```
-notes-api/
+notes/
 └── src/
     └── api/
         ├── config/
@@ -114,55 +114,51 @@ Each key is the route name. `"param": { "control": "list" }` tells the router to
 Open `src/api/controllers/controller.content.js` and replace its contents with:
 
 ```js
-var SuperController = require('../../../core/controller/controller');
-
 // In-memory store — resets on bundle restart.
 // See Models & entities when you are ready for a real database.
 var notes  = [];
 var nextId = 1;
 
-function Controller() {}
-Controller = inherits(Controller, SuperController);
-
-// GET /notes
-Controller.prototype.list = function(req, res, next) {
+function ApiContentController() {
     var self = this;
-    self.renderJSON({ notes: notes, total: notes.length });
-};
 
-// POST /notes
-Controller.prototype.create = function(req, res, next) {
-    var self = this;
-    var text = req.post.text;
-
-    if (!text) {
-        self.throwError(res, 400, '"text" is required');
-        return;
-    }
-
-    var note = {
-        id:        nextId++,
-        text:      text,
-        createdAt: new Date().toISOString()
+    // GET /notes
+    this.list = function(req, res) {
+        self.renderJSON({ notes: notes, total: notes.length });
     };
-    notes.push(note);
-    self.renderJSON({ note: note });
-};
 
-// GET /notes/:id
-Controller.prototype.getById = function(req, res, next) {
-    var self = this;
-    var id   = Number(req.params.id);
-    var note = notes.find(function(n) { return n.id === id; });
+    // POST /notes
+    this.create = function(req, res) {
+        var text = req.post.text;
 
-    if (!note) {
-        self.throwError(res, 404, 'Note not found');
-        return;
-    }
-    self.renderJSON({ note: note });
-};
+        if (!text) {
+            self.throwError(res, 400, '"text" is required');
+            return;
+        }
 
-module.exports = Controller;
+        var note = {
+            id:        nextId++,
+            text:      text,
+            createdAt: new Date().toISOString()
+        };
+        notes.push(note);
+        self.renderJSON({ note: note });
+    };
+
+    // GET /notes/:id
+    this.getById = function(req, res) {
+        var id   = Number(req.params.id);
+        var note = notes.find(function(n) { return n.id === id; });
+
+        if (!note) {
+            self.throwError(res, 404, 'Note not found');
+            return;
+        }
+        self.renderJSON({ note: note });
+    };
+}
+
+module.exports = ApiContentController;
 ```
 
 **Key patterns used:**
@@ -179,7 +175,7 @@ module.exports = Controller;
 ## Step 4 — Start and test
 
 ```bash
-gina bundle:start api @notes-api
+gina bundle:start api @notes
 ```
 
 **List notes (empty):**
