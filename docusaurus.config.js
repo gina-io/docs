@@ -47,7 +47,14 @@ const config = {
           remarkPlugins: [readingTimePlugin],
           async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
             const items = await defaultSidebarItemsGenerator(args);
-            return items.filter(item => !(item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')));
+            // Exclude standalone pages and the tutorials/ directory from the main Docs sidebar.
+            // Each exclusion is handled via `displayed_sidebar` frontmatter in the relevant pages,
+            // which routes them to their own dedicated sidebars.
+            return items.filter(item => {
+              if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
+              if (item.type === 'category' && item.label === 'Tutorials') return false;
+              return true;
+            });
           },
         },
         blog: {
@@ -90,6 +97,13 @@ const config = {
             sidebarId: 'tutorialSidebar',
             position: 'left',
             label: 'Docs',
+          },
+          {
+            type: 'docSidebar',
+            sidebarId: 'tutorialsSidebar',
+            position: 'left',
+            label: 'Tutorials',
+            className: 'navbar-tutorials-link',
           },
           {
             type: 'docSidebar',

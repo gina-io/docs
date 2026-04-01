@@ -3,7 +3,7 @@ title: Models and entities
 sidebar_label: Models
 sidebar_position: 2.5
 description: How Gina's model layer works — entity classes, SQL files, Couchbase N1QL and SQLite query patterns, @param/@return/@options annotations, scope-based data isolation, and calling entity methods with async/await from controllers.
-keywords: [gina models, entity classes, couchbase n1ql, sqlite orm, getModel, sql annotations, scope isolation, node.js mvc]
+keywords: [gina models, entity classes, couchbase n1ql, sqlite orm, mysql orm, postgresql orm, getModel, sql annotations, scope isolation, node.js mvc]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -86,6 +86,46 @@ src/<bundle>/models/
 
 SQL query files live under `sql/`. The same naming convention applies: subdirectory →
 entity, file name → method. Statements are pre-compiled at startup via `conn.prepare()`.
+
+  </TabItem>
+  <TabItem value="mysql" label="MySQL">
+
+```
+src/<bundle>/models/
+  <database>/
+    entities/
+      user.js          ← UserEntity class
+      order.js         ← OrderEntity class
+    sql/
+      user/
+        getById.sql    → db.userEntity.getById()
+        update.sql     → db.userEntity.update()
+      order/
+        getByUserId.sql → db.orderEntity.getByUserId()
+```
+
+SQL query files live under `sql/`. The same naming convention applies: subdirectory →
+entity, file name → method. Uses `?` positional placeholders (mysql2 syntax).
+
+  </TabItem>
+  <TabItem value="postgresql" label="PostgreSQL">
+
+```
+src/<bundle>/models/
+  <database>/
+    entities/
+      user.js          ← UserEntity class
+      order.js         ← OrderEntity class
+    sql/
+      user/
+        getById.sql    → db.userEntity.getById()
+        update.sql     → db.userEntity.update()
+      order/
+        getByUserId.sql → db.orderEntity.getByUserId()
+```
+
+SQL query files live under `sql/`. The same naming convention applies: subdirectory →
+entity, file name → method. Uses `$1`, `$2`, … positional placeholders (pg syntax).
 
   </TabItem>
 </Tabs>
@@ -262,6 +302,57 @@ written as a plain `?` parameter.
 `@include` directives are not supported for SQLite.
 
   </TabItem>
+  <TabItem value="mysql" label="MySQL">
+
+**Path convention**
+
+```
+models/<database>/sql/<EntityName>/<methodName>.sql
+```
+
+**Example — single row by ID**
+
+```sql
+/*
+ * @param  {string} ?
+ * @return {object}
+ */
+SELECT * FROM users WHERE id = ?
+```
+
+MySQL uses `?` positional placeholders — the same syntax as SQLite. The driver
+(`mysql2`) re-uses the server-side prepared statement on repeated calls via
+`pool.execute()`.
+
+There is no `$scope` substitution for MySQL queries. `@include` and `@options` are
+not supported.
+
+  </TabItem>
+  <TabItem value="postgresql" label="PostgreSQL">
+
+**Path convention**
+
+```
+models/<database>/sql/<EntityName>/<methodName>.sql
+```
+
+**Example — single row by ID**
+
+```sql
+/*
+ * @param  {string} $1
+ * @return {object}
+ */
+SELECT * FROM users WHERE id = $1
+```
+
+PostgreSQL uses `$1`, `$2`, `$3`, … positional placeholders (standard pg syntax).
+Arguments are passed in order to `pool.query()`.
+
+There is no `$scope` substitution for PostgreSQL queries. `@include` and `@options` are
+not supported.
+
+  </TabItem>
 </Tabs>
 
 ---
@@ -361,6 +452,62 @@ types: `string`, `number` / `integer`, `float`.
 | `@return {boolean}` | `true` if `length > 0` (SELECT) or `changes > 0` (write) |
 | `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
 | *(omitted on write)* | `{ changes, lastInsertRowid }` |
+
+  </TabItem>
+  <TabItem value="mysql" label="MySQL">
+
+`@param` and `@return` are supported. `@options` and `@include` are not available for
+MySQL.
+
+**`@param` — parameter types and casting**
+
+```sql
+/*
+ * @param {string}  ?   user id
+ * @param {integer} ?   page number
+ */
+```
+
+Use `?` in the query body — the `@param` declaration order determines binding. Supported
+types: `string`, `number` / `integer`, `float`.
+
+**`@return` — result shape**
+
+| Annotation | What is returned |
+|---|---|
+| `@return {object}` | First row, or `null` if the result is empty |
+| `@return {array}` | All rows (default for SELECT) |
+| `@return {boolean}` | `true` if `length > 0` (SELECT) or `affectedRows > 0` (write) |
+| `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
+| *(omitted on write)* | `{ changes, insertId }` |
+
+  </TabItem>
+  <TabItem value="postgresql" label="PostgreSQL">
+
+`@param` and `@return` are supported. `@options` and `@include` are not available for
+PostgreSQL.
+
+**`@param` — parameter types and casting**
+
+```sql
+/*
+ * @param {string}  $1   user id
+ * @param {integer} $2   page number
+ */
+```
+
+Use `$1`, `$2`, … in the query body. The `@param` declaration order must match the
+placeholder numbering. Supported types: `string`, `number` / `integer`, `float`.
+
+**`@return` — result shape**
+
+| Annotation | What is returned |
+|---|---|
+| `@return {object}` | First row (`result.rows[0]`), or `null` if the result is empty |
+| `@return {array}` | All rows (`result.rows`, default for SELECT) |
+| `@return {boolean}` | `true` if `rows.length > 0` (SELECT) or `rowCount > 0` (write) |
+| `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
+| *(omitted on write)* | `{ changes, command }` — e.g. `{ changes: 1, command: 'INSERT' }` |
 
   </TabItem>
 </Tabs>
@@ -492,6 +639,44 @@ var user = await db.userEntity.getById(id, self._scope);
 ```
 
   </TabItem>
+  <TabItem value="mysql" label="MySQL">
+
+MySQL does not use `$scope` substitution. If your schema requires scope filtering, add
+a regular column and pass the scope as a `?` parameter:
+
+```sql
+/*
+ * @param {string} ?   user id
+ * @param {string} ?   scope
+ * @return {object}
+ */
+SELECT * FROM users WHERE id = ? AND scope = ?
+```
+
+```js
+var user = await db.userEntity.getById(id, self._scope);
+```
+
+  </TabItem>
+  <TabItem value="postgresql" label="PostgreSQL">
+
+PostgreSQL does not use `$scope` substitution. If your schema requires scope filtering,
+add a regular column and pass the scope as a positional parameter:
+
+```sql
+/*
+ * @param {string} $1   user id
+ * @param {string} $2   scope
+ * @return {object}
+ */
+SELECT * FROM users WHERE id = $1 AND scope = $2
+```
+
+```js
+var user = await db.userEntity.getById(id, self._scope);
+```
+
+  </TabItem>
 </Tabs>
 
 See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) for the
@@ -524,17 +709,18 @@ instance other callers use, with the same connection.
 
 ---
 
-## Couchbase vs SQLite — quick reference
+## Quick reference
 
-| | Couchbase | SQLite |
-|---|---|---|
-| SQL directory | `n1ql/` | `sql/` |
-| Placeholders | `$1`, `$2`, … | `?` |
-| `$scope` substitution | Yes — replaced with scope value | No |
-| `@include` support | Yes | No |
-| `@options` support | Yes | No |
-| Statement preparation | At query time | At startup (`conn.prepare()`) |
-| Dev hot-reload (SQL) | Re-reads file on every call | Not applicable |
+| | Couchbase | SQLite | MySQL | PostgreSQL |
+|---|---|---|---|---|
+| SQL directory | `n1ql/` | `sql/` | `sql/` | `sql/` |
+| Placeholders | `$1`, `$2`, … | `?` | `?` | `$1`, `$2`, … |
+| `$scope` substitution | Yes | No | No | No |
+| `@include` support | Yes | No | No | No |
+| `@options` support | Yes | No | No | No |
+| Statement preparation | At query time | At startup (`conn.prepare()`) | Per call (`pool.execute()`) | Per call (`pool.query()`) |
+| Dev hot-reload (SQL) | Re-reads file on every call | No | No | No |
+| npm driver | `couchbase` | built-in (`node:sqlite`) | `mysql2` | `pg` |
 
 ---
 

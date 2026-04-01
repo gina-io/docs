@@ -116,7 +116,7 @@ For a persistent file store (survives restarts):
 | Field | Default | Description |
 |---|---|---|
 | `connector` | — | Must be `"sqlite"` |
-| `database` | `~/.gina/{version}/sessions-{bundle}.db` | Path to the SQLite file, or `":memory:"` |
+| `database` | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` |
 | `ttl` | `86400` | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix stored in the DB |
 | `cleanupInterval` | `900` | Seconds between expired-session purges. Set `0` to disable. |

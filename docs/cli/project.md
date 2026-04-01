@@ -17,19 +17,37 @@ Register and manage Gina projects. A project is a collection of bundles sharing 
 
 ## `project:add`
 
-Register an existing project directory with the Gina framework. Run this once
-after creating a project or cloning a repository.
+Create and register a new project directory with the Gina framework.
+
+**From inside the project directory** (directory must already exist and its name must match `@<project>`):
 
 ```bash
+mkdir <project> && cd <project>
 gina project:add @<project>
 ```
 
+**From any directory using `--path`:**
+
 ```bash
-gina project:add @myproject
+gina project:add @<project> --path=<dir>
 ```
 
-Gina reads `manifest.json` in the current directory and records the project
-path in `~/.gina/<version>/projects.json`.
+```bash
+gina project:add @myproject --path=~/Sites/myproject
+gina project:add @myproject --path=./myproject
+```
+
+Gina creates the directory if it does not exist, writes `manifest.json`, `package.json`, and `env.json`, and records the project path in `~/.gina/<version>/projects.json`.
+
+### Options
+
+| Option | Description |
+|---|---|
+| `--path=<dir>` | Target directory for the project. Defaults to the current working directory. |
+| `--homedir=<dir>` | Override the project home directory (defaults to `~/.<project>`). |
+| `--scope=<scope>` | Add a scope at creation time (e.g. `local`). |
+| `--env=<env>` | Set the default environment (e.g. `dev`). |
+| `--start-port-from=<port>` | Start the port scanner from this port number. |
 
 ---
 

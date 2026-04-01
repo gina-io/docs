@@ -57,3 +57,10 @@ gina port:reset @myproject --start-from=3200
 
 Ports are assigned sequentially: the first bundle gets `n`, the second `n+1`,
 and so on.
+
+:::note Reserved range and scan window
+The scanner searches a **900-port window** from the starting number (default
+`3100–3999`). If exhausted, use `--start-from=4200` or higher — ports
+`4100–4199` are reserved and skipped automatically. See
+[Ports](/concepts/ports) for details.
+:::

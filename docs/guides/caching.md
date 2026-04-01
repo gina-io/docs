@@ -116,8 +116,8 @@ in-process `Map`, so heap use is minimal regardless of response size.
 
 Files are written to:
 ```
-{cache.path}/{bundle}/html{url}.html      ← HTML responses
-{cache.path}/{bundle}/data{url}.json      ← JSON responses
+${cache.path}/${bundle}/html${url}.html      ← HTML responses
+${cache.path}/${bundle}/data${url}.json      ← JSON responses
 ```
 
 When an entry expires or is invalidated the cached file is deleted
