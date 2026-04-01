@@ -1,7 +1,7 @@
 ---
 title: Link Shortener
 sidebar_label: Link Shortener
-sidebar_position: 1
+sidebar_position: 2
 description: Build a URL shortener with Gina — SQLite connector, async controller actions, HTML views, and JSON API responses in a single bundle.
 level: intermediate
 displayed_sidebar: tutorialsSidebar
