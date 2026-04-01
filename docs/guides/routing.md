@@ -218,6 +218,35 @@ this.login = function(req, res, next) {
 };
 ```
 
+### Separate routes per method (REST style)
+
+Two routes on the same URL with different methods are fully supported. The router
+scans all routes and picks the first one whose URL **and** method both match:
+
+```json
+"list-notes": {
+  "namespace": "content",
+  "method": "GET",
+  "url": "/notes",
+  "param": { "control": "list" }
+},
+"create-note": {
+  "namespace": "content",
+  "method": "POST",
+  "url": "/notes",
+  "param": { "control": "create" }
+}
+```
+
+If no route matches the URL with the requested method, the router returns 405.
+
+:::warning namespace is required
+Without `"namespace"`, the router looks in `controller.js` instead of
+`controller.content.js`. If your action is defined in a namespace controller,
+omitting `namespace` silently routes to the wrong file and you will get a
+"control not found" error.
+:::
+
 ---
 
 ## Requirements
