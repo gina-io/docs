@@ -169,14 +169,14 @@ Open `src/api/config/routing.json` and replace its contents:
     "url": "/:slug/stats",
     "method": "GET",
     "requirements": { "slug": "^[A-Za-z0-9]{6}$" },
-    "param": { "control": "stats" }
+    "param": { "control": "stats", "slug": ":slug" }
   },
   "redirect": {
     "namespace": "links",
     "url": "/:slug",
     "method": "GET",
     "requirements": { "slug": "^[A-Za-z0-9]{6}$" },
-    "param": { "control": "redirect", "code": 302 }
+    "param": { "control": "redirect", "code": 302, "slug": ":slug" }
   }
 }
 ```
@@ -185,6 +185,7 @@ A few things to notice:
 
 - **`namespace: "links"`** — tells Gina to load `controllers/controller.links.js` for all four routes.
 - **`param.control`** — the action method to call on the controller.
+- **`"slug": ":slug"`** in the `param` block of `stats` and `redirect` — required so the router binds the matched URL segment to `req.params.slug` (and `req.get.slug`). Without this entry, `fitsWithRequirements` returns `false` even when the regex matches and the routes return 404.
 - **`requirements`** — a regex guard on `:slug`. Only 6-character alphanumeric strings match; anything else (e.g. `/favicon.ico`) falls through to 404 without hitting your controller.
 - **`stats` before `redirect`** — good practice: put the more specific two-segment path (`/:slug/stats`) before the one-segment wildcard (`/:slug`), even though Gina's radix trie handles ordering correctly.
 - **`"code": 302`** in the redirect route's `param` block — Gina's `self.redirect()` reads `req.routing.param.code` as the HTTP status code, defaulting to 301. Setting it to `302` here means the browser won't cache the redirect permanently, which is correct for a link shortener (destinations can change).
@@ -370,7 +371,7 @@ function ApiLinksController() {
     this.redirect = async function(req, res) {
         await ensureSchema();
 
-        var slug = req.routing.param.slug;
+        var slug = req.params.slug;
         var link = await db.link.findBySlug(slug);
 
         if (!link) {
@@ -391,7 +392,7 @@ function ApiLinksController() {
     this.stats = async function(req, res) {
         await ensureSchema();
 
-        var slug = req.routing.param.slug;
+        var slug = req.params.slug;
         var link = await db.link.findBySlug(slug);
 
         if (!link) {
@@ -535,6 +536,16 @@ gina bundle:start api @shortener
 ```
 
 You should see the framework log confirm that the SQLite connector loaded and the four routes are registered. Open your browser at `http://localhost:<port>` (replace `<port>` with the value from `gina port:list`).
+
+:::warning Webroot must be `/`
+A link shortener needs clean short links like `/abc123`, not `/api/abc123`. When `api` is the **first** (and only) bundle in a project, `gina bundle:add` automatically sets `webroot` to `/` in `src/api/config/settings.server.json`. Verify it reads `"webroot": "/"` before starting.
+
+If you add the `api` bundle to a project that already has other bundles, the default webroot will be `/api`. In that case open `src/api/config/settings.server.json` and change `"webroot": "/api"` to `"webroot": "/"` manually, then update the fetch URL in `home.html` if needed.
+:::
+
+:::info Dev-mode note
+In dev mode Gina reloads the controller on every request. The `_schemaReady` flag therefore resets each time, so `ensureSchema()` runs `setup()` on every request. This is safe — `CREATE TABLE IF NOT EXISTS` is idempotent — but it adds a small overhead. In production the module is loaded once and the flag persists. If you want the optimisation in dev mode too, store the flag as `global._schemaReady`.
+:::
 
 ---
 
