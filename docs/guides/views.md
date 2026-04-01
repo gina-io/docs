@@ -69,7 +69,26 @@ Gina ships with [Swig](https://node-swig.github.io/swig-templates/) as the defau
 </html>
 ```
 
-Templates live in `src/<bundle>/templates/`.
+Templates live in `src/<bundle>/templates/`. The full path for a content template is:
+
+```
+src/<bundle>/templates/html/content/<namespace>/<route-name>.html
+```
+
+- `<namespace>` — the `namespace` field in `routing.json`
+- `<route-name>` — the route **key** in `routing.json` (not the action method name)
+
+This convention is controlled by `"routeNameAsFilenameEnabled": true` in `templates.json`. Override for a specific route with `"param": { "file": "custom-name" }` in `routing.json`.
+
+Data passed to `self.render({ key: value })` is exposed as `page.data` in the template:
+
+```html
+{% extends 'layouts/main.html' %}
+{% set data = page.data %}
+{% block content %}
+  <h1>{{ data.key }}</h1>
+{% endblock %}
+```
 
 ### Layout inheritance
 

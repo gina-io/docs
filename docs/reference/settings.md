@@ -19,7 +19,7 @@ src/<bundle>/config/
 ├── settings.json                       ← server, locale, upload, cache
 ├── settings.server.json                ← webroot, CORS (server-side only)
 ├── settings.server.credentials.json    ← TLS certificate paths
-├── settings.server.cache.{env}.json    ← cache on/off per environment
+├── settings.server.cache.${env}.json    ← cache on/off per environment
 └── settings.server.resolvers.json      ← DNS resolvers per scope
 ```
 
@@ -237,14 +237,14 @@ and should not be committed. Add it to `.gitignore` and distribute it out of ban
 
 ---
 
-## settings.server.cache.{env}.json {#settingsservercacheenvjson}
+## settings.server.cache.${env}.json {#settingsservercacheenvjson}
 
 Overrides the `server.cache` block for a specific environment. The most common
 use is to disable caching locally while keeping it active in production.
 
-The `{env}` in the filename must match `NODE_ENV` for the file to take effect.
+The `${env}` in the filename must match `NODE_ENV` for the file to take effect.
 When the env does not match, the file is parsed but its section key resolves to
-`server.cache.{env}` — an unused key — so it has no impact.
+`server.cache.${env}` — an unused key — so it has no impact.
 
 ```json title="src/frontend/config/settings.server.cache.dev.json"
 {

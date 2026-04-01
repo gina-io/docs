@@ -38,7 +38,7 @@ src/
 | [`settings.json`](./settings) | ✓ | Server engine, protocol, locale, uploads |
 | [`settings.server.json`](./settings#settingsserverjson) | — | Webroot, CORS — server-side-only overrides |
 | [`settings.server.credentials.json`](./settings#settingsservercredentialsjson) | — | TLS certificate and private key paths |
-| [`settings.server.cache.{env}.json`](./settings#settingsservercacheenvjson) | — | Cache on/off per environment |
+| [`settings.server.cache.${env}.json`](./settings#settingsservercacheenvjson) | — | Cache on/off per environment |
 | [`settings.server.resolvers.json`](./settings#settingsserverresolversjson) | — | DNS resolvers per scope |
 | [`statics.json`](./statics) | — | URL path → filesystem path aliases |
 | [`templates.json`](./templates) | — | Page template definitions (stylesheets, scripts, layouts) |
@@ -76,7 +76,7 @@ described below, not by stripping the suffix from the section key.
 
 ## Environment overlays
 
-For every config file `foo.json`, you can create `foo.{env}.json` alongside it.
+For every config file `foo.json`, you can create `foo.${env}.json` alongside it.
 When the active `NODE_ENV` matches, the env file is loaded **on top of** the base file —
 env values win on conflict.
 
@@ -117,7 +117,7 @@ settings.server.cache.dev.json  → server.cache   (dev only)
 
 For each remaining config file:
 
-1. Load `foo.{env}.json` if it exists (env overlay)
+1. Load `foo.${env}.json` if it exists (env overlay)
 2. Load `foo.json` (base)
 3. Merge — env overlay wins on conflict
 4. Apply shared config from `shared/config/` if present

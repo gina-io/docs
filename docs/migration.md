@@ -19,7 +19,54 @@ upward to the target version.
 
 ---
 
-## 0.2.1 → 0.3.0
+## 0.2.0 → 0.3.0
+
+### `self.renderStream()` — new streaming response method _(additive)_
+
+`self.renderStream(asyncIterable, contentType)` is a new terminal method on
+SuperController. No existing code is affected. Add it when you need real-time token
+delivery (LLM streaming) or SSE endpoints.
+
+```js
+// Anthropic token stream
+Controller.prototype.chat = async function(req, res, next) {
+    var self = this;
+    var ai   = getModel('claude');
+    async function* tokens() {
+        var s = ai.client.messages.stream({ model: ai.model, max_tokens: 1024,
+            messages: [{ role: 'user', content: req.post.message }] });
+        for await (var ev of s)
+            if (ev.type === 'content_block_delta') yield ev.delta.text;
+    }
+    self.renderStream(tokens());   // SSE by default
+};
+```
+
+See [renderStream in the controller guide](/guides/controller#selfrenderstream-asynciterable-contenttype)
+and [token streaming in the AI guide](/guides/ai#token-streaming-with-renderstream).
+
+### AI connector — `.infer()` replaces `.complete()` _(rename, alpha only)_
+
+:::note For 0.3.0-alpha testers only
+This rename happened within the `0.3.0-alpha` series. If you are upgrading from `0.2.0`
+stable the AI connector is entirely new — no action needed.
+:::
+
+The unified inference method was renamed from `.complete()` to `.infer()` to use
+standard ML terminology and avoid confusion with Gina's own `.onComplete()` callback
+pattern.
+
+```js
+// before (0.3.0-alpha.1 early builds)
+var result = await ai.complete(messages, options);
+
+// after
+var result = await ai.infer(messages, options);
+```
+
+The returned shape `{ content, model, usage, raw }` and all options (`model`,
+`maxTokens`, `temperature`, `system`) are unchanged. The `.onComplete()` shim on the
+returned Promise is also unchanged.
 
 ### `self.query()` — non-2xx errors now always reach the callback
 
@@ -137,9 +184,62 @@ module.exports = Controller;
 
 No require needed — `onCompleteCall` is injected globally by the path helper.
 
+### PATCH method
+
+:::note Additive — no action required
+Existing POST and PUT actions are unchanged.
+:::
+
+`"method": "PATCH"` is now valid in `routing.json`. The request body is available
+on `req.patch` (or `req.body` for method-agnostic access). Use PATCH when only a
+subset of a resource's fields should change — the server applies only what is sent
+and leaves everything else untouched. Use PUT when the full resource is replaced.
+
+```json title="routing.json"
+{
+  "user-patch": {
+    "method": "PATCH",
+    "url":    "/users/:id",
+    "param":  { "control": "patch" }
+  }
+}
+```
+
+```js
+this.patch = async function(req, res, next) {
+    // req.patch contains only the fields the client sent
+    var ok = await db.userEntity.patchById(req.routing.param.id, req.patch);
+    self.renderJSON({ ok: ok });
+};
+```
+
+See [Request objects by HTTP method](/guides/controller#request-objects-by-http-method)
+for the full PUT vs PATCH comparison.
+
 ---
 
-## 0.2.0 → 0.2.1
+### HEAD method
+
+:::note Additive — no action required
+Routes declared as GET automatically accept HEAD — no routing change required.
+:::
+
+HEAD requests run the full controller action and return all response headers, but
+the body is suppressed before writing to the wire. Useful for cache validation,
+existence checks (`404` vs `200` without downloading a payload), and CDN probing.
+
+No code changes are needed for existing GET routes. If you want an explicit HEAD
+route, declare it with `"method": "HEAD"` in `routing.json`.
+
+```bash
+# Check whether a resource exists and what content-type it returns
+curl -I https://api.example.com/documents/42
+# HTTP/1.1 200 OK
+# content-type: application/json; charset=utf-8
+# content-length: 847
+```
+
+---
 
 ### `gina_version` in `manifest.json` — per-bundle framework version pin
 

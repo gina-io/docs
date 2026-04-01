@@ -109,7 +109,9 @@ gina bundle:restart api @myproject
 
 ## `bundle:status`
 
-Print the current status of a bundle (running / stopped, PID, port).
+:::note Not yet implemented
+`bundle:status` is planned but the handler is not yet implemented. It will print the running/stopped state, PID, port, and active environment for a specific bundle.
+:::
 
 ```bash
 gina bundle:status <bundle> @<project>

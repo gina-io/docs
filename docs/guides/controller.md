@@ -24,7 +24,7 @@ named by `param.control` in `routing.json`.
 flowchart LR
     A["Route matched"] --> B["Middleware chain"]
     B --> C["Controller action<br/>this.methodName(req, res, next)"]
-    C --> D["self.render()<br/>self.renderJSON()<br/>self.redirect()<br/>self.throwError()"]
+    C --> D["self.render()<br/>self.renderJSON()<br/>self.renderStream()<br/>self.redirect()<br/>self.throwError()"]
 ```
 
 Every action must call exactly one terminal method. If an action returns without calling
@@ -173,6 +173,116 @@ this.healthcheck = function(req, res, next) {
 };
 ```
 
+### `self.renderStream(asyncIterable, contentType)`
+
+Streams an `AsyncIterable` as a chunked HTTP response without buffering. Required for
+LLM token streaming, SSE endpoints, and any response where the full body is not known
+upfront.
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `asyncIterable` | `AsyncIterable` | required | Yields `string` or `Buffer` chunks |
+| `contentType` | `string` | `text/event-stream` | Response `Content-Type` |
+
+**Content-type determines framing:**
+- `text/event-stream` — each yielded chunk is wrapped as `data: {chunk}\n\n` (SSE)
+- any other type — raw chunks are written in sequence
+
+The `asyncIterable` should yield plain strings or Buffers. Object values are coerced
+via `String()`. The caller controls what each chunk contains — typically a token or
+a line of text.
+
+```mermaid
+sequenceDiagram
+    participant C as Controller action
+    participant R as renderStream
+    participant AI as AI SDK
+    participant Cl as HTTP client
+
+    C->>R: renderStream(tokens(), 'text/event-stream')
+    R->>Cl: respond(200, content-type: text/event-stream)
+    loop each token
+        AI-->>C: yield delta.text
+        C-->>R: yield token
+        R->>Cl: write("data: token\n\n")
+    end
+    R->>Cl: end()
+```
+
+**SSE — LLM token streaming (Anthropic):**
+
+```js
+Controller.prototype.chat = async function(req, res, next) {
+    var self = this;
+    var ai   = getModel('claude');
+
+    async function* tokens() {
+        var stream = ai.client.messages.stream({
+            model     : ai.model,
+            max_tokens: 1024,
+            messages  : [{ role: 'user', content: req.post.message }]
+        });
+        for await (var event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                yield event.delta.text;
+            }
+        }
+    }
+
+    self.renderStream(tokens());
+};
+```
+
+**SSE — LLM token streaming (OpenAI-compatible, e.g. DeepSeek, Ollama):**
+
+```js
+Controller.prototype.chat = async function(req, res, next) {
+    var self = this;
+    var ai   = getModel('deepseek');
+
+    async function* tokens() {
+        var stream = await ai.client.chat.completions.create({
+            model   : ai.model,
+            messages: [{ role: 'user', content: req.post.message }],
+            stream  : true
+        });
+        for await (var chunk of stream) {
+            var text = chunk.choices[0].delta.content;
+            if (text) yield text;
+        }
+    }
+
+    self.renderStream(tokens());
+};
+```
+
+**Chunked JSON (NDJSON):**
+
+```js
+Controller.prototype.export = async function(req, res, next) {
+    var self = this;
+
+    async function* rows() {
+        var cursor = await db.myEntity.streamAll();
+        for await (var row of cursor) {
+            yield JSON.stringify(row) + '\n';
+        }
+    }
+
+    self.renderStream(rows(), 'application/x-ndjson');
+};
+```
+
+**Notes:**
+- `renderStream` is fire-and-forget. Do not `await` it — the stream runs in the
+  background while the async IIFE manages the connection lifetime.
+- Upstream response headers set before `renderStream` is called (CORS, cookies, etc.)
+  are automatically preserved in the initial headers frame.
+- HTTP/2: uses `stream.respond()` + `stream.write()` + `stream.end()`.
+- HTTP/1.1: uses automatic chunked transfer-encoding via `response.write()`.
+- `x-accel-buffering: no` is set automatically for `text/event-stream` responses to
+  disable nginx proxy buffering.
+
 ### `self.renderWithoutLayout(data)`
 
 Same as `self.render()` but skips the layout wrapper. Useful for rendering partial HTML
@@ -235,10 +345,127 @@ this.get = function(req, res, next) {
 };
 ```
 
-### POST / PUT body and query strings
+### Request objects by HTTP method
 
-Parsed request data lives on the method-named object (`req.get`, `req.post`, `req.put`,
-`req.delete`). URL parameters and query strings are merged in automatically.
+Each HTTP method gets its own object on `req`. The framework populates only the
+object that matches the incoming method; the others are set to `undefined`.
+
+| Property | Set for | Contains |
+|---|---|---|
+| `req.get` | `GET` | Query-string parameters (`?key=value`) |
+| `req.post` | `POST` | Parsed request body (JSON or form-encoded) |
+| `req.put` | `PUT` | Parsed request body, merged with URI params |
+| `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update |
+| `req.delete` | `DELETE` | Query-string parameters |
+| `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response |
+| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
+
+**`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
+need to distinguish between POST, PUT, and PATCH:
+
+```js
+// Works for POST, PUT, and PATCH — req.body points to the right object automatically
+this.save = async function(req, res, next) {
+    var title = req.body.title;
+    // ...
+};
+```
+
+Use the method-specific name when the action is intentionally method-aware:
+
+```js
+// Explicit POST — create a new resource
+this.create = function(req, res, next) {
+    var name = req.post.name;
+};
+
+// Explicit PUT — replace the full resource
+this.replace = function(req, res, next) {
+    var data = req.put;
+};
+
+// Explicit PATCH — partial update (only the fields sent are changed)
+this.update = function(req, res, next) {
+    var data = req.patch;
+};
+```
+
+### PUT vs PATCH — when to use which
+
+**PUT** replaces the entire resource. The client sends a complete representation
+and the server stores it verbatim — fields that are absent in the body are treated
+as removed or reset to defaults.
+
+**PATCH** applies a partial update. Only the fields present in the request body are
+changed; everything else is left as-is on the server.
+
+Most ORMs and HTTP clients treat the two differently. Sending a PATCH when you
+intend a full replacement silently loses fields. Sending PUT when you only want to
+change one field forces the client to first fetch the full object, modify it, then
+send it back.
+
+```js
+// PUT /users/42  — full replacement
+// Body: { name: "Alice", email: "alice@example.com", role: "admin" }
+// All three fields are written; missing fields are removed.
+this.replace = async function(req, res, next) {
+    var ok = await db.userEntity.replaceById(req.routing.param.id, req.put);
+    self.renderJSON({ ok: ok });
+};
+
+// PATCH /users/42  — partial update
+// Body: { email: "new@example.com" }
+// Only email is updated; name and role are untouched.
+this.update = async function(req, res, next) {
+    var ok = await db.userEntity.patchById(req.routing.param.id, req.patch);
+    self.renderJSON({ ok: ok });
+};
+```
+
+### HEAD — resource metadata without the body
+
+HEAD works exactly like GET but the response body is suppressed. The framework
+runs the full controller action (database queries, header logic), then drops the
+body before writing to the wire. This makes HEAD useful for:
+
+- Checking whether a resource exists (status code)
+- Reading `content-type`, `content-length`, or `etag` before downloading
+- Cache validation by CDNs and reverse proxies
+- Health checks that confirm an endpoint is reachable
+
+Routes declared as `GET` automatically accept `HEAD` requests — no extra routing
+rule is needed.
+
+```js
+// routing.json — one rule covers both GET and HEAD
+{
+  "document-get": {
+    "method": "GET",
+    "url": "/documents/:id",
+    "param": { "control": "get" }
+  }
+}
+```
+
+```js
+// controller
+this.get = async function(req, res, next) {
+    var doc = await db.documentEntity.getById(req.routing.param.id);
+    if (!doc) return self.throwError(404, 'Not found');
+    // For HEAD: headers are sent, body is suppressed automatically
+    self.renderJSON(doc);
+};
+```
+
+```bash
+# Check existence and content-type without downloading the document
+curl -I https://api.example.com/documents/42
+# HTTP/1.1 200 OK
+# content-type: application/json; charset=utf-8
+# content-length: 847
+```
+
+Query-string parameters and URI params are merged in automatically for all methods:
 
 ```js
 // GET /search?q=gina&page=2
@@ -259,6 +486,11 @@ if (req.post.count() > 0) {
 
 String values `"null"`, `"true"`, and `"false"` are automatically cast to their
 JavaScript equivalents.
+
+:::note OPTIONS
+`OPTIONS` is reserved for CORS preflight and is handled internally — it never
+reaches a controller action.
+:::
 
 ### Session and authentication state
 
@@ -582,9 +814,9 @@ and registers watchers for:
 
 | Watched path | Dirty flag | Effect |
 |---|---|---|
-| `{core}/controller/controller.js` | `core` | Re-requires `SuperController` on next request |
-| `{core}/controller/controller.render-swig.js` | `core` | Re-requires render delegate on next request |
-| `{bundle}/controllers/` (directory) | `action` | Re-requires the matched controller file on next request |
+| `${core}/controller/controller.js` | `core` | Re-requires `SuperController` on next request |
+| `${core}/controller/controller.render-swig.js` | `core` | Re-requires render delegate on next request |
+| `${bundle}/controllers/` (directory) | `action` | Re-requires the matched controller file on next request |
 
 `require.cache` is evicted **only when a watched file has actually changed** — not on every
 request. This eliminates the per-request eviction overhead while keeping the instant-feedback
