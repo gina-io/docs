@@ -134,8 +134,7 @@ unique across the project.
 
 ### Parameterized URL
 
-Parameters start with `:`. The matched value is injected into `req.routing.param`
-and the appropriate method object (`req.get`, `req.post`, etc.).
+Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` (and `req.get.<key>` for GET requests).
 
 ```json
 "invoice": {
@@ -150,10 +149,16 @@ and the appropriate method object (`req.get`, `req.post`, etc.).
 ```js
 // In the controller:
 this.get = function(req, res, next) {
-  var id = req.routing.param.id;  // or req.get.id on GET requests
+  var id = req.params.id;  // or req.get.id on GET requests
   // ...
 };
 ```
+
+:::note `req.params` vs `req.routing.param`
+`req.params.<key>` holds the **actual URL value** captured at request time (e.g. `"abc-123"`).
+
+`req.routing.param` is the **raw routing config** for this request — it contains the placeholder declaration (`":id"`) and static values you set in `routing.json` (e.g. `"code": 302`). Use it to read static routing metadata; never use it to read URL parameter values.
+:::
 
 ### Multiple URLs
 
@@ -186,7 +191,7 @@ Parameters can be embedded within a segment rather than forming a full segment:
 }
 ```
 
-`/articles/page3` sets `req.routing.param.number` to `"3"`.
+`/articles/page3` sets `req.params.number` (and `req.get.number`) to `"3"`.
 
 ---
 
@@ -436,7 +441,7 @@ It is used as a fallback when no timeout is passed explicitly to `self.query()`:
 
 this.export = function(req, res, next) {
   // No explicit timeout — picks up 120 s from the route
-  self.query({ hostname: 'coreapi', path: '/heavy-report/' + req.routing.param.id }, function(err, data) {
+  self.query({ hostname: 'coreapi', path: '/heavy-report/' + req.params.id }, function(err, data) {
     if (err) return self.throwError(res, 503, err);
     self.renderJSON(data);
   });

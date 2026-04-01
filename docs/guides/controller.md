@@ -330,7 +330,7 @@ self.throwError(new Error('Forbidden'));  // reads err.status for the HTTP code
 
 ### URL parameters
 
-Route parameters declared in `routing.json` are resolved on `req.routing.param`:
+URL parameters captured in `routing.json` are available on `req.params.<key>` (and on the method-specific object, e.g. `req.get.<key>` for GET):
 
 ```json
 "invoice": {
@@ -341,9 +341,15 @@ Route parameters declared in `routing.json` are resolved on `req.routing.param`:
 
 ```js
 this.get = function(req, res, next) {
-  var id = req.routing.param.id;
+  var id = req.params.id;  // actual URL value, e.g. "abc-123"
 };
 ```
+
+:::note `req.params` vs `req.routing.param`
+`req.params.<key>` — the actual URL segment value captured at request time.
+
+`req.routing.param` — the raw routing configuration object (contains placeholder declarations like `":id"` and static values like `"code": 302`). Use it only to read static routing metadata you declared in `routing.json`, not URL parameter values.
+:::
 
 ### Request objects by HTTP method
 
@@ -409,7 +415,7 @@ send it back.
 // Body: { name: "Alice", email: "alice@example.com", role: "admin" }
 // All three fields are written; missing fields are removed.
 this.replace = async function(req, res, next) {
-    var ok = await db.userEntity.replaceById(req.routing.param.id, req.put);
+    var ok = await db.userEntity.replaceById(req.params.id, req.put);
     self.renderJSON({ ok: ok });
 };
 
@@ -417,7 +423,7 @@ this.replace = async function(req, res, next) {
 // Body: { email: "new@example.com" }
 // Only email is updated; name and role are untouched.
 this.update = async function(req, res, next) {
-    var ok = await db.userEntity.patchById(req.routing.param.id, req.patch);
+    var ok = await db.userEntity.patchById(req.params.id, req.patch);
     self.renderJSON({ ok: ok });
 };
 ```
@@ -450,7 +456,7 @@ rule is needed.
 ```js
 // controller
 this.get = async function(req, res, next) {
-    var doc = await db.documentEntity.getById(req.routing.param.id);
+    var doc = await db.documentEntity.getById(req.params.id);
     if (!doc) return self.throwError(404, 'Not found');
     // For HEAD: headers are sent, body is suppressed automatically
     self.renderJSON(doc);
@@ -530,7 +536,7 @@ or microservice from a controller action.
 
 ```js
 this.invoice = function(req, res, next) {
-  var id = req.routing.param.id;
+  var id = req.params.id;
 
   self.query(
     { hostname: 'api-internal', path: '/invoices/' + id },
@@ -605,7 +611,7 @@ var Controller = function() {
     this.report = async function(req, res, next) {
         var data = await self.query({
             hostname: 'api-internal',
-            path: '/report/' + req.routing.param.id
+            path: '/report/' + req.params.id
         });
         self.renderJSON(data);
     };
@@ -622,7 +628,7 @@ var Controller = function() {
         try {
             var data = await self.query({
                 hostname: 'api-internal',
-                path: '/report/' + req.routing.param.id
+                path: '/report/' + req.params.id
             });
             self.renderJSON(data);
         } catch (err) {
