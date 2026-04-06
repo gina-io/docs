@@ -7,7 +7,7 @@ description: CLI reference for gina env commands — list, add, remove, switch e
 level: intermediate
 prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
-  - '[env.json](/cli/env)'
+  - '[Environments](/concepts/environments)'
 ---
 
 # `gina env`

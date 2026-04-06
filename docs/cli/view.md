@@ -7,7 +7,7 @@ description: CLI reference for gina view commands — scaffold HTML view templat
 level: beginner
 prereqs:
   - '[gina CLI](/cli/)'
-  - '[Running bundle](/cli/bundle)'
+  - '[Running bundle](/cli/cli-bundle)'
 ---
 
 # `gina view`
