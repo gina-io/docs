@@ -7,7 +7,7 @@ description: CLI reference for gina cache commands — inspect in-memory cache s
 level: intermediate
 prereqs:
   - '[Caching guide](/guides/caching)'
-  - '[Running bundle](/cli/bundle)'
+  - '[Running bundle](/cli/cli-bundle)'
 ---
 
 # `gina cache`

@@ -188,7 +188,7 @@ module.exports = ApiContentController;
 | `self.throwError(res, code, msg)` | Send an error response — always `return` immediately after |
 
 :::info Dev mode and in-memory state
-In `dev` (the default env), Gina reloads the controller module on every request to pick up code changes. Plain module-level `var notes = []` would reset on each request. Attaching state to `global` keeps it alive for the lifetime of the bundle process while still resetting on `gina bundle:restart`. See [Dev mode caching](/concepts/caching#dev-mode) for details.
+In `dev` (the default env), Gina reloads the controller module on every request to pick up code changes. Plain module-level `var notes = []` would reset on each request. Attaching state to `global` keeps it alive for the lifetime of the bundle process while still resetting on `gina bundle:restart`. See [Dev mode caching](/guides/caching) for details.
 :::
 
 ---

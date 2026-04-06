@@ -144,7 +144,7 @@ and `initialWindowSize` settings can be tuned in your bundle's `settings.server.
 }
 ```
 
-See the [Configuration reference](/reference/configuration) for the full `settings.server.json`
+See the [Configuration reference](/reference/settings) for the full `settings.server.json`
 field list.
 
 ---
