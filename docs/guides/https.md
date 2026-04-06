@@ -203,8 +203,34 @@ The most common settings to tune, set in `settings.json`:
 
 Full reference: [settings.json → server](../reference/settings#server).
 
-### Coming in 0.3.0
+### 103 Early Hints
 
-**103 Early Hints** — `Link: <url>; rel=preload` headers will be sent as an informational response before the final HTML, allowing the browser to start fetching CSS and JS while the template is still rendering. No action needed on your part — the framework handles it automatically for bundles that declare static assets.
+`Link: <url>; rel=preload` headers are sent as an informational response before the final HTML, allowing the browser to start fetching CSS and JS while the template is still rendering. No action needed on your part — the framework handles it automatically for bundles that declare static assets.
 
-**Configurable stream limits** — `maxConcurrentStreams` and `initialWindowSize` will be movable to `settings.server.json` per bundle.
+To send custom early hints from a controller action:
+
+```javascript
+self.setEarlyHints([
+    '</css/app.css>; rel=preload; as=style',
+    '</js/app.js>; rel=preload; as=script'
+]);
+```
+
+On HTTP/2, this uses `stream.additionalHeaders({ ':status': 103 })`. On HTTP/1.1, it falls back to `res.writeEarlyHints()`. The call is best-effort — a hint failure never affects the main response.
+
+### Stream limits
+
+`maxConcurrentStreams` and `initialWindowSize` are configurable per bundle via `settings.json`:
+
+```json title="src/api/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "maxConcurrentStreams": 256,
+      "initialWindowSize": 655350
+    }
+  }
+}
+```
+
+Defaults are `256` concurrent streams and `655350` bytes initial window size. Security-related HTTP/2 settings remain hardcoded.

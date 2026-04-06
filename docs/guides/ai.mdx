@@ -549,6 +549,7 @@ module.exports = Controller;
 ### `.onComplete()` callback
 
 ```js
+// var self = this; declared at constructor top
 this.chat = function(req, res, next) {
     var ai = getModel('deepseek');
 
@@ -659,7 +660,7 @@ var embedding = await ai.client.embeddings.create({
 
 `ai.infer()` returns a single buffered response. For real-time token delivery —
 chatbots, copilots, long-generation tasks — use `ai.client` directly with `stream: true`
-and pipe the result through [`self.renderStream()`](/guides/controller#selfrenderstream-asynciterable-contenttype).
+and pipe the result through [`self.renderStream()`](/guides/controller#selfrenderstreamasynciterable-contenttype).
 
 ### Anthropic
 

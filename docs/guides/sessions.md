@@ -282,9 +282,9 @@ Point dev at a local Redis without changing `connectors.json`:
 ## Using sessions in controllers
 
 ```js title="src/api/controllers/controller.auth.js"
-this.login = function(req, res, next) {
-    var self = this;
+var self = this;
 
+this.login = function(req, res, next) {
     // Validate credentials ...
     var user = { id: 42, name: 'Martin', role: 'admin' };
 
@@ -296,8 +296,6 @@ this.login = function(req, res, next) {
 };
 
 this.logout = function(req, res, next) {
-    var self = this;
-
     req.session.destroy(function(err) {
         if (err) return self.throwError(res, 500, err);
         self.renderJSON({ ok: true });
@@ -306,9 +304,9 @@ this.logout = function(req, res, next) {
 
 this.profile = function(req, res, next) {
     if (!req.session.user) {
-        return this.throwError(res, 401, new Error('Not authenticated'));
+        return self.throwError(res, 401, new Error('Not authenticated'));
     }
-    this.renderJSON({ user: req.session.user });
+    self.renderJSON({ user: req.session.user });
 };
 ```
 

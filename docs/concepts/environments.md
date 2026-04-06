@@ -92,7 +92,7 @@ You can only have one development environment per project.
 Before starting a bundle in any non-development environment (e.g. `prod`, `staging`), you must build it first:
 
 ```bash
-gina project:build prod @myproject
+gina project:build @myproject --env=prod
 ```
 
 This compiles assets and prepares the release output.

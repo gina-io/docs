@@ -48,7 +48,7 @@ Any unrecognised `--key=value` flag is forwarded to the Node.js process
 gina bundle:start api @myproject --inspect-brk=5858 --max-old-space-size=2048
 ```
 
-**Per-bundle framework version**
+### Per-bundle framework version
 
 Pin a bundle to a specific installed gina version without touching the running
 socket server:

@@ -63,7 +63,7 @@ Then try starting the bundle again.
 If Gina reports a port already in use, reset port allocation for the project:
 
 ```bash
-gina port:reset @myproject --start-from=3100
+gina port:reset @myproject --start-port-from=3100
 ```
 
 ---

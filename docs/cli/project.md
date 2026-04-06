@@ -126,6 +126,10 @@ Print the status of every bundle in a project.
 gina project:status @<project>
 ```
 
+:::caution Not yet implemented
+The `project:status` handler is a placeholder.
+:::
+
 ---
 
 ## `project:build`

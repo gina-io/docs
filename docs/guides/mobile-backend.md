@@ -34,7 +34,7 @@ gina project:add @myapp
 gina bundle:add api @myapp
 ```
 
-A mobile backend rarely needs HTML views, so the default JSON-only bundle is the right starting point. Set the hostname to `localhost` in `env.json` for local development (see [First Project](/getting-started/first-project#env-json-and-hostnames)).
+A mobile backend rarely needs HTML views, so the default JSON-only bundle is the right starting point. Set the hostname to `localhost` in `env.json` for local development (see [First Project](/getting-started/first-project#envjson-and-hostnames)).
 
 ---
 
@@ -363,9 +363,11 @@ Starting the bundle with HTTPS/HTTP2 protocol gives mobile clients measurable im
 Switch the `api` bundle to HTTP/2:
 
 ```bash
-gina protocol:set http2 api @myapp
+gina protocol:set api @myapp
 gina bundle:restart api @myapp
 ```
+
+The command runs interactively and prompts you to select the protocol.
 
 See [HTTPS & HTTP/2](/guides/https) for the full certificate setup.
 

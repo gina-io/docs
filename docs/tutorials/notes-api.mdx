@@ -31,6 +31,10 @@ In this tutorial you will build a simple REST API for creating and listing notes
 - Return JSON with `self.renderJSON()`
 - Return errors with `self.throwError()`
 
+:::info Download the finished project
+[**notes-api.zip**](/downloads/tutorials/notes-api.zip) — extract and run `gina project:add @notes --path=$(pwd) && gina bundle:start api @notes`.
+:::
+
 ---
 
 ## What you'll build
@@ -65,7 +69,7 @@ gina project:add @notes
 gina bundle:add api @notes
 ```
 
-Open `notes/env.json` and confirm the `dev` hostname is set to `localhost` (see [First Project](/getting-started/first-project#env-json-and-hostnames)).
+Open `notes/env.json` and confirm the `dev` hostname is set to `localhost` (see [First Project](/getting-started/first-project#envjson-and-hostnames)).
 
 The two files you will edit:
 
