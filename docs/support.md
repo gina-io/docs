@@ -36,7 +36,7 @@ Code contributions are the highest-leverage form of support. The project activel
 
 - Bug fixes
 - Documentation improvements
-- New connectors (MySQL, PostgreSQL, ScyllaDB — see [Roadmap](/docs/roadmap))
+- New connectors (MySQL, PostgreSQL, ScyllaDB — see [Roadmap](/roadmap))
 - Test coverage
 
 [See the contributing guide →](https://github.com/Rhinostone/gina/blob/master/CONTRIBUTING.md)

@@ -72,7 +72,7 @@ gina env:use prod
 Read the value of a specific environment variable.
 
 ```bash
-gina env:get <key>
+gina env:get --<key> @<project>
 ```
 
 ---
@@ -82,7 +82,7 @@ gina env:get <key>
 Set an environment variable.
 
 ```bash
-gina env:set <key> <value>
+gina env:set --<key>=<value> @<project>
 ```
 
 ---
@@ -92,7 +92,7 @@ gina env:set <key> <value>
 Remove an environment variable.
 
 ```bash
-gina env:unset <key>
+gina env:unset --<key> @<project>
 ```
 
 ---

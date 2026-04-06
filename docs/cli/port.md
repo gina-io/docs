@@ -33,12 +33,16 @@ gina port:list @<project>
 Assign a specific port to a bundle.
 
 ```bash
-gina port:set <bundle> <port> @<project>
+gina port:set <protocol>:<port> <bundle> @<project>/<env>
 ```
 
 ```bash
-gina port:set api 4200 @myproject
+gina port:set http:4200 api @myproject/dev
 ```
+
+:::caution Not yet implemented
+The `port:set` handler is a placeholder. Use `port:reset` to reallocate ports.
+:::
 
 ---
 
@@ -48,11 +52,11 @@ Reallocate all bundle ports for a project, starting from a given number.
 Useful after a port conflict or when restructuring a project.
 
 ```bash
-gina port:reset @<project> --start-from=<n>
+gina port:reset @<project> --start-port-from=<n>
 ```
 
 ```bash
-gina port:reset @myproject --start-from=3200
+gina port:reset @myproject --start-port-from=3200
 ```
 
 Ports are assigned sequentially: the first bundle gets `n`, the second `n+1`,
@@ -60,7 +64,7 @@ and so on.
 
 :::note Reserved range and scan window
 The scanner searches a **900-port window** from the starting number (default
-`3100–3999`). If exhausted, use `--start-from=4200` or higher — ports
+`3100–3999`). If exhausted, use `--start-port-from=4200` or higher — ports
 `4100–4199` are reserved and skipped automatically. See
 [Ports](/concepts/ports) for details.
 :::

@@ -29,7 +29,7 @@ A project:
 |---------|-------------|
 | `gina project:add @name --path=<path>` | Register a new project |
 | `gina project:rm @name` | Unregister a project |
-| `gina project:build <env> @name` | Build the project for a given environment |
+| `gina project:build @name --env=<env>` | Build the project for a given environment |
 
 ---
 
@@ -83,7 +83,7 @@ Gina allocates ports automatically. The starting port for a project defaults to 
 You can reset port allocation:
 
 ```bash
-gina port:reset @myproject --start-from=3100
+gina port:reset @myproject --start-port-from=3100
 ```
 
 ---
@@ -101,12 +101,12 @@ Declare `gina_version` on the bundle entry in `manifest.json`:
   "bundles": {
     "api": {
       "version":      "0.0.1",
-      "gina_version": "0.2.0",     // this bundle runs under 0.2.0
+      "gina_version": "0.3.0",     // this bundle runs under 0.3.0
       "src":          "src/api"
     },
     "frontend": {
       "version":      "0.0.1",
-      "gina_version": "0.2.1",     // this bundle runs under 0.2.1
+      "gina_version": "0.3.1",     // this bundle runs under 0.3.1
       "src":          "src/frontend"
     }
   }

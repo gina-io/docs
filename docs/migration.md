@@ -98,7 +98,7 @@ Controller.prototype.chat = async function(req, res, next) {
 };
 ```
 
-See [renderStream in the controller guide](/guides/controller#selfrenderstream-asynciterable-contenttype)
+See [renderStream in the controller guide](/guides/controller#selfrenderstreamasynciterable-contenttype)
 and [token streaming in the AI guide](/guides/ai#token-streaming-with-renderstream).
 
 ### AI connector — `.infer()` replaces `.complete()` _(rename, alpha only)_

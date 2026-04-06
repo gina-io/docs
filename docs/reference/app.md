@@ -121,8 +121,9 @@ via `getConfig()` throughout the bundle.
 
 ```js
 // In a controller or middleware:
-var timeout = getConfig('app.defaultAlertTimeout');  // 15
-var email   = getConfig('app.supportEmail');          // "support@example.com"
+var appConf = self.getConfig('app');
+var timeout = appConf.defaultAlertTimeout;  // 15
+var email   = appConf.supportEmail;          // "support@example.com"
 ```
 
 Keep application-wide constants here rather than scattering them across the codebase.

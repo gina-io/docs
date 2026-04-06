@@ -185,6 +185,6 @@ adds the `templates.json` watcher when `NODE_ENV=dev`.
 - `fs.watch` reliability varies by OS and filesystem. On Linux with network
   filesystems (NFS, CIFS) or inside Docker on macOS, some change events may be
   missed. In those environments, consider polling as a fallback.
-- `watchers.json` is the foundation for the upcoming dev-mode hot-reload feature
-  (#M6, `0.3.0`), which will register watchers for controllers and SQL files against
+- `watchers.json` is the foundation for the dev-mode hot-reload feature
+  (shipped in `0.3.0`), which registers watchers for controllers and SQL files against
   the same service.

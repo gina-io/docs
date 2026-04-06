@@ -771,7 +771,7 @@ The 103 is sent immediately when called.
 | Transport | Mechanism |
 |---|---|
 | HTTP/2 | `stream.additionalHeaders({ ':status': 103, 'link': '...' })` |
-| HTTP/1.1 | `res.writeEarlyHints({ link: '...' })` (Node.js 18.11+) |
+| HTTP/1.1 | `res.writeEarlyHints({ link: '...' })` |
 
 `links` is a `Link` header value string or an array of strings. Multiple values
 are joined with `', '` into one header.
@@ -800,7 +800,6 @@ self
 
 **Behaviour:**
 - Silent no-op when headers have already been sent (guards against double-call).
-- Silent no-op on Node.js < 18.11 that don't support `writeEarlyHints`.
 - Errors from the underlying write are caught and discarded — a hint failure never
   affects the main response.
 
