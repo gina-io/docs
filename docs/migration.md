@@ -19,6 +19,62 @@ upward to the target version.
 
 ---
 
+## 0.3.0 → 0.3.1
+
+### Dependency reduction — `ssl-checker`, `colors`, `uuid` removed _(no action required)_
+
+:::note Additive — no action required
+`engine.io` is now the sole runtime dependency. Three dev/build-time dependencies
+have been removed and replaced with built-in equivalents. Your bundle code is
+unaffected.
+:::
+
+| Removed dep | Replaced by | Why |
+|---|---|---|
+| `ssl-checker` | Built-in `https.request` + `getPeerCertificate()` | Eliminates a transitive dependency tree for a single TLS check |
+| `colors` | Hardcoded ANSI escape map in the logger | Supply-chain risk — `colors` 1.4.1+ was intentionally sabotaged upstream |
+| `uuid` | `crypto.randomUUID()` (Node 19+) | Native API, zero-dependency UUID v4 generation |
+
+If your bundle code imports `uuid` directly (not through Gina), your project's own
+`node_modules/uuid` is unaffected.
+
+### SQL index reporting in the Inspector _(additive)_
+
+:::note Additive — no action required unless you want index badges
+This feature activates automatically when an `indexes.sql` file is present.
+:::
+
+The Inspector's Query tab now shows **index badges** for MySQL, PostgreSQL, and
+SQLite queries. To enable them, create an `indexes.sql` file in your bundle's
+SQL directory containing the `CREATE INDEX` statements that match your schema:
+
+```sql title="src/api/models/sql/indexes.sql"
+CREATE INDEX idx_invoice_date ON invoices (created_at);
+CREATE UNIQUE INDEX idx_user_email ON users (email);
+```
+
+The connector reads this file once at startup and matches each query's target
+table against the known indexes. Three badge states appear in the Query tab:
+
+| Badge | Meaning |
+|---|---|
+| Green (index name) | A secondary index covers the query's table |
+| Amber (`PRIMARY`) | Only a primary key scan is available |
+| Red (`no index`) | The `indexes.sql` file exists but no index covers this table |
+| Grey (`N/A`) | No `indexes.sql` file — index reporting not available |
+
+The Couchbase connector extracts indexes from the query execution plan
+automatically (no `indexes.sql` needed).
+
+### HTTP/2 direct stream for HTML rendering _(internal optimization)_
+
+HTML rendering (`render-swig.js`) now uses `stream.respond()` + `stream.end()`
+directly for HTTP/2 requests, bypassing the HTTP/1.1 compatibility layer. This
+matches the pattern already used by JSON rendering. No configuration change —
+the optimization applies automatically when the Isaac HTTP/2 engine is active.
+
+---
+
 ## 0.2.0 → 0.3.0
 
 ### `self.renderStream()` — new streaming response method _(additive)_
