@@ -78,7 +78,7 @@ shortener/
               insert.sql         ← INSERT new short link
               findBySlug.sql     ← SELECT by slug
               incrementHits.sql  ← UPDATE hits + 1
-      templates/                   ← created by gina view:add
+      templates/                   ← created by gina view:add (step 6)
         html/
           content/
             links/               ← matches controller namespace
@@ -98,7 +98,6 @@ mkdir shortener
 cd shortener
 gina project:add @shortener
 gina bundle:add api @shortener
-gina view:add api @shortener
 ```
 
 Then open `env.json` and change the `dev` hostname to `localhost`:
@@ -424,7 +423,13 @@ The `this.redirect` action you define and the `self.redirect()` framework method
 
 ## 6. Add views
 
-`gina view:add` (step 1) already scaffolded `src/api/templates/` with a layout and a default content page. Create the namespace subdirectory for the `links` routes:
+Scaffold the view layer — templates directory, base layout, and default content page:
+
+```bash
+gina view:add api @shortener
+```
+
+Then create the namespace subdirectory for the `links` routes:
 
 ```bash
 mkdir -p src/api/templates/html/content/links
