@@ -61,7 +61,7 @@ Windows support is in alpha — Windows users can use Docker or WSL in the meant
 
 ## Requirements
 
-- Node.js **>= 16** (host tested up to Node 25)
+- Node.js **>= 22** (host tested up to Node 25)
 - npm
 - Unix-like OS (macOS, Linux) for full feature support
 
