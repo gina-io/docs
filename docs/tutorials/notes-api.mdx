@@ -32,7 +32,23 @@ In this tutorial you will build a simple REST API for creating and listing notes
 - Return errors with `self.throwError()`
 
 :::info Download the finished project
-[**notes-api.zip**](/downloads/tutorials/notes-api.zip) — extract and run `gina project:add @notes --path=$(pwd) && gina bundle:add api @notes --import && gina bundle:start api @notes`.
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ifm-link-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign: '-3px', marginRight: '4px'}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> [**notes-api.zip**](/downloads/tutorials/notes-api.zip) — extract and run:
+
+```bash
+cd notes
+```
+
+```bash
+gina project:add @notes
+```
+
+```bash
+gina bundle:add api @notes --import
+```
+
+```bash
+gina bundle:start api @notes
+```
 :::
 
 ---
@@ -65,7 +81,13 @@ flowchart LR
 
 ```bash
 mkdir notes && cd notes
+```
+
+```bash
 gina project:add @notes
+```
+
+```bash
 gina bundle:add api @notes
 ```
 
@@ -158,9 +180,9 @@ function ApiContentController() {
         }
 
         var note = {
-            id:        store.nextId++,
-            text:      text,
-            createdAt: new Date().toISOString()
+            id        : store.nextId++
+          , text      : text
+          , createdAt : new Date().toISOString()
         };
         store.notes.push(note);
         self.renderJSON({ note: note });
