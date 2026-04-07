@@ -104,6 +104,15 @@ export default {
         .transform(response);
     }
 
+    // JSON Schema files — served from docs site static/schema/
+    if (url.pathname.startsWith('/schema/')) {
+      return fetch('https://gina-io-docs.vercel.app' + url.pathname + url.search, {
+        method:  request.method,
+        headers: request.headers,
+        body:    request.body,
+      });
+    }
+
     // Strip /docs prefix and proxy to Vercel.
     // Docusaurus baseUrl '/docs/' embeds '/docs/' into all asset/page paths, so
     // the browser always requests gina.io/docs/*, Worker strips to /*, Vercel
