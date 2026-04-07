@@ -3,7 +3,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import readingTimePlugin from './src/remark/reading-time.js';
 
 // Updated automatically by gina's post_publish script on each release.
-const ginaVersion = '0.3.1';
+const ginaVersion = '0.3.2-alpha.2';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -20,7 +20,19 @@ const config = {
     mermaid: true,
   },
 
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    ['@easyops-cn/docusaurus-search-local', /** @type {import("@easyops-cn/docusaurus-search-local").PluginOptions} */ ({
+      hashed: true,
+      indexDocs: true,
+      indexBlog: false,
+      indexPages: false,
+      docsRouteBasePath: '/',
+      highlightSearchTermsOnTargetPage: true,
+      searchResultLimits: 10,
+      explicitSearchResultPath: true,
+    })],
+  ],
 
   url: 'https://gina.io',
   baseUrl: '/docs/',
@@ -163,7 +175,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © 2009-${new Date().getFullYear()} Rhinostone.`,
+        copyright: `Copyright © 2009-${new Date().getFullYear()} gina-io.`,
       },
       prism: {
         theme: prismThemes.github,
