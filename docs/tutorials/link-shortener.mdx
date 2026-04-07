@@ -32,7 +32,23 @@ In this tutorial you'll build a working URL shortener. A visitor pastes a long U
 **Time:** ~30 minutes · **Node.js:** 22.5+ · **Gina:** 0.3.0+
 
 :::info Download the finished project
-[**link-shortener.zip**](/downloads/tutorials/link-shortener.zip) — extract and run `gina bundle:start api @shortener`.
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ifm-link-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign: '-3px', marginRight: '4px'}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> [**link-shortener.zip**](/downloads/tutorials/link-shortener.zip) — extract and run:
+
+```bash
+cd shortener
+```
+
+```bash
+gina project:add @shortener
+```
+
+```bash
+gina bundle:add api @shortener --import
+```
+
+```bash
+gina bundle:start api @shortener
+```
 :::
 
 ---
@@ -100,13 +116,13 @@ gina project:add @shortener
 gina bundle:add api @shortener
 ```
 
-Then open `env.json` and change the `dev` hostname to `localhost`:
+Then open `env.json` and change the `dev` host to `localhost`:
 
 ```json title="env.json"
 {
-  "dev": {
-    "api": {
-      "hostname": "localhost"
+  "api": {
+    "dev": {
+      "host": "localhost"
     }
   }
 }
@@ -167,14 +183,14 @@ Open `src/api/config/routing.json` and replace its contents:
     "namespace": "links",
     "url": "/:slug/stats",
     "method": "GET",
-    "requirements": { "slug": "^[A-Za-z0-9]{6}$" },
+    "requirements": { "slug": "/^[A-Za-z0-9]{6}$/" },
     "param": { "control": "stats", "slug": ":slug" }
   },
   "redirect": {
     "namespace": "links",
     "url": "/:slug",
     "method": "GET",
-    "requirements": { "slug": "^[A-Za-z0-9]{6}$" },
+    "requirements": { "slug": "/^[A-Za-z0-9]{6}$/" },
     "param": { "control": "redirect", "code": 302, "slug": ":slug" }
   }
 }
@@ -184,8 +200,8 @@ A few things to notice:
 
 - **`namespace: "links"`** — tells Gina to load `controllers/controller.links.js` for all four routes.
 - **`param.control`** — the action method to call on the controller.
-- **`"slug": ":slug"`** in the `param` block of `stats` and `redirect` — required so the router binds the matched URL segment to `req.params.slug` (and `req.get.slug`). Without this entry, `fitsWithRequirements` returns `false` even when the regex matches and the routes return 404.
-- **`requirements`** — a regex guard on `:slug`. Only 6-character alphanumeric strings match; anything else (e.g. `/favicon.ico`) falls through to 404 without hitting your controller.
+- **`"slug": ":slug"`** in the `param` block of `stats` and `redirect` — required so `fitsWithRequirements` binds the matched URL segment to `req.params.slug`. Without this entry, `fitsWithRequirements` returns `false` even when the regex matches and the routes return 404.
+- **`requirements`** — a regex guard on `:slug`, wrapped in `/` delimiters (e.g. `/^pattern$/`). Only 6-character alphanumeric strings match; anything else (e.g. `/favicon.ico`) falls through to 404 without hitting your controller.
 - **`stats` before `redirect`** — good practice: put the more specific two-segment path (`/:slug/stats`) before the one-segment wildcard (`/:slug`), even though Gina's radix trie handles ordering correctly.
 - **`"code": 302`** in the redirect route's `param` block — Gina's `self.redirect()` reads `req.routing.param.code` as the HTTP status code, defaulting to 301. Setting it to `302` here means the browser won't cache the redirect permanently, which is correct for a link shortener (destinations can change).
 
@@ -354,8 +370,8 @@ function ApiLinksController() {
         var hostname = appConf.hostname || ('http://localhost:' + appConf.port);
 
         self.renderJSON({
-            slug:      slug,
-            short_url: hostname + '/' + slug
+            slug      : slug
+          , short_url : hostname + '/' + slug
         });
     };
 
