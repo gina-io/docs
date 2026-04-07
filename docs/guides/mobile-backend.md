@@ -99,7 +99,7 @@ flowchart LR
 
 ```js
 // PATCH — only update the fields the client sent
-Controller.prototype.update = function(req, res, next) {
+this.update = function(req, res, next) {
     var self   = this;
     var fields = req.patch; // { name: 'Amara' } — only changed fields
     // merge fields into the stored document...
@@ -120,8 +120,8 @@ Agree on a consistent JSON shape with your mobile client team and stick to it. A
 ```js
 // Success
 self.renderJSON({
-    data:    result,      // the payload
-    meta:    { total: n } // optional metadata (pagination, etc.)
+    data : result        // the payload
+  , meta : { total: n }  // optional metadata (pagination, etc.)
 });
 
 // Error — handled automatically by throwError(), but you can also format manually
@@ -130,10 +130,10 @@ self.throwError(res, 404, 'User not found');
 ```
 
 ```json
-// Success response
 { "data": { "id": 1, "name": "Amara Diallo" }, "meta": {} }
+```
 
-// Error response
+```json
 { "error": "User not found" }
 ```
 
@@ -160,20 +160,23 @@ Offset-based pagination is the simplest to implement and works well for most mob
 **Controller:**
 
 ```js
-Controller.prototype.list = function(req, res, next) {
+this.list = function(req, res, next) {
     var self   = this;
     var limit  = Math.min(Number(req.get.limit)  || 20, 100); // cap at 100
     var offset = Number(req.get.offset) || 0;
 
     // with a database entity:
     // var results = await self.UserEntity.findPage(limit, offset);
-    // self.renderJSON({ data: results.rows, meta: { total: results.total, limit: limit, offset: offset } });
+    // self.renderJSON({
+    //     data : results.rows
+    //   , meta : { total: results.total, limit: limit, offset: offset }
+    // });
 
     // in-memory example:
     var page = allUsers.slice(offset, offset + limit);
     self.renderJSON({
-        data: page,
-        meta: { total: allUsers.length, limit: limit, offset: offset }
+        data : page
+      , meta : { total : allUsers.length, limit : limit, offset : offset }
     });
 };
 ```
@@ -201,7 +204,7 @@ Sessions are enabled per bundle in `app.json`:
 Login / logout controller:
 
 ```js
-Controller.prototype.login = function(req, res, next) {
+this.login = function(req, res, next) {
     var self = this;
     var user = authenticate(req.post.email, req.post.password);
 
@@ -214,7 +217,7 @@ Controller.prototype.login = function(req, res, next) {
     self.renderJSON({ ok: true, user: req.session.user });
 };
 
-Controller.prototype.logout = function(req, res, next) {
+this.logout = function(req, res, next) {
     var self = this;
     req.session.destroy();
     self.renderJSON({ ok: true });
@@ -247,7 +250,7 @@ Apply it per-route in `routing.json`:
   "profile-get": {
     "method": "GET",
     "url": "/profile",
-    "middleware": ["auth/index::check"],
+    "middleware": ["middlewares.auth.check"],
     "param": { "control": "getProfile" }
   }
 }
@@ -266,7 +269,7 @@ Auth.prototype.check = function(req, res, next, done) {
         self.throwError(res, 401, 'Invalid or missing token');
         return;
     }
-    req.currentUser = decodeToken(token);
+    req.session.user = decodeToken(token);
     done(req, res, next);
 };
 ```
@@ -275,13 +278,11 @@ Auth.prototype.check = function(req, res, next, done) {
 
 ## CORS
 
-Cross-origin requests from mobile web views (Expo Web, Capacitor) or browser-based testing tools need CORS headers. Add a global CORS middleware in `routing.global.json`:
+Cross-origin requests from mobile web views (Expo Web, Capacitor) or browser-based testing tools need CORS headers. Add a global CORS middleware in `routing.global.json` — this array is prepended to every route's middleware chain:
 
 ```json
 {
-  "cors": {
-    "middleware": ["cors/index::handle"]
-  }
+  "middleware": ["middlewares.cors.handle"]
 }
 ```
 
@@ -318,7 +319,7 @@ module.exports = Cors;
 `self.throwError(res, statusCode, message)` terminates the request and sends a standard `{ "error": "..." }` JSON body. Always `return` immediately after:
 
 ```js
-Controller.prototype.create = function(req, res, next) {
+this.create = function(req, res, next) {
     var self = this;
 
     if (!req.post.email) {
@@ -338,7 +339,7 @@ Controller.prototype.create = function(req, res, next) {
 For async actions, errors that reach the `.catch()` handler are routed to a 500 response automatically — you only need to handle expected errors explicitly:
 
 ```js
-Controller.prototype.getById = async function(req, res, next) {
+this.getById = async function(req, res, next) {
     var self = this;
     var user = await self.UserEntity.getById(req.params.id);
 
@@ -378,13 +379,13 @@ See [HTTPS & HTTP/2](/guides/https) for the full certificate setup.
 For AI-powered features (chatbot, autocomplete, summarisation), `self.renderStream()` lets you push tokens to the mobile client as they arrive without buffering the full response:
 
 ```js
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self   = this;
     var ai     = getModel('claude');
     var stream = ai.client.messages.stream({
-        model:      'claude-opus-4-6',
-        max_tokens: 1024,
-        messages:   [{ role: 'user', content: req.post.message }]
+        model      : 'claude-opus-4-6'
+      , max_tokens : 1024
+      , messages   : [{ role: 'user', content: req.post.message }]
     });
 
     self.renderStream(

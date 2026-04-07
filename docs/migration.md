@@ -85,7 +85,7 @@ delivery (LLM streaming) or SSE endpoints.
 
 ```js
 // Anthropic token stream
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('claude');
     async function* tokens() {

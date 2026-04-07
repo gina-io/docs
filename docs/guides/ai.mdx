@@ -665,7 +665,7 @@ and pipe the result through [`self.renderStream()`](/guides/controller#selfrende
 ### Anthropic
 
 ```js
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('claude');
 
@@ -689,7 +689,7 @@ Controller.prototype.chat = async function(req, res, next) {
 ### OpenAI-compatible (DeepSeek, Ollama, Groq, …)
 
 ```js
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('deepseek');
 

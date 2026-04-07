@@ -212,7 +212,7 @@ sequenceDiagram
 **SSE — LLM token streaming (Anthropic):**
 
 ```js
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('claude');
 
@@ -236,7 +236,7 @@ Controller.prototype.chat = async function(req, res, next) {
 **SSE — LLM token streaming (OpenAI-compatible, e.g. DeepSeek, Ollama):**
 
 ```js
-Controller.prototype.chat = async function(req, res, next) {
+this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('deepseek');
 
@@ -259,7 +259,7 @@ Controller.prototype.chat = async function(req, res, next) {
 **Chunked JSON (NDJSON):**
 
 ```js
-Controller.prototype.export = async function(req, res, next) {
+this.export = async function(req, res, next) {
     var self = this;
 
     async function* rows() {
