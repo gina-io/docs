@@ -1,6 +1,6 @@
 # Gina — Documentation
 
-Official documentation for [Gina](https://github.com/Rhinostone/gina),
+Official documentation for [Gina](https://github.com/gina-io/gina),
 an MVC framework for Node.js with built-in HTTP/2, multi-bundle
 architecture, and scope-based data isolation — no Express dependency.
 
@@ -14,7 +14,7 @@ Found a typo or want to improve a page? Every doc page has an
 **Edit this page** link at the bottom — the quickest way to suggest a fix.
 
 For larger contributions (new guides, restructuring), open an issue on
-[Rhinostone/gina](https://github.com/Rhinostone/gina/issues) first to
+[gina-io/gina](https://github.com/gina-io/gina/issues) first to
 discuss scope.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to run the site locally
