@@ -19,6 +19,67 @@ upward to the target version.
 
 ---
 
+## 0.3.1 → 0.3.2
+
+### JSON Schema for config files _(additive)_
+
+:::note Additive — no action required
+Seven JSON Schema files are now published at `gina.io/schema/*`. You can reference
+them in your config files for IDE validation and autocomplete.
+:::
+
+Add a `$schema` property to any Gina config file to enable validation:
+
+```json title="config/routing.json"
+{
+  "$schema": "https://gina.io/schema/routing.json",
+  "home": {
+    "url": "/",
+    "param": { "action": "home" }
+  }
+}
+```
+
+Available schemas: `app.json`, `connectors.json`, `manifest.json`, `routing.json`,
+`settings.json`, `watchers.json`, `app.crons.json`.
+
+### Entity short-name aliases _(additive)_
+
+:::note Additive — no action required
+Existing `self.getEntity('user/user')` calls continue to work unchanged.
+:::
+
+You can now use the short form when the entity name matches the directory name:
+
+```javascript
+// Before (still works)
+var user = self.getEntity('user/user');
+
+// After (new shorthand)
+var user = self.getEntity('user');
+```
+
+### Model loading without `onInitialize` _(bug fix)_
+
+Models that do not define an `onInitialize` hook now load correctly. Previously,
+the absence of this hook could cause a silent failure during entity registration.
+
+### `getConfig()` proxy override fix _(bug fix)_
+
+`getConfig()` no longer overwrites the hostname with `undefined` when
+`PROXY_HOSTNAME` is not set. This affected same-origin POST requests that include
+an `Origin` header (all modern browsers).
+
+### Inspector improvements _(additive)_
+
+- **Tab layout presets** — choose Balanced, Backend, Frontend, or Custom (drag-to-reorder) in the settings panel
+- **Query performance banners** — slow and heavy queries are flagged with anchor links to the offending card
+- **Missing-index banners** — queries with `indexes: []` get a red warning banner
+- **Cross-bundle QI propagation** — queries from upstream bundles (via `self.query()`) now appear in the downstream Inspector
+- **`render-json` Inspector feed** — JSON-only APIs now emit Inspector data when the Inspector is connected
+
+---
+
 ## 0.3.0 → 0.3.1
 
 ### Dependency reduction — `ssl-checker`, `colors`, `uuid` removed _(no action required)_
