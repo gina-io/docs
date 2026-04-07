@@ -76,4 +76,4 @@ See [HTTPS and HTTP/2 → Local development](./https#local-development--fixing-c
 
 ## Need help?
 
-Open an issue on GitHub: [github.com/Rhinostone/gina/issues](https://github.com/Rhinostone/gina/issues)
+Open an issue on GitHub: [github.com/gina-io/gina/issues](https://github.com/gina-io/gina/issues)
