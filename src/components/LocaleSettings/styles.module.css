@@ -1,0 +1,29 @@
+.wrapper {
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--ifm-color-primary);
+  border-radius: 0 var(--ifm-global-radius) var(--ifm-global-radius) 0;
+  background: var(--ifm-alert-background-color);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--ifm-color-primary);
+}
+
+.desc {
+  font-size: 0.92rem;
+  margin-bottom: 0.75rem;
+}
+
+.desc code {
+  font-size: 0.88em;
+}
