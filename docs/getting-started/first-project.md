@@ -66,19 +66,21 @@ myproject/
 
 ### env.json and hostnames
 
-Because Gina does not include a local DNS server yet, you need to update the hostname in `env.json` for your development environment.
+Because Gina does not include a local DNS server yet, you need to update the host in `env.json` for your development environment.
 
-Open `myproject/env.json` and change the `dev` hostname from the generated value (e.g. `frontend-dev-local-v1.myproject.app`) to `localhost`:
+Open `myproject/env.json` and change the `dev` host from the generated value (e.g. `frontend-dev-local-v1.myproject.app`) to `localhost`:
 
 ```json
 {
-  "dev": {
-    "frontend": {
-      "hostname": "localhost"
+  "frontend": {
+    "dev": {
+      "host": "localhost"
     }
   }
 }
 ```
+
+The format is `{ bundle: { environment: { ... } } }` — bundle name first, then environment.
 
 This is a temporary workaround until Gina ships its own local DNS server.
 
