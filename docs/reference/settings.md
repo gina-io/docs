@@ -193,6 +193,75 @@ exposed to templates or client-side code.
 | `server.webroot` | string | `"/"` | URL prefix prepended to every route. `/frontend` makes `GET /home` accessible at `/frontend/home` |
 | `server.webrootAutoredirect` | boolean | `true` | Redirect `GET /frontend` → `GET /frontend/` automatically. Set to `false` when webroot is `"/"` |
 
+### CORS headers {#cors}
+
+Add CORS headers under `server.response.header` in `settings.server.json`:
+
+```json title="src/api/config/settings.server.json"
+{
+  "server": {
+    "response": {
+      "header": {
+        "access-control-allow-origin": "${api}@${myproject}, https://checkout.stripe.com",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "Content-Type, Authorization, X-Requested-With",
+        "access-control-allow-credentials": true,
+        "vary": "Origin"
+      }
+    }
+  }
+}
+```
+
+| Header | Type | Default | Description |
+|---|---|---|---|
+| `access-control-allow-origin` | string | Reflects own hostname (same-origin only) | Comma-separated list of allowed origins. Supports `${bundle}@${project}` placeholders (see below). Cross-origin requests are blocked when the origin is not listed |
+| `access-control-allow-methods` | string | `"GET, POST, HEAD"` | HTTP methods the client may use on cross-origin requests |
+| `access-control-allow-headers` | string | — | Headers the client may send. Add `Content-Type` for JSON APIs, `Authorization` for token-based auth |
+| `access-control-allow-credentials` | boolean | — | Set to `true` to allow cookies and credentials on cross-origin requests |
+| `vary` | string | — | Set to `"Origin"` when allowing multiple specific origins, so caches serve the correct header per origin |
+
+**Default behavior (no CORS config):** Gina reflects the requesting origin only for
+same-origin requests. Cross-origin requests receive no `Access-Control-Allow-Origin`
+header — browsers block them. This is a secure default.
+
+**Preflight handling:** `OPTIONS` requests with an `Access-Control-Request-Method`
+header are detected automatically. Gina responds with `204 No Content` and the
+configured CORS headers — no controller action executes. The
+[controller guide](/guides/controller) notes that `OPTIONS` never reaches a
+controller action.
+
+**The `${bundle}@${project}` placeholder:** References another bundle's hostname at
+runtime. `${api}@${myproject}` resolves to `http://localhost:3100` (or the production
+URL depending on the environment). Use this for inter-bundle CORS instead of
+hardcoding hostnames:
+
+```json
+"access-control-allow-origin": "${frontend}@${myproject}, ${admin}@${myproject}"
+```
+
+You can also append an environment: `${api}@${myproject}/prod`.
+
+:::tip
+Gina never sends `Access-Control-Allow-Origin: *` — it always resolves to a specific
+origin. When multiple origins are configured, only the one matching the current
+request is returned. This is the correct behavior per the CORS specification.
+:::
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Gina
+
+    Note over Browser,Gina: Preflight (cross-origin POST with custom headers)
+    Browser->>Gina: OPTIONS /api/data<br/>Origin: https://app.example.com<br/>Access-Control-Request-Method: POST<br/>Access-Control-Request-Headers: Content-Type
+    Gina-->>Browser: 204 No Content<br/>Access-Control-Allow-Origin: https://app.example.com<br/>Access-Control-Allow-Methods: GET, POST, OPTIONS<br/>Access-Control-Allow-Headers: Content-Type
+
+    Note over Browser,Gina: Actual request
+    Browser->>Gina: POST /api/data<br/>Origin: https://app.example.com<br/>Content-Type: application/json
+    Gina-->>Browser: 200 OK<br/>Access-Control-Allow-Origin: https://app.example.com<br/>{response body}
+```
+
 ---
 
 ## settings.server.credentials.json {#settingsservercredentialsjson}
