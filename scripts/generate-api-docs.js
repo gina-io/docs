@@ -35,6 +35,7 @@ const MODULES = [
   { id: 'domain',     title: 'Domain',     desc: 'Domain and public-suffix validation',            files: ['domain/src/main.js']     },
   { id: 'math',       title: 'Math',       desc: 'Math utility helpers',                           files: ['math/index.js']          },
   { id: 'url',        title: 'URL',        desc: 'URL parsing and manipulation',                   files: ['url/index.js']           },
+  { id: 'uuid',       title: 'UUID',       desc: 'Lightweight cryptographic ID generator',          files: ['uuid/src/main.js'],       manual: true },
 ];
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'docs', 'api');
