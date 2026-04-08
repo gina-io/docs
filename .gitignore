@@ -16,6 +16,7 @@ CLAUDE.md
 /docs/api/*
 !/docs/api/_category_.json
 !/docs/api/logger.md
+!/docs/api/uuid.md
 
 # Misc
 .DS_Store
