@@ -617,15 +617,22 @@ html:not([data-sidebar-collapsed]) .sidebar-flyout {
 }
 
 .tutorial-card {
+  display: block;
   border: 1px solid var(--ifm-color-emphasis-200);
   border-radius: 8px;
   padding: 1.25rem 1.5rem;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .tutorial-card:hover {
   border-color: var(--gina-amber);
   box-shadow: 0 2px 12px rgba(240, 176, 54, 0.12);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
 }
 
 [data-theme='dark'] .tutorial-card {
@@ -642,12 +649,7 @@ html:not([data-sidebar-collapsed]) .sidebar-flyout {
   font-size: 1.15rem;
 }
 
-.tutorial-card h3 a {
-  color: inherit;
-  text-decoration: none;
-}
-
-.tutorial-card h3 a:hover {
+.tutorial-card:hover h3 {
   color: var(--gina-amber);
 }
 
