@@ -75,6 +75,45 @@ async function handleVote(request, env) {
   return jsonResponse({ error: 'method not allowed' }, 405);
 }
 
+// ── Clean URL proxy ──────────────────────────────────────────────────────────
+// Proxy a clean URL (e.g. /roadmap, /tutorials) to Vercel, rewrite the
+// canonical to the clean path, and inject a pre-hydration script that
+// temporarily sets the URL to /docs/<slug> so Docusaurus's client-side
+// router recognises the route, then restores the clean URL after hydration.
+
+async function proxyCleanUrl(request, cleanPath, docsPath) {
+  const url  = new URL(request.url);
+  const response = await fetch(
+    'https://gina-io-docs.vercel.app' + docsPath + url.search,
+    { method: request.method, headers: request.headers, body: request.body },
+  );
+  return new HTMLRewriter()
+    .on('link[rel="canonical"]', {
+      element(el) {
+        el.setAttribute('href', 'https://gina.io' + cleanPath);
+      },
+    })
+    .on('head', {
+      element(el) {
+        el.prepend(
+          '<script>' +
+          'var __rS=history.replaceState.bind(history);' +
+          '__rS(null,"","/docs' + docsPath + '"+location.search+location.hash);' +
+          'window.addEventListener("load",function(){' +
+          '(function p(n){' +
+          'if(document.querySelector("main article"))' +
+          '__rS(null,"","' + cleanPath + '"+location.search+location.hash);' +
+          'else if(n<50)setTimeout(p,100,n+1)' +
+          '})(0)' +
+          '})' +
+          '</script>',
+          { html: true },
+        );
+      },
+    })
+    .transform(response);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default {
@@ -86,43 +125,14 @@ export default {
       return handleVote(request, env);
     }
 
-    // Proxy /roadmap → Vercel /roadmap (URL stays clean).
-    // HTMLRewriter replaces the Docusaurus-generated canonical (/docs/roadmap)
-    // with the clean URL so search engines and AI engines see a single canonical.
-    // A pre-hydration script temporarily rewrites the URL to /docs/roadmap so
-    // Docusaurus's client-side router recognises the route, then restores /roadmap
-    // after hydration completes.
+    // Clean URL proxies — served from Vercel with Docusaurus hydration bridge.
+    // /roadmap   → Vercel /roadmap   (Docusaurus route: /docs/roadmap)
+    // /tutorials → Vercel /tutorials (Docusaurus route: /docs/tutorials)
     if (url.pathname === '/roadmap') {
-      const response = await fetch('https://gina-io-docs.vercel.app/roadmap' + url.search, {
-        method:  request.method,
-        headers: request.headers,
-        body:    request.body,
-      });
-      return new HTMLRewriter()
-        .on('link[rel="canonical"]', {
-          element(el) {
-            el.setAttribute('href', 'https://gina.io/roadmap');
-          },
-        })
-        .on('head', {
-          element(el) {
-            el.prepend(
-              '<script>' +
-              'var __rS=history.replaceState.bind(history);' +
-              '__rS(null,"","/docs/roadmap"+location.search+location.hash);' +
-              'window.addEventListener("load",function(){' +
-              '(function p(n){' +
-              'if(document.querySelector("main article"))' +
-              '__rS(null,"","/roadmap"+location.search+location.hash);' +
-              'else if(n<50)setTimeout(p,100,n+1)' +
-              '})(0)' +
-              '})' +
-              '</script>',
-              { html: true },
-            );
-          },
-        })
-        .transform(response);
+      return proxyCleanUrl(request, '/roadmap', '/roadmap');
+    }
+    if (url.pathname === '/tutorials') {
+      return proxyCleanUrl(request, '/tutorials', '/tutorials');
     }
 
     // JSON Schema files — served from docs site static/schema/
