@@ -20,7 +20,8 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Q3 2026** | `0.3.0` ✅ | Async/await · Dev hot-reload · MySQL & PostgreSQL connectors · AI Phase 2 · Tutorials · Mobile backend guide · Route radix tree · Connector peerDependencies · 103 Early Hints · HTTP/2 observability · Security & CVE page · Couchbase connector hardening · Inspector Phase 1 · CLI Tier 1 (project lifecycle, port:set, framework:get) |
 | **Q3 2026** | `0.3.1` ✅ | Dependency reduction (ssl-checker, colors, uuid removed) · SQL index reporting Phase A · HTTP/2 direct stream for HTML · Release workflow fixes |
 | **Q3 2026** | `0.3.2` ✅ | JSON Schema for config files · Entity short-name aliases · Model loading fix · getConfig() proxy fix · Inspector tab presets & QI propagation |
-| **Q4 2026** | `0.4.0` | TypeScript declarations · AI agents (OpenAPI, MCP) · ScyllaDB connector · PWA scaffold · Prometheus metrics · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
+| **Q3 2026** | `0.3.3` ✅ | OpenAPI spec generation · CLI port:set & framework:get · TypeScript declarations · Explicit exports · Swig npm migration · Live index introspection · Popin perf · Docker fixes |
+| **Q4 2026** | `0.4.0` | AI agents (MCP) · ScyllaDB connector · PWA scaffold · Prometheus metrics · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Beemaster admin · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
@@ -47,9 +48,9 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **`project:start` / `project:stop` / `project:restart`** — Start, stop, or restart all bundles in a project with one command. `start` accepts `--env`, `--scope`, `--inspect-brk`. `restart` uses the last known environment. Handler files are empty (0 lines) despite being documented with full flag examples. | `0.3.0` | Q3 2026 |
-| 📋 | **`framework:get`** — Read one or all keys from `~/.gina/settings.json`. Completes the `gina set` / `gina get` pair. Handler is 0 lines; workaround is `env:get`. | `0.3.0` | Q3 2026 |
-| 📋 | **`port:set`** — Set or update a specific port for a bundle/env/protocol/scheme combination without a full `port:reset`. Handler is 0 lines despite being documented. | `0.3.0` | Q3 2026 |
+| ✅ | **`project:start` / `project:stop` / `project:restart`** — Start, stop, or restart all bundles in a project with one command. Each delegates to `gina bundle:start/stop/restart @<project>` (bulk mode). `start` and `restart` accept `--env`, `--scope`, `--inspect-brk` (flags forwarded). 41 unit tests. | `0.3.0-alpha.1` | 2026-04-02 |
+| ✅ | **`framework:get`** — Read one or all keys from `~/.gina/settings.json`. Completes the `gina set` / `gina get` pair. Supports `--flag`, bare key names, and `all` keyword. | `0.3.3-alpha.2` | 2026-04-08 |
+| ✅ | **`port:set`** — Set or update a specific port for a bundle/env/protocol/scheme combination without a full `port:reset`. Positional syntax: `gina port:set <protocol>:<port> <bundle> @<project>/<env>`. Flag syntax: `--protocol=`, `--scheme=`, `--port=`, `--env=`. Prompts interactively for missing values. | `0.3.3-alpha.2` | 2026-04-08 |
 
 ### Tier 2 — `0.4.0`
 
@@ -102,8 +103,8 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Explicit exports for global helpers** — `getContext`, `setContext`, `_`, `requireJSON` etc. available as explicit `require('gina/gna').getContext` imports alongside the existing global injection. Enables IDE navigation and static analysis. | `0.4.0` | Q4 2026 |
-| 📋 | **TypeScript declaration files** — `.d.ts` declarations for the public surface: `SuperController`, `EntitySuper`, connector config shapes, `routing.json` schema. No TS migration of internals — just declarations for consumer projects. | `0.4.0` | Q4 2026 |
+| ✅ | **Explicit exports for global helpers** — `getContext`, `setContext`, `_`, `requireJSON` etc. available as explicit `require('gina/gna').getContext` imports alongside the existing global injection. Enables IDE navigation and static analysis. | `0.3.3-alpha.3` | 2026-04-09 |
+| ✅ | **TypeScript declaration files** — `.d.ts` declarations for the public surface: `SuperController`, `EntitySuper`, connector config shapes, `routing.json` schema, `PathObject`, `uuid`, all config file interfaces, `GinaRequest`/`GinaResponse`. No TS migration of internals — just declarations for consumer projects. | `0.3.3-alpha.3` | 2026-04-09 |
 | 📋 | **`gina connector:audit [@project]`** — reads `connectors.json`, maps each declared connector to its npm peer package (`mysql2`, `pg`, `ioredis`, `couchbase`, `openai`, `@anthropic-ai/sdk`, etc.), and runs `npm audit --json` scoped to those packages in the project's `node_modules`. Reports CVEs with severity and fix availability. If `socket` is installed in the project, delegates to it for supply-chain analysis (malware, typosquatting, protestware) instead of `npm audit`. Exit code 1 on any high/critical finding — CI-friendly. Only audits packages actually declared in `connectors.json`, not the full dependency tree. | `0.4.0` | Q4 2026 |
 
 ### Phase 5 — Future
@@ -213,7 +214,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 | --- | --- | --- | --- |
 | ✅ | **JSON Schemas for config files** — Machine-readable schemas for `routing.json`, `connectors.json`, `app.json`, `settings.json`, `app.crons.json`. Adds `"$schema"` references to generated scaffold files. Free validation and autocomplete in any editor that supports JSON Schema. | `0.2.0` | Q2 2026 |
 | ✅ | **Publish JSON Schema files at `gina.io/schema/*`** — 7 JSON Schema files published: `app.json`, `app.crons.json`, `connectors.json`, `manifest.json`, `routing.json`, `settings.json`, `watchers.json`. IDEs can now download and validate config files automatically. | `0.3.2` | Q3 2026 |
-| 📋 | **TypeScript declaration files** — Cross-listed with Modernisation Phase 4. Essential for AI code generation accuracy. | `0.4.0` | Q4 2026 |
+| ✅ | **TypeScript declaration files** — Cross-listed with Modernisation Phase 4. Essential for AI code generation accuracy. | `0.3.3-alpha.3` | 2026-04-09 |
 
 ### Phase 2 — Gina apps can use AI
 
@@ -227,7 +228,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **OpenAPI spec generation** — `gina bundle:openapi @myproject` emits `openapi.json` from `routing.json`. Zero manual spec writing — route annotations become `description` fields. Makes any Gina app consumable by AI agents, API gateways, and testing tools. | `0.4.0` | Q4 2026 |
+| ✅ | **OpenAPI spec generation** — `gina bundle:openapi @myproject` emits `openapi.json` from `routing.json`. Zero manual spec writing — route annotations become `description` fields. Makes any Gina app consumable by AI agents, API gateways, and testing tools. Alias: `bundle:oas`. Supports `--output` flag for custom path. | `0.3.3-alpha.2` | 2026-04-08 |
 | 📋 | **MCP server wrapper** — `gina bundle:mcp @myproject` exposes `routing.json` routes as MCP (Model Context Protocol) tools. Makes any Gina app a native MCP server discoverable by AI agents. | `0.4.0` | Q4 2026 |
 
 ---
