@@ -4,7 +4,9 @@ compatibility_date = "2026-03-02"
 
 routes = [
   { pattern = "gina.io/docs*", zone_name = "gina.io" },
-  { pattern = "gina.io/api/*", zone_name = "gina.io" }
+  { pattern = "gina.io/api/*", zone_name = "gina.io" },
+  { pattern = "gina.io/schema/*", zone_name = "gina.io" },
+  { pattern = "gina.io/roadmap*", zone_name = "gina.io" }
 ]
 
 [[d1_databases]]
