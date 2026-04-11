@@ -19,6 +19,84 @@ upward to the target version.
 
 ---
 
+## 0.3.2 → 0.3.3
+
+### TypeScript declarations _(additive)_
+
+:::note Additive — no action required
+TypeScript declaration files are now included in the package (`types/index.d.ts`,
+`types/globals.d.ts`, `types/gna.d.ts`). IDEs with TypeScript support will
+automatically pick up type information for `SuperController`, `EntitySuper`,
+config file shapes, and all global helpers. No `@types/gina` package needed.
+:::
+
+### Explicit exports via `require('gina/gna')` _(additive)_
+
+:::note Additive — no action required
+All global helpers are now available as named imports:
+```javascript
+const { getContext, _, onCompleteCall, uuid } = require('gina/gna');
+```
+The existing global injection is unchanged — this is an additional import path
+for IDE go-to-definition and static analysis. Lazy getters ensure symbols
+resolve correctly after framework boot.
+:::
+
+### `bundle:openapi` CLI command _(additive)_
+
+:::note Additive — no action required
+:::
+
+Generate an OpenAPI 3.1.0 spec from your `routing.json`:
+
+```bash
+gina bundle:openapi api @myproject
+gina bundle:openapi api @myproject --output ./api-spec.json
+```
+
+Route annotations (`description` fields in `routing.json`) become OpenAPI `description` fields. Alias: `bundle:oas`.
+
+### `framework:get` and `port:set` CLI commands _(additive)_
+
+:::note Additive — no action required
+:::
+
+- `gina get --key` / `gina get all` — read one or all keys from `~/.gina/settings.json`
+- `gina port:set http/1.1:3200 frontend @myproject/dev` — set a specific port without a full `port:reset`
+
+### Swig migration _(internal)_
+
+:::note Additive — no action required
+The vendored `swig-1.4.2` has been replaced with the `@rhinostone/swig` npm dependency (maintained fork with CVE-2023-25345 patched). Template rendering behaviour is unchanged.
+:::
+
+### Live database index introspection _(additive)_
+
+:::note Additive — no action required
+:::
+
+The Inspector Query tab now queries actual database indexes from MySQL, PostgreSQL, and SQLite connectors. No manual `indexes.sql` files required — index badges resolve automatically when the Inspector is opened.
+
+### Popin performance improvements _(internal)_
+
+Parallel DOM-injected resource loading replaces sequential XHR + `eval()`. `popinDestroy()` is now functional (was a stub). No API changes.
+
+### Validator fix — touched-field-only errors _(bug fix)_
+
+The global validation pass on field blur no longer displays errors for untouched fields. Only the field the user interacted with shows its error. Submit button enable/disable logic is unchanged.
+
+### Docker and container fixes _(bug fix)_
+
+- `streamsearch` vendored to fix `busboy MODULE_NOT_FOUND` crash after framework directory rename in containers
+- `emerg` messages now forward to CLI output and docker logs when a bundle aborts during startup
+- Config loader checks `MIDDLEWARE` file existence before reading — prevents crash in containers where the file is absent
+
+### requireJSON trailing comma tolerance _(bug fix)_
+
+JSON config files with trailing commas (e.g. `{"key": "value",}`) now produce a warning instead of calling `emerg` + `process.exit(1)`. The file is parsed successfully after stripping the trailing commas. Genuinely broken JSON still aborts as before.
+
+---
+
 ## 0.3.1 → 0.3.2
 
 ### JSON Schema for config files _(additive)_
@@ -150,8 +228,11 @@ this.chat = async function(req, res, next) {
     var self = this;
     var ai   = getModel('claude');
     async function* tokens() {
-        var s = ai.client.messages.stream({ model: ai.model, max_tokens: 1024,
-            messages: [{ role: 'user', content: req.post.message }] });
+        var s = ai.client.messages.stream({
+            model      : ai.model
+          , max_tokens : 1024
+          , messages   : [{ role: 'user', content: req.post.message }]
+        });
         for await (var ev of s)
             if (ev.type === 'content_block_delta') yield ev.delta.text;
     }
