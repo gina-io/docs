@@ -109,11 +109,13 @@ export default {
             el.prepend(
               '<script>' +
               'history.replaceState(null,"","/docs/roadmap"+location.search+location.hash);' +
+              'window.addEventListener("load",function(){' +
               '(function p(n){' +
               'if(document.querySelector("main article"))' +
               'history.replaceState(null,"","/roadmap"+location.search+location.hash);' +
-              'else if(n<100)setTimeout(p,60,n+1)' +
+              'else if(n<50)setTimeout(p,100,n+1)' +
               '})(0)' +
+              '})' +
               '</script>',
               { html: true },
             );
