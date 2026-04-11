@@ -13,28 +13,28 @@ import Link from '@docusaurus/Link';
 
 Hands-on, project-based guides that walk you through building real applications with Gina. Each tutorial produces a working app you can run and extend.
 
+:::tip Before you start
+Make sure you have [Gina installed](/getting-started/installation) and have completed the [First Project](/getting-started/first-project) guide.
+:::
+
 <div className="tutorials-grid">
 
-<div className="tutorial-card tutorial-card--beginner">
+<Link to="/tutorials/notes-api" className="tutorial-card tutorial-card--beginner">
   <div className="tutorial-card__level">Beginner</div>
-  <h3><Link to="/tutorials/notes-api">Notes API</Link></h3>
+  <h3>Notes API</h3>
   <p>Build your first REST API — define routes in <code>routing.json</code>, write controller actions, and return JSON responses. No database required.</p>
   <div className="tutorial-card__tags">
     <span>routing</span><span>controllers</span><span>JSON</span>
   </div>
-</div>
+</Link>
 
-<div className="tutorial-card tutorial-card--intermediate">
+<Link to="/tutorials/link-shortener" className="tutorial-card tutorial-card--intermediate">
   <div className="tutorial-card__level">Intermediate</div>
-  <h3><Link to="/tutorials/link-shortener">Link Shortener</Link></h3>
+  <h3>Link Shortener</h3>
   <p>Build a URL shortener with SQLite — async controller actions, HTML views, JSON API, and <code>self.redirect()</code> in a single bundle.</p>
   <div className="tutorial-card__tags">
     <span>SQLite</span><span>async</span><span>ORM</span><span>views</span>
   </div>
-</div>
+</Link>
 
 </div>
-
-:::tip Before you start
-Make sure you have [Gina installed](/getting-started/installation) and have completed the [First Project](/getting-started/first-project) guide.
-:::
