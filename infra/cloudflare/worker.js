@@ -108,11 +108,12 @@ export default {
           element(el) {
             el.prepend(
               '<script>' +
-              'history.replaceState(null,"","/docs/roadmap"+location.search+location.hash);' +
+              'var __rS=history.replaceState.bind(history);' +
+              '__rS(null,"","/docs/roadmap"+location.search+location.hash);' +
               'window.addEventListener("load",function(){' +
               '(function p(n){' +
               'if(document.querySelector("main article"))' +
-              'history.replaceState(null,"","/roadmap"+location.search+location.hash);' +
+              '__rS(null,"","/roadmap"+location.search+location.hash);' +
               'else if(n<50)setTimeout(p,100,n+1)' +
               '})(0)' +
               '})' +
