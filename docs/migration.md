@@ -19,6 +19,32 @@ upward to the target version.
 
 ---
 
+## 0.3.3 → 0.3.4
+
+### Fixed: `require('gina/gna')` explicit exports _(patch fix)_
+
+:::caution Action required if using explicit imports
+`require('gina/gna')` was broken in v0.3.3 — the published package contained
+stale framework paths (`v0.3.3-alpha.3` instead of `v0.3.3`), causing
+`MODULE_NOT_FOUND` errors. Upgrade to 0.3.4 to fix this.
+
+If you use only `require('gina')` (the standard import), you are not affected.
+:::
+
+```bash
+npm install gina@latest
+```
+
+### Internal: release lifecycle scripts now sync `gna.js` _(no action required)_
+
+:::note Internal — no action required
+`prepare_version.js` and `post_publish.js` now automatically update `gna.js`
+framework paths when the version changes. This prevents the stale-path issue
+from recurring in future releases.
+:::
+
+---
+
 ## 0.3.2 → 0.3.3
 
 ### TypeScript declarations _(additive)_
