@@ -6,7 +6,7 @@ description: Add HTML template support to a Gina bundle using the Swig template 
 level: beginner
 prereqs:
   - '[Controllers](/guides/controller)'
-  - '[Swig template syntax](https://node-swig.github.io/swig-templates/docs/)'
+  - '[Swig template syntax](/swig/syntax)'
 ---
 
 # Views and templates
@@ -49,7 +49,7 @@ Refresh your browser — the template is now rendered.
 
 ## Template engine — Swig
 
-Gina ships with [Swig](https://node-swig.github.io/swig-templates/) as the default template engine. Swig uses a syntax similar to Jinja2/Django:
+Gina ships with [Swig](/swig) as the default template engine — see the [Swig documentation](/swig) for the full syntax reference, built-in [tags](/swig/tags) and [filters](/swig/filters), and the [programmatic API](/swig/api). Swig uses a syntax similar to Jinja2/Django:
 
 ```html
 <!DOCTYPE html>
@@ -92,7 +92,7 @@ Data passed to `self.render({ key: value })` is exposed as `page.data` in the te
 
 ### Layout inheritance
 
-Swig supports layout inheritance with `{% extends %}` and `{% block %}`:
+Swig supports [layout inheritance](/swig/syntax#template-inheritance) with `{% extends %}` and `{% block %}`:
 
 ```html
 {# base.html #}
