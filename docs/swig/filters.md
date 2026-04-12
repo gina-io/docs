@@ -1,0 +1,305 @@
+---
+title: Filters
+sidebar_label: Filters
+sidebar_position: 5
+description: Reference for Swig's built-in filters — addslashes, capitalize, date, escape, first, groupBy, join, json, last, length, lower, raw, replace, reverse, safe, sort, striptags, title, uniq, upper, url_encode, url_decode.
+level: intermediate
+prereqs:
+  - '[Template Syntax](./syntax)'
+---
+
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta
+  minutes={8}
+  level="intermediate"
+  prereqs={['[Template Syntax](./syntax)']}
+/>
+
+# Filters
+
+Filters transform values inside a `{{ … }}` expression using the pipe character. Chain them left to right:
+
+```swig
+{# names = ['<p>paul</p>', '<p>jim</p>'] #}
+{{ names|striptags|join(', ')|title }}
+{# => Paul, Jim #}
+```
+
+Filters marked **safe** bypass the autoescape pass — their output is trusted as-is. See [Security](./security#what-the-guards-protect-against) for the model.
+
+| Filter | Safe | Purpose |
+| --- | --- | --- |
+| [`addslashes`](#addslashes) | — | Backslash-escape `\`, `'`, `"`. |
+| [`capitalize`](#capitalize) | — | First letter upper, rest lower. |
+| [`date`](#date) | — | PHP-style date formatting. |
+| [`e`](#e--escape) / [`escape`](#e--escape) | ✅ | HTML-escape. |
+| [`first`](#first) | — | First element of an array or string. |
+| [`groupBy`](#groupby) | — | Group an array of objects by key. |
+| [`join`](#join) | — | `Array.prototype.join`. |
+| [`json`](#json--json_encode) / [`json_encode`](#json--json_encode) | ✅ | `JSON.stringify`. |
+| [`last`](#last) | — | Last element. |
+| [`length`](#length) | — | `.length` of array/string or object key count. |
+| [`lower`](#lower) | — | Lowercase. |
+| [`raw`](#raw) | ✅ | Pass-through (bypass autoescape). |
+| [`replace`](#replace) | — | Regex `String.replace`. |
+| [`reverse`](#reverse) | — | Reverse an array (returns a copy). |
+| [`safe`](#safe) | ✅ | Pass-through (bypass autoescape). |
+| [`sort`](#sort) | — | Sort (returns a copy). |
+| [`striptags`](#striptags) | — | Remove HTML tags. |
+| [`title`](#title) | — | Title-case. |
+| [`uniq`](#uniq) | — | Remove duplicates. |
+| [`upper`](#upper) | — | Uppercase. |
+| [`url_encode`](#url_encode) | ✅ | `encodeURIComponent`. |
+| [`url_decode`](#url_decode) | ✅ | `decodeURIComponent`. |
+
+---
+
+## addslashes
+
+Backslash-escape `\`, `'`, `"`.
+
+```swig
+{{ '"quoted string"'|addslashes }}
+{# => \"quoted string\" #}
+```
+
+## capitalize
+
+Uppercase the first character, lowercase the rest.
+
+```swig
+{{ "hello world"|capitalize }}
+{# => Hello world #}
+```
+
+Also recurses into arrays and objects via `iterateFilter`.
+
+## date
+
+PHP-style date format. Accepts a `Date`, ISO string, or timestamp.
+
+```swig
+{{ user.birthday|date('F jS, Y') }}
+{# => July 6th, 1985 #}
+
+{{ now|date('Y-m-d H:i:s') }}
+```
+
+| Arg | Type | Description |
+| --- | --- | --- |
+| `format` | string | PHP date format string |
+| `offset` | number | Optional minutes offset from UTC |
+| `abbr` | string | Optional timezone abbreviation |
+
+Set a process-wide default offset with [`swig.setDefaultTZOffset(minutes)`](./api#setdefaulttzoffset).
+
+## e / escape
+
+HTML-escape. `e` is an alias for `escape`. This is the filter that autoescape applies automatically — calling it explicitly is rarely needed except to escape function output.
+
+```swig
+{{ mystuff()|e }}
+```
+
+Accepts a type: `'html'` (default) or `'js'`.
+
+```swig
+{# Escape for use inside a JavaScript string #}
+var msg = "{{ text|escape('js') }}";
+```
+
+Marked **safe** — the filter's own output is not re-escaped.
+
+## first
+
+First element of an array or first character of a string.
+
+```swig
+{{ [1, 2, 3]|first }}  {# => 1 #}
+{{ "hello"|first }}    {# => h #}
+```
+
+## groupBy
+
+Group an array of objects by a property value. Returns a map.
+
+```swig
+{# people = [{name:"Paul",dept:"eng"}, {name:"Jane",dept:"sales"}, {name:"Jim",dept:"eng"}] #}
+{{ people|groupBy('dept')|json }}
+{# => {"eng":[{"name":"Paul",...},{"name":"Jim",...}],"sales":[...]} #}
+```
+
+## join
+
+`Array.prototype.join`.
+
+```swig
+{{ ["a", "b", "c"]|join(", ") }}
+{# => a, b, c #}
+```
+
+## json / json_encode
+
+`JSON.stringify`. `json_encode` is an alias. Accepts an optional indent argument.
+
+```swig
+<script>var data = {{ data|json }};</script>
+<pre>{{ data|json(2) }}</pre>
+```
+
+Marked **safe**.
+
+## last
+
+Last element of an array or last character of a string.
+
+```swig
+{{ [1, 2, 3]|last }}  {# => 3 #}
+```
+
+## length
+
+Length of an array or string, or key count of an object.
+
+```swig
+{{ "hello"|length }}   {# => 5 #}
+{{ [1, 2]|length }}    {# => 2 #}
+{{ { a: 1 }|length }}  {# => 1 #}
+```
+
+## lower
+
+Lowercase the string.
+
+```swig
+{{ "HELLO"|lower }}  {# => hello #}
+```
+
+## raw
+
+Pass-through. Marked **safe** — skips the autoescape pass.
+
+```swig
+{{ trustedHtml|raw }}
+```
+
+Prefer [`safe`](#safe) when possible — both behave identically.
+
+## replace
+
+Regex-based replace.
+
+```swig
+{{ "banana"|replace("a", "A") }}
+{# => bAnana #}
+
+{{ "banana"|replace("a", "A", "g") }}
+{# => bAnAnA #}
+```
+
+| Arg | Type | Description |
+| --- | --- | --- |
+| `search` | string | Regex pattern (as a string) |
+| `replacement` | string | Replacement text |
+| `flags` | string | Optional regex flags (`g`, `i`, `m`) |
+
+## reverse
+
+Reverse an array. **Returns a copy** — the input is not mutated.
+
+```swig
+{{ [1, 2, 3]|reverse|join(',') }}
+{# => 3,2,1 #}
+```
+
+## safe
+
+Pass-through. Marked **safe** — skips autoescape.
+
+```swig
+{{ markdown.render(body)|safe }}
+```
+
+## sort
+
+Sort an array. **Returns a copy**. Pass `true` to reverse.
+
+```swig
+{{ [3, 1, 2]|sort|join(',') }}
+{# => 1,2,3 #}
+
+{{ [3, 1, 2]|sort(true)|join(',') }}
+{# => 3,2,1 #}
+```
+
+## striptags
+
+Remove every HTML tag from a string.
+
+```swig
+{{ "<p>hi <b>there</b></p>"|striptags }}
+{# => hi there #}
+```
+
+## title
+
+Title-case — uppercase the first letter of every word, lowercase the rest.
+
+```swig
+{{ "hello world"|title }}
+{# => Hello World #}
+```
+
+## uniq
+
+Remove duplicate values from an array.
+
+```swig
+{{ [1, 2, 1, 3, 2]|uniq|join(',') }}
+{# => 1,2,3 #}
+```
+
+## upper
+
+Uppercase.
+
+```swig
+{{ "hello"|upper }}  {# => HELLO #}
+```
+
+## url_encode
+
+`encodeURIComponent`. Marked **safe**.
+
+```swig
+<a href="/search?q={{ query|url_encode }}">Search</a>
+```
+
+## url_decode
+
+`decodeURIComponent`. Marked **safe**.
+
+```swig
+{{ encoded|url_decode }}
+```
+
+---
+
+## Writing custom filters
+
+See [Extending Swig — Custom Filters](./extending#custom-filters).
+
+## Recursion into arrays and objects
+
+Most built-in filters call `iterateFilter` internally, so passing an array or object applies the filter to each element/value. A custom filter can opt in:
+
+```js
+var iterateFilter = require('@rhinostone/swig/lib/filters').iterateFilter;
+
+function exclamate(input) {
+  var out = iterateFilter.apply(exclamate, arguments);
+  if (out !== undefined) return out;
+  return String(input) + '!';
+}
+```

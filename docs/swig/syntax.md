@@ -1,0 +1,198 @@
+---
+title: Template Syntax
+sidebar_label: Template Syntax
+sidebar_position: 3
+description: Detailed reference for Swig's template syntax — variables, expressions, operators, filters, tags, comments, whitespace control, and the autoescape model.
+level: intermediate
+prereqs:
+  - '[Getting Started](./getting-started)'
+---
+
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta
+  minutes={6}
+  level="intermediate"
+  prereqs={['[Getting Started](./getting-started)']}
+/>
+
+# Template Syntax
+
+Swig has three syntactic constructs:
+
+| Construct | Markers | Purpose |
+| --- | --- | --- |
+| **Variable** | `{{ … }}` | Evaluate an expression and emit its value. |
+| **Tag** | `{% … %}` | Control flow, inheritance, imports, macros. |
+| **Comment** | `{# … #}` | Stripped at parse time. |
+
+All three marker pairs can be customized via [`varControls`, `tagControls`, `cmtControls`](./api#setdefaults) if they collide with your output format.
+
+## Expressions
+
+### Literals
+
+```swig
+{{ "hello" }}         {# string #}
+{{ 42 }}              {# number #}
+{{ true }}            {# boolean #}
+{{ [1, 2, 3] }}       {# array #}
+{{ { a: 1, b: 2 } }}  {# object #}
+```
+
+### Variables
+
+Identifiers resolve against the locals context passed at render time.
+
+```swig
+{{ user }}
+{{ user.name }}
+{{ user['email'] }}
+{{ users[0].name }}
+```
+
+### Operators
+
+Arithmetic: `+  -  *  /  %`
+Comparison: `==  ===  !=  !==  <  >  <=  >=  in`
+Logical: `and  &&  or  ||  not  !`
+
+```swig
+{{ a + b }}
+{{ price * 0.9 }}
+{% if count > 0 and user.active %}…{% endif %}
+{% if "admin" in user.roles %}…{% endif %}
+```
+
+### Function calls
+
+Variables can be functions. Function output is **never autoescaped**.
+
+```swig
+{{ formatDate(user.birthday) }}
+```
+
+See [Security](./security) for why functions bypass autoescape.
+
+## Filters
+
+Filters transform a value. Apply with `|`, chain left to right.
+
+```swig
+{{ name|upper }}
+{{ items|join(', ') }}
+{{ birthday|date('F jS, Y') }}
+
+{# Chain #}
+{{ names|striptags|join(', ')|title }}
+```
+
+A filter declared with `.safe = true` bypasses autoescape. The built-ins marked safe are: `safe`, `raw`, `e`, `escape`, `json`, `json_encode`, `url_encode`, `url_decode`. Full list in the [Filters reference](./filters).
+
+## Tags
+
+Tags are block-structured. Many require a matching `{% end… %}`:
+
+```swig
+{% if user %}
+  Welcome, {{ user.name }}.
+{% else %}
+  Please log in.
+{% endif %}
+
+{% for item in items %}
+  <li>{{ item }}</li>
+{% endfor %}
+```
+
+End tags accept free-form text that the parser ignores — handy for scoping reminders:
+
+```swig
+{% block tacos %}
+  ...
+{% endblock tacos %}
+```
+
+See the [Tags reference](./tags).
+
+## Comments
+
+```swig
+{# This is a comment. It is removed at parse time. #}
+```
+
+Comments cannot be nested.
+
+## Whitespace control
+
+Add `-` immediately after the open mark or immediately before the close mark to strip adjacent whitespace:
+
+```swig
+{# no whitespace between "-" and the % #}
+{% for n in nums -%}
+  {{ n }}
+{%- endfor %}
+```
+
+Renders `12345` for `nums = [1, 2, 3, 4, 5]`.
+
+For larger regions, use the [`spaceless`](./tags#spaceless) tag to collapse whitespace between HTML tags.
+
+## Autoescape
+
+By default, every `{{ … }}` variable is piped through the `e` (escape) filter — `<`, `>`, `&`, `"`, `'` are converted to HTML entities. This is applied **after** any user filters.
+
+```swig
+{{ "<p>hi</p>" }}
+{# => &lt;p&gt;hi&lt;/p&gt; #}
+```
+
+Three ways to output raw HTML:
+
+1. Apply a filter marked `.safe = true`:
+   ```swig
+   {{ trustedHtml|safe }}
+   ```
+
+2. Return a function from locals (functions bypass autoescape):
+   ```js
+   locals.banner = function () { return '<strong>News</strong>'; };
+   ```
+
+3. Disable autoescape globally or per-call:
+   ```js
+   swig.setDefaults({ autoescape: false });
+   ```
+
+   Or for a region via the [`autoescape`](./tags#autoescape) tag:
+   ```swig
+   {% autoescape false %}
+     {{ rawHtml }}
+   {% endautoescape %}
+   ```
+
+See [Security — autoescape](./security#autoescape-is-the-only-default-xss-protection).
+
+## Template inheritance
+
+`{% extends %}` at the top of a child template declares its parent. `{% block %}` in the parent is an override point. See the [walk-through in Getting Started](./getting-started#template-inheritance) and the [`extends`](./tags#extends), [`block`](./tags#block), and [`parent`](./tags#parent) tag references.
+
+## Includes and macros
+
+- [`include`](./tags#include) — inline another template with the current or a fresh context.
+- [`import`](./tags#import) — import macros from another file as a namespace.
+- [`macro`](./tags#macro) — define a reusable mini-template inside the current file.
+
+## Custom control markers
+
+If `{{ … }}` or `{% … %}` collides with your output format, override them:
+
+```js
+swig.setDefaults({
+  varControls: ['<%=', '%>'],
+  tagControls: ['<%', '%>'],
+  cmtControls: ['<#', '#>']
+});
+```
+
+Each must be a 2-element array of distinct strings of length ≥ 2. The parser rejects anything shorter via [`validateOptions`](./api#setdefaults).

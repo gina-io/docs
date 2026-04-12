@@ -93,7 +93,7 @@ Route annotations (`description` fields in `routing.json`) become OpenAPI `descr
 ### Swig migration _(internal)_
 
 :::note Additive — no action required
-The vendored `swig-1.4.2` has been replaced with the `@rhinostone/swig` npm dependency (maintained fork with CVE-2023-25345 patched). Template rendering behaviour is unchanged.
+The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/swig) npm dependency (maintained fork with [CVE-2023-25345](/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
 :::
 
 ### Live database index introspection _(additive)_
@@ -743,7 +743,7 @@ Default is `false` (disabled).
 
 ### Security — swig CVE-2023-25345
 
-Patched in-place in the vendored swig 1.4.2. **No user action required.**
+Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
 
 Template paths in `{% extends %}` tags and relative/absolute `file` paths are
 now validated against the template root before being read.

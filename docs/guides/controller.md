@@ -109,15 +109,15 @@ Every action must terminate with exactly one of these.
 
 ### `self.render(data)`
 
-Renders an HTML template using Swig. The template is resolved from the route's `param.file`
+Renders an HTML template using [Swig](/swig). The template is resolved from the route's `param.file`
 value (defaults to the rule name). Data is merged with environment and routing metadata before
 being passed to the template.
 
 ```js
 this.home = function(req, res, next) {
   self.render({
-    title:   'Home',
-    message: 'Hello, World!'
+      title   : 'Home'
+    , message : 'Hello, World!'
   });
 };
 ```
@@ -218,9 +218,9 @@ this.chat = async function(req, res, next) {
 
     async function* tokens() {
         var stream = ai.client.messages.stream({
-            model     : ai.model,
-            max_tokens: 1024,
-            messages  : [{ role: 'user', content: req.post.message }]
+            model      : ai.model
+          , max_tokens : 1024
+          , messages   : [{ role: 'user', content: req.post.message }]
         });
         for await (var event of stream) {
             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
@@ -242,9 +242,9 @@ this.chat = async function(req, res, next) {
 
     async function* tokens() {
         var stream = await ai.client.chat.completions.create({
-            model   : ai.model,
-            messages: [{ role: 'user', content: req.post.message }],
-            stream  : true
+            model    : ai.model
+          , messages : [{ role: 'user', content: req.post.message }]
+          , stream   : true
         });
         for await (var chunk of stream) {
             var text = chunk.choices[0].delta.content;
@@ -567,9 +567,9 @@ not an `Error` instance:
 
 ```js
 {
-  status:  502,           // HTTP status code from the upstream response
-  error:   "Bad Gateway", // human-readable label for the status
-  message: "..."          // upstream response body or reason phrase
+    status  : 502           // HTTP status code from the upstream response
+  , error   : "Bad Gateway" // human-readable label for the status
+  , message : "..."         // upstream response body or reason phrase
 }
 ```
 
@@ -610,8 +610,8 @@ var Controller = function() {
 
     this.report = async function(req, res, next) {
         var data = await self.query({
-            hostname: 'api-internal',
-            path: '/report/' + req.params.id
+            hostname : 'api-internal'
+          , path     : '/report/' + req.params.id
         });
         self.renderJSON(data);
     };
@@ -627,8 +627,8 @@ var Controller = function() {
     this.report = async function(req, res, next) {
         try {
             var data = await self.query({
-                hostname: 'api-internal',
-                path: '/report/' + req.params.id
+                hostname : 'api-internal'
+              , path     : '/report/' + req.params.id
             });
             self.renderJSON(data);
         } catch (err) {
@@ -837,4 +837,5 @@ back to per-request eviction transparently.
 
 - [Routing guide](./routing) — Declaring routes and mapping them to controller actions
 - [Views and templates](./views) — Template rendering and the Swig template engine
+- [Swig reference](/swig) — Swig syntax, tags, filters, and API
 - [Middleware guide](./middleware) — Code that runs between route matching and the controller

@@ -1,0 +1,268 @@
+---
+title: Tags
+sidebar_label: Tags
+sidebar_position: 4
+description: Reference for Swig's 15 built-in tags — autoescape, block, extends, filter, for, if / else / elseif, import, include, macro, parent, raw, set, spaceless.
+level: intermediate
+prereqs:
+  - '[Template Syntax](./syntax)'
+---
+
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta
+  minutes={10}
+  level="intermediate"
+  prereqs={['[Template Syntax](./syntax)']}
+/>
+
+# Tags
+
+Tags control flow, define reusable structures, and orchestrate template inheritance. Each tag is written between `{% … %}` markers. Tags that open a block must be closed with `{% end<name> %}`.
+
+| Tag | Ends | Block-level | Purpose |
+| --- | --- | --- | --- |
+| [`autoescape`](#autoescape) | ✅ | — | Override autoescape for a region. |
+| [`block`](#block) | ✅ | ✅ | Named override point for [`extends`](#extends). |
+| [`else`](#else) / [`elseif`](#elseif) (`elif`) | — | — | Secondary branches inside `if` / `for`. |
+| [`extends`](#extends) | — | ✅ | Declare a parent template. |
+| [`filter`](#filter) | ✅ | — | Pipe an entire block through a filter. |
+| [`for`](#for) | ✅ | — | Iterate arrays, objects, or strings. |
+| [`if`](#if) | ✅ | — | Conditional. |
+| [`import`](#import) | — | ✅ | Import macros from another template. |
+| [`include`](#include) | — | — | Inline another template. |
+| [`macro`](#macro) | ✅ | — | Define a reusable mini-template. |
+| [`parent`](#parent) | — | — | Emit the parent block's content. |
+| [`raw`](#raw) | ✅ | — | Verbatim content — parser does not tokenize inside. |
+| [`set`](#set) | — | ✅ | Declare or assign a context variable. |
+| [`spaceless`](#spaceless) | ✅ | — | Collapse whitespace between HTML tags. |
+
+---
+
+## autoescape
+
+Override the global `autoescape` option for a block.
+
+```swig
+{% autoescape false %}
+  {{ raw_html }}
+{% endautoescape %}
+
+{% autoescape 'js' %}
+  var msg = "{{ user.name }}";
+{% endautoescape %}
+```
+
+The argument is passed to the [`e`](./filters#e--escape) filter. `true`, `false`, and a string type (`'html'`, `'js'`, …) are accepted.
+
+## block
+
+Declares a named override point inside a template that is being extended.
+
+```swig
+{# layout.html #}
+<title>{% block title %}My Site{% endblock %}</title>
+
+{# page.html #}
+{% extends "layout.html" %}
+{% block title %}Contact — My Site{% endblock %}
+```
+
+Blocks must have unique names within a template. Use [`parent`](#parent) inside an overriding block to emit the parent's content.
+
+## else
+
+Secondary branch inside [`if`](#if) and [`for`](#for). Inside `for`, it runs when the iterable is empty or missing:
+
+```swig
+{% if user.active %}
+  Welcome.
+{% else %}
+  Please log in.
+{% endif %}
+
+{% for item in items %}
+  <li>{{ item }}</li>
+{% else %}
+  <p>No items.</p>
+{% endfor %}
+```
+
+## elseif
+
+Alias: `elif`. Chain multiple conditions inside an `if`:
+
+```swig
+{% if x < 0 %}
+  Negative
+{% elseif x === 0 %}
+  Zero
+{% else %}
+  Positive
+{% endif %}
+```
+
+## extends
+
+Declares a parent template. Must be the first statement in the child template.
+
+```swig
+{% extends "layouts/base.html" %}
+```
+
+The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
+
+## filter
+
+Apply a filter to every string emitted inside the block.
+
+```swig
+{% filter upper %}
+  Hello, {{ user.name }}.
+{% endfilter %}
+```
+
+Accepts filter arguments:
+
+```swig
+{% filter replace("a", "A", "g") %}
+  banana
+{% endfilter %}
+```
+
+## for
+
+Iterate over arrays, objects, or strings.
+
+```swig
+{% for item in items %}
+  {{ item }}
+{% endfor %}
+
+{% for key, value in obj %}
+  {{ key }}: {{ value }}
+{% endfor %}
+```
+
+Inside the loop, `loop` exposes:
+
+| Property | Meaning |
+| --- | --- |
+| `loop.index` | 1-based iteration counter |
+| `loop.index0` | 0-based iteration counter |
+| `loop.revindex` | Reverse 1-based |
+| `loop.revindex0` | Reverse 0-based |
+| `loop.first` | `true` on the first iteration |
+| `loop.last` | `true` on the last iteration |
+| `loop.key` | Key for object iteration; same as `index0` for arrays |
+| `loop.cycle(a, b, …)` | Rotate through arguments by iteration |
+
+Use [`else`](#else) for the empty case.
+
+## if
+
+Conditional. Supports `and`, `or`, `not`, comparison operators, and `in`.
+
+```swig
+{% if user and user.active %}…{% endif %}
+{% if "admin" in user.roles %}…{% endif %}
+{% if not items %}Empty.{% endif %}
+```
+
+Branch with [`elseif`](#elseif) / [`else`](#else).
+
+## import
+
+Load macros from another template as a namespace object. Does not render the imported template.
+
+```swig
+{% import "forms.html" as forms %}
+{{ forms.input("email") }}
+```
+
+The alias must be a simple identifier. Reserved names (`__proto__`, `constructor`, `prototype`) are rejected at parse time — see [Security](./security).
+
+## include
+
+Inline another template. By default the current context is shared:
+
+```swig
+{% include "header.html" %}
+```
+
+Pass a fresh context with `with`:
+
+```swig
+{% include "item.html" with data %}
+```
+
+Suppress errors for missing files with `ignore missing`:
+
+```swig
+{% include "optional.html" ignore missing %}
+```
+
+Files are resolved through the active [loader](./loaders).
+
+## macro
+
+Define a reusable mini-template.
+
+```swig
+{% macro input(name, value, type) %}
+  <input type="{{ type }}" name="{{ name }}" value="{{ value|e }}">
+{% endmacro %}
+
+{{ input("email", user.email) }}
+```
+
+Macros are in scope for the rest of the current template and exported to any template that [`import`](#import)s the file. Macro names are validated — reserved names are rejected (see [Security](./security)).
+
+## parent
+
+Inside an overriding `{% block %}`, emit the parent block's rendered content.
+
+```swig
+{% block head %}
+  {% parent %}
+  <link rel="stylesheet" href="page.css">
+{% endblock %}
+```
+
+Only valid inside a block that overrides an inherited one.
+
+## raw
+
+Emit verbatim content — the parser does not tokenize inside a `raw` block. Useful for embedding other template syntaxes or documentation examples.
+
+```swig
+{% raw %}
+  This {{ will }} not {% be %} evaluated.
+{% endraw %}
+```
+
+## set
+
+Declare or update a context variable. Valid at the top of a template even when extending.
+
+```swig
+{% set page_title = "Home" %}
+{% set items = ["a", "b", "c"] %}
+```
+
+Assigning to reserved property names (`__proto__`, `constructor`, `prototype`) throws at parse time — see [Security](./security).
+
+## spaceless
+
+Remove whitespace between HTML tags in the enclosed region.
+
+```swig
+{% spaceless %}
+  <p>
+    <a href="/">Home</a>
+  </p>
+{% endspaceless %}
+{# => <p><a href="/">Home</a></p> #}
+```
+
+Only whitespace between `>` and `<` is stripped — text content is preserved.
