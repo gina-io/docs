@@ -99,8 +99,8 @@ parsing headers.
 
 ```js
 http2Options.settings = {
-    maxHeaderListSize: 65536,   // 64 KB compressed header cap
-    ...
+    maxHeaderListSize : 65536   // 64 KB compressed header cap
+  , ...
 };
 ```
 
@@ -117,8 +117,8 @@ The RFC 9113 revision also relaxes the requirement. Gina disables it uncondition
 
 ```js
 http2Options.settings = {
-    enablePush: false,
-    ...
+    enablePush : false
+  , ...
 };
 ```
 

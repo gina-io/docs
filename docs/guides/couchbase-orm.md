@@ -246,10 +246,10 @@ include them in your entity or save logic:
 ```javascript
 // This is all you need — _createdAt, _updatedAt, _scope are injected
 Invoice.save({
-    type: 'invoice',
-    customerId: 'cust-123',
-    amount: 250.00,
-    currency: 'USD'
+    type       : 'invoice'
+  , customerId : 'cust-123'
+  , amount     : 250.00
+  , currency   : 'USD'
 }).onComplete(function(err, result) {
     // Saved document now has _createdAt, _updatedAt, _scope
 });
@@ -332,16 +332,16 @@ Each query entry includes:
 
 ```javascript
 {
-  type: 'N1QL',
-  trigger: 'invoice#findByCustomer',
-  statement: 'SELECT i.* FROM `myBucket` i WHERE ...',
-  params: ['cust-123'],
-  durationMs: 12,
-  resultCount: 5,
-  resultSize: 2048,
-  indexes: [{ name: 'idx_invoice_customer', primary: false }],
-  connector: 'couchbase',
-  origin: 'api'
+    type        : 'N1QL'
+  , trigger     : 'invoice#findByCustomer'
+  , statement   : 'SELECT i.* FROM `myBucket` i WHERE ...'
+  , params      : ['cust-123']
+  , durationMs  : 12
+  , resultCount : 5
+  , resultSize  : 2048
+  , indexes     : [{ name: 'idx_invoice_customer', primary: false }]
+  , connector   : 'couchbase'
+  , origin      : 'api'
 }
 ```
 

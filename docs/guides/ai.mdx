@@ -370,8 +370,8 @@ var Controller = function() {
         ], {
             system    : 'You are a support agent for Acme Store. ' +
                         'Answer only questions about orders, returns, and products. ' +
-                        'Be concise and friendly.',
-            maxTokens : 512
+                        'Be concise and friendly.'
+          , maxTokens : 512
         });
 
         self.renderJSON({ reply: result.content });
@@ -462,8 +462,8 @@ this.reason = async function(req, res, next) {
         { role: 'user', content: req.body.problem }
     ], {
         system    : 'You are a precise reasoning assistant. ' +
-                    'Show your step-by-step thinking before giving the final answer.',
-        maxTokens : 2048
+                    'Show your step-by-step thinking before giving the final answer.'
+      , maxTokens : 2048
     });
 
     self.renderJSON({ answer: result.content, model: result.model });
@@ -488,8 +488,8 @@ this.compare = async function(req, res, next) {
     ]);
 
     self.renderJSON({
-        local    : { content: a.content, model: a.model, tokens: a.usage },
-        deepseek : { content: b.content, model: b.model, tokens: b.usage }
+        local    : { content: a.content, model: a.model, tokens: a.usage }
+      , deepseek : { content: b.content, model: b.model, tokens: b.usage }
     });
 };
 ```
@@ -568,9 +568,9 @@ Both styles accept a `system` option as an alternative to a system message in th
 
 ```js
 var result = await ai.infer(messages, {
-    system    : 'You are a concise assistant. Reply in one sentence.',
-    maxTokens : 256,
-    temperature: 0.3
+    system      : 'You are a concise assistant. Reply in one sentence.'
+  , maxTokens   : 256
+  , temperature : 0.3
 });
 ```
 
@@ -621,13 +621,13 @@ ai.infer(messages, options)
 
 ```js
 {
-  content : "Paris.",        // string — the text response
-  model   : "deepseek-chat", // string — model that answered
-  usage   : {
-    inputTokens  : 18,       // prompt tokens
-    outputTokens : 4         // completion tokens
-  },
-  raw     : { ... }          // original unmodified provider response
+    content : "Paris."        // string — the text response
+  , model   : "deepseek-chat" // string — model that answered
+  , usage   : {
+        inputTokens  : 18    // prompt tokens
+      , outputTokens : 4     // completion tokens
+    }
+  , raw     : { ... }        // original unmodified provider response
 }
 ```
 
@@ -649,8 +649,8 @@ var stream = await ai.client.messages.stream({ ... });
 
 // Raw OpenAI SDK
 var embedding = await ai.client.embeddings.create({
-    model : 'text-embedding-3-small',
-    input : text
+    model : 'text-embedding-3-small'
+  , input : text
 });
 ```
 
@@ -671,9 +671,9 @@ this.chat = async function(req, res, next) {
 
     async function* tokens() {
         var stream = ai.client.messages.stream({
-            model     : ai.model,
-            max_tokens: 1024,
-            messages  : [{ role: 'user', content: req.post.message }]
+            model      : ai.model
+          , max_tokens : 1024
+          , messages   : [{ role: 'user', content: req.post.message }]
         });
         for await (var event of stream) {
             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
@@ -695,9 +695,9 @@ this.chat = async function(req, res, next) {
 
     async function* tokens() {
         var stream = await ai.client.chat.completions.create({
-            model   : ai.model,
-            messages: [{ role: 'user', content: req.post.message }],
-            stream  : true
+            model    : ai.model
+          , messages : [{ role: 'user', content: req.post.message }]
+          , stream   : true
         });
         for await (var chunk of stream) {
             var text = chunk.choices[0].delta.content;

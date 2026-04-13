@@ -3,7 +3,7 @@ id: cli-bundle
 title: bundle
 sidebar_label: bundle
 sidebar_position: 2
-description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, and list bundles within a Gina project.
+description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, list, and openapi bundles within a Gina project.
 level: beginner
 prereqs:
   - '[Gina project created](/getting-started/first-project)'
@@ -191,3 +191,91 @@ List all bundles registered in a project.
 ```bash
 gina bundle:list @<project>
 ```
+
+---
+
+## `bundle:openapi`
+
+*New in 0.3.3-alpha.2*
+
+Generate an [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) specification from a bundle's `routing.json`. The spec is written to `<bundle>/config/openapi.json` by default.
+
+```bash
+gina bundle:openapi <bundle> @<project>
+```
+
+```bash
+gina bundle:openapi api @myproject
+```
+
+Generate specs for **all** bundles in a project:
+
+```bash
+gina bundle:openapi @<project>
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--output=<path>` | Write the spec to a custom file path instead of the bundle's config directory |
+
+**Alias:** `bundle:oas`
+
+```bash
+gina bundle:oas api @myproject
+```
+
+### How routing.json maps to OpenAPI
+
+The generator reads every route in `routing.json` and produces the corresponding OpenAPI structure — no manual spec writing required.
+
+```mermaid
+flowchart LR
+    A["routing.json"] --> B["bundle:openapi"]
+    B --> C["openapi.json"]
+    C --> D["AI agents"]
+    C --> E["API gateways"]
+    C --> F["Testing tools"]
+```
+
+| routing.json field | OpenAPI equivalent |
+|---|---|
+| `url` (`:param` syntax) | `paths` (`{param}` syntax) |
+| `method` | HTTP operations under each path |
+| `param.control` | `operationId` |
+| `namespace` | `tags` |
+| `requirements` (regex) | `parameters[].schema.pattern` |
+| `requirements` (pipe-separated) | `parameters[].schema.enum` |
+| `_comment` | operation `description` |
+| `_sample` | `x-sample-url` extension |
+| `param.title` | operation `summary` |
+| `middleware` | `x-middleware` extension |
+| `cache` | `Cache-Control` response header documentation |
+| `param.code` + `param.path` (redirects) | 3xx response with `Location` header |
+
+### Enriching the generated spec
+
+Add `_comment` and `_sample` fields to your routes for richer output:
+
+```json title="routing.json"
+{
+  "user-get": {
+    "namespace": "users",
+    "url": "/users/:id",
+    "method": "GET",
+    "param": {
+      "control": "getUser",
+      "title": "Fetch a user by ID",
+      "id": ":id"
+    },
+    "requirements": {
+      "id": "/^[0-9a-f]{8}-/i"
+    },
+    "_comment": "Returns the full user profile including preferences.",
+    "_sample": "/users/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+  }
+}
+```
+
+This produces an operation with `operationId: "users.getUser"`, `summary: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, a `{id}` path parameter with a UUID pattern, and the `users` tag.

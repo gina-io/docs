@@ -515,19 +515,19 @@ Contains the matched route's resolved metadata:
 
 ```js
 {
-  rule:         "invoice@frontend",   // full rule name (name@bundle)
-  url:          "/invoice/abc-123",   // matched URL with params resolved
-  method:       "GET",                // HTTP method
-  namespace:    "account",            // namespace, if set
-  bundle:       "frontend",           // bundle name
-  param: {
-    control:    "get",                // controller method
-    file:       "invoice/detail",     // template file
-    id:         "abc-123"             // resolved param value
-  },
-  middleware:   ["middlewares.passport.authentificate"],
-  requirements: { id: "/^[-a-f0-9]+$/i" },
-  queryTimeout: 30000                 // normalised to ms (set via "queryTimeout": "30s" in routing.json)
+    rule         : "invoice@frontend"   // full rule name (name@bundle)
+  , url          : "/invoice/abc-123"   // matched URL with params resolved
+  , method       : "GET"                // HTTP method
+  , namespace    : "account"            // namespace, if set
+  , bundle       : "frontend"           // bundle name
+  , param        : {
+        control  : "get"               // controller method
+      , file     : "invoice/detail"    // template file
+      , id       : "abc-123"           // resolved param value
+    }
+  , middleware   : ["middlewares.passport.authentificate"]
+  , requirements : { id: "/^[-a-f0-9]+$/i" }
+  , queryTimeout : 30000               // normalised to ms (set via "queryTimeout": "30s" in routing.json)
 }
 ```
 

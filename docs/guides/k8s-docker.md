@@ -537,11 +537,11 @@ myapp.onInitialize(function(event, app) {
     var RedisStore = new SessionStore(session);
 
     app.use(session({
-        secret           : process.env.SESSION_SECRET,
-        resave           : false,
-        saveUninitialized: false,
-        store            : new RedisStore(),
-        cookie           : { secure: true, maxAge: 86400000 }
+        secret           : process.env.SESSION_SECRET
+      , resave           : false
+      , saveUninitialized: false
+      , store            : new RedisStore()
+      , cookie           : { secure: true, maxAge: 86400000 }
     }));
 
     event.emit('complete', app);

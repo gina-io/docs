@@ -13,6 +13,16 @@ These modules are bootstrapped at framework startup and inject functions directl
 into the global scope. No `require()` call is needed — they are available
 everywhere in your bundle code. This is a core design principle of the Gina framework: common utilities like `_()`, `getContext()`, `requireJSON()`, and `dateFormat` are wired into the global scope by `gna.js` and the helpers bootstrap so that bundle code stays concise.
 
+:::tip Explicit imports (New in 0.3.3)
+All global helpers are also available as named imports for IDE navigation and
+static analysis:
+```javascript
+const { getContext, _, onCompleteCall, uuid } = require('gina/gna');
+```
+The globals continue to work as before — the explicit imports are an additional
+path, not a replacement.
+:::
+
 | Global | Injected names | Description |
 |--------|---------------|-------------|
 | [Path](./path.md) | `_()`, `setPath`, `getPath`, `setPaths`, `getPaths` | Path normalisation, file-system operations, named path registry |
