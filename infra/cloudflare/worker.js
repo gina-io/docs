@@ -144,6 +144,19 @@ export default {
       });
     }
 
+    // 301 redirects for category index pages whose URL was slugged to drop the
+    // /category/ prefix. Preserves SEO equity for any indexed backlinks.
+    const CATEGORY_REDIRECTS = {
+      '/docs/category/getting-started': '/docs/getting-started',
+      '/docs/category/concepts':        '/docs/concepts',
+      '/docs/category/guides':          '/docs/guides',
+      '/docs/category/cli':             '/docs/cli',
+    };
+    const trimmed = url.pathname.replace(/\/$/, '');
+    if (CATEGORY_REDIRECTS[trimmed]) {
+      return Response.redirect('https://gina.io' + CATEGORY_REDIRECTS[trimmed] + url.search, 301);
+    }
+
     // Strip /docs prefix and proxy to Vercel.
     // Docusaurus baseUrl '/docs/' embeds '/docs/' into all asset/page paths, so
     // the browser always requests gina.io/docs/*, Worker strips to /*, Vercel
