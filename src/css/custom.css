@@ -479,6 +479,27 @@ html[data-sidebar-collapsed] .sidebar-nav-icon svg {
   height: 20px;
 }
 
+/* Swig version badge in collapsed sidebar — drop the pkg name/version pill
+ * (its inner border leaks through as a vertical "|" artifact when clipped
+ * to 52 px) and center the GitHub icon with full contrast. */
+html[data-sidebar-collapsed] [class*='swigBadge_'] {
+  padding: 10px 0;
+  justify-content: center;
+}
+
+html[data-sidebar-collapsed] [class*='swigPkg_'] {
+  display: none;
+}
+
+html[data-sidebar-collapsed] [class*='swigRepo_'] {
+  color: var(--ifm-color-emphasis-1000);
+}
+
+html[data-sidebar-collapsed] [class*='swigRepo_']:hover {
+  color: var(--gina-amber);
+  background: transparent;
+}
+
 /* Active item: amber icon + subtle background */
 html[data-sidebar-collapsed] .menu__link--active .sidebar-nav-icon {
   color: var(--gina-amber);
