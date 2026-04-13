@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Updated automatically by gina's post_publish script on each release.
 const ginaVersion = '0.3.5';
-const swigVersion = '1.5.0';
+const swigVersion = '1.6.0';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
