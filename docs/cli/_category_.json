@@ -2,8 +2,7 @@
   "label": "CLI Reference",
   "position": 5,
   "link": {
-    "type": "generated-index",
-    "slug": "/cli",
-    "description": "Complete reference for the gina command-line interface."
+    "type": "doc",
+    "id": "cli-overview"
   }
 }
