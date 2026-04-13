@@ -318,32 +318,29 @@ blockquote {
 }
 
 /* Keep the sidebar column pinned even when the doc content is shorter than the
- * viewport. Without this, the aside's height matches the flex row (= content
- * column height); on short pages like /docs/tutorials/ the inner sticky viewport
- * runs out of range and scrolls away. Making the aside itself sticky at the
- * navbar offset decouples sidebar stickiness from content length. */
+ * viewport. `position: sticky` is bounded by the flex-row containing block —
+ * on short pages (tutorials, swig index) the row collapses to content height
+ * and the aside releases after ~130 px of scroll while maxScroll is ~366 px.
+ * `position: fixed` decouples the aside from flow entirely; the content
+ * column is offset by margin-left to reserve the same space. */
 @media (min-width: 997px) {
   .theme-doc-sidebar-container {
-    position: sticky;
+    position: fixed;
     top: var(--ifm-navbar-height);
-    align-self: flex-start;
+    left: 0;
+    width: var(--doc-sidebar-width, 300px);
     height: calc(100vh - var(--ifm-navbar-height));
+    z-index: 50;
+  }
+  [class*='docMainContainer_'] {
+    margin-left: var(--doc-sidebar-width, 300px);
   }
   /* Docusaurus pads the inner sidebar by navbar-height to clear the fixed
-   * navbar in its default layout. With the aside made sticky at navbar-height,
-   * that padding stacks on top of the sticky offset and produces a blank
-   * column above the first menu item. Zero it out. */
+   * navbar in its default layout. The outer aside already sits below the
+   * navbar, so the inner padding would stack and produce a blank column
+   * above the first menu item. Zero it out. */
   .theme-doc-sidebar-container [class*='sidebar_'] {
     padding-top: 0;
-  }
-  /* Sticky range = containing block height - sticky element height. On short
-   * pages (tutorials, swig index) the flex row collapses to content height,
-   * leaving only ~50 px of sticky range before the aside releases. Forcing
-   * the main content column to fill at least the viewport extends the flex
-   * row so the aside can remain pinned throughout the scrollable region. */
-  [class*='docItemContainer_'],
-  [class*='docMainContainer_'] {
-    min-height: calc(100vh - var(--ifm-navbar-height));
   }
 }
 
