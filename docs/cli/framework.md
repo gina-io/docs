@@ -104,6 +104,23 @@ filtering and workflow tips.
 
 ---
 
+## `framework:get`
+
+Read one or more keys from `~/.gina/<version>/settings.json`.
+Counterpart to [`framework:set`](#frameworkset).
+
+```bash
+gina get                        # print all settings
+gina get all                    # same — explicit all
+gina get --log-level            # print a single value (flag style)
+gina get log_level              # same — bare key name
+gina get --port --env           # print multiple values
+```
+
+Shorthand `gina get` is equivalent to `gina framework:get`.
+
+---
+
 ## `framework:set`
 
 Persist a framework-level setting to `~/.gina/main.json` and/or

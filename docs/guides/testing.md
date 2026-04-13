@@ -27,8 +27,8 @@ cluster.
 
 ```js
 var inst = new InvoiceEntity(null, null, {
-  connector: mockConnector,
-  config:    function(bundle, key) { return mockConfig; }
+    connector : mockConnector
+  , config    : function(bundle, key) { return mockConfig; }
 });
 ```
 
@@ -55,9 +55,9 @@ Overrides `this.getConfig()`. Must be a function with the same signature
 
 ```js
 var inst = new InvoiceEntity(null, null, {
-  config: function(bundle, confName) {
-    return { vatRate: 0.2, currency: 'EUR' };
-  }
+    config : function(bundle, confName) {
+        return { vatRate: 0.2, currency: 'EUR' };
+    }
 });
 ```
 
@@ -86,10 +86,10 @@ describe('InvoiceEntity#getVatTotal', function() {
   it('returns the correct VAT total', function() {
 
     var inst = new InvoiceEntity(null, null, {
-      connector: {},                           // not used by this method
-      config: function() {
-        return { vatRate: 0.2 };
-      }
+        connector : {}                           // not used by this method
+      , config    : function() {
+            return { vatRate: 0.2 };
+        }
     });
 
     var result = inst.getVatTotal(1000);
@@ -114,10 +114,10 @@ request/response objects.
 
 ```js
 var inst = MyController.createTestInstance({
-  req:     { session: { user: mockUser }, routing: { param: { id: 'abc' } } },
-  res:     {},
-  next:    function() {},
-  options: {}
+    req     : { session: { user: mockUser }, routing: { param: { id: 'abc' } } }
+  , res     : {}
+  , next    : function() {}
+  , options : {}
 });
 ```
 

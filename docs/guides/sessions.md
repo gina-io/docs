@@ -48,10 +48,10 @@ var session      = require('express-session');
 
 myapp.onInitialize(function(event, app) {
     app.use(session({
-        secret           : process.env.SESSION_SECRET || 'changeme',
-        resave           : false,
-        saveUninitialized: false,
-        cookie           : { secure: false, maxAge: 86400000 }  // 1 day
+        secret           : process.env.SESSION_SECRET || 'changeme'
+      , resave           : false
+      , saveUninitialized: false
+      , cookie           : { secure: false, maxAge: 86400000 }  // 1 day
     }));
 
     event.emit('complete', app);
@@ -134,11 +134,11 @@ myapp.onInitialize(function(event, app) {
     var SqliteStore = new SessionStore(session); // returns the SqliteStore class
 
     app.use(session({
-        secret           : process.env.SESSION_SECRET || 'changeme',
-        resave           : false,
-        saveUninitialized: false,
-        store            : new SqliteStore(),
-        cookie           : { secure: false, maxAge: 86400000 }
+        secret           : process.env.SESSION_SECRET || 'changeme'
+      , resave           : false
+      , saveUninitialized: false
+      , store            : new SqliteStore()
+      , cookie           : { secure: false, maxAge: 86400000 }
     }));
 
     event.emit('complete', app);
@@ -245,13 +245,13 @@ myapp.onInitialize(function(event, app) {
     var RedisStore = new SessionStore(session);   // returns the RedisStore class
 
     app.use(session({
-        secret           : process.env.SESSION_SECRET,
-        resave           : false,
-        saveUninitialized: false,
-        store            : new RedisStore(),
-        cookie           : {
-            secure  : true,      // HTTPS only in production
-            maxAge  : 86400000   // 1 day in ms
+        secret           : process.env.SESSION_SECRET
+      , resave           : false
+      , saveUninitialized: false
+      , store            : new RedisStore()
+      , cookie           : {
+            secure  : true      // HTTPS only in production
+          , maxAge  : 86400000  // 1 day in ms
         }
     }));
 
@@ -329,10 +329,10 @@ adapter if used alongside gina's session pattern.
 
 ```js
 cookie: {
-    secure  : /^production$/i.test(process.env.NODE_ENV),
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge  : 86400000
+    secure  : /^production$/i.test(process.env.NODE_ENV)
+  , httpOnly: true
+  , sameSite: 'lax'
+  , maxAge  : 86400000
 }
 ```
 

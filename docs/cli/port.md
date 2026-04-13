@@ -30,19 +30,26 @@ gina port:list @<project>
 
 ## `port:set`
 
-Assign a specific port to a bundle.
+Assign a specific port to a bundle. Supports both positional and flag syntax.
+When a required value is omitted, the CLI prompts interactively.
 
 ```bash
+# Positional syntax — protocol:port, bundle, @project/env
 gina port:set <protocol>:<port> <bundle> @<project>/<env>
+
+# Flag syntax
+gina port:set <bundle> @<project> --protocol=<proto> --scheme=<scheme> --port=<n> --env=<env>
+
+# Interactive — prompts for protocol, scheme, port, and environment
+gina port:set <bundle> @<project>
 ```
 
 ```bash
-gina port:set http:4200 api @myproject/dev
+gina port:set http/1.1:4200 api @myproject/dev
+gina port:set api @myproject --protocol=http/1.1 --scheme=http --port=4200 --env=dev
 ```
 
-:::caution Not yet implemented
-The `port:set` handler is a placeholder. Use `port:reset` to reallocate ports.
-:::
+Ports in the reserved range **4100–4199** are rejected (Gina infrastructure).
 
 ---
 

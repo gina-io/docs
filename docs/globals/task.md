@@ -76,8 +76,8 @@ task.onComplete(function(err, output) {
 
 ```js
 run('sass --watch src/scss:public/css', {
-    cwd: getPath('myapp.root'),
-    outToProcessSTD: true
+    cwd             : getPath('myapp.root')
+  , outToProcessSTD : true
 });
 ```
 

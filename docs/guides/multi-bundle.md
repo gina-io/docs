@@ -143,8 +143,8 @@ this.home = function(req, res, next) {
             if (err) return self.throwError(err);
 
             self.render({
-                user: userData,
-                notifications: notifications
+                user          : userData
+              , notifications : notifications
             });
         });
     });

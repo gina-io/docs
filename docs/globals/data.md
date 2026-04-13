@@ -47,8 +47,8 @@ user[name]=Alice&user[role]=admin
 ```js
 {
     user: {
-        name: 'Alice',
-        role: 'admin'
+        name : 'Alice'
+      , role : 'admin'
     }
 }
 ```

@@ -50,9 +50,8 @@ gina port:set http:3200 frontend @myproject/dev
 
 The `<protocol>:<port>` prefix accepts `http` or `https`.
 
-:::caution Not yet implemented
-The `port:set` handler is a placeholder. Use `port:reset` to reallocate ports.
-:::
+The `<protocol>:<port>` prefix uses full protocol names like `http/1.1` or `http/2.0`.
+You can also use flag syntax: `--protocol=http/1.1 --scheme=http --port=3200 --env=dev`.
 
 ---
 
