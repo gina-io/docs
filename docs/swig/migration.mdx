@@ -310,32 +310,32 @@ Twig 3 removed the `{% spaceless %}` tag in favour of `{% apply spaceless %}`. S
 
 ## Filter parity table
 
-Swig ships these 26 filters. The **Jinja2** and **Django** columns show whether the same-named filter exists in each; ✱ marks a name collision where semantics differ.
+Swig ships these 26 filters. The **Jinja2**, **Django**, and **Twig** columns show whether the same-named filter exists in each; ✱ marks a name collision where semantics or naming differ.
 
-| Swig | Jinja2 | Django |
-| --- | --- | --- |
-| `addslashes` | — | ✅ |
-| `capitalize` | ✅ | ✅ |
-| `date` | — | ✅ (both use PHP-style format strings — mostly compatible, but Django's set omits a few characters Swig accepts and vice-versa; spot-check format strings during migration) |
-| `escape` / `e` | ✅ | ✅ |
-| `first` | ✅ | ✅ |
-| `groupBy` | `groupby` (camelCase vs lowercase) ✱ | — |
-| `join` | ✅ | ✅ |
-| `json` / `json_encode` | `tojson` (different name) | — |
-| `last` | ✅ | ✅ |
-| `length` | ✅ | ✅ |
-| `lower` | ✅ | ✅ |
-| `raw` | — | — (Swig-specific; equivalent to `safe`) |
-| `replace` | ✅ | — |
-| `reverse` | ✅ | — |
-| `safe` | ✅ | ✅ |
-| `sort` | ✅ | `dictsort` (dicts only — Django has no general-purpose sort filter) ✱ |
-| `striptags` | `striptags` | `striptags` |
-| `title` | ✅ | `title` |
-| `uniq` | `unique` (name differs) | — |
-| `upper` | ✅ | ✅ |
-| `url_encode` | `urlencode` (no underscore) | `urlencode` |
-| `url_decode` | — | — |
+| Swig | Jinja2 | Django | Twig |
+| --- | --- | --- | --- |
+| `addslashes` | — | ✅ | — |
+| `capitalize` | ✅ | ✅ | ✅ |
+| `date` | — | ✅ (both use PHP-style format strings — mostly compatible, but Django's set omits a few characters Swig accepts and vice-versa; spot-check format strings during migration) | ✅ (PHP-style format strings — closest match to Swig) |
+| `escape` / `e` | ✅ | ✅ | ✅ |
+| `first` | ✅ | ✅ | ✅ |
+| `groupBy` | `groupby` (camelCase vs lowercase) ✱ | — | — |
+| `join` | ✅ | ✅ | ✅ |
+| `json` / `json_encode` | `tojson` (different name) | — | `json_encode` ✅ |
+| `last` | ✅ | ✅ | ✅ |
+| `length` | ✅ | ✅ | ✅ |
+| `lower` | ✅ | ✅ | ✅ |
+| `raw` | — | — (Swig-specific; equivalent to `safe`) | ✅ (Twig's idiomatic name for `safe`) |
+| `replace` | ✅ | — | ✅ |
+| `reverse` | ✅ | — | ✅ |
+| `safe` | ✅ | ✅ | `raw` (different name — Swig accepts both) ✱ |
+| `sort` | ✅ | `dictsort` (dicts only — Django has no general-purpose sort filter) ✱ | ✅ |
+| `striptags` | `striptags` | `striptags` | `striptags` |
+| `title` | ✅ | `title` | `title` |
+| `uniq` | `unique` (name differs) | — | — (Swig-specific; Twig has no built-in) |
+| `upper` | ✅ | ✅ | ✅ |
+| `url_encode` | `urlencode` (no underscore) | `urlencode` | `url_encode` ✅ |
+| `url_decode` | — | — | — |
 
 Always prefer Swig's names in Swig templates; the parser rejects unknown filter names at parse time, which makes drift obvious.
 
