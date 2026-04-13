@@ -1,9 +1,9 @@
 ---
 displayed_sidebar: swigSidebar
-title: Migrating from Jinja2 or Django
+title: Migrating from Jinja2, Django, or Twig
 sidebar_label: Migration Guide
 sidebar_position: 12
-description: Concrete differences between Swig and Jinja2/Django. Syntax that ports cleanly, syntax that breaks at parse time, and workaround patterns for the gaps.
+description: Concrete differences between Swig and Jinja2/Django/Twig. Syntax that ports cleanly, syntax that breaks at parse time, and workaround patterns for the gaps.
 level: intermediate
 prereqs:
   - '[Template Syntax](./syntax)'
@@ -11,31 +11,46 @@ prereqs:
   - '[Filters reference](./filters)'
 ---
 
-# Migrating from Jinja2 or Django
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
-Swig is **Jinja2/Django-inspired**, not drop-in compatible with either. Marker shapes, filter syntax, inheritance, and most tag names line up — but concrete constructs do break on paste, especially `is`-tests from Jinja2 and `forloop.*` from Django. This page lists every gap we are aware of, with workarounds.
+# Migrating from Jinja2, Django, or Twig
 
-## What ports cleanly (both directions)
+Swig shares the **Jinja2 lineage** — so Jinja2 itself, Django templates, and Twig (PHP) all look familiar but none are drop-in compatible. Marker shapes, filter syntax, inheritance, and most tag names line up — but concrete constructs do break on paste, especially `is`-tests (Jinja2 / Twig), `forloop.*` (Django), and the `~` / `??` / `?:` / `..` / `#{}` operators (Twig). This page lists every gap we are aware of, with workarounds.
 
-```mermaid
-flowchart LR
-  subgraph compat["Ports cleanly"]
-    A["{{ var }} / {{ var.attr }} / {{ var[key] }}"]
-    B["{% if %} / {% elif %} / {% else %} / {% endif %}"]
-    C["{% for x in xs %} / {% endfor %}"]
-    D["{% block name %} / {% extends 'parent' %}"]
-    E["{% include 'f' %}"]
-    F["{# comment #}"]
-    G["Whitespace control: {%- -%} and {{- -}}"]
-    H["Overlapping filters (upper, lower, length, first, last, join, replace, sort, date, safe, escape, striptags, title, capitalize)"]
-  end
-```
+## What ports cleanly
 
-The markers `{{ }}`, `{% %}`, `{# #}` match all three engines. Filter chaining with `|` works the same way. Comments cannot be nested in any of them. Template inheritance is single-parent in all three.
+Constructs available in every engine. Anything not listed here likely differs — check the engine-specific tab below.
 
-**Surprise:** Swig **does** support Jinja2-style whitespace control (`{%- ... -%}`, `{{- ... -}}`, `{#- ... -#}`) — see [Template Syntax § Whitespace control](./syntax#whitespace-control). This was not always the case historically; if a reference says otherwise, it is stale.
+| Feature | Canonical syntax | Swig | Jinja2 | Django | Twig |
+| --- | --- | :---: | :---: | :---: | :---: |
+| Variable output | `{{ var }}` | ✅ | ✅ | ✅ | ✅ |
+| Attribute access | `{{ var.attr }}` | ✅ | ✅ | ✅ | ✅ |
+| Bracket access | `{{ var[key] }}` | ✅ | ✅ | — [^1] | ✅ |
+| Filter chain | `{{ x\|upper\|trim }}` | ✅ | ✅ | ✅ | ✅ |
+| Conditional | `{% if %} / {% elif %} / {% else %} / {% endif %}` | ✅ | ✅ | ✅ [^2] | ✅ |
+| Loop | `{% for x in xs %} / {% endfor %}` | ✅ | ✅ | ✅ | ✅ |
+| Inheritance | `{% extends "parent" %}` + `{% block name %}` | ✅ | ✅ | ✅ | ✅ |
+| Include | `{% include "f" %}` | ✅ | ✅ | ✅ | ✅ |
+| Comment | `{# comment #}` | ✅ | ✅ | ⚠️ [^3] | ✅ |
+| Whitespace trim | `{%- … -%}` and `{{- … -}}` | ✅ | ✅ | — | ✅ |
+| Autoescape (default on) | `{{ x }}` is HTML-escaped | ✅ | ✅ | ✅ | ✅ |
+| `safe` filter | `{{ x\|safe }}` | ✅ | ✅ | ✅ | ✅ [^4] |
+| Overlapping filters | `upper`, `lower`, `length`, `first`, `last`, `join`, `replace`, `sort`, `date`, `escape`/`e`, `striptags`, `title`, `capitalize` | ✅ | mostly | mostly | mostly |
 
-## From Jinja2 → Swig
+[^1]: Django uses `.key` for both attribute and dict lookup; `[key]` is not valid template syntax.
+[^2]: Django added `{% elif %}` in 1.4; earlier versions required nested `{% if %}` / `{% else %}`.
+[^3]: Django uses `{# #}` only for single-line comments; multi-line comments need `{% comment %}…{% endcomment %}`. Swig/Jinja2/Twig accept multi-line in `{# #}`.
+[^4]: Twig's idiomatic name is `|raw`, but `|safe` is also accepted. Swig accepts both.
+
+Template inheritance is single-parent in all four — no mixins, no multiple inheritance. Comments cannot be nested in any of them.
+
+## Engine-specific gaps
+
+Pick your source engine. The shared reference (filter parity, operators, autoescape, checklist) is below.
+
+<Tabs groupId="source-engine" queryString>
+  <TabItem value="jinja2" label="Jinja2" default>
 
 ### Parse-time blockers
 
@@ -115,7 +130,8 @@ swig.renderFile('page.html', {
 {% for i in range(10) %}…{% endfor %}
 ```
 
-## From Django → Swig
+  </TabItem>
+  <TabItem value="django" label="Django">
 
 ### Parse-time blockers
 
@@ -172,6 +188,126 @@ Django templates do not allow arithmetic in `{{ }}`; you use `|add:` or compute 
 
 Migration direction matters: **Django → Swig** means Django idioms (`|add:`) break and need to become arithmetic or a Swig filter; **Swig → Django** means arithmetic expressions are illegal and must move into the view.
 
+  </TabItem>
+  <TabItem value="twig" label="Twig">
+
+Twig (PHP) and Swig are **Jinja2 siblings** — markers, inheritance, macros, and the core tag set line up. The divergences are mostly at the expression-language level: Twig is PHP-flavoured where Swig is JavaScript-flavoured.
+
+### Parse-time blockers
+
+These fail with `Unexpected tag`, `Unable to parse …`, or "Mismatched nesting state" at compile time.
+
+| Twig | Swig equivalent | Notes |
+| --- | --- | --- |
+| `{{ "hello " ~ name }}` | `{{ "hello " + name }}` | Swig has **no `~` operator**. Use `+` (JS concat). If either side may be numeric, cast explicitly — JS coerces with `+`. |
+| `{{ 1..10 }}` | `range(1, 11)` via locals | No range operator. Pass a `range` helper through locals (see the Jinja2 section). |
+| `{{ x ?? 'fallback' }}` | `{% if x %}{{ x }}{% else %}fallback{% endif %}` | No null-coalescing operator. |
+| `{{ x ?: 'fallback' }}` | Same as above | Short ternary isn't lexed. |
+| `{{ x ? 'a' : 'b' }}` | `{% if x %}a{% else %}b{% endif %}` | No `?:` ternary operator. |
+| `{{ x is defined }}` | `{{ x !== undefined }}` or `{{ x }}` | No `is` operator. No tests. |
+| `{{ x is null }}` | `{{ x === null }}` | |
+| `{{ x is empty }}` | `{{ not x or x.length === 0 }}` or register an `empty` filter | |
+| `{{ x is odd }}` / `is even` | `{{ x % 2 === 1 }}` / `{{ x % 2 === 0 }}` | |
+| `{{ x is iterable }}` | Custom filter, or pre-compute in locals | |
+| `{{ x is divisible by(3) }}` | `{{ x % 3 === 0 }}` | |
+| `{{ x is same as(y) }}` | `{{ x === y }}` | |
+| `{% set x %}body{% endset %}` | `{% set x = "body" %}` | Swig only supports the one-liner. |
+| `{% apply upper %}...{% endapply %}` | `{% filter upper %}...{% endfilter %}` | Swig keeps the pre-Twig-2.9 name. |
+| `{% verbatim %}...{% endverbatim %}` | `{% raw %}...{% endraw %}` | |
+| `{% embed "layout.twig" %}...{% endembed %}` | `{% extends "layout" %}` in a child template | No `embed` — inline the block overrides into a dedicated child. |
+| `{% use "blocks.twig" %}` | Not supported | Horizontal reuse has no equivalent. Inline or factor through macros. |
+| `{% do x.flush() %}` | `{{ x.flush() }}` or compute in controller | No `do` tag. A function call in `{{ }}` whose return is `""` (or gets escaped away) behaves similarly, but prefer moving side effects out of templates. |
+| `{% sandbox %}` | Not supported | No sandbox mode — the security model is documented in [Security](./security). |
+| `{% deprecated "…" %}` | Not supported | |
+| `{{ parent() }}` | `{% parent %}` | Swig uses a dedicated tag, not a function call. |
+| `{{ block('name') }}` | Not supported directly | Restructure via inheritance, or pre-compute in the controller. |
+| `{{ attribute(obj, key) }}` | `{{ obj[key] }}` | JS-style dynamic access already works; `attribute()` is not provided. |
+| `{{ constant('App::VERSION') }}` | Pass through locals | PHP-only concept. |
+| `{{ dump(x) }}` | `{{ x\|json }}` | No `dump` helper; `json` filter is the closest. |
+| `{% from "f.twig" import m1, m2 %}` | `{% import "f" as ns %}` then `ns.m1()` / `ns.m2()` | Swig has no `from … import`. |
+
+### String interpolation
+
+Twig lexes `#{ … }` inside double-quoted strings:
+
+```twig
+{{ "Hello #{name}!" }}
+```
+
+Swig does not — concatenate explicitly:
+
+```swig
+{{ "Hello " + name + "!" }}
+```
+
+Escaping rules are identical on both sides; autoescape still applies to the concatenated output.
+
+### Include with context
+
+```twig
+{# Twig #}
+{% include 'sidebar.twig' with { user: current } only %}
+```
+
+Swig's `{% include %}` accepts a `with` expression (a context object) but has **no `only` modifier** — the parent context is always visible unless a variable is shadowed. If strict isolation matters, wrap the included body in a `{% macro %}` and call it: macro bodies only see their arguments plus globals.
+
+```swig
+{% include "sidebar" with { user: current } %}
+```
+
+### Macros — defaults and named args
+
+Twig macros accept default values and named arguments at the call site:
+
+```twig
+{% macro input(name, type = 'text', value = '') %}...{% endmacro %}
+{{ _self.input(name='email', type='email') }}
+```
+
+Swig supports neither. Macro args are bare positional identifiers; defaults happen inside the body:
+
+```swig
+{% macro input(name, type, value) %}
+  <input name="{{ name }}"
+         type="{% if type %}{{ type }}{% else %}text{% endif %}"
+         value="{{ value }}">
+{% endmacro %}
+{{ input("email", "email", "") }}
+```
+
+Named-argument call syntax (`input(name="x")`) is not parsed. Imports use the `as ns` form only — there is no `{% from … import name %}`.
+
+### Filter differences worth flagging
+
+Name / semantic mismatches that bite on paste:
+
+| Twig filter | Swig equivalent |
+| --- | --- |
+| `default('fallback')` | Not built in — use `{% if %}` or register a filter |
+| `number_format(2, '.', ',')` | Not built in — register, or format in the controller |
+| `format('%s — %d', name, n)` | Concatenate with `+`, or register a `format` filter |
+| `date('Y-m-d')` | Same API — Swig's `date` filter also uses PHP format strings |
+| `date_modify('+1 day')` | Not supported — compute in the controller |
+| `merge({ a: 1 })` | Not built in — pass the merged object through locals |
+| `slice(0, 3)` | `{{ s.slice(0, 3) }}` — strings and arrays are JS natives |
+| `split(',')` | `{{ s.split(",") }}` — call the JS method directly |
+| `trim` | `{{ s.trim() }}` |
+| `batch(3)` | Not built in — group in the controller |
+| `keys` | `{{ Object.keys(obj) }}` |
+| `raw` | `{{ x\|raw }}` — same name, same semantics |
+| `escape('html')` / `e` | `{{ x\|e }}` — same |
+| `url_encode` | `{{ x\|url_encode }}` — Swig keeps the underscore (Twig accepts either form) |
+| `spaceless` | `{% spaceless %}...{% endspaceless %}` — it's a **tag** in Swig, not a filter |
+
+Swig does not distinguish "functions" from "filters" — everything is a filter plus whatever you expose via `locals`. Where Twig uses `range(0, 10)`, `max(a, b)`, `min(a, b)`, or `random(xs)`, pass those as locals from the controller.
+
+### `spaceless`
+
+Twig 3 removed the `{% spaceless %}` tag in favour of `{% apply spaceless %}`. Swig keeps the **tag** form (`{% spaceless %}…{% endspaceless %}`) and does not ship a `spaceless` filter. Both sides accept Jinja2-style `{%- … -%}` trimming for finer control.
+
+  </TabItem>
+</Tabs>
+
 ## Filter parity table
 
 Swig ships these 26 filters. The **Jinja2** and **Django** columns show whether the same-named filter exists in each; ✱ marks a name collision where semantics differ.
@@ -213,8 +349,9 @@ and  or  not  &&  ||  !
 gt  gte  lt  lte   ← Swig-only word aliases for <, <=, >, >=
 ```
 
-Missing from Jinja2 that Swig also omits: `is`, `is not`, `not in`.
-Missing from Jinja2 that Swig **keeps**: strict equality `===`/`!==` (JS-native).
+Missing from Jinja2 / Twig that Swig also omits: `is`, `is not`, `not in`.
+Missing from Twig that Swig also omits: `~` (string concat), `??` (null coalesce), `?:` (short ternary), `..` (range).
+**Kept by Swig** (absent from Jinja2 / Django / Twig): strict equality `===` / `!==` (JS-native).
 
 ## Autoescape parity
 
@@ -226,23 +363,31 @@ All three engines autoescape `{{ … }}` by default. Opt-out mechanisms differ:
 | **Jinja2** | `{{ x\|safe }}` | `{% autoescape false %}…{% endautoescape %}` |
 | **Django** | `{{ x\|safe }}` | `{% autoescape off %}…{% endautoescape %}` (note: `off`, not `false`) |
 
-Swig additionally **bypasses autoescape for function-call output** (e.g. `{{ formatDate(x) }}` is not escaped). Neither Jinja2 nor Django do this. See [Security — autoescape](./security#autoescape-is-the-only-default-xss-protection) for why, and the guardrails around it.
+**Twig** uses `{% autoescape 'html' %}…{% endautoescape %}` (quoted strategy name, not `false`/`off`); per-value opt-out is also `{{ x\|safe }}` (Twig calls this `|raw`, and Swig accepts both).
+
+Swig additionally **bypasses autoescape for function-call output** (e.g. `{{ formatDate(x) }}` is not escaped). Neither Jinja2, Django, nor Twig do this. See [Security — autoescape](./security#autoescape-is-the-only-default-xss-protection) for why, and the guardrails around it.
 
 ## Migration checklist
 
 Use this as a per-template review pass:
 
-1. **Search for `is ` and `is not `** — replace each with the closest `===` / `!==` / `!` equivalent, or a custom filter.
+1. **Search for `is ` and `is not `** (Jinja2 / Twig) — replace each with the closest `===` / `!==` / `!` equivalent, or a custom filter.
 2. **Search for `not in`** — wrap as `not (x in xs)`.
 3. **Search for `forloop.`** (Django only) — replace with `loop.`.
-4. **Search for `block.super` / `super()`** — replace with `{% parent %}`.
+4. **Search for `block.super` / `super()` / `parent()`** — replace with `{% parent %}`.
 5. **Search for `|filter:"arg"`** (Django only) — rewrite as `|filter("arg")`.
 6. **Search for `{% with %}`** — rewrite with `{% set %}` and scope-check.
-7. **Search for `{% from "…" import … %}`** — rewrite as `{% import "…" as ns %}` + `ns.name`.
+7. **Search for `{% from "…" import … %}`** (Jinja2 / Twig) — rewrite as `{% import "…" as ns %}` + `ns.name`.
 8. **Search for `.<method>` without parens** (Django only) — add `()` on every method call.
 9. **Search for filters** — audit against the filter parity table above; register missing ones via [`setFilter`](./extending#custom-filters).
-10. **Search for `//` and `**`** — rewrite using `Math.floor` / `Math.pow` or a filter.
-11. **Run the full test suite** — Swig fails loudly at parse time for unknown tags/filters, so most gaps surface on first render rather than silently.
+10. **Search for `//` and `**`** (Jinja2 only) — rewrite using `Math.floor` / `Math.pow` or a filter.
+11. **Search for `~`** (Twig only) — rewrite string concatenation as `+`.
+12. **Search for `??` and `?:`** (Twig only) — rewrite as `{% if %}{% else %}{% endif %}`.
+13. **Search for `..` range literals** (Twig only) — replace with a `range()` helper passed through locals.
+14. **Search for `#{` inside double-quoted strings** (Twig only) — rewrite as `+` concatenation.
+15. **Search for `{% embed %}` / `{% use %}` / `{% verbatim %}` / `{% do %}` / `{% sandbox %}` / `{% apply %}` / `{% set x %}…{% endset %}`** (Twig only) — see the Twig tab for per-tag rewrites.
+16. **Search for `attribute()`, `constant()`, `dump()`** (Twig only) — rewrite as `obj[key]`, a local, or `|json`.
+17. **Run the full test suite** — Swig fails loudly at parse time for unknown tags/filters, so most gaps surface on first render rather than silently.
 
 ## See also
 
