@@ -1,4 +1,5 @@
 ---
+displayed_sidebar: swigSidebar
 title: Extending Swig
 sidebar_label: Extending Swig
 sidebar_position: 8
@@ -9,17 +10,6 @@ prereqs:
   - '[Template Syntax](./syntax)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={10}
-  level="expert"
-  prereqs={[
-    '[API](./api)',
-    '[Template Syntax](./syntax)'
-  ]}
-/>
-
 # Extending Swig
 
 Every Swig instance owns its own set of filters, tags, and extensions — registrations on the default instance are not visible on an instance constructed via `new swig.Swig()`, and vice versa.
@@ -29,11 +19,11 @@ flowchart TD
   INST[Swig instance] --> FILT[filters map]
   INST --> TAGS[tags map]
   INST --> EXT[extensions map]
-  FILT -->|{{ x\|myFilter }}| TOKEN[FILTER token]
-  TAGS -->|{% myTag %}| PARSE[parse handler]
+  FILT -->|"{{ x&#124;myFilter }}"| TOKEN[FILTER token]
+  TAGS -->|"{% myTag %}"| PARSE[parse handler]
   PARSE --> COMPILE[compile handler]
   COMPILE --> OUT[JS source fragment]
-  EXT -->|_ext[name]| RUNTIME[Runtime helper]
+  EXT -->|"_ext&#91;name&#93;"| RUNTIME[Runtime helper]
 ```
 
 ## Custom filters

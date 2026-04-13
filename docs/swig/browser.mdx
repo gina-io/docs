@@ -1,4 +1,5 @@
 ---
+displayed_sidebar: swigSidebar
 title: Browser Usage
 sidebar_label: Browser Usage
 sidebar_position: 10
@@ -9,17 +10,6 @@ prereqs:
   - '[Loaders](./loaders)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={5}
-  level="intermediate"
-  prereqs={[
-    '[CLI](./cli)',
-    '[Loaders](./loaders)'
-  ]}
-/>
-
 # Browser Usage
 
 Most of Swig works in the browser the same way it does in Node. The only exception: **Swig cannot read files by path from the browser** — the filesystem loader throws if `fs` is unavailable.
@@ -29,7 +19,7 @@ If a template uses `{% extends "./myfile.html" %}` or `{% include "./myfile.html
 ```mermaid
 flowchart LR
   SRC[templates/*.html] -->|build: swig compile| JS[dist/templates.js]
-  JS -->|<script src=...>| BROWSER[Browser]
+  JS -->|"&lt;script src=...&gt;"| BROWSER[Browser]
   BROWSER --> PRIME["swig.run(tpl, {}, '/path')"]
   PRIME --> CACHE[In-memory cache]
   BROWSER --> RENDER["swig.render(newSrc, {filename, locals})"]

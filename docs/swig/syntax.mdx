@@ -1,4 +1,5 @@
 ---
+displayed_sidebar: swigSidebar
 title: Template Syntax
 sidebar_label: Template Syntax
 sidebar_position: 3
@@ -7,14 +8,6 @@ level: intermediate
 prereqs:
   - '[Getting Started](./getting-started)'
 ---
-
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={6}
-  level="intermediate"
-  prereqs={['[Getting Started](./getting-started)']}
-/>
 
 # Template Syntax
 
@@ -27,6 +20,11 @@ Swig has three syntactic constructs:
 | **Comment** | `{# … #}` | Stripped at parse time. |
 
 All three marker pairs can be customized via [`varControls`, `tagControls`, `cmtControls`](./api#setdefaults) if they collide with your output format.
+
+:::note Porting from Jinja2 or Django?
+Swig is inspired by Jinja2 and Django but not drop-in compatible — `is`-tests, `not in`, `forloop.*`, block-form `{% set %}`, and ~25 Jinja2 filters are unsupported. Read the [Migration Guide](./migration) for a full parity list and workarounds.
+:::
+
 
 ## Expressions
 

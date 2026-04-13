@@ -1,24 +1,14 @@
 ---
+displayed_sidebar: swigSidebar
 title: Getting Started
 sidebar_label: Getting Started
 sidebar_position: 2
 description: Install @rhinostone/swig, render your first template, and wire it up to Express. Covers installation, basic usage, variables, filters, and functions.
 level: beginner
 prereqs:
-  - '[Swig overview](./index)'
+  - '[Swig overview](./)'
   - '[Node.js](https://nodejs.org)'
 ---
-
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={5}
-  level="beginner"
-  prereqs={[
-    '[Swig overview](./index)',
-    '[Node.js](https://nodejs.org)'
-  ]}
-/>
 
 # Getting Started
 
@@ -29,6 +19,11 @@ npm install @rhinostone/swig --save
 ```
 
 Node.js ≥ 12 is required. Browsers can load the bundled build from `dist/swig.js` — see [Browser Usage](./browser).
+
+:::tip Coming from Jinja2 or Django?
+Swig's syntax will feel familiar but is not drop-in compatible — a few constructs (`is defined`, `not in`, `forloop.*`, block-form `{% set %}`, many filters) fail at parse time. See the [Migration Guide](./migration) before porting existing templates.
+:::
+
 
 ## Render your first template
 

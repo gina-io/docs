@@ -4,6 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Updated automatically by gina's post_publish script on each release.
 const ginaVersion = '0.3.5';
+const swigVersion = '1.5.0';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -65,6 +66,7 @@ const config = {
             return items.filter(item => {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
+              if (item.type === 'category' && item.label === 'Swig Template Engine') return false;
               return true;
             });
           },
@@ -86,6 +88,10 @@ const config = {
       }),
     ],
   ],
+
+  customFields: {
+    swigVersion,
+  },
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
@@ -116,6 +122,13 @@ const config = {
             position: 'left',
             label: 'Tutorials',
             className: 'navbar-tutorials-link',
+          },
+          {
+            type: 'docSidebar',
+            sidebarId: 'swigSidebar',
+            position: 'left',
+            label: 'Swig',
+            className: 'navbar-swig-link',
           },
           {
             type: 'docSidebar',
