@@ -1,8 +1,9 @@
 ---
+displayed_sidebar: swigSidebar
 title: Swig
 sidebar_label: Overview
 sidebar_position: 1
-description: Swig is the Jinja2/Django-style template engine vendored by Gina. This section documents the @rhinostone/swig fork that Gina ships — syntax, built-in tags and filters, the API, loaders, the CLI, and the browser build.
+description: Swig is the Jinja2/Django-inspired template engine vendored by Gina. This section documents the @rhinostone/swig fork that Gina ships — syntax, built-in tags and filters, the API, loaders, the CLI, and the browser build.
 level: beginner
 prereqs:
   - '[Views guide](/guides/views)'
@@ -10,21 +11,9 @@ prereqs:
   - '[gina-io/swig on GitHub](https://github.com/gina-io/swig)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={3}
-  level="beginner"
-  prereqs={[
-    '[Views guide](/guides/views)',
-    '[@rhinostone/swig on npm](https://www.npmjs.com/package/@rhinostone/swig)',
-    '[gina-io/swig on GitHub](https://github.com/gina-io/swig)'
-  ]}
-/>
-
 # Swig
 
-Swig is the default HTML template engine shipped with Gina. It uses a Jinja2/Django-style syntax — variables are wrapped in `{{ … }}`, logic tags in `{% … %}`, and layout inheritance happens through `{% extends %}` / `{% block %}`.
+Swig is the default HTML template engine shipped with Gina. Its syntax is **inspired by Jinja2 and Django** — variables are wrapped in `{{ … }}`, logic tags in `{% … %}`, and layout inheritance happens through `{% extends %}` / `{% block %}` — but it is **not drop-in compatible** with either. If you are porting templates from a Jinja2 or Django project, read the [Migration Guide](./migration) first.
 
 Gina vendors the browser build of [`@rhinostone/swig`](https://github.com/gina-io/swig) under `framework/v*/core/deps/swig-client/`. This section documents that fork directly — installing it standalone, the template syntax, the full API, and how to extend it with custom tags, filters, and loaders.
 
@@ -64,6 +53,7 @@ Swig is a single-pass engine: source text is tokenized, parsed into a tree, comp
 - **[CLI](./cli)** — the `swig` command-line tool (compile / render / run).
 - **[Browser Usage](./browser)** — running Swig in the browser, pre-compiling templates for the client.
 - **[Security](./security)** — CVE advisories, the security model, and guidance for consumers.
+- **[Migration Guide](./migration)** — porting templates from Jinja2 or Django: what transfers cleanly, what breaks at parse time, and workaround patterns.
 
 ## Gina integration
 
