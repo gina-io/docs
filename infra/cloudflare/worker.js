@@ -128,11 +128,15 @@ export default {
     // Clean URL proxies — served from Vercel with Docusaurus hydration bridge.
     // /roadmap   → Vercel /roadmap   (Docusaurus route: /docs/roadmap)
     // /tutorials → Vercel /tutorials (Docusaurus route: /docs/tutorials)
+    // /swig/*    → Vercel /swig/*    (Docusaurus route: /docs/swig/*)
     if (url.pathname === '/roadmap') {
       return proxyCleanUrl(request, '/roadmap', '/roadmap');
     }
     if (url.pathname === '/tutorials') {
       return proxyCleanUrl(request, '/tutorials', '/tutorials');
+    }
+    if (url.pathname === '/swig' || url.pathname.startsWith('/swig/')) {
+      return proxyCleanUrl(request, url.pathname, url.pathname);
     }
 
     // JSON Schema files — served from docs site static/schema/
