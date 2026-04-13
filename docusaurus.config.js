@@ -2,8 +2,9 @@
 import {themes as prismThemes} from 'prism-react-renderer';
 import readingTimePlugin from './src/remark/reading-time.js';
 
-// Updated automatically by gina's post_publish script on each release.
-const ginaVersion = '0.3.5';
+// Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
+// Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → node_modules.
+const ginaVersion = '0.3.6-alpha.2';
 const swigVersion = '1.6.0';
 
 /** @type {import('@docusaurus/types').Config} */
