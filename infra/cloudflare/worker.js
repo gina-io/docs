@@ -99,13 +99,16 @@ async function proxyCleanUrl(request, cleanPath, docsPath) {
           '<script>' +
           'var __rS=history.replaceState.bind(history);' +
           '__rS(null,"","/docs' + docsPath + '"+location.search+location.hash);' +
-          'window.addEventListener("load",function(){' +
-          '(function p(n){' +
-          'if(document.querySelector("main article"))' +
-          '__rS(null,"","' + cleanPath + '"+location.search+location.hash);' +
-          'else if(n<50)setTimeout(p,100,n+1)' +
-          '})(0)' +
-          '})' +
+          'var __done=false;' +
+          'function __restore(){__done=true;__rS(null,"","' + cleanPath + '"+location.search+location.hash)}' +
+          'function __try(n){' +
+          'if(__done)return;' +
+          'if(document.querySelector("main article"))__restore();' +
+          'else if(n<50)setTimeout(__try,100,n+1);' +
+          'else __restore()' +
+          '}' +
+          'window.addEventListener("DOMContentLoaded",function(){__try(0)});' +
+          'window.addEventListener("load",function(){__try(0)});' +
           '</script>',
           { html: true },
         );
