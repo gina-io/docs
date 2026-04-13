@@ -19,6 +19,37 @@ upward to the target version.
 
 ---
 
+## 0.3.4 → 0.3.5
+
+### Security: extended CVE-2023-25345 path-traversal guards _(no action required)_
+
+:::note Security — upgrade recommended
+`@rhinostone/swig` bumped to `1.5.0`. Extends the CVE-2023-25345 path-traversal
+blocklist to bracket-notation access (`obj['__proto__']`), `set` bracket
+assignments, `for` loop variable names, macro names, and import aliases —
+closing the remaining bypass surface in the parse-time guard.
+
+No breaking changes. No config update needed. `npm install gina@latest` picks
+up the new swig version automatically.
+:::
+
+```bash
+npm install gina@latest
+```
+
+### Security: browser-side swig parity _(no action required)_
+
+:::note Security — upgrade recommended
+The vendored client-side swig build (`core/deps/swig-client/`) was rebuilt from
+`@rhinostone/swig@1.5.0`. Browser-side templating now has the same CVE-2023-25345
+protections as the server. If you render templates in the browser (gina's
+client-side swig runtime), the extended `__proto__` / `constructor` / `prototype`
+blocklist now applies to bracket notation, `for` variables, macro names, and
+import aliases there too.
+:::
+
+---
+
 ## 0.3.3 → 0.3.4
 
 ### Fixed: `require('gina/gna')` explicit exports _(patch fix)_
