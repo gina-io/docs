@@ -7,7 +7,8 @@ routes = [
   { pattern = "gina.io/api/*", zone_name = "gina.io" },
   { pattern = "gina.io/schema/*", zone_name = "gina.io" },
   { pattern = "gina.io/roadmap*", zone_name = "gina.io" },
-  { pattern = "gina.io/tutorials*", zone_name = "gina.io" }
+  { pattern = "gina.io/tutorials*", zone_name = "gina.io" },
+  { pattern = "gina.io/swig*", zone_name = "gina.io" }
 ]
 
 [[d1_databases]]
