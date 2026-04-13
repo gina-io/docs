@@ -317,6 +317,36 @@ blockquote {
   transition: width 0.22s ease;
 }
 
+/* Keep the sidebar column pinned even when the doc content is shorter than the
+ * viewport. Without this, the aside's height matches the flex row (= content
+ * column height); on short pages like /docs/tutorials/ the inner sticky viewport
+ * runs out of range and scrolls away. Making the aside itself sticky at the
+ * navbar offset decouples sidebar stickiness from content length. */
+@media (min-width: 997px) {
+  .theme-doc-sidebar-container {
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    align-self: flex-start;
+    height: calc(100vh - var(--ifm-navbar-height));
+  }
+  /* Docusaurus pads the inner sidebar by navbar-height to clear the fixed
+   * navbar in its default layout. With the aside made sticky at navbar-height,
+   * that padding stacks on top of the sticky offset and produces a blank
+   * column above the first menu item. Zero it out. */
+  .theme-doc-sidebar-container [class*='sidebar_'] {
+    padding-top: 0;
+  }
+  /* Sticky range = containing block height - sticky element height. On short
+   * pages (tutorials, swig index) the flex row collapses to content height,
+   * leaving only ~50 px of sticky range before the aside releases. Forcing
+   * the main content column to fill at least the viewport extends the flex
+   * row so the aside can remain pinned throughout the scrollable region. */
+  [class*='docItemContainer_'],
+  [class*='docMainContainer_'] {
+    min-height: calc(100vh - var(--ifm-navbar-height));
+  }
+}
+
 /* Suppress all transitions during drag (no lag) */
 .sidebar-resizing .theme-doc-sidebar-container,
 .sidebar-resizing .sidebar-resize-handle,
