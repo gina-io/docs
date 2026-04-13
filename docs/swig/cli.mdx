@@ -23,15 +23,16 @@ Verify:
 
 ```bash
 swig --version
-# => 1.5.0
+# => 1.6.0
 ```
 
 ## Subcommands
 
 ```bash
-swig compile [file…] [options]   # Compile to a JS function, write to stdout or --output
-swig render  [file…] [options]   # Compile + render with a locals context
-swig run     [file…] [options]   # Execute a pre-compiled template file
+swig compile [file…] [options]         # Compile to a JS function, write to stdout or --output
+swig compile --recursive <dir> [opts]  # Compile every template under <dir> into a single AOT bundle module
+swig render  [file…] [options]         # Compile + render with a locals context
+swig run     [file…] [options]         # Execute a pre-compiled template file
 ```
 
 ```mermaid
@@ -51,6 +52,8 @@ flowchart LR
 | `--json <file>` | `-j` | — | Locals context as a JSON file. |
 | `--context <file>` | `-c` | — | Locals context as a CommonJS module. Only used when `--json` is absent. |
 | `--minify` | `-m` | — | Minify compiled output with `terser`. |
+| `--recursive <dir>` | `-r` | — | Compile every template under `<dir>` into a single CommonJS bundle. Added in v1.6.0. Conflicts with positional file arguments, `--method-name`, `--wrap-start`, `--wrap-end`. |
+| `--ext <list>` | — | — | Comma-separated file extensions to include when using `--recursive` (e.g. `.html,.swig`). Added in v1.6.0. Defaults to no filter. |
 | `--filters <file>` | — | — | CommonJS module of custom filters. Each export becomes a filter. |
 | `--tags <file>` | — | — | CommonJS module of custom tags. Each export must have `parse`, `compile`, optional `ends`, `block`. |
 | `--options <file>` | — | — | CommonJS module of options — passed to `swig.setDefaults`. |
@@ -108,6 +111,43 @@ The CLI's primary browser use-case is compiling templates at build time so the b
 ```bash
 swig compile myfile.html --method-name=myfile > myfile.js
 ```
+
+## AOT bundle — compile a directory
+
+For projects with more than a handful of templates, `--recursive` walks a directory and emits one CommonJS module of `{ "<rel-path>": fn, ... }`. Added in v1.6.0.
+
+```bash
+swig compile --recursive ./views --ext=.html,.swig -o ./dist/templates.js
+```
+
+The emitted bundle looks like:
+
+```js
+module.exports = {
+  "index.html": function (_swig, _ctx, _filters, _utils, _fn) { /* … */ },
+  "partials/header.html": function (_swig, _ctx, _filters, _utils, _fn) { /* … */ }
+  // …
+};
+```
+
+Prime Swig's cache from the bundle at startup so `extends` / `include` / `import` resolve against the compiled functions:
+
+```js
+var swig = require('@rhinostone/swig');
+var templates = require('./dist/templates.js');
+
+Object.keys(templates).forEach(function (key) {
+  swig.cache[key] = templates[key];
+});
+```
+
+:::note
+`--recursive` is incompatible with positional file arguments, `--method-name`, `--wrap-start`, and `--wrap-end` — the CLI exits with an error if any of those are combined with `-r`.
+:::
+
+:::caution
+`extends` / `include` / `import` still resolve at render time through the consumer's loader. The AOT bundle compiles each template in isolation — it does not inline parent templates or includes. Your loader must return a resolved key that matches the bundle's map (typically the relative path you passed to `--recursive`).
+:::
 
 ## Security notes
 

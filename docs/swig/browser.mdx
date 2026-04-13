@@ -64,6 +64,25 @@ flowchart LR
    </script>
    ```
 
+## AOT bundle — many templates at once
+
+For projects with more than a handful of templates, use `swig compile --recursive` to emit one module instead of one file per template. Added in v1.6.0.
+
+```bash
+swig compile --recursive ./views --ext=.html -o ./dist/templates.js
+```
+
+Prime the cache from the bundle at startup:
+
+```js
+var templates = require('./dist/templates.js');
+Object.keys(templates).forEach(function (key) {
+  swig.cache[key] = templates[key];
+});
+```
+
+See [CLI — AOT bundle](./cli#aot-bundle--compile-a-directory) for the full flag reference and caveats.
+
 ## Memory loader instead of pre-compilation
 
 If you prefer to ship raw template source to the browser, wire up a memory loader:
