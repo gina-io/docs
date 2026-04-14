@@ -52,6 +52,11 @@ function syncVersion(opts) {
         return;
     }
 
+    if (version.indexOf('-') !== -1) {
+        console.log('[sync-versions]', configKey, 'skipped — pre-release version', version, 'is not advertised on the docs site.');
+        return;
+    }
+
     var src     = fs.readFileSync(CONFIG_PATH, 'utf8');
     var re      = new RegExp('const ' + configKey + " = '[^']*'");
     var patched = src.replace(re, 'const ' + configKey + " = '" + version + "'");

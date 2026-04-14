@@ -18,6 +18,10 @@ import TabItem from '@theme/TabItem';
 
 Swig shares the **Jinja2 lineage** — so Jinja2 itself, Django templates, and Twig (PHP) all look familiar but none are drop-in compatible. Marker shapes, filter syntax, inheritance, and most tag names line up — but concrete constructs do break on paste, especially `is`-tests (Jinja2 / Twig), `forloop.*` (Django), and the `~` / `??` / `?:` / `..` / `#{}` operators (Twig). This page lists every gap we are aware of, with workarounds.
 
+:::info Coming in a future release
+Swig's next major track ships a pluggable frontend architecture so Twig, Jinja2, and Django templates can render without rewriting. Dedicated frontends will close most of the gaps on this page. Track progress in the [swig roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md).
+:::
+
 ## What ports cleanly
 
 Constructs available in every engine. Anything not listed here likely differs — check the engine-specific tab below.
