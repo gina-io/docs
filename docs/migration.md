@@ -19,6 +19,92 @@ upward to the target version.
 
 ---
 
+## 0.3.5 → 0.3.6
+
+### Security: Inspector payload redaction _(no action required)_
+
+:::note Security — upgrade recommended
+Dev-mode Inspector data (`window.__ginaData`, `localStorage`, `/_gina/agent` SSE,
+engine.io push) is now redacted before any sink. Fields whose keys match secret
+patterns (`password`, `token`, `apikey`, `secret`, `cvv`, `ssn`, `authorization`,
+`credentials`, `private_key`, etc.) are replaced with `[redacted]` in the Inspector
+feed. The actual HTTP response body is **never** modified — redaction only affects
+the dev-mode Inspector channel.
+
+Two carve-outs preserve validation metadata:
+- **Suffix carve-out** — keys ending in `rule`, `policy`, `validator`, `config`,
+  `settings`, `schema`, etc. pass through (e.g. `passwordRule`, `passwordPolicy`).
+- **Primitive-only redaction** — when a matched key holds an object or array, the
+  walker recurses into it instead of replacing it (metadata shapes like
+  `rules.account[password]` are preserved).
+
+Configurable via `settings.json` `inspector.redact.{patterns, types, replacement}`.
+No code changes needed — defaults cover standard secret field names.
+:::
+
+### Security: pre-commit hook and CI guard for Claude-related paths _(no action required)_
+
+:::note Internal — no action required
+A `.githooks/pre-commit` hook and GitHub Actions workflow now block Claude-related
+paths (`CLAUDE.md`, `.claude*`) from entering git history or the npm tarball.
+`post_install.js` installs the hook automatically for contributor clones. These are
+internal safeguards with no user-facing impact.
+:::
+
+### Security: private-token leak gate _(no action required)_
+
+:::note Internal — no action required
+The npm `prepack` hook now scans the tarball listing for Claude-related paths and
+private-token patterns before every publish. No user-facing impact.
+:::
+
+### Changed: `syncDocs` lockfile regeneration _(no action required)_
+
+:::note Internal — no action required
+`post_publish.js → syncDocs` now regenerates the docs-site `package-lock.json`
+after bumping the `gina` devDependency. This prevents CI / Vercel deploy failures
+that occurred on previous stable releases when the lockfile was stale.
+:::
+
+### Fixed: Whisper Error on first CLI command after fresh install _(patch fix)_
+
+:::caution Upgrade recommended
+`gina --version` and `gina framework:*` commands no longer emit a spurious
+`Whisper Error: The key ${global_mode} was not found` red stack trace on a
+brand-new install. If you see this error after `npm install -g gina`, upgrading
+to 0.3.6 resolves it.
+:::
+
+```bash
+npm install -g gina@latest
+```
+
+### Fixed: `framework:init` hardened against missing `def_*` keys _(no action required)_
+
+:::note Internal — no action required
+`main['def_prefix']`, `def_global_mode`, `def_arch`, `def_platform`, `def_env`,
+`def_scope`, `def_log_level` reads now short-circuit to `undefined` instead of
+throwing `TypeError` when the key is absent from `~/.gina/main.json`.
+:::
+
+### Fixed: CORS preflight `access-control-allow-headers` preservation _(bug fix)_
+
+`completeHeaders()` no longer overwrites the echo that `checkPreflightRequest()`
+sets from the incoming `access-control-request-headers`. If your bundle's `env.json`
+`access-control-allow-headers` list omits a header the client sends, the preflight
+response now correctly echoes the requested headers instead of dropping them.
+
+No config change needed — the fix is automatic.
+
+### Fixed: `prepare_version.js` stale `dir` field _(internal)_
+
+:::note Internal — no action required
+Publishing now fails fast with an actionable message when `~/.gina/<release>/settings.json`
+has a stale `dir` field, instead of wedging with a misleading "No branch selected" error.
+:::
+
+---
+
 ## 0.3.4 → 0.3.5
 
 ### Security: extended CVE-2023-25345 path-traversal guards _(no action required)_
