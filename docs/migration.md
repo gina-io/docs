@@ -19,6 +19,47 @@ upward to the target version.
 
 ---
 
+## 0.3.6 → 0.3.7
+
+### Explicit exports expanded to `require('gina')` _(additive)_
+
+:::note Additive — no action required
+The named-import surface introduced in `0.3.3` is now complete: every injected
+global is also a property of the primary entry point `require('gina')`, not
+just the `require('gina/gna')` barrel. Each export carries JSDoc for IDE
+navigation and AI code generation:
+
+```javascript
+// Either entry point now exposes every helper
+const { setContext, requireJSON, merge, ApiError } = require('gina');
+const { getContext, _, onCompleteCall, uuid }       = require('gina/gna');
+```
+
+The globals are still injected as before — this is an additive surface.
+
+One intentional asymmetry: `getConfig` is only surfaced on `require('gina/gna')`.
+`require('gina')` later re-binds `gna.getConfig` as a bundle-specific instance
+method, which would collide with the global form.
+:::
+
+### MCP tool manifest generation _(additive)_
+
+:::note Additive — no action required
+New `gina bundle:mcp <bundle> @<project>` command emits a static
+[Model Context Protocol](https://modelcontextprotocol.io) tool manifest
+(`<bundle>/config/mcp.json`) from `routing.json`, alongside the existing
+`bundle:openapi` generator. One tool per route variant, with tool IDs derived
+from `param.control`, `inputSchema` built from URL params and `requirements`,
+and `_meta["io.gina.route"]` carrying the original routing entry for
+downstream dispatch.
+
+Phase 1 is manifest-only. A runtime MCP server that exposes these tools over
+stdio/HTTP is planned for a follow-up release. See
+[`bundle:mcp`](/cli/bundle#bundlemcp) for the full CLI reference.
+:::
+
+---
+
 ## 0.3.5 → 0.3.6
 
 ### Security: Inspector payload redaction _(no action required)_

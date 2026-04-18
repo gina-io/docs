@@ -3,7 +3,7 @@ id: cli-bundle
 title: bundle
 sidebar_label: bundle
 sidebar_position: 2
-description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, list, and openapi bundles within a Gina project.
+description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, list, openapi, and MCP manifest generation for bundles within a Gina project.
 level: beginner
 prereqs:
   - '[Gina project created](/getting-started/first-project)'
@@ -279,3 +279,93 @@ Add `_comment` and `_sample` fields to your routes for richer output:
 ```
 
 This produces an operation with `operationId: "users.getUser"`, `summary: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, a `{id}` path parameter with a UUID pattern, and the `users` tag.
+
+---
+
+## `bundle:mcp`
+
+*New in 0.3.7-alpha.2*
+
+Generate a [Model Context Protocol](https://modelcontextprotocol.io) tool manifest from a bundle's `routing.json`. The manifest is written to `<bundle>/config/mcp.json` by default.
+
+```bash
+gina bundle:mcp <bundle> @<project>
+```
+
+```bash
+gina bundle:mcp api @myproject
+```
+
+Generate manifests for **all** bundles in a project:
+
+```bash
+gina bundle:mcp @<project>
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--output=<path>` | Write the manifest to a custom file path instead of the bundle's config directory |
+
+:::note Phase 1 — manifest only
+`bundle:mcp` currently emits a static tool manifest. A runtime MCP server that exposes these tools over stdio/HTTP and dispatches calls back into the bundle is planned for a follow-up release.
+:::
+
+### How routing.json maps to MCP tools
+
+The generator reads every route in `routing.json` and produces one MCP tool per route variant — no manual manifest writing required.
+
+```mermaid
+flowchart LR
+    A["routing.json"] --> B["bundle:mcp"]
+    B --> C["mcp.json"]
+    C --> D["AI agents (Claude, ChatGPT)"]
+    C --> E["IDE extensions"]
+    C --> F["MCP hosts"]
+```
+
+| routing.json field | MCP Tool equivalent |
+|---|---|
+| `param.control` | `name` (with `#<method>` / `#<n>` disambiguation when needed) |
+| `param.title` | `title` |
+| `_comment` | `description` |
+| `url` (`:param` syntax) + query params | `inputSchema.properties` |
+| `requirements` (regex) | `inputSchema.properties[].pattern` |
+| `requirements` (pipe-separated) | `inputSchema.properties[].enum` |
+| `method` GET/HEAD | `annotations.readOnlyHint: true` |
+| `method` DELETE | `annotations.destructiveHint: true` |
+| `method` PUT | `annotations.idempotentHint: true` |
+| routing.json entry (full) | `_meta["io.gina.route"]` |
+| `namespace` | `_meta["io.gina.namespace"]` |
+| `_sample` | `_meta["io.gina.sample"]` |
+
+### Tool naming
+
+Tool IDs are derived from `param.control`. When a single route handler covers multiple HTTP methods, each method gets its own tool with a `#<method>` suffix (e.g. `getUser`, `getUser#post`). When a route defines multiple URL variants (comma-separated), each variant gets a `#<n>` suffix (e.g. `listUsers#1`, `listUsers#2`).
+
+### Example
+
+Given the same route used in the OpenAPI example above:
+
+```json title="routing.json"
+{
+  "user-get": {
+    "namespace": "users",
+    "url": "/users/:id",
+    "method": "GET",
+    "param": {
+      "control": "getUser",
+      "title": "Fetch a user by ID",
+      "id": ":id"
+    },
+    "requirements": {
+      "id": "/^[0-9a-f]{8}-/i"
+    },
+    "_comment": "Returns the full user profile including preferences.",
+    "_sample": "/users/3fa85f64-5717-4562-b3fc-2c963f66afa6"
+  }
+}
+```
+
+This produces a tool with `name: "getUser"`, `title: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, an `inputSchema` with an `id` property carrying the UUID pattern, `annotations.readOnlyHint: true`, and `_meta["io.gina.route"]` carrying the original routing entry for downstream dispatch.
