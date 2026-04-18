@@ -53,9 +53,29 @@ from `param.control`, `inputSchema` built from URL params and `requirements`,
 and `_meta["io.gina.route"]` carrying the original routing entry for
 downstream dispatch.
 
-Phase 1 is manifest-only. A runtime MCP server that exposes these tools over
-stdio/HTTP is planned for a follow-up release. See
-[`bundle:mcp`](/cli/bundle#bundlemcp) for the full CLI reference.
+Phase 1 is manifest-only. See [`bundle:mcp`](/cli/bundle#bundlemcp) for the
+full CLI reference.
+:::
+
+### MCP runtime server over stdio _(additive)_
+
+:::note Additive — no action required
+New `gina bundle:mcp-start <bundle> @<project>` command runs a live MCP server
+for a single bundle over stdio (MCP spec revision **2025-06-18**, JSON-RPC 2.0,
+newline-delimited UTF-8). It reads the manifest written by `bundle:mcp` and
+dispatches incoming `tools/call` requests as real HTTP requests against the
+bundle's configured port on localhost.
+
+Prerequisites — the bundle must already be running (`bundle:start`) and the
+manifest must exist (`bundle:mcp`). `stdout` is reserved for the JSON-RPC
+wire; framework logs and warnings go to `stderr`.
+
+Tool execution failures (upstream 4xx/5xx, `ECONNREFUSED`, timeout) surface as
+`{content, isError: true}` per the MCP spec — they are never JSON-RPC errors.
+
+Streamable HTTP transport for remote/containerised agents is planned for a
+follow-up release. See [`bundle:mcp-start`](/cli/bundle#bundlemcp-start) for
+the full CLI reference.
 :::
 
 ---

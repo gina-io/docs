@@ -3,7 +3,7 @@ id: cli-bundle
 title: bundle
 sidebar_label: bundle
 sidebar_position: 2
-description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, list, openapi, and MCP manifest generation for bundles within a Gina project.
+description: CLI reference for gina bundle commands — start, stop, restart, build, add, remove, list, openapi, MCP manifest generation, and runtime MCP server for bundles within a Gina project.
 level: beginner
 prereqs:
   - '[Gina project created](/getting-started/first-project)'
@@ -308,8 +308,8 @@ gina bundle:mcp @<project>
 |------|-------------|
 | `--output=<path>` | Write the manifest to a custom file path instead of the bundle's config directory |
 
-:::note Phase 1 — manifest only
-`bundle:mcp` currently emits a static tool manifest. A runtime MCP server that exposes these tools over stdio/HTTP and dispatches calls back into the bundle is planned for a follow-up release.
+:::note Pair with `bundle:mcp-start`
+`bundle:mcp` only writes the manifest. To actually serve it to an MCP client, run [`bundle:mcp-start`](#bundle-mcp-start) in a separate process — it reads `<bundle>/config/mcp.json` and dispatches `tools/call` as real HTTP requests into the running bundle.
 :::
 
 ### How routing.json maps to MCP tools
@@ -369,3 +369,76 @@ Given the same route used in the OpenAPI example above:
 ```
 
 This produces a tool with `name: "getUser"`, `title: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, an `inputSchema` with an `id` property carrying the UUID pattern, `annotations.readOnlyHint: true`, and `_meta["io.gina.route"]` carrying the original routing entry for downstream dispatch.
+
+---
+
+## `bundle:mcp-start`
+
+*New in 0.3.7-alpha.3*
+
+Run a live [Model Context Protocol](https://modelcontextprotocol.io) server for a single bundle over stdio (MCP spec revision **2025-06-18**, JSON-RPC 2.0, newline-delimited UTF-8). Tool calls are dispatched as real HTTP requests against the running bundle's configured port on localhost.
+
+```bash
+gina bundle:mcp-start <bundle> @<project>
+```
+
+```bash
+gina bundle:mcp-start api @myproject
+```
+
+**Prerequisites.** The bundle must already be started with [`bundle:start`](#bundle-start) **and** a manifest must be generated with [`bundle:mcp`](#bundle-mcp). The MCP server is stateless — it holds no session, no auth, nothing beyond what lives in `mcp.json` and the bundle's own routing.
+
+```mermaid
+flowchart LR
+    A["MCP client<br/>(Claude Desktop, agent)"] -- "stdio<br/>JSON-RPC 2.0" --> B["bundle:mcp-start"]
+    B -- "reads" --> C["mcp.json"]
+    B -- "HTTP loopback" --> D["bundle (running)"]
+```
+
+:::caution stdio discipline
+`bundle:mcp-start` reserves `stdout` for the JSON-RPC wire. All framework logs, warnings, and informational output go to `stderr`. This is enforced by an early intercept in `bin/cli` — do not wrap the command in anything that muxes stderr into stdout.
+:::
+
+### Methods implemented
+
+| Method | Notes |
+|---|---|
+| `initialize` | Responds with `protocolVersion: "2025-06-18"`, `serverInfo`, and `capabilities.tools.listChanged: false` |
+| `ping` | Responds with `{}` |
+| `tools/list` | Returns every tool from `mcp.json` |
+| `tools/call` | Validates arguments against `inputSchema`, dispatches via HTTP, returns the result |
+| `notifications/initialized` | Flips internal state to initialized |
+| `notifications/cancelled` | Marks the target request as cancelled (best-effort) |
+
+Unknown methods return `-32601` (METHOD_NOT_FOUND). Argument validation failures return `-32602` (INVALID_PARAMS). Tool execution failures — upstream 4xx/5xx, `ECONNREFUSED`, timeout — are returned as `{content, isError: true}` per the MCP spec, **never** as JSON-RPC errors.
+
+### Dispatch rules
+
+- URL `:param` placeholders are substituted from tool arguments (`/invoice/:id` → `/invoice/42`).
+- For `GET`, `DELETE`, `HEAD` — remaining arguments become the query string.
+- For `POST`, `PUT`, `PATCH` — if an argument named `body` is present, it is sent as the JSON body; otherwise all non-path arguments are sent as the JSON body.
+- `Content-Type: application/json` is set on request bodies.
+- `application/json` and `application/problem+json` responses become `structuredContent` + a text block. Non-JSON responses become a text block only.
+- Default timeout: 30 seconds.
+
+### Warnings emitted on stderr
+
+- **Staleness.** If `routing.json` has been modified after `mcp.json`, the server warns on startup and suggests re-running `bundle:mcp`. Clients may otherwise see outdated tools.
+- **Session-scoped tools.** Tools whose `_meta["io.gina.middleware"]` contains `auth`, `session`, or `login` are listed as likely to return 401/403 until the bundle recognises the caller.
+
+### Example — Claude Desktop
+
+In Claude Desktop's `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "gina-api": {
+      "command": "gina",
+      "args": ["bundle:mcp-start", "api", "@myproject"]
+    }
+  }
+}
+```
+
+Claude Desktop spawns the process, speaks JSON-RPC over its stdio, and exposes every route in the `api` bundle as a callable tool.
