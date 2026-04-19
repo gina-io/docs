@@ -336,7 +336,7 @@ flowchart LR
 | `method` GET/HEAD | `annotations.readOnlyHint: true` |
 | `method` DELETE | `annotations.destructiveHint: true` |
 | `method` PUT | `annotations.idempotentHint: true` |
-| routing.json entry (full) | `_meta["io.gina.route"]` |
+| routing.json routeName key | `_meta["io.gina.routeName"]` |
 | `namespace` | `_meta["io.gina.namespace"]` |
 | `_sample` | `_meta["io.gina.sample"]` |
 
@@ -368,7 +368,7 @@ Given the same route used in the OpenAPI example above:
 }
 ```
 
-This produces a tool with `name: "getUser"`, `title: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, an `inputSchema` with an `id` property carrying the UUID pattern, `annotations.readOnlyHint: true`, and `_meta["io.gina.route"]` carrying the original routing entry for downstream dispatch.
+This produces a tool with `name: "getUser"`, `title: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, an `inputSchema` with an `id` property carrying the UUID pattern, `annotations.readOnlyHint: true`, and `_meta["io.gina.routeName"]` carrying the routing entry's key name for downstream dispatch.
 
 ---
 
