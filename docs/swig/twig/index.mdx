@@ -18,7 +18,7 @@ prereqs:
 
 The package is currently pre-release:
 
-- **Version:** `2.0.0-alpha.7`
+- **Version:** `2.0.0-alpha.8`
 - **Dist-tag:** `alpha`
 - **Stable target:** `2.0.0` (lockstep release with `swig-core` and `swig`)
 
@@ -45,7 +45,7 @@ Every frontend (native swig, swig-twig, future Jinja2, future Django) lowers its
 npm install @rhinostone/swig-twig@alpha
 ```
 
-`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin (`2.0.0-alpha.7`). The IR ABI is unstable across alpha minors, so npm will install the matching core automatically — do not override it.
+`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin (`2.0.0-alpha.8`). The IR ABI is unstable across alpha minors, so npm will install the matching core automatically — do not override it.
 
 ## Your first template
 
@@ -141,3 +141,20 @@ Use **native swig** if you have existing Jinja2-inspired templates or want the b
 The IR ABI is unstable across alpha minors. Pin `@rhinostone/swig-twig` and `@rhinostone/swig-core` to matching exact versions (npm's peerDependency range does this for you on a fresh install). Do not mix alpha versions of the two packages — the compiled IR will not match the backend emitter.
 
 Production users who want a stable API should wait for `2.0.0` stable. The alpha channel is suitable for evaluation, integration testing, and contributing fixture coverage.
+
+### `2.0.0-alpha.8` — `exports.parse` removed
+
+The soft-deprecated `parse(source, options)` wrapper on the module's default export has been removed. It was soft-deprecated since `2.0.0-alpha.4`. Migrate to the per-instance API:
+
+```js
+var twig = require('@rhinostone/swig-twig');
+
+// Default instance — render, compile, precompile, renderFile are all attached
+twig.render('Hello {{ name }}!', { locals: { name: 'World' } });
+
+// Isolated instance — honours per-instance setFilter / setTag / setExtension overrides
+var instance = new twig.Twig({ autoescape: false });
+instance.render('<b>{{ html }}</b>', { locals: { html: '<em>ok</em>' } });
+```
+
+The full-instance path honours per-instance extensions; the old wrapper did not. Internal plumbing (`twig.parser.parse`, `twig.parseFile`) is unaffected and remains available.
