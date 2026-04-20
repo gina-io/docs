@@ -96,11 +96,12 @@ Positional calls port unchanged. Keyword-argument calls do not — see [Non-Goal
 | `url` | Supported via `url_encode`. | Supported via `url_encode`. |
 | `html_attr` | Supported. | Not implemented — `escape('html')` is usually sufficient for quoted attribute values. |
 
-If you rely on `css` or `html_attr`, register a custom filter and mark it `.safe = true`:
+If you rely on `css` or `html_attr`, register a custom filter — mark it `.safe = true` on the function before passing it to `setFilter`:
 
 ```js
-twig.setFilter('css_escape', function (input) { /* your CSS-safe escape */ });
-twig.filters.css_escape.safe = true;
+function cssEscape(input) { /* your CSS-safe escape */ }
+cssEscape.safe = true;
+twig.setFilter('css_escape', cssEscape);
 ```
 
 See [Extending Swig](../extending) for the registration contract.

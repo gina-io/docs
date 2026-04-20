@@ -131,7 +131,11 @@ These are new to `swig-twig` and match upstream Twig semantics where possible:
 
 ### Semantic differences from native swig
 
-The `replace` filter is the notable one.
+One filter exists in both frontends with diverged semantics:
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `replace` | 1 | Accepts a `{ from: to, … }` object map (PHP `strtr` shape) — native swig takes a regex and substitution. See below. |
 
 **Native swig** accepts a regex and a substitution: `input.replace(regex, sub)`.
 
