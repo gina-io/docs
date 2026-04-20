@@ -106,6 +106,12 @@ twig.setDefaults({
 
 See [Loaders](../loaders) for the full contract — it is identical across frontends.
 
+## Browser usage
+
+`@rhinostone/swig-twig` does not ship a pre-built browser bundle. Bundle `@rhinostone/swig-twig` through your own toolchain (esbuild, Vite, Webpack, Rollup) and follow the shared Swig [Browser Usage](../browser) recipe — memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
+
+Browser support is unverified during the alpha. It will be formally validated with a smoke-test bundle at `2.0.0` stable.
+
 ## Relationship to `@rhinostone/swig`
 
 | | `@rhinostone/swig` | `@rhinostone/swig-twig` |
