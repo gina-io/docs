@@ -12,11 +12,13 @@ jobs:
 
       - name: Deploy to Vercel
         id: deploy
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           url=$(npx vercel deploy --prod \
             --token ${{ secrets.VERCEL_TOKEN }} \
-            --yes \
-            2>/dev/null)
+            --yes)
           echo "url=$url" >> $GITHUB_OUTPUT
 
       - name: Update stable alias
