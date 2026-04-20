@@ -1,0 +1,171 @@
+---
+displayed_sidebar: swigSidebar
+title: Twig Parity
+sidebar_label: Parity
+sidebar_position: 2
+description: Operator, tag, filter, and is-test support in @rhinostone/swig-twig — what matches upstream PHP Twig, what diverges, and what is shared with the native swig frontend.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Upstream Twig operator reference](https://twig.symfony.com/doc/3.x/templates.html#literals-and-expressions)'
+  - '[Upstream Twig filter reference](https://twig.symfony.com/doc/3.x/filters.html)'
+  - '[Native swig tags](../tags)'
+  - '[Native swig filters](../filters)'
+---
+
+# Twig Parity
+
+This page lists exactly what `@rhinostone/swig-twig@2.0.0-alpha.7` accepts — operators, tags, filters, and is-tests — cross-referenced against upstream PHP Twig and the native `@rhinostone/swig` frontend.
+
+The matrices below are ground truth: each row maps to a symbol actually exported by the shipped source. For features that throw at parse time, see [Non-Goals](./non-goals).
+
+## Operators
+
+Twig-specific operators that `@rhinostone/swig-twig` accepts and the native swig frontend does not:
+
+| Operator | Shape | Semantics | Lowering |
+| --- | --- | --- | --- |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
+| `..` | `a..b` | Integer or single-character range. | `_utils.range(a, b)` |
+| `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
+| `?:` | `a ?: b` | Elvis. Falls back if `a` is falsy. | `a ? a : b` |
+| `? :` | `cond ? a : b` | Ternary. | Native JS ternary. |
+| `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
+| `is not` | `x is not <test>` | Negated predicate. | `!(_ext._test_<name>(...))` |
+| `#{…}` | `"hello #{name}"` | String interpolation inside double-quoted strings. | Expression replacement during tokenization. |
+
+The `~` operator is Twig's dedicated string-concat operator (`+` in Twig is strictly numeric). `#{…}` works only inside double-quoted strings.
+
+## `is` tests {#is-tests}
+
+`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Twig constructor registers the seven built-ins below via `setExtension`:
+
+| Test | Shape | Semantics |
+| --- | --- | --- |
+| `defined` | `x is defined` | `true` if `x` is defined and not `null` in the context. |
+| `null` | `x is null` | `true` if `x` is `null` or `undefined`. |
+| `empty` | `x is empty` | `true` if `x` is `null`, `undefined`, an empty string, an empty array, or an object with no own keys. |
+| `iterable` | `x is iterable` | `true` if `x` is an array or a plain object. |
+| `odd` | `x is odd` | `true` if `x` is an odd integer. |
+| `even` | `x is even` | `true` if `x` is an even integer. |
+| `divisibleby` | `x is divisibleby(n)` | `true` if `x % n === 0`. |
+
+`defined` and `null` on a bare `VarRef` are compiled through the `IRVarRefExists` IR node so the defined/undefined signal is preserved (the default `emitVarRef` coerces missing context slots to empty strings, which would wash out the test). Other subjects fall through the normal expression path.
+
+Register additional tests by exposing them on `_ext._test_<name>`:
+
+```js
+var twig = require('@rhinostone/swig-twig');
+twig.setExtension('_test_positive', function (x) { return typeof x === 'number' && x > 0; });
+twig.render('{{ n is positive ? "yes" : "no" }}', { locals: { n: 3 } });
+// → "yes"
+```
+
+## Tags
+
+`@rhinostone/swig-twig` ships 12 built-in tags. Each is registered in `packages/swig-twig/lib/tags/index.js`.
+
+| Tag | Ends | Upstream Twig | Native swig | Notes |
+| --- | --- | --- | --- | --- |
+| `set` | No¹ | Yes | Yes | Supports `{% set foo = 1 %}`, `{% set foo = [1,2] %}`, and body-form `{% set foo %}…{% endset %}`. Bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
+| `if` / `elseif` / `else` / `endif` | Yes | Yes | Yes | `elseif` and `elif` both accepted. |
+| `for` / `else` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). |
+| `block` / `endblock` | Yes | Yes | Yes | Named block for template inheritance. |
+| `extends` | No | Yes | Yes | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
+| `include` | No | Yes | Yes | Supports `with { … }` and `only`. |
+| `macro` / `endmacro` | Yes | Yes | Yes | Kwargs deferred — see [Non-Goals](./non-goals#macro-kwargs). |
+| `import` | No | Yes | Yes | `{% import "file.twig" as forms %}`. |
+| `from` | No | Yes | No | `{% from "macros.twig" import greet, wave as hello %}`. Path **must be a string literal**. |
+| `verbatim` / `endverbatim` | Yes | Yes | — (`raw` is native) | Verbatim content between `{% verbatim %}` and `{% endverbatim %}`. |
+| `apply` / `endapply` | Yes | Yes | — (`filter` is native) | Pipes the block's output through the given filter chain. |
+| `with` / `endwith` | Yes | Yes | No | Pushes a fresh local scope. `only` limits the scope to the object literal. |
+
+¹ `set` is `endset`-terminated only in body form.
+
+Tags explicitly **not implemented** (throw at parse time):
+
+- `{% sandbox %}` / `{% use %}` / `{% deprecated %}` / `{% embed %}` / `{% do %}`
+
+See [Non-Goals](./non-goals) for the full list and the error messages they produce.
+
+## Filters
+
+`@rhinostone/swig-twig` ships 24 built-in filters. They live in `packages/swig-twig/lib/filters.js`.
+
+### Shared with native swig
+
+Same semantics as [native swig filters](../filters):
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `length` | 0 | `.length` of arrays/strings, `Object.keys().length` of objects. |
+| `lower` | 0 | `toLowerCase`. |
+| `upper` | 0 | `toUpperCase`. |
+| `first` | 0 | First element. |
+| `last` | 0 | Last element. |
+| `join` | 1 | `Array.prototype.join(sep)`. |
+| `reverse` | 0 | Returns a reversed **copy** (does not mutate). |
+| `sort` | 0 | Returns a sorted **copy** (does not mutate). |
+| `striptags` | 0 | Remove HTML tags. |
+| `url_encode` | 0 | `encodeURIComponent`. Marked `.safe = true`. |
+| `json_encode` | 0/1 | `JSON.stringify` with optional indent. Marked `.safe = true`. |
+| `raw` | 0 | Pass-through. Marked `.safe = true`. |
+| `escape` / `e` | 0/1 | HTML-escape. Accepts type argument (`'html'`, `'js'`, …). |
+| `date` | 1 | PHP-style format via shared `dateformatter.js`. |
+
+### Twig-specific
+
+These are new to `swig-twig` and match upstream Twig semantics where possible:
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `batch` | 1/2 | Chunk an array into groups of N. Optional pad value for the final group. |
+| `default` | 1 | Fallback value when the input is `undefined`, `null`, or `''`. |
+| `format` | N | `printf`-style format — delegates to a vendored formatter. |
+| `keys` | 0 | `Object.keys(input)`. |
+| `merge` | 1 | Shallow merge two arrays (concat) or two objects. |
+| `number_format` | 0/1/2/3 | Format a number with decimals, decimal separator, thousands separator. |
+| `slice` | 1/2 | `Array.prototype.slice` / `String.prototype.slice` (negative indices supported). |
+| `split` | 1/2 | `String.prototype.split` with optional limit. |
+| `trim` | 0/1/2 | Trim surrounding characters. Optional `side` (`'left'` / `'right'` / both). |
+
+### Semantic differences from native swig
+
+The `replace` filter is the notable one.
+
+**Native swig** accepts a regex and a substitution: `input.replace(regex, sub)`.
+
+**swig-twig** accepts a `{ from: to, … }` object map — the PHP `strtr` shape:
+
+```twig
+{{ "I love Tacos"|replace({"Tacos": "Pizza"}) }}
+{# → I love Pizza #}
+```
+
+Port regex-based replacements by enumerating every substitution, or register a custom `regex_replace` filter.
+
+### Registering your own
+
+Same shape as the native frontend:
+
+```js
+twig.setFilter('exclaim', function (input) { return String(input) + '!'; });
+twig.render('{{ msg|exclaim }}', { locals: { msg: 'hi' } });
+// → "hi!"
+```
+
+Filters that emit already-safe HTML must set `.safe = true` to opt out of autoescape:
+
+```js
+function monospace(input) { return '<code>' + input + '</code>'; }
+monospace.safe = true;
+twig.setFilter('monospace', monospace);
+```
+
+See [Extending Swig](../extending) for the full filter/tag extension contract — it is identical across frontends.
+
+## Autoescape
+
+Autoescape behaves exactly as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. Filters marked safe in the table above are excluded from autoescape: `raw`, `escape`/`e`, `json_encode`, `url_encode`.
+
+See [Security](../security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.
