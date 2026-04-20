@@ -1,0 +1,137 @@
+---
+displayed_sidebar: swigSidebar
+title: Twig Frontend
+sidebar_label: Overview
+sidebar_position: 1
+description: "@rhinostone/swig-twig is a strict subset of upstream PHP Twig running on the shared swig-core engine. Install, wire up a Twig instance, and render your first template."
+level: beginner
+prereqs:
+  - '[Swig overview](../)'
+  - '[@rhinostone/swig-twig on npm](https://www.npmjs.com/package/@rhinostone/swig-twig)'
+  - '[gina-io/swig on GitHub](https://github.com/gina-io/swig)'
+  - '[Upstream Twig documentation](https://twig.symfony.com/doc/3.x/)'
+---
+
+# Twig Frontend
+
+`@rhinostone/swig-twig` is a **Twig-flavored frontend** on top of the shared `@rhinostone/swig-core` engine. It lets you render templates written in [upstream PHP Twig syntax](https://twig.symfony.com/doc/3.x/) from Node.js — with the same security model, IR backend, and compilation pipeline that powers `@rhinostone/swig`.
+
+The package is currently pre-release:
+
+- **Version:** `2.0.0-alpha.7`
+- **Dist-tag:** `alpha`
+- **Stable target:** `2.0.0` (lockstep release with `swig-core` and `swig`)
+
+It is a **strict subset** of upstream Twig: everything it accepts compiles to the same IR as the native `swig` frontend and runs under the same `new Function(...)` sandbox boundary. Syntax that it does not yet support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. See [Non-Goals](./non-goals).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  SRC[Twig template source] --> TWIG["@rhinostone/swig-twig"]
+  TWIG -->|lexer + Pratt parser| IR[Shared IR tree]
+  IR --> CORE["@rhinostone/swig-core"]
+  CORE -->|IR → JS source| FN["new Function(_swig, _ctx, _filters, _utils, _fn)"]
+  FN --> OUT[Rendered string]
+
+  NATIVE["@rhinostone/swig (native frontend)"] -->|lexer + parser| IR
+```
+
+Every frontend (native swig, swig-twig, future Jinja2, future Django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Twig template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
+
+## Install
+
+```bash
+npm install @rhinostone/swig-twig@alpha
+```
+
+`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin (`2.0.0-alpha.7`). The IR ABI is unstable across alpha minors, so npm will install the matching core automatically — do not override it.
+
+## Your first template
+
+```js
+var twig = require('@rhinostone/swig-twig');
+
+var out = twig.render('Hello {{ name|upper }}!', {
+  locals: { name: 'World' }
+});
+// → "Hello WORLD!"
+```
+
+The module exports a **default singleton instance** — same pattern as `@rhinostone/swig`. `render`, `compile`, `renderFile`, `setFilter`, `setTag`, `setExtension`, and `setDefaults` are all attached to it.
+
+## Isolated instances
+
+Use `new twig.Twig(opts)` when you need a Twig instance with its own cache, tags, filters, and extensions — for example, when rendering tenant-scoped templates with different autoescape settings or custom filter libraries.
+
+```js
+var twig = require('@rhinostone/swig-twig');
+
+var admin = new twig.Twig({ autoescape: false });
+admin.setFilter('monospace', function (input) {
+  return '<code>' + input + '</code>';
+});
+
+admin.render('{{ label|monospace }}', { locals: { label: 'READ-ME' } });
+// → "<code>READ-ME</code>"
+```
+
+Instances are fully isolated — filters, tags, and extensions registered on `admin` are invisible to the default singleton and to any other instance. This matches the isolation contract documented in the [swig API reference](../api).
+
+## Express integration
+
+`@rhinostone/swig-twig` ships with the same Express adapter as `@rhinostone/swig`:
+
+```js
+var express = require('express');
+var twig = require('@rhinostone/swig-twig');
+var app = express();
+
+app.engine('twig', twig.__express);
+app.set('view engine', 'twig');
+app.set('views', __dirname + '/views');
+
+app.get('/', function (req, res) { res.render('index', { title: 'Hi' }); });
+```
+
+Templates are loaded through the filesystem loader by default. Switch to the memory loader for tests or browser usage:
+
+```js
+twig.setDefaults({
+  loader: twig.loaders.memory({
+    'index.twig': 'Hello {{ title }}!'
+  })
+});
+```
+
+See [Loaders](../loaders) for the full contract — it is identical across frontends.
+
+## Relationship to `@rhinostone/swig`
+
+| | `@rhinostone/swig` | `@rhinostone/swig-twig` |
+| --- | --- | --- |
+| Syntax dialect | Native swig (Jinja2-ish) | Upstream PHP Twig (strict subset) |
+| Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
+| CVE-2023-25345 guards | Yes | Yes |
+| Autoescape defaults | `true` (HTML) | `true` (HTML) |
+| `new Function(...)` sandbox | Yes | Yes |
+| Loader contract | Shared | Shared |
+| Cache contract | Shared | Shared |
+| `setFilter` / `setTag` / `setExtension` | Yes | Yes |
+| Tag set | 15 built-ins | 12 built-ins (see [Parity](./parity)) |
+| Filter set | 26 built-ins | 24 built-ins (see [Parity](./parity)) |
+| Is-tests | — | 7 (`defined`, `null`, `empty`, `iterable`, `odd`, `even`, `divisibleby`) |
+
+Use **native swig** if you have existing Jinja2-inspired templates or want the broadest built-in tag set. Use **swig-twig** if you have templates written against upstream PHP Twig syntax and want to keep them portable. Both share the same engine, so switching frontends is a parser-level choice — not a runtime or security-model choice.
+
+## Where to go next
+
+- **[Parity](./parity)** — operators, tags, filters, and is-tests, each grounded in the shipped source.
+- **[Non-Goals](./non-goals)** — upstream Twig features that throw at parse time or are deferred.
+- **[Migrating from upstream PHP Twig](./migration)** — behavioural differences when porting real Twig templates.
+
+## Alpha caveat
+
+The IR ABI is unstable across alpha minors. Pin `@rhinostone/swig-twig` and `@rhinostone/swig-core` to matching exact versions (npm's peerDependency range does this for you on a fresh install). Do not mix alpha versions of the two packages — the compiled IR will not match the backend emitter.
+
+Production users who want a stable API should wait for `2.0.0` stable. The alpha channel is suitable for evaluation, integration testing, and contributing fixture coverage.

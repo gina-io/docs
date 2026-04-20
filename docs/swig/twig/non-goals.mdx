@@ -1,0 +1,112 @@
+---
+displayed_sidebar: swigSidebar
+title: Twig Non-Goals
+sidebar_label: Non-Goals
+sidebar_position: 3
+description: Upstream PHP Twig features that @rhinostone/swig-twig throws on at parse time — sandbox, use, deprecated, macro kwargs, dynamic extends/from, bracket-notation set. Explicit rather than silent.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Parity](./parity)'
+  - '[Security — the parser is the boundary](../security#the-parser-is-the-boundary)'
+---
+
+# Twig Non-Goals
+
+`@rhinostone/swig-twig` is a **strict subset** of upstream PHP Twig. Syntax outside the subset throws at parse time rather than silently producing a template that behaves differently from upstream. This page enumerates each rejection, the error message produced, and the rationale.
+
+The rejections fall into three buckets:
+
+1. **Sandbox / extension tags** that rely on runtime features swig-core does not expose.
+2. **Deferred features** that will likely ship later but need dedicated IR design work.
+3. **Intentional security rejections** where silent acceptance would weaken the CVE-2023-25345 guard perimeter.
+
+## Unsupported tags
+
+The following tags throw a generic `Unexpected tag "<name>"` error at parse time:
+
+| Tag | Upstream purpose | Why rejected |
+| --- | --- | --- |
+| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig does not ship a sandbox — the backend evaluates the template via `new Function(...)` with the full JS runtime reachable. See [Security — swig run is not a sandbox](../security#the-parser-is-the-boundary). |
+| `{% use %}` | Pull blocks in from a "trait" template without inheriting it. | Block composition is expressible via `extends` + `include` today. Adding `use` needs a dedicated IR node and was not on the alpha path. |
+| `{% deprecated %}` | Emit a deprecation warning from within a template. | Low value relative to `console.warn` or a custom extension — deferred. |
+| `{% embed %}` | Include with block-override. | Compound of `include` + block remapping. Deferred pending a concrete use case. |
+| `{% do %}` | Evaluate an expression for its side effects. | Side-effectful expressions bypass autoescape and harden the attack surface; not worth the complexity. |
+
+If you need one of these, either:
+
+- Express the same intent with supported tags (e.g. `extends` + `block` for trait-style composition), or
+- Register a [custom tag](../extending#custom-tags) scoped to your application.
+
+## Macro kwargs
+
+Upstream Twig supports positional and keyword macro calls:
+
+```twig
+{% macro field(name, value=null, class="") %}…{% endmacro %}
+{{ field("email", value=user.email, class="required") }}
+```
+
+swig-twig accepts the positional form — `{{ field("email", user.email, "required") }}` — but **rejects the keyword-argument form**. Lowering kwargs needs a per-macro parameter map in the IR, plus a runtime dispatcher in `swig-core`. That landed on the Phase 4 target list but slipped past alpha.5.
+
+Workarounds:
+
+- Pass an object literal and destructure inside the macro:
+  ```twig
+  {% macro field(args) %}{{ args.name }} — {{ args.class ?? "" }}{% endmacro %}
+  {{ field({ name: "email", class: "required" }) }}
+  ```
+- Order positional parameters from most-commonly-passed to least-commonly-passed so defaults "fall off the right."
+
+## Dynamic `{% extends %}` and `{% from %}`
+
+Both tags require the path to be a **string literal**. Expressions throw:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% extends "base.twig" %}` | Yes | — |
+| `{% extends parent_template %}` | No | `Dynamic "extends" is not supported — parent path must be a string literal` |
+| `{% extends cond ? "a.twig" : "b.twig" %}` | No | Same as above. |
+| `{% from "macros.twig" import foo %}` | Yes | — |
+| `{% from dynamic_path import foo %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+
+Rationale: swig's `getParents()` walks the inheritance chain at parse time so it can cache compiled templates by resolved filename. A dynamic parent would either break that caching (recompile on every render) or require a runtime loader path that none of the built-in loaders support today. The string-literal requirement keeps compiled output deterministic and lets the shared cache work.
+
+Workaround:
+
+```twig
+{% if flavor == "admin" %}
+  {% extends "layout_admin.twig" %}
+{% else %}
+  {% extends "layout_public.twig" %}
+{% endif %}
+```
+
+The `if` wrapper works for **a small, known set of parents** — each `extends` is resolved at parse time. For truly dynamic inheritance, dispatch in the caller and render the selected template directly.
+
+`include` is not affected — its path can be any expression.
+
+## Bracket-notation `set`
+
+Dot-path LHS is supported; bracket-notation LHS throws:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% set foo = 1 %}` | Yes | — |
+| `{% set foo.bar = 1 %}` | Yes | — |
+| `{% set foo["bar"] = 1 %}` | No | `Bracket-notation assignment is not supported in "set" (use dot-path notation)` |
+| `{% set foo[dynamic_key] = 1 %}` | No | Same as above. |
+
+Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [CVE-2023-25345 Phase 2](../security#cve-2023-25345--arbitrary-code-execution-via-__proto__). swig-twig inherits the same perimeter.
+
+## Other known gaps
+
+These are tracked but not yet implemented:
+
+- **`date_modify` filter.** Relies on DateTime-object mutation; deferred.
+- **Locale-aware `date` / `number_format`.** swig-twig's `date` uses the shared PHP-style formatter from `@rhinostone/swig-core`; locale rules (weekday names, currency formats) are not plumbed through yet.
+- **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked. Documented at the engine level — see [Security — what the guards do NOT protect against](../security#what-the-guards-do-not-protect-against).
+
+## Reporting a rejection that feels wrong
+
+If the rejection you hit isn't listed here, please [open an issue on `gina-io/swig`](https://github.com/gina-io/swig/issues) with a minimal reproducer — we track rejections against the design-doc subset and may be able to promote a gap to a supported feature.
