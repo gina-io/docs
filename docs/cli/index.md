@@ -34,6 +34,7 @@ to identify which project the command targets.
 | [`view`](./view.md) | Scaffold HTML view templates into a bundle |
 | [`cache`](./cache.md) | Inspect in-memory cache stats for running bundles |
 | [`protocol`](./protocol.md) | HTTP protocol and scheme configuration |
+| [`service`](./service.md) | List framework-internal services (@gina-only) |
 
 ## Online vs offline commands
 

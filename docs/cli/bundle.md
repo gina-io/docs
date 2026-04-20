@@ -186,11 +186,64 @@ gina bundle:remove <bundle> @<project>
 
 ## `bundle:list`
 
-List all bundles registered in a project.
+List the bundles registered in a project, each annotated with src-existence, a preferred-port summary, and host-side running state.
 
 ```bash
 gina bundle:list @<project>
 ```
+
+```bash
+gina bundle:list @myproject
+```
+
+List every project at once with `--all`:
+
+```bash
+gina bundle:list --all
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--all` | List bundles for every registered project |
+| `--format=json` | Emit a JSON payload instead of the human-readable text table |
+
+### Output
+
+The text output shows a status prefix, the padded bundle name, the preferred port, and the running state:
+
+```text
+[ ok ] inspector        http/2.0 dev https 4208  (running, pid 27007)
+[ ok ] proxy            http/2.0 dev https 4210  (stopped)
+[ ?! ] unbuilt          (no port)                (stopped)
+```
+
+- **`[ ok ]` / `[ ?! ]`** — src-existence. `[ ?! ]` means the bundle's source directory (`<project>/<bundle.src>`) is missing.
+- **`http/2.0 dev https 4208`** — preferred port. Read from `~/.gina/ports.reverse.json`. Precedence: `http/2.0 https` → `http/1.1 https` → `http/1.1 http`; `dev` env is preferred when present, otherwise the first environment in the record. Bundles with no allocated port render as `(no port)`.
+- **`(running, pid N)` / `(stopped)`** — probed from `~/.gina/run/<bundle>@<project>.pid` with `process.kill(pid, 0)`. A stale pidfile (the process exited) reports `(stopped)` without being deleted; pidfile clean-up stays with [`bundle:stop`](#bundlestop).
+
+With `--format=json`, each bundle object carries:
+
+```json
+{
+  "bundle": "inspector",
+  "project": "gina",
+  "status": "ok",
+  "ports": {
+    "dev":  { "http/1.1": { "http": 4200, "https": 4204 }, "http/2.0": { "https": 4208 } },
+    "prod": { "http/1.1": { "http": 4201, "https": 4205 }, "http/2.0": { "https": 4209 } }
+  },
+  "running": true,
+  "pid": 27007
+}
+```
+
+A missing or malformed `ports.reverse.json` is tolerated — the command still renders with every bundle showing `(no port)` / `ports: null`.
+
+:::caution Docker bundles
+Bundles running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `bundle:list` from a host shell will report them as `(stopped)` even when the container is up — use `docker ps` or `docker exec <container> gina bundle:list` for the container-side view.
+:::
 
 ---
 
