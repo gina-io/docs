@@ -23,20 +23,31 @@ The rejections fall into three buckets:
 
 ## Unsupported tags
 
-The following tags throw a generic `Unexpected tag "<name>"` error at parse time:
+All of the following throw a generic `Unexpected tag "<name>"` error at parse time. They split into two categories:
+
+- **Won't support (security).** Threat-model calls; unlikely to change.
+- **Deferred.** Design work awaiting demand — [open an issue](https://github.com/gina-io/swig/issues) if you hit one.
+
+### Won't support (security)
 
 | Tag | Upstream purpose | Why rejected |
 | --- | --- | --- |
-| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig does not ship a sandbox — the backend evaluates the template via `new Function(...)` with the full JS runtime reachable. See [Security — swig run is not a sandbox](../security#the-parser-is-the-boundary). |
-| `{% use %}` | Pull blocks in from a "trait" template without inheriting it. | Block composition is expressible via `extends` + `include` today. Adding `use` needs a dedicated IR node and was not on the alpha path. |
-| `{% deprecated %}` | Emit a deprecation warning from within a template. | Low value relative to `console.warn` or a custom extension — deferred. |
-| `{% embed %}` | Include with block-override. | Compound of `include` + block remapping. Deferred pending a concrete use case. |
-| `{% do %}` | Evaluate an expression for its side effects. | Side-effectful expressions bypass autoescape and harden the attack surface; not worth the complexity. |
+| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where varname resolves to `"__proto__"` — a [known unclosable gap](../security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
+| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [CVE-2023-25345 Phase 2](../security#cve-2023-25345--arbitrary-code-execution-via-__proto__)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
+
+### Deferred
+
+| Tag | Upstream purpose | Why not yet |
+| --- | --- | --- |
+| `{% embed %}` | Include with block-override. | Compound of `include` + block remapping. Most commonly requested of the three — likely to ship in a later minor if demand shows up. |
+| `{% use %}` | Pull blocks in from a "trait" template without inheriting it. | Block composition is expressible via `extends` + `include` today. Needs a dedicated IR node. |
+| `{% deprecated %}` | Emit a deprecation warning from within a template. | Trivial to build; low demand in swig-twig's likely audience. |
 
 If you need one of these, either:
 
-- Express the same intent with supported tags (e.g. `extends` + `block` for trait-style composition), or
+- Express the same intent with supported tags (e.g. `extends` + `block` for trait-style composition).
 - Register a [custom tag](../extending#custom-tags) scoped to your application.
+- [Open an issue](https://github.com/gina-io/swig/issues) with a concrete use case — especially for the "Deferred" rows.
 
 ## Macro kwargs
 
