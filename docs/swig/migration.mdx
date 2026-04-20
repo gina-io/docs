@@ -2,7 +2,7 @@
 displayed_sidebar: swigSidebar
 title: Migrating from Jinja2, Django, or Twig
 sidebar_label: Migration Guide
-sidebar_position: 12
+sidebar_position: 13
 description: Concrete differences between Swig and Jinja2/Django/Twig. Syntax that ports cleanly, syntax that breaks at parse time, and workaround patterns for the gaps.
 level: intermediate
 prereqs:
@@ -21,13 +21,7 @@ Swig shares the **Jinja2 lineage** — so Jinja2 itself, Django templates, and T
 :::info Coming in a future release
 Swig's next major track ships a pluggable frontend architecture so Twig, Jinja2, and Django templates can render without rewriting. Dedicated frontends will close most of the gaps on this page. Track progress in the [swig roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md).
 
-**Preview available on the `@alpha` channel.** The Twig frontend parser ships as `@rhinostone/swig-twig@2.0.0-alpha.3` alongside `@rhinostone/swig@2.0.0-alpha.3`:
-
-```bash
-npm install @rhinostone/swig-twig@alpha  # 2.0.0-alpha.2 is deprecated; this resolves to alpha.3
-```
-
-At this stage the package exposes **parser output only** — `parser.parse(source, options)` returns swig-core IR you can inspect, but end-to-end rendering (a `render(...)` entry point) is not wired yet and will land in `1.0.0`. The filter catalog includes ~24 Twig-shape ports (strtr-style `replace`, `date`, `number_format`, `batch`, `slice`, `merge`, …).
+The Twig frontend already ships on the `@alpha` channel — see the [Twig Frontend](./twig) section for install, scope, and the full parity matrix.
 :::
 
 ## What ports cleanly
