@@ -218,6 +218,7 @@ After the write, the exact install command for the matching driver is printed �
 | `--base-url=<url>` | AI connector only. Override the provider base URL (OpenAI-compatible providers). |
 | `--driver-version=<range>` | Optional semver range to pin the driver install (e.g. `^5.0.0`, `>=5.3.0 <6.0.0`). Written to the entry under the `version` key. See the **Reserved flag names** note below. |
 | `--force` | Overwrite an existing entry with the same `<name>`. |
+| `--install` | After writing the entry, run the detected package manager's install command for the resolved driver + range. Opt-in; default behaviour is "write entry, print hint". See [Driver install](#driver-install-with---install) below. |
 
 :::caution Reserved flag names
 Two CLI flags use longer names than their schema property names:
@@ -245,6 +246,9 @@ gina connector:add ai-bot @myproject --connector=ai --protocol=anthropic:// --ap
 
 # Pin driver version, overwrite existing
 gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
+
+# Write entry AND run `npm install ioredis@<range>` (lockfile-detected PM)
+gina connector:add redis @myproject --install
 ```
 
 ### Output
@@ -255,6 +259,66 @@ Next: run `npm install ioredis@">=5.0.0"` inside your project root.
 ```
 
 When overwriting an existing entry with `--force`, the first line reads `Updated connector ...` instead of `Added connector ...`.
+
+### Driver install with `--install`
+
+By default, `connector:add` writes the entry and prints the matching `npm install …` hint — it does **not** run the install for you. Pass `--install` to turn that hint into an actual call, using the package manager detected from the project's lockfile.
+
+```bash
+gina connector:add redis @myproject --install
+```
+
+```text
+Added connector `redis` (redis) in shared scope at /path/to/project/shared/config/connectors.json
+[install] detected package manager: npm (package-lock.json)
+[install] resolving driver range: >=5.0.0 (source: framework)
+[npm] running: npm install ioredis@>=5.0.0 (cwd: /path/to/project)
+…npm output…
+```
+
+**Package-manager detection (lockfile probe order)**
+
+The detector walks the project root looking for a lockfile, in this order:
+
+| Order | Lockfile | Package manager | Install subcommand |
+|-------|----------|-----------------|--------------------|
+| 1 | `bun.lockb` | bun | `bun add <pkg>@<range>` |
+| 2 | `pnpm-lock.yaml` | pnpm | `pnpm add <pkg>@<range>` |
+| 3 | `yarn.lock` | yarn | `yarn add <pkg>@<range>` |
+| 4 | `package-lock.json` | npm | `npm install <pkg>@<range>` |
+| — | *(no lockfile)* | npm (fallback) | `npm install <pkg>@<range>` |
+
+The first match wins. When no lockfile is present, npm is the fallback — the detector logs `(fallback — no lockfile found)` so it's visible in the output.
+
+**Install-range resolution order**
+
+The range that follows `@` in the install command is resolved in three tiers, first match wins:
+
+1. **`--driver-version=<range>`** — the pin on the `connector:add` call (if set). Also written to the entry under the `version` key.
+2. **Project `package.json`** — `dependencies` first, then `devDependencies`. If the driver is already declared there (from a previous install), that range is reused so `npm install` doesn't churn the lockfile.
+3. **Framework `peerDependencies`** — the range declared by gina itself (e.g. `ioredis >=5.0.0`, `couchbase >=3.0.0`).
+
+The resolved tier is logged as `(source: entry | project | framework)` so you can see which rung fired.
+
+**`sqlite` and `ai` behaviour**
+
+- **`sqlite`** — short-circuits. Node.js ≥ 22.5.0 ships `node:sqlite` built in, so `--install` logs `[install] no install needed — Node.js >= 22.5.0 built-in (node:sqlite).` and exits `0` without running anything.
+- **`ai`** with a missing or unknown `--protocol=` — exits `1` after writing the entry. The entry is still written to disk (you can fix the protocol and re-run `--install` separately, or install by hand). The error names the supported schemes.
+
+**Exit codes**
+
+| Scenario | Exit code |
+|----------|-----------|
+| Entry written, install ran, package manager exited `0` | `0` |
+| Entry written, `sqlite` short-circuit | `0` |
+| Entry written, install ran, package manager exited non-zero | whatever the PM returned |
+| Entry written, PM binary missing on `PATH` | `127` |
+| Entry written, AI connector with missing/unknown `protocol` | `1` |
+| Entry written, unknown connector type | `1` |
+
+:::note Opt-in by design
+`--install` is never applied by default — `connector:add` always writes the entry first, then honours the flag. There is no `--no-install` / `--yes` counterpart, and no configuration that silently turns install into the default. If a future session needs it, the flag can be added without changing the default.
+:::
 
 ### Version pin — where it applies
 
