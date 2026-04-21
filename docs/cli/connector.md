@@ -15,11 +15,12 @@ import DocMeta from '@site/src/components/DocMeta';
 
 <DocMeta />
 
-The `connector` command group inspects `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory, then reports the effective overlay that every bundle sees at runtime along with npm driver install status.
+The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, and lints / auto-fixes common schema drift. Every subcommand is **offline** — no framework socket or network call.
 
-:::info Read-only and offline
-`connector:list` is **offline** — it does not contact the framework socket and makes no network calls. It only reads local JSON config and probes `node_modules/` for install status.
-:::
+- **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.
+- **`connector:add`** — write a connector entry to shared or bundle scope, with driver install hint.
+- **`connector:rm`** (alias `connector:remove`) — remove a connector entry; prints retention hints, never touches `node_modules/`.
+- **`connector:migrate`** — lint every `connectors.json` for schema drift, optionally fix in place with `--fix`.
 
 ```mermaid
 flowchart LR
@@ -416,6 +417,132 @@ Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-ser
 | `connector:rm unknown @<project>` | "Connector `unknown` not found in /…/shared/config/connectors.json" (exit 1) |
 | `connector:rm session api @<project>` (lives only in shared) | Inherited-from-shared hint (exit 1) |
 | `connector:rm session @<project>` (siblings still reference it) | "Removing shared connector would break N bundle(s): …" (exit 1; pass `--force` to override) |
+
+---
+
+## `connector:migrate`
+
+*New in 0.3.7-alpha.3*
+
+Lint every `connectors.json` in a project (or a single bundle's file) and optionally apply auto-fixable issues in place. `connector:migrate` is **explicit and opt-in** — the framework never auto-migrates a `connectors.json` at bundle boot. Run it in CI or before committing.
+
+```bash
+gina connector:migrate @<project>                 # Scan shared + every bundle
+gina connector:migrate <bundle> @<project>        # Scan just the bundle's file
+gina connector:migrate @<project> --fix           # Apply auto-fixable issues
+gina connector:migrate @<project> --format=json   # Machine-readable report
+```
+
+:::info Dry run by default
+Without `--fix`, `connector:migrate` is a **read-only dry run** — nothing is written. Pass `--fix` to apply the auto-fixable issues.
+:::
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--fix` | Apply auto-fixable issues to disk. Without it, `connector:migrate` is a read-only dry run. |
+| `--format=json` | Emit a machine-readable JSON report instead of the human-readable text summary. |
+
+### Checks
+
+| Check | Severity | Auto-fixable | Description |
+|-------|----------|--------------|-------------|
+| `missing-schema` | info | yes | Top-level `$schema` key is absent. `--fix` injects `"$schema": "https://gina.io/schema/connectors.json"` at the top of the object, preserving the leading comment header and existing key order. |
+| `bare-key-no-connector` | warn | no | An entry has no `connector` field **and** its key is not in the built-in enum (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`). The correct driver cannot be inferred from the key name, so re-declare the entry explicitly via `gina connector:add <name> @<project> --connector=<type> --force`. |
+
+### Example — dry run
+
+```bash
+gina connector:migrate @myproject
+```
+
+```text
+[dry-run] /.../shared/config/connectors.json (shared) — 2 connector(s), 1 issue(s) remaining
+    INFO  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+[dry-run] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
+[dry-run] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 2 issue(s) remaining
+    INFO  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+Re-run with --fix to apply 2 auto-fixable issue(s). 1 issue(s) need manual attention.
+```
+
+### Example — apply fixes
+
+```bash
+gina connector:migrate @myproject --fix
+```
+
+```text
+[fix] /.../shared/config/connectors.json (shared) — 2 connector(s), 1 fixed
+    FIXED  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+[fix] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
+[fix] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 1 fixed, 1 issue(s) remaining
+    FIXED  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+Applied 2 fix(es). 1 issue(s) still need manual attention.
+```
+
+Re-running after `--fix` is idempotent — the fixable issue no longer fires, and only the manual-attention warnings remain.
+
+### JSON output
+
+```bash
+gina connector:migrate @myproject --format=json
+```
+
+```json
+{
+  "project": "myproject",
+  "scope": "project",
+  "bundle": null,
+  "fixApplied": false,
+  "files": [
+    {
+      "path": "/.../shared/config/connectors.json",
+      "bundle": null,
+      "exists": true,
+      "parseError": null,
+      "connectorCount": 2,
+      "fixed": [],
+      "issues": [
+        {
+          "type": "missing-schema",
+          "severity": "info",
+          "fixable": true,
+          "message": "Top-level `$schema` key missing. Auto-fix adds `\"$schema\": \"https://gina.io/schema/connectors.json\"`."
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `project` | Project short-name (manifest `name` with the leading `@` stripped) |
+| `scope` | `"project"` when `<bundle>` is absent, `"bundle"` when present |
+| `bundle` | Bundle name when scope is `"bundle"`, otherwise `null` |
+| `fixApplied` | `true` when `--fix` was passed (regardless of whether any fix ran) |
+| `files[]` | One entry per scanned `connectors.json` file — `path`, owning `bundle` (null for shared), `exists`, `parseError`, `connectorCount` (excluding `$schema`), `fixed[]`, `issues[]` |
+
+### Comment header preservation
+
+The leading `//` or `/* */` comment header above the first `{` is preserved byte-for-byte when `--fix` rewrites the file. Mid-body comments are lost on rewrite (same convention as `connector:add` and `connector:rm`).
+
+### Why there is no auto-migrate hook
+
+`connector:migrate` does **not** run automatically at bundle boot — `core/config.js` is unchanged by this command. A runtime auto-migration hook is the right long-term design, but only when a concrete old-shape → new-shape delta exists to migrate. Today's schema has no such delta (the enum and field shapes are stable since 0.3.7), so a boot-path hook would be scaffolding around a non-existent problem. The real hook is deferred to `0.4.0` alongside the Couchbase SDK v2 removal (`#CN8`), when the migration will have a real before/after to act on.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:migrate` with no `@<project>` | "`connector:migrate` requires `@<project>`" (exit 1) |
+| `connector:migrate @unknown` | "Project \[unknown\] not found in your projects list" (CmdHelper, exit 1) |
+| `connector:migrate bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connector:migrate @<project> --format=xml` | "Unknown --format value `xml`. Supported: json." (exit 1) |
+| Target `connectors.json` missing | Reported as "missing (skipped)" — not an error (exit 0) |
 
 ---
 
