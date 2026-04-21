@@ -294,6 +294,131 @@ Example: `gina connector:add redis @myproject --host=127.0.0.1 --connector-port=
 
 ---
 
+## `connector:rm`
+
+*New in 0.3.7-alpha.3*
+
+Remove a connector entry from a project's `shared/config/connectors.json` or from a bundle-scoped `<bundle>/config/connectors.json`. The scope is inferred from positional-absence: pass a `<bundle>` to target that bundle, omit it to target shared. `remove` is accepted as an alias.
+
+```bash
+gina connector:rm <name> @<project>              # Removes from shared/config/connectors.json
+gina connector:rm <name> <bundle> @<project>     # Removes from <bundle-src>/config/connectors.json
+gina connector:remove <name> @<project>          # Alias for rm
+```
+
+:::caution Never uninstalls the npm driver
+`connector:rm` removes the JSON entry only — it never runs `npm uninstall`. A driver removed from one bundle may still be needed by another bundle in the same project, and the project's `node_modules/` is shared across bundles. After removal, the command prints a retention hint listing any sibling bundles (or shared) that still reference the same driver.
+:::
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Print what would be removed without touching any file. Includes the sibling-usage hint. |
+| `--force` | Skip the project-level guard that refuses to remove a shared connector while other bundles still reference it. Bundle-level removals never consult this guard. |
+
+### Scoping rules
+
+| Command shape | Target file | Safety gate |
+|---------------|-------------|-------------|
+| `connector:rm <name> @<project>` | `shared/config/connectors.json` | Refuses if any bundle still declares `<name>` unless `--force` is passed |
+| `connector:rm <name> <bundle> @<project>` | `<bundle-src>/config/connectors.json` | Always proceeds. Leaves shared untouched. |
+
+### Examples
+
+```bash
+# Remove shared entry (fails if any bundle still uses it)
+gina connector:rm session @myproject
+
+# Remove from one bundle only
+gina connector:rm session api @myproject
+
+# Preview removal with sibling warnings
+gina connector:rm session @myproject --dry-run
+
+# Remove shared entry even if bundles still use it
+gina connector:rm session @myproject --force
+```
+
+### Output
+
+```text
+Removed connector `session` from shared scope at /path/to/project/shared/config/connectors.json
+Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: api (override), worker (session).
+```
+
+When removing from a bundle:
+
+```text
+Removed connector `session` from bundle `api` at /path/to/project/src/api/config/connectors.json
+Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: shared, worker (session).
+```
+
+When the removed driver is `sqlite` (Node-builtin), the retention note is omitted — there is no npm package to retain.
+
+### Dry-run
+
+```bash
+gina connector:rm session @myproject --dry-run
+```
+
+```text
+[dry-run] Would remove connector `session` from shared scope at /path/to/project/shared/config/connectors.json.
+[dry-run] Current entry:
+{
+    "connector": "redis",
+    "host": "127.0.0.1",
+    "port": 6379
+}
+[dry-run] Warning: 2 bundle(s) still reference `session`: api (override), worker. Re-run without --dry-run and with --force to proceed.
+[dry-run] Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: api (override), worker (session).
+```
+
+Dry-run never writes to disk and always exits `0`, even when the real command would refuse without `--force`.
+
+### Project-level guard (`--force`)
+
+By default, removing a shared connector requires that no bundle still declares the same logical name — this prevents a bundle that relies on overlay inheritance from breaking silently. The command prints the offending bundles:
+
+```text
+[error] Removing shared connector `session` would break 2 bundle(s) that still reference it:
+  api (override), worker.
+Re-run with --force to remove anyway, or remove from each bundle first.
+```
+
+Pass `--force` to bypass the guard. Bundle-level removals never consult the guard — removing from `api` has no effect on `worker` or `shared`.
+
+### Inherited-from-shared hint
+
+Attempting to remove a connector from a bundle when it is only declared in `shared` prints a hint pointing at the right scope:
+
+```text
+[error] Connector `session` is not declared in `api/config/connectors.json` — it is inherited from shared/config/connectors.json. Use `gina connector:rm session @myproject` to remove it from shared.
+```
+
+### Merge behaviour
+
+The written file preserves:
+
+1. `$schema` (always first)
+2. Existing entries in their original key order, minus the removed key
+3. Any comment header above the first `{` (byte-for-byte)
+
+Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-serialised from the parsed JSON, same as `connector:add`.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:rm` with no `<name>` | "`connector:rm` requires `<name>` and `@<project>`" (exit 1) |
+| `connector:rm <name>` (no `@<project>`) | "`connector:rm` requires `@<project>`" (exit 1) |
+| `connector:rm <name> bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connector:rm unknown @<project>` | "Connector `unknown` not found in /…/shared/config/connectors.json" (exit 1) |
+| `connector:rm session api @<project>` (lives only in shared) | Inherited-from-shared hint (exit 1) |
+| `connector:rm session @<project>` (siblings still reference it) | "Removing shared connector would break N bundle(s): …" (exit 1; pass `--force` to override) |
+
+---
+
 ## `connector:help`
 
 Print the usage summary for the `connector` command group.
