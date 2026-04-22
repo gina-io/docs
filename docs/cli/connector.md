@@ -38,7 +38,7 @@ flowchart LR
 
 ## `connector:list`
 
-*New in 0.3.7-alpha.3*
+*New in 0.3.7-alpha.2*
 
 List connectors for every registered project, a single project, or the merged view a single bundle sees at runtime.
 
@@ -189,7 +189,7 @@ npm resolves `node_modules/<driver>/` to a single version per project. When two 
 
 ## `connector:add`
 
-*New in 0.3.7-alpha.3*
+*New in 0.3.7-alpha.2*
 
 Add a connector entry to a project's `shared/config/connectors.json` or a bundle-scoped `<bundle>/config/connectors.json`. Preserves any `//` / `/* */` comment header above the first `{`, serialises the body with 4-space indentation, and pins `$schema` at the top.
 
@@ -361,7 +361,7 @@ Example: `gina connector:add redis @myproject --host=127.0.0.1 --connector-port=
 
 ## `connector:rm`
 
-*New in 0.3.7-alpha.3*
+*New in 0.3.7-alpha.2*
 
 Remove a connector entry from a project's `shared/config/connectors.json` or from a bundle-scoped `<bundle>/config/connectors.json`. The scope is inferred from positional-absence: pass a `<bundle>` to target that bundle, omit it to target shared. `remove` is accepted as an alias.
 
@@ -486,7 +486,7 @@ Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-ser
 
 ## `connector:migrate`
 
-*New in 0.3.7-alpha.3*
+*New in 0.3.7-alpha.2*
 
 Lint every `connectors.json` in a project (or a single bundle's file) and optionally apply auto-fixable issues in place. `connector:migrate` is **explicit and opt-in** — the framework never auto-migrates a `connectors.json` at bundle boot. Run it in CI or before committing.
 

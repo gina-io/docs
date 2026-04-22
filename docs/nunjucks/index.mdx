@@ -161,15 +161,15 @@ The 0.3.7 release is a **minimum viable MVP**. Several features that the swig re
 
 | Feature | Status | Workaround |
 | --- | --- | --- |
-| Inspector `__ginaData` dev payload | **Deferred** | Inspector Data tab won't show payloads for nunjucks pages. |
-| HTTP/2 `stream.respond()` direct path | **Deferred** | Uses `res.writeHead()` + `res.end()` through the HTTP/1.1 compat layer. |
+| Inspector `__ginaData` dev payload | **Shipped in `0.3.7-alpha.2`** | — |
+| HTTP/2 `stream.respond()` direct path | **Shipped in `0.3.7-alpha.2`** | — |
+| Error-page template routing | **Shipped in `0.3.7-alpha.2`** | — |
 | Early Hints 103 auto-send for CSS/JS preloads | **Deferred** | Manually call `self.setEarlyHints(linkHeader)` in the action if needed. |
 | Static HTML cache (`cache` key in `routing.json`) | **Deferred** | Every request re-renders even when the route has `cache` configured. |
 | `setResources` asset cataloguing / `<gina>` layout placeholders | **Deferred** | Wire your own `<link>` / `<script>` tags into templates. |
 | Gina's built-in swig filters | **Not ported** | Register equivalents via `env.addFilter()`. |
-| Error-page template routing | **Deferred** | Thrown errors render via the swig path (the framework error template is currently swig-only). |
 
-Each is a focused follow-up session when the gap bites.
+Each remaining deferred item is a focused follow-up session when the gap bites.
 
 ## Safety contract (negative invariants)
 
@@ -191,5 +191,5 @@ Three rules are enforced by source-inspection tests in `test/lib/render-engine-d
 
 ## Precedents
 
-- `0.3.7-alpha.3` (2026-04-22) — `lib/nunjucks-resolver` primitive shipped in commit `63e7e569f`.
-- `0.3.7-alpha.3` (2026-04-22) — `controller.render-nunjucks.js` MVP + dispatch shipped in commit `0980a00b7`.
+- `0.3.7-alpha.2` (2026-04-22) — `lib/nunjucks-resolver` primitive shipped in commit `0eacab84`.
+- `0.3.7-alpha.2` (2026-04-22) — `controller.render-nunjucks.js` MVP + dispatch shipped in commit `3128e729`.

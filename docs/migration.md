@@ -74,14 +74,15 @@ project's `node_modules/`. A bundle that opts in without installing the
 package fails at startup with a clear `NUNJUCKS_NOT_INSTALLED` error
 rather than a silent mid-render failure.
 
-This is the MVP release — basic `.njk` rendering works end-to-end, but
-several features from the swig path are **not yet ported**: the
-Inspector dev payload, HTTP/2 `stream.respond()` direct path, Early
-Hints 103 preloads, the static HTML response cache, automatic asset
-cataloguing (`setResources` / `<gina>` layout placeholders), Gina's
-custom filter registry (`getWebroot`, `nl2br`, etc.), and error-page
-template routing. See the [Nunjucks guide](/nunjucks) for the full
-list of deferred features and how to wire your own nunjucks filters.
+Basic `.njk` rendering works end-to-end in the MVP; the Inspector dev
+payload, HTTP/2 `stream.respond()` direct path, and error-page template
+routing shipped as follow-ups in `0.3.7-alpha.2` at parity with the swig
+path. Still deferred from the swig path: Early Hints 103 preloads, the
+static HTML response cache, automatic asset cataloguing (`setResources` /
+`<gina>` layout placeholders), and Gina's custom filter registry
+(`getWebroot`, `nl2br`, etc.). See the [Nunjucks guide](/nunjucks) for
+the full list of deferred features and how to wire your own nunjucks
+filters.
 :::
 
 ---
