@@ -83,17 +83,14 @@ Both tags require the path to be a **string literal**. Expressions throw:
 
 Rationale: swig's `getParents()` walks the inheritance chain at parse time so it can cache compiled templates by resolved filename. A dynamic parent would either break that caching (recompile on every render) or require a runtime loader path that none of the built-in loaders support today. The string-literal requirement keeps compiled output deterministic and lets the shared cache work.
 
-Workaround:
+Workaround: **dispatch in the caller** and render the selected template directly.
 
-```twig
-{% if flavor == "admin" %}
-  {% extends "layout_admin.twig" %}
-{% else %}
-  {% extends "layout_public.twig" %}
-{% endif %}
+```js
+var template = (flavor === 'admin') ? 'page_admin.twig' : 'page_public.twig';
+twig.renderFile(template, { /* locals */ });
 ```
 
-The `if` wrapper works for **a small, known set of parents** — each `extends` is resolved at parse time. For truly dynamic inheritance, dispatch in the caller and render the selected template directly.
+Wrapping `{% extends %}` in `{% if %}` blocks does not work — the parent link is resolved at parse time, so whichever `extends` the parser sees last wins regardless of the runtime condition. This applies whether you use the (currently [deferred](#conditional-branches-deferred)) `{% if %}…{% else %}…{% endif %}` form or paired `{% if %}` blocks. Dispatch in the caller is the only working path.
 
 `include` is not affected — its path can be any expression.
 
@@ -109,6 +106,44 @@ Dot-path LHS is supported; bracket-notation LHS throws:
 | `{% set foo[dynamic_key] = 1 %}` | No | Same as above. |
 
 Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [CVE-2023-25345 Phase 2](../security#cve-2023-25345--arbitrary-code-execution-via-__proto__). swig-twig inherits the same perimeter.
+
+## Conditional branches (deferred)
+
+Upstream Twig supports multi-branch conditionals — `{% if %} … {% elseif %} … {% else %} … {% endif %}` — and an empty-fallback form on `{% for %}` — `{% for %} … {% else %} … {% endfor %}` (runs when the iterable is empty). swig-twig alpha.8 ships only the single-branch form.
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% if x %}…{% endif %}` | Yes | — |
+| `{% if x %}…{% else %}…{% endif %}` | No | `Unexpected tag "else"` |
+| `{% if x %}…{% elseif y %}…{% endif %}` | No | `Unexpected tag "elseif"` |
+| `{% for x in items %}…{% endfor %}` | Yes | — |
+| `{% for x in items %}…{% else %}…{% endfor %}` | No | `Unexpected tag "else"` |
+
+Rationale: the single-branch shape shipped first to unblock the rest of the Twig parser surface. Multi-branch lowering needs a dedicated branch-chain IR node plus the frontend handler that consumes `else` / `elseif` tokens without pushing them on the open-tag stack. Not blocking `2.0.0` stable. [Open an issue](https://github.com/gina-io/swig/issues) with a concrete use case to prioritise.
+
+Workarounds that parse under alpha.8:
+
+- **`{% if %} / {% else %}` → two `if` blocks with `not`:**
+  ```twig
+  {% if x %}yes{% endif %}
+  {% if not x %}no{% endif %}
+  ```
+- **`{% if %} / {% elseif %} / {% else %}` → nested `if`:**
+  ```twig
+  {% if x %}a{% endif %}
+  {% if not x %}
+    {% if y %}b{% endif %}
+    {% if not y %}c{% endif %}
+  {% endif %}
+  ```
+  Uglier than the native form but semantically equivalent.
+- **`{% for … %}{% else %}…{% endfor %}` → guard with `{% if items|length %}` before the loop:**
+  ```twig
+  {% if items|length %}
+    {% for item in items %}{{ item }}{% endfor %}
+  {% endif %}
+  {% if not items|length %}empty{% endif %}
+  ```
 
 ## Other known gaps
 
