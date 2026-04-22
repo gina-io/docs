@@ -62,3 +62,60 @@ When using Swig inside a Gina bundle you don't call the Swig API directly — th
 - Writing a custom loader or extension that plugs into Gina's rendering pipeline.
 - Debugging a template error — understanding what code the Swig parser generates clarifies the call stack.
 - Using `@rhinostone/swig` outside of Gina (e.g. a standalone Express app, a CLI pre-compile step).
+
+## Project-side version override
+
+New in `0.3.7` (opt-in). By default every Gina bundle uses the framework's bundled `@rhinostone/swig`. If you need a newer fork release before the framework ships it, or you want to pin the version independently of the framework, set `swig.useProject` in `config/settings.json`:
+
+```json
+{
+  "swig": {
+    "useProject": true,
+    "package": "@rhinostone/swig"
+  }
+}
+```
+
+Then install the package in your project:
+
+```bash
+npm install @rhinostone/swig@^1.6.0
+```
+
+On bundle startup, the framework walks `${projectPath}/node_modules/` for the configured package, validates it against two safety gates, and swaps the template engine reference once per process. The defaults preserve today's behaviour — nothing happens unless `useProject` is `true`.
+
+### Safety gates
+
+Two constraints reject a project pin and fall back to the framework's copy. The bundle never crashes; it logs one `[swig-resolver]` warning at startup and proceeds with the bundled engine:
+
+| Gate | Example | Warning code |
+| --- | --- | --- |
+| Package not installed | `useProject: true` but no `@rhinostone/swig` in `node_modules/` | `not-installed` |
+| `package.json` malformed | Invalid JSON in the project copy | `malformed-package-json` |
+| `package.json` missing `version` | Hand-edited manifest | `missing-version` |
+| Major does not match framework floor | Project pinned `2.0.0`, framework floor is `^1.6.0` | `version-mismatch` |
+| Version below framework floor | Project pinned `1.5.0`, framework floor is `1.6.0` | `version-mismatch` |
+
+The abandoned upstream `swig` package name is **never** accepted — only `@rhinostone/swig` and `@rhinostone/swig-twig` are valid values for `swig.package`. This prevents [CVE-2023-25345](./security) from re-entering the render pipeline through a stale `swig@^1.4.2` project dependency.
+
+### Startup logs
+
+Successful override:
+
+```text
+[swig-resolver] using project @rhinostone/swig@1.6.2 from /srv/app/node_modules/@rhinostone/swig/lib/index.js
+```
+
+Rejected override (any reason):
+
+```text
+[swig-resolver] project override ignored (version-mismatch) — project pinned 1.5.0; using framework copy of @rhinostone/swig
+```
+
+### Twig frontend
+
+Set `swig.package: "@rhinostone/swig-twig"` to use the [Twig-syntax frontend](/swig/twig) instead. The API is drop-in — `self.render(data)` still works — but templates must be written in Twig syntax, not swig. The framework floor for the Twig frontend is `2.0.0-alpha.8`.
+
+### Multi-bundle processes
+
+When multiple bundles share a single Node process (standalone mode), the first bundle to call the resolver wins. A second bundle declaring a different `swig.package` is warned and keeps the loaded copy. Split to one bundle per process if you need per-bundle swig isolation.

@@ -19,6 +19,38 @@ upward to the target version.
 
 ---
 
+## 0.3.6 → 0.3.7
+
+### Added: `swig.useProject` — project-pinned swig override _(no action required)_
+
+:::note New feature — opt-in, default off
+Bundles can now load a project-pinned `@rhinostone/swig` (or
+`@rhinostone/swig-twig` for the Twig frontend) from the project's
+`node_modules/` in place of the framework's bundled copy, by setting
+`swig.useProject: true` in `config/settings.json`:
+
+```json
+{
+  "swig": {
+    "useProject": true,
+    "package": "@rhinostone/swig"
+  }
+}
+```
+
+The framework honours the override only when the project pin satisfies two
+safety gates — same major as the framework floor (currently `1.6.0`) **and**
+version at or above the floor. A rejected override falls back to the
+framework's copy and logs a one-line `[swig-resolver]` warning at bundle
+startup.
+
+Default remains `swig.useProject: false` — existing bundles see no behaviour
+change. See the [Swig overview](/swig) for the full list of warning codes
+and the [Twig frontend](/swig/twig) for package override details.
+:::
+
+---
+
 ## 0.3.5 → 0.3.6
 
 ### Security: Inspector payload redaction _(no action required)_
