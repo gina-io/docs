@@ -49,6 +49,41 @@ change. See the [Swig overview](/swig) for the full list of warning codes
 and the [Twig frontend](/swig/twig) for package override details.
 :::
 
+### Added: `render.engine = "nunjucks"` — opt-in nunjucks rendering _(no action required)_
+
+:::note New feature — opt-in, default off
+Bundles can now render templates with [nunjucks](https://mozilla.github.io/nunjucks/)
+instead of swig by setting `render.engine: "nunjucks"` in `config/settings.json`
+and installing the package in the project root:
+
+```json
+{
+  "render":   { "engine": "nunjucks" },
+  "nunjucks": { "autoescape": true }
+}
+```
+
+```bash
+npm install nunjucks
+```
+
+Default remains `render.engine: "swig"` — existing bundles see no
+behaviour change. The framework never declares nunjucks as a
+dependency; it's only loaded when a bundle opts in, and only from the
+project's `node_modules/`. A bundle that opts in without installing the
+package fails at startup with a clear `NUNJUCKS_NOT_INSTALLED` error
+rather than a silent mid-render failure.
+
+This is the MVP release — basic `.njk` rendering works end-to-end, but
+several features from the swig path are **not yet ported**: the
+Inspector dev payload, HTTP/2 `stream.respond()` direct path, Early
+Hints 103 preloads, the static HTML response cache, automatic asset
+cataloguing (`setResources` / `<gina>` layout placeholders), Gina's
+custom filter registry (`getWebroot`, `nl2br`, etc.), and error-page
+template routing. See the [Nunjucks guide](/nunjucks) for the full
+list of deferred features and how to wire your own nunjucks filters.
+:::
+
 ---
 
 ## 0.3.5 → 0.3.6
