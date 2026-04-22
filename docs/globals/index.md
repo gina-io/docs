@@ -13,14 +13,42 @@ These modules are bootstrapped at framework startup and inject functions directl
 into the global scope. No `require()` call is needed — they are available
 everywhere in your bundle code. This is a core design principle of the Gina framework: common utilities like `_()`, `getContext()`, `requireJSON()`, and `dateFormat` are wired into the global scope by `gna.js` and the helpers bootstrap so that bundle code stays concise.
 
-:::tip Explicit imports (New in 0.3.3)
-All global helpers are also available as named imports for IDE navigation and
-static analysis:
+:::tip Explicit imports (expanded in 0.3.7-alpha.2)
+Every injected helper is also a named property of both `require('gina')` and
+`require('gina/gna')` for IDE navigation, static analysis, and the TypeScript
+declaration generator:
+
 ```javascript
-const { getContext, _, onCompleteCall, uuid } = require('gina/gna');
+// Named imports work from either entry point
+const { getContext, _, onCompleteCall, uuid }    = require('gina/gna');
+const { setContext, requireJSON, merge, ApiError } = require('gina');
 ```
-The globals continue to work as before — the explicit imports are an additional
-path, not a replacement.
+
+Every export carries JSDoc (description, `@param`, `@returns`, `@example`), so
+editors can jump to definitions and AI assistants can generate accurate Gina
+code. The globals continue to work exactly as before — this is an additive
+surface, not a replacement.
+
+One intentional asymmetry: `getConfig` is only surfaced on `require('gina/gna')`.
+The primary `require('gina')` entry point later re-binds `gna.getConfig` as a
+bundle-specific instance method, which would collide with the global.
+:::
+
+:::info `types/gna.d.ts` is auto-generated (0.3.7-alpha.2, #M9)
+`types/gna.d.ts` is emitted by `script/generate_gna_types.js` directly from the
+JSDoc on `framework/v*/core/gna.js`. The authoritative inventory is the
+`GLOBAL_EXPORTS` array in `framework/v*/test/unit/gna-exports.test.js` — add a
+global there, add JSDoc above the matching `gna.<name> =` assignment, then run:
+
+```bash
+npm run types:gen      # regenerate types/gna.d.ts
+npm run types:check    # CI guard — exits 1 if the file drifted
+```
+
+A unit test (`gna-types-drift.test.js`) re-runs the generator in memory on
+every test pass so stale declarations are caught before release. **Do not
+hand-edit `types/gna.d.ts`** — your change will be overwritten on the next
+generator run.
 :::
 
 | Global | Injected names | Description |

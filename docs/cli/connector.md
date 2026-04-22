@@ -1,0 +1,623 @@
+---
+id: cli-connector
+title: connector
+sidebar_label: connector
+sidebar_position: 12
+description: CLI reference for gina connector commands — list connectors declared across a project's shared config and bundle overlays, with driver install status and version-pin warnings.
+level: intermediate
+prereqs:
+  - '[Gina installed globally](/getting-started/installation)'
+  - '[Connectors concept](/concepts/connectors)'
+  - '[Projects and bundles](/concepts/projects-and-bundles)'
+---
+
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta />
+
+The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, and lints / auto-fixes common schema drift. Every subcommand is **offline** — no framework socket or network call.
+
+- **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.
+- **`connector:add`** — write a connector entry to shared or bundle scope, with driver install hint.
+- **`connector:rm`** (alias `connector:remove`) — remove a connector entry; prints retention hints, never touches `node_modules/`.
+- **`connector:migrate`** — lint every `connectors.json` for schema drift, optionally fix in place with `--fix`.
+
+```mermaid
+flowchart LR
+    A["<project>/manifest.json"] --> B["manifest.bundles"]
+    B --> C["shared/config/connectors.json"]
+    B --> D["<bundle>/config/connectors.json"]
+    C --> E["overlay merge<br/>(bundle wins)"]
+    D --> E
+    E --> F["connector:list rows"]
+    F --> G["<project>/node_modules/<driver>/package.json<br/>(install probe)"]
+    G --> F
+```
+
+---
+
+## `connector:list`
+
+*New in 0.3.7-alpha.2*
+
+List connectors for every registered project, a single project, or the merged view a single bundle sees at runtime.
+
+```bash
+gina connector:list                      # Every registered project
+gina connector:list @<project>           # One project (shared + all bundles)
+gina connector:list <bundle> @<project>  # Merged shared+bundle view for <bundle>
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--format=json` | Emit a JSON payload instead of the human-readable text table |
+
+### Output
+
+```text
+------------------------------------
+myproject
+------------------------------------
+[ ok ] session          couchbase    [shared]                 (couchbase@>=3.0.0 4.1.3 installed)
+[ ok ] profile          couchbase    [api]                    (couchbase@>=3.0.0 4.1.3 installed)
+[ ok ] session          couchbase    [api override]           (couchbase@>=3.0.0 4.1.3 installed)
+[ ?! ] mongodb          mongodb      [admin]                  (mongodb@>=5.0.0 — run `npm install mongodb`)
+[ ok ] local            sqlite       [worker]                 (Node.js >= 22.5.0 built-in (node:sqlite))
+```
+
+**Row columns**
+
+| Column | Meaning |
+|--------|---------|
+| **`[ ok ]` / `[ ?! ]` / `[ ?? ]`** | Install status (see below) |
+| **name** | Logical connector key (JSON object key in `connectors.json`) |
+| **connector** | Driver type resolved from `entry.connector` (falls back to the logical key) |
+| **source label** | Where the entry comes from: `[shared]`, `[<bundle>]`, or `[<bundle> override]` |
+| **driver info** | Resolved npm package, `peerDependencies` range, pinned version (if any), install state |
+
+**Status flags**
+
+| Flag | Meaning |
+|------|---------|
+| `[ ok ]` | Driver installed at `<project>/node_modules/<driver>`, or built-in (`node:sqlite`) |
+| `[ ?! ]` | Driver declared but not found — `npm install <driver>` suggested inline |
+| `[ ?? ]` | Unknown connector type, or `ai` connector with missing/unrecognised `protocol` |
+| `[ !! ]` | Version-pin disagreement — emitted as a trailing warning line when two bundles pin the same driver at different versions (the first `npm install` wins) |
+
+**Source labels**
+
+| Label | Meaning |
+|-------|---------|
+| `[shared]` | Declared only in `shared/config/connectors.json` |
+| `[<bundle>]` | Declared only in the bundle's `config/connectors.json` |
+| `[<bundle> override]` | Declared in `shared` **and** overridden by the bundle — the merged entry (bundle wins on conflicting keys) is shown |
+
+### JSON output
+
+```bash
+gina connector:list @<project> --format=json
+```
+
+```json
+{
+  "project": "myproject",
+  "status": "ok",
+  "connectors": [
+    {
+      "project": "myproject",
+      "bundle": "api",
+      "name": "session",
+      "connector": "couchbase",
+      "source": "override",
+      "driver": "couchbase",
+      "builtin": false,
+      "range": ">=3.0.0",
+      "version": null,
+      "installed": true,
+      "installedVersion": "4.1.3",
+      "note": null,
+      "unresolved": false
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `project` / `bundle` / `name` | Project, owning bundle (null for shared-only rows), logical connector key |
+| `connector` | Resolved connector type |
+| `source` | `"shared"`, `"bundle"`, or `"override"` |
+| `driver` | npm package name (null for built-in drivers) |
+| `builtin` | `true` when the driver is Node-builtin (e.g. `node:sqlite`) |
+| `range` | `peerDependencies` range declared by the framework |
+| `version` | User-set `version` pin from the connector entry (null if unset) |
+| `installed` / `installedVersion` | Install probe result from `<project>/node_modules/<driver>/package.json` |
+| `note` | Human-readable hint for unresolved or built-in entries |
+| `unresolved` | `true` when no driver mapping exists for the type |
+
+### Driver resolution
+
+Drivers are resolved from the framework's `peerDependencies` declared in `package.json`:
+
+| Connector type | npm package | Range |
+|----------------|-------------|-------|
+| `couchbase` | `couchbase` | `>=3.0.0` |
+| `redis` | `ioredis` | `>=5.0.0` |
+| `mysql` | `mysql2` | `>=2.0.0` |
+| `postgresql` | `pg` | `>=8.0.0` |
+| `mongodb` | `mongodb` | `>=5.0.0` |
+| `scylladb` | `@scylladb/scylla-driver` | `>=1.0.0` |
+| `sqlite` | *(built-in: `node:sqlite`)* | Node ≥ 22.5.0 |
+| `ai` | Resolved from `entry.protocol` | See below |
+
+The `ai` connector resolves its driver from `entry.protocol`:
+
+| Scheme | npm package |
+|--------|-------------|
+| `anthropic://` | `@anthropic-ai/sdk` (`>=0.27.0`) |
+| `openai://`, `deepseek://`, `qwen://`, `groq://`, `mistral://`, `together://`, `ollama://`, `gemini://`, `xai://`, `perplexity://` | `openai` (`>=4.0.0`) |
+
+### Overlay semantics
+
+Shared and bundle-level `connectors.json` files are merged key-level, with the bundle side winning on conflicting keys. This mirrors the runtime behaviour of `core/config.js`: a bundle that overrides `session` in its own `config/connectors.json` does **not** need to restate the full entry — it inherits the shared fields and only overrides the keys it declares.
+
+The text output emits one row per resolved entry:
+- A shared entry with no bundle override → one `[shared]` row.
+- A shared entry that is overridden by one or more bundles → one `[<bundle> override]` row per overriding bundle; **no standalone `[shared]` row**.
+- A bundle-only entry (not in shared) → `[<bundle>]`.
+
+### Comment tolerance
+
+`connectors.json`, `manifest.json`, and the file headers they carry are parsed with tolerance for `//` line comments and `/* … */` block comments, the same as `routing.json`.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:list @unknown` | CmdHelper rejects: "Project \[unknown\] not found in your projects list" (exit 1) |
+| `connector:list <bundle>` (no `@<project>`) | "`connector:list <bundle>` requires `@<project>`" (exit 1) |
+| `connector:list bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connectors.json` malformed | Treated as "no connectors declared" (silently skipped — use `bundle:start` for strict validation) |
+
+:::caution Version-pin warnings vs. install resolution
+npm resolves `node_modules/<driver>/` to a single version per project. When two bundles declare the same driver with different `version` pins, the first `npm install` wins and the other bundle's pin is aspirational. `connector:list` flags this with a trailing `[ !! ] driver \`<name>\` has conflicting \`version\` pins: ...` line. The actual installed version still appears on the affected rows.
+:::
+
+---
+
+## `connector:add`
+
+*New in 0.3.7-alpha.2*
+
+Add a connector entry to a project's `shared/config/connectors.json` or a bundle-scoped `<bundle>/config/connectors.json`. Preserves any `//` / `/* */` comment header above the first `{`, serialises the body with 4-space indentation, and pins `$schema` at the top.
+
+```bash
+gina connector:add <name> @<project>               # Writes to shared/config/connectors.json
+gina connector:add <name> <bundle> @<project>      # Writes to <bundle-src>/config/connectors.json
+```
+
+After the write, the exact install command for the matching driver is printed — e.g. `npm install ioredis@">=5.0.0"`.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--connector=<type>` | Driver type. One of: `couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`. Inferred from `<name>` when `<name>` matches one of those values. |
+| `--driver=<type>` | Synonym for `--connector=`. |
+| `--protocol=<uri>` | Connection protocol URI scheme (`couchbase://`, `anthropic://`, etc). Required for `ai` connectors. |
+| `--host=<host>` | Hostname or IP. Comma-separated for clusters (`db1,db2`). |
+| `--connector-port=<port>` | Server port. Numeric when possible. Written to the entry under the `port` key. See the **Reserved flag names** note below. |
+| `--database=<name>` | Database, bucket, or keyspace name. |
+| `--username=<name>` | Authentication username. |
+| `--password=<value>` | Authentication password. Supports `${ENV_VAR}` interpolation. |
+| `--scope=<scope>` | Data isolation scope: `local`, `beta`, `production`, `testing`. |
+| `--model=<id>` | AI connector only. Default model id. |
+| `--api-key=<value>` | AI connector only. API key. Supports `${ENV_VAR}` interpolation. |
+| `--base-url=<url>` | AI connector only. Override the provider base URL (OpenAI-compatible providers). |
+| `--driver-version=<range>` | Optional semver range to pin the driver install (e.g. `^5.0.0`, `>=5.3.0 <6.0.0`). Written to the entry under the `version` key. See the **Reserved flag names** note below. |
+| `--force` | Overwrite an existing entry with the same `<name>`. |
+| `--install` | After writing the entry, run the detected package manager's install command for the resolved driver + range. Opt-in; default behaviour is "write entry, print hint". See [Driver install](#driver-install-with---install) below. |
+
+:::caution Reserved flag names
+Two CLI flags use longer names than their schema property names:
+
+- **`--connector-port=`** (not `--port=`): `--port=` is reserved by the framework for its own socket port (8124 by default) and is intercepted by `bin/cli` before the handler runs. The written JSON entry still uses the property name `port`.
+- **`--driver-version=`** (not `--version=`): the framework auto-converts any `--<key>=<value>` flag to a `GINA_<KEY>` env var, so `--version=^5.0.0` would set `GINA_VERSION=^5.0.0` and trigger a framework version migration. The written JSON entry still uses the property name `version`.
+
+These aliases exist to avoid collisions with framework-level flags; the on-disk JSON shape is unchanged.
+:::
+
+### Examples
+
+```bash
+# Shared Redis, type inferred from name
+gina connector:add redis @myproject --host=127.0.0.1 --connector-port=6379
+
+# Shared Redis under a custom name
+gina connector:add session @myproject --connector=redis --host=127.0.0.1 --connector-port=6379
+
+# Bundle-scoped MySQL entry
+gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
+
+# AI connector with env-var secret
+gina connector:add ai-bot @myproject --connector=ai --protocol=anthropic:// --api-key='${ANTHROPIC_API_KEY}'
+
+# Pin driver version, overwrite existing
+gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
+
+# Write entry AND run `npm install ioredis@<range>` (lockfile-detected PM)
+gina connector:add redis @myproject --install
+```
+
+### Output
+
+```text
+Added connector `redis` (redis) in bundle `api` at /path/to/project/src/api/config/connectors.json
+Next: run `npm install ioredis@">=5.0.0"` inside your project root.
+```
+
+When overwriting an existing entry with `--force`, the first line reads `Updated connector ...` instead of `Added connector ...`.
+
+### Driver install with `--install`
+
+By default, `connector:add` writes the entry and prints the matching `npm install …` hint — it does **not** run the install for you. Pass `--install` to turn that hint into an actual call, using the package manager detected from the project's lockfile.
+
+```bash
+gina connector:add redis @myproject --install
+```
+
+```text
+Added connector `redis` (redis) in shared scope at /path/to/project/shared/config/connectors.json
+[install] detected package manager: npm (package-lock.json)
+[install] resolving driver range: >=5.0.0 (source: framework)
+[npm] running: npm install ioredis@>=5.0.0 (cwd: /path/to/project)
+…npm output…
+```
+
+**Package-manager detection (lockfile probe order)**
+
+The detector walks the project root looking for a lockfile, in this order:
+
+| Order | Lockfile | Package manager | Install subcommand |
+|-------|----------|-----------------|--------------------|
+| 1 | `bun.lockb` | bun | `bun add <pkg>@<range>` |
+| 2 | `pnpm-lock.yaml` | pnpm | `pnpm add <pkg>@<range>` |
+| 3 | `yarn.lock` | yarn | `yarn add <pkg>@<range>` |
+| 4 | `package-lock.json` | npm | `npm install <pkg>@<range>` |
+| — | *(no lockfile)* | npm (fallback) | `npm install <pkg>@<range>` |
+
+The first match wins. When no lockfile is present, npm is the fallback — the detector logs `(fallback — no lockfile found)` so it's visible in the output.
+
+**Install-range resolution order**
+
+The range that follows `@` in the install command is resolved in three tiers, first match wins:
+
+1. **`--driver-version=<range>`** — the pin on the `connector:add` call (if set). Also written to the entry under the `version` key.
+2. **Project `package.json`** — `dependencies` first, then `devDependencies`. If the driver is already declared there (from a previous install), that range is reused so `npm install` doesn't churn the lockfile.
+3. **Framework `peerDependencies`** — the range declared by gina itself (e.g. `ioredis >=5.0.0`, `couchbase >=3.0.0`).
+
+The resolved tier is logged as `(source: entry | project | framework)` so you can see which rung fired.
+
+**`sqlite` and `ai` behaviour**
+
+- **`sqlite`** — short-circuits. Node.js ≥ 22.5.0 ships `node:sqlite` built in, so `--install` logs `[install] no install needed — Node.js >= 22.5.0 built-in (node:sqlite).` and exits `0` without running anything.
+- **`ai`** with a missing or unknown `--protocol=` — exits `1` after writing the entry. The entry is still written to disk (you can fix the protocol and re-run `--install` separately, or install by hand). The error names the supported schemes.
+
+**Exit codes**
+
+| Scenario | Exit code |
+|----------|-----------|
+| Entry written, install ran, package manager exited `0` | `0` |
+| Entry written, `sqlite` short-circuit | `0` |
+| Entry written, install ran, package manager exited non-zero | whatever the PM returned |
+| Entry written, PM binary missing on `PATH` | `127` |
+| Entry written, AI connector with missing/unknown `protocol` | `1` |
+| Entry written, unknown connector type | `1` |
+
+:::note Opt-in by design
+`--install` is never applied by default — `connector:add` always writes the entry first, then honours the flag. There is no `--no-install` / `--yes` counterpart, and no configuration that silently turns install into the default. If a future session needs it, the flag can be added without changing the default.
+:::
+
+### Version pin — where it applies
+
+The `--driver-version=` pin is written to the entry under the `version` key. At install time, the printed install hint uses that pin (so `--driver-version=^5.0.0` produces `npm install ioredis@"^5.0.0"`). When omitted, the hint falls back to the framework's `peerDependencies` range.
+
+Since `npm install` resolves a single version per project, a `version` pin set on one bundle still affects every bundle that uses the same driver. `connector:list` flags conflicting pins with a `[ !! ]` warning — see the [version-pin warnings note](#connectorlist).
+
+### Merge behaviour
+
+The written file always has this order:
+
+1. `$schema` (always first; inserted with the canonical `https://gina.io/schema/connectors.json` URL if none was present)
+2. Existing entries — key order preserved verbatim; if `<name>` already exists, it is replaced in place (not moved to the bottom)
+3. The new entry — appended only when `<name>` was not already present
+
+Any comment header above the first `{` is preserved byte-for-byte. Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-serialised from the parsed JSON.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:add` with no `<name>` | "`connector:add` requires `<name>` and `@<project>`" (exit 1) |
+| `connector:add <name>` (no `@<project>`) | "`connector:add` requires `@<project>`" (exit 1) |
+| `connector:add <name> bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connector:add mycache @<project> --connector=notathing` | "Unknown connector type `notathing`. Allowed values: ..." (exit 1) |
+| `connector:add redis @<project>` with no `shared/` dir | "Config directory does not exist: ..." (exit 1) |
+| Entry already exists, `--force` not passed | "Connector \`<name>\` already exists in ... Re-run with --force to overwrite." (exit 1) |
+| `--scope=` is not one of `local`, `beta`, `production`, `testing` | The framework's scope validation rejects first (before the handler); if it passes, the handler falls back to "Scope \`<value>\` is not valid. Allowed: ..." |
+
+:::tip Inferred type
+If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type.
+
+Example: `gina connector:add redis @myproject --host=127.0.0.1 --connector-port=6379` writes:
+```json
+"redis": { "host": "127.0.0.1", "port": 6379 }
+```
+:::
+
+---
+
+## `connector:rm`
+
+*New in 0.3.7-alpha.2*
+
+Remove a connector entry from a project's `shared/config/connectors.json` or from a bundle-scoped `<bundle>/config/connectors.json`. The scope is inferred from positional-absence: pass a `<bundle>` to target that bundle, omit it to target shared. `remove` is accepted as an alias.
+
+```bash
+gina connector:rm <name> @<project>              # Removes from shared/config/connectors.json
+gina connector:rm <name> <bundle> @<project>     # Removes from <bundle-src>/config/connectors.json
+gina connector:remove <name> @<project>          # Alias for rm
+```
+
+:::caution Never uninstalls the npm driver
+`connector:rm` removes the JSON entry only — it never runs `npm uninstall`. A driver removed from one bundle may still be needed by another bundle in the same project, and the project's `node_modules/` is shared across bundles. After removal, the command prints a retention hint listing any sibling bundles (or shared) that still reference the same driver.
+:::
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Print what would be removed without touching any file. Includes the sibling-usage hint. |
+| `--force` | Skip the project-level guard that refuses to remove a shared connector while other bundles still reference it. Bundle-level removals never consult this guard. |
+
+### Scoping rules
+
+| Command shape | Target file | Safety gate |
+|---------------|-------------|-------------|
+| `connector:rm <name> @<project>` | `shared/config/connectors.json` | Refuses if any bundle still declares `<name>` unless `--force` is passed |
+| `connector:rm <name> <bundle> @<project>` | `<bundle-src>/config/connectors.json` | Always proceeds. Leaves shared untouched. |
+
+### Examples
+
+```bash
+# Remove shared entry (fails if any bundle still uses it)
+gina connector:rm session @myproject
+
+# Remove from one bundle only
+gina connector:rm session api @myproject
+
+# Preview removal with sibling warnings
+gina connector:rm session @myproject --dry-run
+
+# Remove shared entry even if bundles still use it
+gina connector:rm session @myproject --force
+```
+
+### Output
+
+```text
+Removed connector `session` from shared scope at /path/to/project/shared/config/connectors.json
+Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: api (override), worker (session).
+```
+
+When removing from a bundle:
+
+```text
+Removed connector `session` from bundle `api` at /path/to/project/src/api/config/connectors.json
+Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: shared, worker (session).
+```
+
+When the removed driver is `sqlite` (Node-builtin), the retention note is omitted — there is no npm package to retain.
+
+### Dry-run
+
+```bash
+gina connector:rm session @myproject --dry-run
+```
+
+```text
+[dry-run] Would remove connector `session` from shared scope at /path/to/project/shared/config/connectors.json.
+[dry-run] Current entry:
+{
+    "connector": "redis",
+    "host": "127.0.0.1",
+    "port": 6379
+}
+[dry-run] Warning: 2 bundle(s) still reference `session`: api (override), worker. Re-run without --dry-run and with --force to proceed.
+[dry-run] Note: gina does not uninstall npm packages. Driver `redis` is still referenced by: api (override), worker (session).
+```
+
+Dry-run never writes to disk and always exits `0`, even when the real command would refuse without `--force`.
+
+### Project-level guard (`--force`)
+
+By default, removing a shared connector requires that no bundle still declares the same logical name — this prevents a bundle that relies on overlay inheritance from breaking silently. The command prints the offending bundles:
+
+```text
+[error] Removing shared connector `session` would break 2 bundle(s) that still reference it:
+  api (override), worker.
+Re-run with --force to remove anyway, or remove from each bundle first.
+```
+
+Pass `--force` to bypass the guard. Bundle-level removals never consult the guard — removing from `api` has no effect on `worker` or `shared`.
+
+### Inherited-from-shared hint
+
+Attempting to remove a connector from a bundle when it is only declared in `shared` prints a hint pointing at the right scope:
+
+```text
+[error] Connector `session` is not declared in `api/config/connectors.json` — it is inherited from shared/config/connectors.json. Use `gina connector:rm session @myproject` to remove it from shared.
+```
+
+### Merge behaviour
+
+The written file preserves:
+
+1. `$schema` (always first)
+2. Existing entries in their original key order, minus the removed key
+3. Any comment header above the first `{` (byte-for-byte)
+
+Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-serialised from the parsed JSON, same as `connector:add`.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:rm` with no `<name>` | "`connector:rm` requires `<name>` and `@<project>`" (exit 1) |
+| `connector:rm <name>` (no `@<project>`) | "`connector:rm` requires `@<project>`" (exit 1) |
+| `connector:rm <name> bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connector:rm unknown @<project>` | "Connector `unknown` not found in /…/shared/config/connectors.json" (exit 1) |
+| `connector:rm session api @<project>` (lives only in shared) | Inherited-from-shared hint (exit 1) |
+| `connector:rm session @<project>` (siblings still reference it) | "Removing shared connector would break N bundle(s): …" (exit 1; pass `--force` to override) |
+
+---
+
+## `connector:migrate`
+
+*New in 0.3.7-alpha.2*
+
+Lint every `connectors.json` in a project (or a single bundle's file) and optionally apply auto-fixable issues in place. `connector:migrate` is **explicit and opt-in** — the framework never auto-migrates a `connectors.json` at bundle boot. Run it in CI or before committing.
+
+```bash
+gina connector:migrate @<project>                 # Scan shared + every bundle
+gina connector:migrate <bundle> @<project>        # Scan just the bundle's file
+gina connector:migrate @<project> --fix           # Apply auto-fixable issues
+gina connector:migrate @<project> --format=json   # Machine-readable report
+```
+
+:::info Dry run by default
+Without `--fix`, `connector:migrate` is a **read-only dry run** — nothing is written. Pass `--fix` to apply the auto-fixable issues.
+:::
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--fix` | Apply auto-fixable issues to disk. Without it, `connector:migrate` is a read-only dry run. |
+| `--format=json` | Emit a machine-readable JSON report instead of the human-readable text summary. |
+
+### Checks
+
+| Check | Severity | Auto-fixable | Description |
+|-------|----------|--------------|-------------|
+| `missing-schema` | info | yes | Top-level `$schema` key is absent. `--fix` injects `"$schema": "https://gina.io/schema/connectors.json"` at the top of the object, preserving the leading comment header and existing key order. |
+| `bare-key-no-connector` | warn | no | An entry has no `connector` field **and** its key is not in the built-in enum (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`). The correct driver cannot be inferred from the key name, so re-declare the entry explicitly via `gina connector:add <name> @<project> --connector=<type> --force`. |
+
+### Example — dry run
+
+```bash
+gina connector:migrate @myproject
+```
+
+```text
+[dry-run] /.../shared/config/connectors.json (shared) — 2 connector(s), 1 issue(s) remaining
+    INFO  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+[dry-run] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
+[dry-run] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 2 issue(s) remaining
+    INFO  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+Re-run with --fix to apply 2 auto-fixable issue(s). 1 issue(s) need manual attention.
+```
+
+### Example — apply fixes
+
+```bash
+gina connector:migrate @myproject --fix
+```
+
+```text
+[fix] /.../shared/config/connectors.json (shared) — 2 connector(s), 1 fixed
+    FIXED  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+[fix] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
+[fix] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 1 fixed, 1 issue(s) remaining
+    FIXED  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
+    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+Applied 2 fix(es). 1 issue(s) still need manual attention.
+```
+
+Re-running after `--fix` is idempotent — the fixable issue no longer fires, and only the manual-attention warnings remain.
+
+### JSON output
+
+```bash
+gina connector:migrate @myproject --format=json
+```
+
+```json
+{
+  "project": "myproject",
+  "scope": "project",
+  "bundle": null,
+  "fixApplied": false,
+  "files": [
+    {
+      "path": "/.../shared/config/connectors.json",
+      "bundle": null,
+      "exists": true,
+      "parseError": null,
+      "connectorCount": 2,
+      "fixed": [],
+      "issues": [
+        {
+          "type": "missing-schema",
+          "severity": "info",
+          "fixable": true,
+          "message": "Top-level `$schema` key missing. Auto-fix adds `\"$schema\": \"https://gina.io/schema/connectors.json\"`."
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `project` | Project short-name (manifest `name` with the leading `@` stripped) |
+| `scope` | `"project"` when `<bundle>` is absent, `"bundle"` when present |
+| `bundle` | Bundle name when scope is `"bundle"`, otherwise `null` |
+| `fixApplied` | `true` when `--fix` was passed (regardless of whether any fix ran) |
+| `files[]` | One entry per scanned `connectors.json` file — `path`, owning `bundle` (null for shared), `exists`, `parseError`, `connectorCount` (excluding `$schema`), `fixed[]`, `issues[]` |
+
+### Comment header preservation
+
+The leading `//` or `/* */` comment header above the first `{` is preserved byte-for-byte when `--fix` rewrites the file. Mid-body comments are lost on rewrite (same convention as `connector:add` and `connector:rm`).
+
+### Why there is no auto-migrate hook
+
+`connector:migrate` does **not** run automatically at bundle boot — `core/config.js` is unchanged by this command. A runtime auto-migration hook is the right long-term design, but only when a concrete old-shape → new-shape delta exists to migrate. Today's schema has no such delta (the enum and field shapes are stable since 0.3.7), so a boot-path hook would be scaffolding around a non-existent problem. The real hook is deferred to `0.4.0` alongside the Couchbase SDK v2 removal (`#CN8`), when the migration will have a real before/after to act on.
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:migrate` with no `@<project>` | "`connector:migrate` requires `@<project>`" (exit 1) |
+| `connector:migrate @unknown` | "Project \[unknown\] not found in your projects list" (CmdHelper, exit 1) |
+| `connector:migrate bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| `connector:migrate @<project> --format=xml` | "Unknown --format value `xml`. Supported: json." (exit 1) |
+| Target `connectors.json` missing | Reported as "missing (skipped)" — not an error (exit 0) |
+
+---
+
+## `connector:help`
+
+Print the usage summary for the `connector` command group.
+
+```bash
+gina connector:help
+```
+
+```bash
+gina connector
+```
