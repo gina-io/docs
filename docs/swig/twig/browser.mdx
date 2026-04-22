@@ -1,0 +1,173 @@
+---
+displayed_sidebar: swigSidebar
+title: Twig in the Browser
+sidebar_label: In the Browser
+sidebar_position: 5
+description: Bundle @rhinostone/swig-twig for the browser — memory loader only, bring your own bundler (esbuild/Vite/Webpack), shared autoescape and CVE-2023-25345 guards inherited from @rhinostone/swig-core.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Swig Browser Usage](../browser)'
+  - '[Security — the parser is the boundary](../security#the-parser-is-the-boundary)'
+  - '[Loaders](../loaders)'
+---
+
+# Twig in the Browser
+
+`@rhinostone/swig-twig` runs in the browser the same way `@rhinostone/swig` does — memory loader only, no `fs` access, identical autoescape and CVE-2023-25345 guard perimeter inherited from `@rhinostone/swig-core`. The package does not ship a pre-built browser bundle; consumers bundle through their own toolchain (esbuild, Vite, Webpack, Rollup).
+
+This page covers the Twig-specific bits: how to bundle, how to install the peer-dependency pair during alpha, and a minimal first-template example using Twig syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  SRC["Twig source<br/>in the page"] --> ENTRY["entry.js<br/>require('@rhinostone/swig-twig')"]
+  ENTRY -->|"bundle<br/>(esbuild / Vite / ...)"| BUNDLE["dist/browser.js"]
+  BUNDLE -->|"&lt;script src=...&gt;"| PAGE[Browser]
+  PAGE --> LOADER["twig.setDefaults(<br/>&nbsp;&nbsp;{ loader: twig.loaders.memory(...) }<br/>)"]
+  LOADER --> RENDER["twig.render(src, locals)"]
+  RENDER --> HTML[Rendered HTML]
+```
+
+Same flow as native swig, with two deltas:
+
+- The entry point is `@rhinostone/swig-twig` instead of `@rhinostone/swig`.
+- Your bundler resolves both `@rhinostone/swig-twig` and its peer `@rhinostone/swig-core`.
+
+## Install
+
+```bash
+npm install @rhinostone/swig-twig@alpha @rhinostone/swig-core@alpha
+```
+
+During the `2.0.0-alpha.x` cycle the IR ABI is unstable across minors, so `@rhinostone/swig-twig`'s `peerDependencies` pin `@rhinostone/swig-core` to the **exact matching version** (no caret). Install both together at the same alpha — mixing minors is not supported.
+
+```json
+// package.json — example consumer during alpha
+{
+  "dependencies": {
+    "@rhinostone/swig-core": "2.0.0-alpha.8",
+    "@rhinostone/swig-twig": "2.0.0-alpha.8"
+  }
+}
+```
+
+At `2.0.0` stable the pin loosens to `^2.0.0`.
+
+## Bundle with esbuild
+
+Minimal recipe. Two things to wire up:
+
+- `fs` is stubbed to an empty object (the filesystem loader at `@rhinostone/swig-core/lib/loaders/filesystem.js` guards itself when `fs.readFileSync` is missing, so an empty stub is enough to make it a no-op in the browser).
+- `path` is aliased to [`path-browserify`](https://www.npmjs.com/package/path-browserify) because the shared loader normalises paths.
+
+This mirrors the native-swig build recipe at [gina-io/swig/Makefile:58](https://github.com/gina-io/swig/blob/develop/Makefile#L58).
+
+```js
+// entry.js
+var twig = require('@rhinostone/swig-twig');
+
+twig.setDefaults({
+  loader: twig.loaders.memory({
+    'greeting.twig': 'Hello {{ name|upper }}!'
+  })
+});
+
+window.twig = twig;
+```
+
+```js
+// stubs/fs.js — empty stub, turns the filesystem loader into a no-op
+module.exports = {};
+```
+
+```js
+// build.js
+require('esbuild').build({
+  entryPoints: ['entry.js'],
+  bundle: true,
+  format: 'iife',
+  outfile: 'dist/browser.js',
+  alias: {
+    fs: './stubs/fs.js',
+    path: 'path-browserify'
+  },
+  minify: true,
+  sourcemap: true
+}).catch(function (err) { console.error(err); process.exit(1); });
+```
+
+```bash
+node build.js
+```
+
+Load it with a `<script>` tag:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <div id="out"></div>
+    <script src="dist/browser.js"></script>
+    <script>
+      var out = window.twig.render('Hello {{ name|upper }}!', {
+        locals: { name: 'world' }
+      });
+      document.querySelector('#out').textContent = out;
+      // → "Hello WORLD!"
+    </script>
+  </body>
+</html>
+```
+
+**Other bundlers follow the same shape.** [Vite](https://vitejs.dev/) and [Rollup](https://rollupjs.org/) use `resolve.alias` (Vite) or the [`@rollup/plugin-alias`](https://www.npmjs.com/package/@rollup/plugin-alias) plugin. [Webpack](https://webpack.js.org/) uses `resolve.alias` + `resolve.fallback: { fs: false }`. The requirement is always: stub `fs`, alias `path`.
+
+## Extends + include
+
+For templates using `{% extends %}` or `{% include %}`, prime the memory loader with every referenced file before rendering:
+
+```js
+twig.setDefaults({
+  loader: twig.loaders.memory({
+    'layout.twig': '<!doctype html><title>{{ title }}</title>{% block body %}{% endblock %}',
+    'page.twig':   '{% extends "layout.twig" %}{% block body %}Hello {{ name|upper }}!{% endblock %}'
+  })
+});
+
+twig.renderFile('page.twig', { title: 'Hi', name: 'world' });
+// → "<!doctype html><title>Hi</title>Hello WORLD!"
+```
+
+The loader contract is identical across frontends — see [Loaders](../loaders).
+
+## AOT pre-compilation
+
+If bundle size or cold-render latency matters, pre-compile Twig templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + prime + render](../browser#pre-compile--prime--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
+
+## Bundle size
+
+As of `2.0.0-alpha.8`, a minified browser bundle of `@rhinostone/swig-twig` plus its transitive `@rhinostone/swig-core` dependency weighs approximately **82 KB minified** (~27 KB gzipped) via esbuild `--minify --format=iife` — measured against an entry point that imports the default Twig instance, wires up a memory loader, and exposes it on `window.twig`.
+
+For perf-critical paths, prefer AOT pre-compilation (previous section) — the runtime footprint drops substantially because the lexer and parser are not shipped.
+
+## Security model
+
+`@rhinostone/swig-twig` inherits every security guarantee of `@rhinostone/swig-core`:
+
+- **Autoescape is on by default.** HTML entities are escaped on every `{{ … }}` output unless the expression is explicitly marked `safe` (built-in filter) or produced by a user filter declaring `.safe = true`.
+- **CVE-2023-25345 `_dangerousProps` guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in every context that writes to `_ctx`: dotted access, bracket-notation with string literals, `{% set %}` LHS, `{% for %}` loop variables, `{% macro %}` names, and `{% import %}` aliases. The guards are frontend-agnostic — both native swig and Twig run them.
+- **Template source is trusted.** Same model as upstream Twig, Jinja2, and Django. Never pass user-controlled strings directly to `twig.render(source, locals)`; keep locals data-only.
+
+See [Security — the parser is the boundary](../security#the-parser-is-the-boundary) for the full story.
+
+## Gotchas
+
+- **Filesystem loader throws in the browser.** Always call `twig.setDefaults({ loader: twig.loaders.memory({}) })` at module init time — before any render.
+- **Peer-dependency pinning.** During alpha, `@rhinostone/swig-core` and `@rhinostone/swig-twig` must be installed at the **exact same version**. Bundlers that rely on npm's `node_modules/@rhinostone/swig-core` symlink (as in a workspace dev checkout) can mask a missing `dependencies` declaration. Verify by bundling against a fresh `node_modules`.
+- **Cache persistence.** The compiled-template cache lives on the Twig instance — reset on page reload. Hot-reload consumers should call `twig.invalidateCache()` before re-priming.
+- **`swig run` is not a sandbox.** Same warning as the native frontend — the function body is `eval`'d. Never hand user-controlled strings to it.
+
+## Gina's browser build
+
+Gina's vendored browser build at `framework/v*/core/deps/swig-client/swig.js` currently ships the native-swig bundle only. A vendored swig-twig bundle is scheduled for the `2.0.0` stable release; track progress in the [project roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md).
