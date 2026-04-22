@@ -28,7 +28,7 @@ Multiple connectors can coexist in the same file and are each independently avai
 to any model in the bundle.
 
 :::tip Manage connectors from the CLI
-The [`connector:list`](/cli/connector#connectorlist) command lists every connector across your projects with driver install status, and [`connector:add`](/cli/connector#connectoradd) writes new entries to `shared/config/connectors.json` or a bundle-scoped `connectors.json` with the correct shape.
+The [`connector:list`](/cli/cli-connector#connectorlist) command lists every connector across your projects with driver install status, and [`connector:add`](/cli/cli-connector#connectoradd) writes new entries to `shared/config/connectors.json` or a bundle-scoped `connectors.json` with the correct shape.
 :::
 
 ---
@@ -600,8 +600,8 @@ Each connector entry accepts an optional `version` field carrying a semver range
 
 The `version` field is informational at runtime — the driver that actually loads is whichever version was installed by `npm install` at the project root. It is consumed by two tools:
 
-- [`connector:list`](/cli/connector#connectorlist) reports the pin in the driver-info column and raises a `[ !! ]` warning when two bundles pin the same driver at different versions (npm resolves one version per project, so the first `npm install` wins).
-- [`connector:add`](/cli/connector#connectoradd) uses the pin to print the exact `npm install <pkg>@"<range>"` command after writing the entry. Set it with `--driver-version=<range>`.
+- [`connector:list`](/cli/cli-connector#connectorlist) reports the pin in the driver-info column and raises a `[ !! ]` warning when two bundles pin the same driver at different versions (npm resolves one version per project, so the first `npm install` wins).
+- [`connector:add`](/cli/cli-connector#connectoradd) uses the pin to print the exact `npm install <pkg>@"<range>"` command after writing the entry. Set it with `--driver-version=<range>`.
 
 Drivers without a pin fall back to the framework's `peerDependencies` range.
 

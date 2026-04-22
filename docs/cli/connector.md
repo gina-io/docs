@@ -7,7 +7,7 @@ description: CLI reference for gina connector commands — list connectors decla
 level: intermediate
 prereqs:
   - '[Gina installed globally](/getting-started/installation)'
-  - '[Connectors concept](/concepts/connectors)'
+  - '[connectors.json reference](/reference/connectors)'
   - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
@@ -36,7 +36,7 @@ flowchart LR
 
 ---
 
-## `connector:list`
+## `connector:list` {#connectorlist}
 
 *New in 0.3.7-alpha.2*
 
@@ -187,7 +187,7 @@ npm resolves `node_modules/<driver>/` to a single version per project. When two 
 
 ---
 
-## `connector:add`
+## `connector:add` {#connectoradd}
 
 *New in 0.3.7-alpha.2*
 
