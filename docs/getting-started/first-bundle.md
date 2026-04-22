@@ -82,7 +82,7 @@ gina bundle:restart frontend @myproject
 
 Now edit `src/frontend/controllers/controller.content.js` and change `self.renderJSON(...)` to `self.render(...)`. Refresh your browser — you will see the HTML view.
 
-Gina uses [Swig](/swig) as its default template engine. You can use any other template engine if you prefer.
+Gina uses [Swig](/views/swig) as its default template engine. You can use any other template engine if you prefer.
 
 ---
 

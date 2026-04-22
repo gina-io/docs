@@ -1,0 +1,8 @@
+{
+  "label": "Swig",
+  "position": 2,
+  "link": {
+    "type": "doc",
+    "id": "views/swig/index"
+  }
+}

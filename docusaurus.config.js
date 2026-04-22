@@ -36,6 +36,35 @@ const config = {
     })],
   ],
 
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          // Swig pages moved under /views/swig/ (2026-04-23 Views umbrella).
+          {from: '/swig',                to: '/views/swig'},
+          {from: '/swig/getting-started',to: '/views/swig/getting-started'},
+          {from: '/swig/syntax',         to: '/views/swig/syntax'},
+          {from: '/swig/tags',           to: '/views/swig/tags'},
+          {from: '/swig/filters',        to: '/views/swig/filters'},
+          {from: '/swig/loaders',        to: '/views/swig/loaders'},
+          {from: '/swig/extending',      to: '/views/swig/extending'},
+          {from: '/swig/api',            to: '/views/swig/api'},
+          {from: '/swig/cli',            to: '/views/swig/cli'},
+          {from: '/swig/browser',        to: '/views/swig/browser'},
+          {from: '/swig/migration',      to: '/views/swig/migration'},
+          {from: '/swig/security',       to: '/views/swig/security'},
+          {from: '/swig/twig',           to: '/views/swig/twig'},
+          {from: '/swig/twig/migration', to: '/views/swig/twig/migration'},
+          {from: '/swig/twig/parity',    to: '/views/swig/twig/parity'},
+          {from: '/swig/twig/non-goals', to: '/views/swig/twig/non-goals'},
+          // Nunjucks moved under /views/nunjucks/.
+          {from: '/nunjucks',            to: '/views/nunjucks'},
+        ],
+      },
+    ],
+  ],
+
   url: 'https://gina.io',
   baseUrl: '/docs/',
 
@@ -67,7 +96,7 @@ const config = {
             return items.filter(item => {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
-              if (item.type === 'category' && item.label === 'Swig Template Engine') return false;
+              if (item.type === 'category' && item.label === 'Views') return false;
               return true;
             });
           },
@@ -126,10 +155,10 @@ const config = {
           },
           {
             type: 'docSidebar',
-            sidebarId: 'swigSidebar',
+            sidebarId: 'viewsSidebar',
             position: 'left',
-            label: 'Swig',
-            className: 'navbar-swig-link',
+            label: 'Views',
+            className: 'navbar-views-link',
           },
           {
             type: 'docSidebar',

@@ -141,4 +141,4 @@ By default, a new bundle renders JSON. To add HTML template support:
 gina view:add frontend @myproject
 ```
 
-See the [Views guide](../guides/views) for the bundle-level setup and the [Swig reference](/swig) for the template language itself.
+See the [Views guide](../guides/views) for the bundle-level setup and the [Swig reference](/views/swig) for the template language itself.
