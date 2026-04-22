@@ -332,3 +332,93 @@ Add `_comment` and `_sample` fields to your routes for richer output:
 ```
 
 This produces an operation with `operationId: "users.getUser"`, `summary: "Fetch a user by ID"`, `description: "Returns the full user profile including preferences."`, a `{id}` path parameter with a UUID pattern, and the `users` tag.
+
+---
+
+## `bundle:mcp`
+
+Generate a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) tool manifest from `routing.json` for a bundle. The manifest targets MCP spec revision `2025-06-18` and is written to `<bundle>/config/mcp.json` by default. The emitted file is static — one tool per (route × URL variant × HTTP method) combination — with `inputSchema` derived from URL parameters and requirements. No runtime server is started; this step is the prerequisite for `bundle:mcp-start`.
+
+```sh
+gina bundle:mcp <bundle_name> @<project_name>
+gina bundle:mcp @<project_name>                         # all bundles in the project
+gina bundle:mcp <bundle_name> @<project_name> --output=/path/to/mcp.json
+```
+
+---
+
+## `bundle:mcp-start`
+
+Run a live MCP server for a single bundle. Speaks JSON-RPC 2.0 over one of two transports:
+
+- **`stdio`** (default) — newline-delimited UTF-8 on stdin/stdout. Point-to-point, ideal for local CLI agent hosts that spawn the server as a subprocess.
+- **`http`** (Streamable HTTP, spec revision `2025-06-18`) — long-running HTTP listener. Ideal for remote or containerised agents.
+
+```sh
+# stdio (default)
+gina bundle:mcp-start <bundle_name> @<project_name>
+
+# Streamable HTTP
+gina bundle:mcp-start <bundle_name> @<project_name> --transport=http
+gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --http-port=3107
+gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --auth-token=<token>
+```
+
+The bundle MUST already be started (`gina bundle:start`) and a manifest generated (`gina bundle:mcp`). The server reads `<bundle>/config/mcp.json` to discover tools and warns on stderr if the manifest is older than `routing.json`.
+
+`tools/call` invocations are dispatched as real HTTP requests against the bundle's loopback port. Session-scoped routes (middleware list contains `auth`/`session`/`login`) are flagged at startup but still exposed — agents receive the upstream 401/403 as `{content, isError: true}` rather than a JSON-RPC error.
+
+### Common flags
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--transport=stdio\|http` | `stdio` | Transport selection |
+| `--timeout-ms=<n>` | `30000` | HTTP dispatch timeout. Also `mcp.json > server > timeoutMs`. |
+
+### HTTP transport flags
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--http-host=<host>` | `$GINA_HOST_V4` → `127.0.0.1` | Bind host. Pass `0.0.0.0` to expose externally (deliberate opt-in). |
+| `--http-port=<n>` | `0` (OS-assigned) | Bind port. Resolved port logged to stderr on start. |
+| `--max-in-flight=<n>` | `16` | Concurrency cap on upstream dispatch. Applies globally across HTTP clients. |
+| `--auth-token=<token>` | none | When set, `Authorization: Bearer <token>` is required on every non-OPTIONS request. Also `$GINA_MCP_AUTH_TOKEN` or `mcp.json > server > authToken`. |
+| `--cors-origin=<list>` | loopback-only | Comma-separated extra origins beyond the built-in loopback allowlist (`http(s)://localhost`, `127.0.0.1`, `[::1]` on any port). Pass `*` to disable the Origin check entirely. |
+
+Every CLI flag has a matching `mcp.json > server > <field>` manifest fallback (`transport`, `httpHost`, `httpPort`, `maxInFlight`, `authToken`, `allowedOrigins`, `timeoutMs`). Precedence at each layer: CLI → manifest → env (where sensible) → default. Invalid values (non-numeric port, unknown transport name) warn on stderr and fall through to the next tier — a malformed override cannot silently disable the guard.
+
+### HTTP endpoint semantics
+
+One endpoint, `POST /`. The `Accept` header picks the response shape: `application/json` returns a JSON frame (or JSON array for a JSON-RPC 2.0 batch); `text/event-stream` returns SSE with one `event: message` per non-notification frame. Notifications-only POSTs return `202 Accepted` with an empty body. `GET` and `DELETE` return `405 Method Not Allowed` — v1 has no server-initiated streams.
+
+`Mcp-Session-Id` is generated via `crypto.randomUUID()` on the `initialize` response header when the client does not supply one, and echoed verbatim on every subsequent response (including 202 notifications). Dispatch is stateless — no per-id state is retained.
+
+### Default security posture
+
+Bind loopback (`127.0.0.1`), no auth. The network boundary IS the security. The `Origin` allowlist accepts `http(s)://localhost`, `127.0.0.1`, and `[::1]` on any port so browser-based MCP clients (MCP Inspector, dev tools) work without configuration; requests without an `Origin` header (curl, desktop agent hosts) pass through. Disallowed origins receive `403 Forbidden` without CORS headers; missing or invalid bearer tokens receive `401 Unauthorized` + `WWW-Authenticate: Bearer realm="MCP"` with CORS preserved so browser clients can read the error body.
+
+:::info OAuth 2.1 deployments
+Gina's MCP server ships **static bearer auth only**. For OAuth-protected deployments, place gina behind a reverse proxy (e.g. `oauth2-proxy`, Traefik `ForwardAuth`, nginx `auth_request`) that handles the OAuth dance and forwards the upstream request with a static bearer or no auth. This is the MCP community standard and keeps gina's surface small.
+:::
+
+### Manifest example — pin every tunable
+
+```json
+{
+  "server": {
+    "name": "demo",
+    "version": "0.0.1",
+    "baseUrl": "http://localhost:3100",
+    "transport": "http",
+    "httpHost": "127.0.0.1",
+    "httpPort": 3107,
+    "maxInFlight": 32,
+    "timeoutMs": 10000,
+    "authToken": "<set via env or deploy config, not committed>",
+    "allowedOrigins": ["http://mcp-inspector.example.com"]
+  },
+  "tools": [ ... ]
+}
+```
+
+CLI flags always win; use the manifest for project-pinned defaults.
