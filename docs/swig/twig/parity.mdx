@@ -68,8 +68,8 @@ twig.render('{{ n is positive ? "yes" : "no" }}', { locals: { n: 3 } });
 | Tag | Ends | Upstream Twig | Native swig | Notes |
 | --- | --- | --- | --- | --- |
 | `set` | No¹ | Yes | Yes | Supports `{% set foo = 1 %}`, `{% set foo = [1,2] %}`, and body-form `{% set foo %}…{% endset %}`. Bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
-| `if` / `elseif` / `else` / `endif` | Yes | Yes | Yes | `elseif` and `elif` both accepted. |
-| `for` / `else` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). |
+| `if` / `endif` | Yes | Yes | Yes | `{% else %}` and `{% elseif %}` branches deferred in alpha.8 — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
+| `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred in alpha.8 — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
 | `block` / `endblock` | Yes | Yes | Yes | Named block for template inheritance. |
 | `extends` | No | Yes | Yes | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
 | `include` | No | Yes | Yes | Supports `with { … }` and `only`. |
