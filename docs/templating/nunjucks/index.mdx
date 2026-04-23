@@ -28,7 +28,7 @@ Pick nunjucks over swig if:
 
 Stick with swig if:
 
-- You need full parity with the swig rendering path — several integrations (Inspector dev payload, HTTP/2 stream optimisations, asset cataloguing) are not yet ported. See [Deferred features](#deferred-features) below.
+- You need full parity with the swig rendering path — a few integrations (Early Hints 103 auto-send, static HTML cache, `setResources` / `<gina>` layout placeholders) are not yet ported. See [Deferred features](#deferred-features) below.
 - You're writing a new bundle without prior template history and want the most-polished Gina experience today.
 
 ## Opt-in
@@ -145,16 +145,26 @@ Production bundles short-circuit the mtime probe entirely — load-once semantic
 
 ## Registering custom filters
 
-Gina's built-in swig filters (`getWebroot`, `nl2br`, etc.) are **not automatically ported** to nunjucks. Register your own via `env.addFilter()`. In an MVP bundle, the simplest place is in your controller or a shared module:
+**Since `0.3.7-alpha.4` Gina's built-in filter registry is automatically registered on the nunjucks environment on every request.** The seven public filters are the same as on the swig path: `getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`. You can use them directly in templates without any setup:
+
+```html
+<a href="{{ 'home' | getUrl }}">Home</a>
+<a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
+<p>{{ post.body | nl2br | safe }}</p>
+<time>{{ event.startDate | addDays(7) | date('Y-m-d') }}</time>
+```
+
+To register **your own** filters on top, grab the cached environment and call `env.addFilter()` — e.g. once at bundle boot or inside a controller action:
 
 ```javascript
 // In a controller action, once per process:
-var nunjucks = getContext('gina')._nunjucks; // or: require('gina').nunjucksResolver.get()
-nunjucks.configure();                         // ensures default env exists
-nunjucks.env.addFilter('upper', function (s) { return String(s).toUpperCase(); });
+var nunjucks = require('gina').nunjucksResolver.get();
+// Grab the Environment for this bundle's template root and extend it:
+var env = nunjucks.configure();
+env.addFilter('upper', function (s) { return String(s).toUpperCase(); });
 ```
 
-A cleaner integration (filter registration at bundle startup via a config hook) is planned for a follow-up.
+The built-in filters and your custom ones coexist on the same `nunjucks.Environment` — additions don't clobber Gina's registry.
 
 ## Deferred features
 
@@ -168,7 +178,7 @@ The 0.3.7 release is a **minimum viable MVP**. Several features that the swig re
 | Early Hints 103 auto-send for CSS/JS preloads | **Deferred** | Manually call `self.setEarlyHints(linkHeader)` in the action if needed. |
 | Static HTML cache (`cache` key in `routing.json`) | **Deferred** | Every request re-renders even when the route has `cache` configured. |
 | `setResources` asset cataloguing / `<gina>` layout placeholders | **Deferred** | Wire your own `<link>` / `<script>` tags into templates. |
-| Gina's built-in swig filters | **Not ported** | Register equivalents via `env.addFilter()`. |
+| Gina's built-in filter registry (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`) | **Shipped in `0.3.7-alpha.4`** | — |
 
 Each remaining deferred item is a focused follow-up session when the gap bites.
 
@@ -188,7 +198,7 @@ Three rules are enforced by source-inspection tests in `test/lib/render-engine-d
 
 **Template not found** — error message shows both the relative template path we looked up and the absolute root the `FileSystemLoader` is scanning. Double-check `templates/html/<your-file>.njk` exists and the extension matches what `routing.json` declares (`data.page.view.ext`).
 
-**Filter not recognised** — Gina's swig filters aren't registered on the nunjucks engine. Add your own via `env.addFilter()`.
+**Filter not recognised** — Gina's built-in registry ships the same 7 filters as the swig path (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`). For anything beyond those, register your own via `env.addFilter()`.
 
 ## Precedents
 
