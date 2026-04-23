@@ -28,7 +28,7 @@ Pick nunjucks over swig if:
 
 Stick with swig if:
 
-- You need full parity with the swig rendering path — a few integrations (Early Hints 103 auto-send, static HTML cache, `setResources` / `<gina>` layout placeholders) are not yet ported. See [Deferred features](#deferred-features) below.
+- You need full parity with the swig rendering path — a couple of integrations (Early Hints 103 auto-send, static HTML cache) are not yet ported. See [Deferred features](#deferred-features) below.
 - You're writing a new bundle without prior template history and want the most-polished Gina experience today.
 
 ## Opt-in
@@ -177,8 +177,8 @@ The 0.3.7 release is a **minimum viable MVP**. Several features that the swig re
 | Error-page template routing | **Shipped in `0.3.7-alpha.2`** | — |
 | Early Hints 103 auto-send for CSS/JS preloads | **Deferred** | Manually call `self.setEarlyHints(linkHeader)` in the action if needed. |
 | Static HTML cache (`cache` key in `routing.json`) | **Deferred** | Every request re-renders even when the route has `cache` configured. |
-| `setResources` asset cataloguing / `<gina>` layout placeholders | **Deferred** | Wire your own `<link>` / `<script>` tags into templates. |
-| Gina's built-in filter registry (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`) | **Shipped in `0.3.7-alpha.4`** | — |
+| `setResources` asset cataloguing / `<gina>` layout placeholders | **Shipped in `0.3.7-alpha.3`** | — |
+| Gina's built-in filter registry (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`) | **Shipped in `0.3.7-alpha.3`** | — |
 
 Each remaining deferred item is a focused follow-up session when the gap bites.
 

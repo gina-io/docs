@@ -77,12 +77,9 @@ rather than a silent mid-render failure.
 Basic `.njk` rendering works end-to-end in the MVP; the Inspector dev
 payload, HTTP/2 `stream.respond()` direct path, and error-page template
 routing shipped as follow-ups in `0.3.7-alpha.2` at parity with the swig
-path. Still deferred from the swig path: Early Hints 103 preloads, the
-static HTML response cache, automatic asset cataloguing (`setResources` /
-`<gina>` layout placeholders), and Gina's custom filter registry
-(`getWebroot`, `nl2br`, etc.). See the [Nunjucks guide](/templating/nunjucks) for
-the full list of deferred features and how to wire your own nunjucks
-filters.
+path. Still deferred from the swig path: Early Hints 103 preloads and the
+static HTML response cache. See the [Nunjucks guide](/templating/nunjucks) for
+the full parity table.
 :::
 
 ---
