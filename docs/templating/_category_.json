@@ -1,8 +1,8 @@
 {
-  "label": "Views",
+  "label": "Templating",
   "position": 9,
   "link": {
     "type": "doc",
-    "id": "views/index"
+    "id": "templating/index"
   }
 }

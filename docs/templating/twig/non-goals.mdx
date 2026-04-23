@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: viewsSidebar
+displayed_sidebar: templatingSidebar
 title: Twig Non-Goals
 sidebar_label: Non-Goals
 sidebar_position: 3
@@ -8,7 +8,7 @@ level: intermediate
 prereqs:
   - '[Overview](./)'
   - '[Parity](./parity)'
-  - '[Security — the parser is the boundary](../security#the-parser-is-the-boundary)'
+  - '[Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)'
 ---
 
 # Twig Non-Goals
@@ -32,8 +32,8 @@ All of the following throw a generic `Unexpected tag "<name>"` error at parse ti
 
 | Tag | Upstream purpose | Why rejected |
 | --- | --- | --- |
-| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where varname resolves to `"__proto__"` — a [known unclosable gap](../security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
-| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [CVE-2023-25345 Phase 2](../security#cve-2023-25345--arbitrary-code-execution-via-__proto__)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
+| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where varname resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
+| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [CVE-2023-25345 Phase 2](../swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
 
 ### Deferred
 
@@ -46,7 +46,7 @@ All of the following throw a generic `Unexpected tag "<name>"` error at parse ti
 If you need one of these, either:
 
 - Express the same intent with supported tags (e.g. `extends` + `block` for trait-style composition).
-- Register a [custom tag](../extending#custom-tags) scoped to your application.
+- Register a [custom tag](../swig/extending#custom-tags) scoped to your application.
 - [Open an issue](https://github.com/gina-io/swig/issues) with a concrete use case — especially for the "Deferred" rows.
 
 ## Macro kwargs
@@ -108,7 +108,7 @@ Dot-path LHS is supported; bracket-notation LHS throws:
 | `{% set foo["bar"] = 1 %}` | No | `Bracket-notation assignment is not supported in "set" (use dot-path notation)` |
 | `{% set foo[dynamic_key] = 1 %}` | No | Same as above. |
 
-Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [CVE-2023-25345 Phase 2](../security#cve-2023-25345--arbitrary-code-execution-via-__proto__). swig-twig inherits the same perimeter.
+Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [CVE-2023-25345 Phase 2](../swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__). swig-twig inherits the same perimeter.
 
 ## Other known gaps
 
@@ -116,7 +116,7 @@ These are tracked but not yet implemented:
 
 - **`date_modify` filter.** Relies on DateTime-object mutation; deferred.
 - **Locale-aware `date` / `number_format`.** swig-twig's `date` uses the shared PHP-style formatter from `@rhinostone/swig-core`; locale rules (weekday names, currency formats) are not plumbed through yet.
-- **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked. Documented at the engine level — see [Security — what the guards do NOT protect against](../security#what-the-guards-do-not-protect-against).
+- **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked. Documented at the engine level — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
 
 ## Reporting a rejection that feels wrong
 

@@ -45,7 +45,7 @@ compatibility messages.
 
 ### Template file resolution
 
-`self.render(data)` looks up the [Swig](/views/swig) template at:
+`self.render(data)` looks up the [Swig](/templating/swig) template at:
 
 ```
 src/<bundle>/templates/html/content/<namespace>/<route-name>.html

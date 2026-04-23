@@ -6,7 +6,7 @@ description: Reference for templates.json — declares the layout, stylesheets, 
 level: intermediate
 prereqs:
   - '[Views guide](/guides/views)'
-  - '[Swig syntax](/views/swig/syntax)'
+  - '[Swig syntax](/templating/swig/syntax)'
 ---
 
 # templates.json

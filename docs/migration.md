@@ -45,8 +45,8 @@ framework's copy and logs a one-line `[swig-resolver]` warning at bundle
 startup.
 
 Default remains `swig.useProject: false` — existing bundles see no behaviour
-change. See the [Swig overview](/views/swig) for the full list of warning codes
-and the [Twig frontend](/views/swig/twig) for package override details.
+change. See the [Swig overview](/templating/swig) for the full list of warning codes
+and the [Twig frontend](/templating/twig) for package override details.
 :::
 
 ### Added: `render.engine = "nunjucks"` — opt-in nunjucks rendering _(no action required)_
@@ -80,7 +80,7 @@ routing shipped as follow-ups in `0.3.7-alpha.2` at parity with the swig
 path. Still deferred from the swig path: Early Hints 103 preloads, the
 static HTML response cache, automatic asset cataloguing (`setResources` /
 `<gina>` layout placeholders), and Gina's custom filter registry
-(`getWebroot`, `nl2br`, etc.). See the [Nunjucks guide](/views/nunjucks) for
+(`getWebroot`, `nl2br`, etc.). See the [Nunjucks guide](/templating/nunjucks) for
 the full list of deferred features and how to wire your own nunjucks
 filters.
 :::
@@ -278,7 +278,7 @@ Route annotations (`description` fields in `routing.json`) become OpenAPI `descr
 ### Swig migration _(internal)_
 
 :::note Additive — no action required
-The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/views/swig) npm dependency (maintained fork with [CVE-2023-25345](/views/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
+The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/templating/swig) npm dependency (maintained fork with [CVE-2023-25345](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
 :::
 
 ### Live database index introspection _(additive)_
@@ -928,7 +928,7 @@ Default is `false` (disabled).
 
 ### Security — swig CVE-2023-25345
 
-Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/views/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
+Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
 
 Template paths in `{% extends %}` tags and relative/absolute `file` paths are
 now validated against the template root before being read.

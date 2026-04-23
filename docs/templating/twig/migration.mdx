@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: viewsSidebar
+displayed_sidebar: templatingSidebar
 title: Migrating from upstream PHP Twig
 sidebar_label: From upstream Twig
 sidebar_position: 4
@@ -76,7 +76,7 @@ swig-twig **matches this shape exactly** — the object-map form ports as-is. If
 
 ### `date` filter
 
-swig-twig's `date` filter uses the PHP-style format tokens documented under [native swig's `date` filter](../filters) (shared with `@rhinostone/swig-core`). Most format strings port — `"Y-m-d H:i:s"`, `"U"`, etc. — but locale-aware names (weekday names, month names in non-English locales) are not plumbed through. If you rely on locale switching, pre-format on the controller side and pass the string into the template.
+swig-twig's `date` filter uses the PHP-style format tokens documented under [native swig's `date` filter](../swig/filters) (shared with `@rhinostone/swig-core`). Most format strings port — `"Y-m-d H:i:s"`, `"U"`, etc. — but locale-aware names (weekday names, month names in non-English locales) are not plumbed through. If you rely on locale switching, pre-format on the controller side and pass the string into the template.
 
 `date_modify` is not implemented — see [Non-Goals](./non-goals#other-known-gaps).
 
@@ -104,7 +104,7 @@ cssEscape.safe = true;
 twig.setFilter('css_escape', cssEscape);
 ```
 
-See [Extending Swig](../extending) for the registration contract.
+See [Extending Swig](../swig/extending) for the registration contract.
 
 ### Template inheritance
 
@@ -127,10 +127,10 @@ Practical consequences:
 
 Everything below is inherited from `@rhinostone/swig-core` and behaves identically across all frontends (native swig, swig-twig, future Jinja2/Django):
 
-- **CVE-2023-25345 guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in variable output, dot access, bracket access (string literals), and all context-writing tags (`set`, `for`, `macro`, `import`, `from`). See [Security — known advisories](../security#known-advisories).
+- **CVE-2023-25345 guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in variable output, dot access, bracket access (string literals), and all context-writing tags (`set`, `for`, `macro`, `import`, `from`). See [Security — known advisories](../swig/security#known-advisories).
 - **Autoescape injection.** The final `e` filter is appended automatically to every variable output unless the filter chain ends in a `.safe = true` filter.
-- **Isolation.** Tags, filters, and extensions registered on one instance are invisible to other instances — same guarantee as native swig. See [Security — design invariants](../security#security-model).
-- **Cache semantics.** Compiled functions are keyed by the loader-resolved filename. See [Loaders](../loaders) for the contract.
+- **Isolation.** Tags, filters, and extensions registered on one instance are invisible to other instances — same guarantee as native swig. See [Security — design invariants](../swig/security#security-model).
+- **Cache semantics.** Compiled functions are keyed by the loader-resolved filename. See [Loaders](../swig/loaders) for the contract.
 
 ## When to stay on upstream PHP Twig
 

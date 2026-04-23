@@ -3,6 +3,6 @@
   "position": 2,
   "link": {
     "type": "doc",
-    "id": "views/swig/index"
+    "id": "templating/swig/index"
   }
 }

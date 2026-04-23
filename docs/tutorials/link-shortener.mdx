@@ -546,7 +546,7 @@ document.getElementById('shorten-form').addEventListener('submit', async functio
 {% endblock %}
 ```
 
-The data passed to `self.render({ link: link })` is available as `page.data` in every [Swig](/views/swig) template. The `{% set data = page.data %}` alias at the top is a Gina convention (matches the boilerplate) that keeps template expressions concise.
+The data passed to `self.render({ link: link })` is available as `page.data` in every [Swig](/templating/swig) template. The `{% set data = page.data %}` alias at the top is a Gina convention (matches the boilerplate) that keeps template expressions concise.
 
 ---
 

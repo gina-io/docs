@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: viewsSidebar
+displayed_sidebar: templatingSidebar
 title: Twig Parity
 sidebar_label: Parity
 sidebar_position: 2
@@ -9,8 +9,8 @@ prereqs:
   - '[Overview](./)'
   - '[Upstream Twig operator reference](https://twig.symfony.com/doc/3.x/templates.html#literals-and-expressions)'
   - '[Upstream Twig filter reference](https://twig.symfony.com/doc/3.x/filters.html)'
-  - '[Native swig tags](../tags)'
-  - '[Native swig filters](../filters)'
+  - '[Native swig tags](../swig/tags)'
+  - '[Native swig filters](../swig/filters)'
 ---
 
 # Twig Parity
@@ -94,7 +94,7 @@ See [Non-Goals](./non-goals) for the full list and the error messages they produ
 
 ### Shared with native swig
 
-Same semantics as [native swig filters](../filters):
+Same semantics as [native swig filters](../swig/filters):
 
 | Filter | Arity | Notes |
 | --- | --- | --- |
@@ -166,10 +166,10 @@ monospace.safe = true;
 twig.setFilter('monospace', monospace);
 ```
 
-See [Extending Swig](../extending) for the full filter/tag extension contract — it is identical across frontends.
+See [Extending Swig](../swig/extending) for the full filter/tag extension contract — it is identical across frontends.
 
 ## Autoescape
 
 Autoescape behaves exactly as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. Filters marked safe in the table above are excluded from autoescape: `raw`, `escape`/`e`, `json_encode`, `url_encode`.
 
-See [Security](../security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.
+See [Security](../swig/security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.

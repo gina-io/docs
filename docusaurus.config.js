@@ -40,26 +40,52 @@ const config = {
     [
       '@docusaurus/plugin-client-redirects',
       {
+        // Every old URL points directly to its final destination under
+        // /templating/*. No redirect chains. Paired with Cloudflare Worker
+        // 301s (infra/cloudflare/worker.js § TEMPLATING_REDIRECTS) so
+        // indexed backlinks resolve via HTTP 301 at the edge; this
+        // meta-refresh layer is the fallback for direct Vercel access.
         redirects: [
-          // Swig pages moved under /views/swig/ (2026-04-23 Views umbrella).
-          {from: '/swig',                to: '/views/swig'},
-          {from: '/swig/getting-started',to: '/views/swig/getting-started'},
-          {from: '/swig/syntax',         to: '/views/swig/syntax'},
-          {from: '/swig/tags',           to: '/views/swig/tags'},
-          {from: '/swig/filters',        to: '/views/swig/filters'},
-          {from: '/swig/loaders',        to: '/views/swig/loaders'},
-          {from: '/swig/extending',      to: '/views/swig/extending'},
-          {from: '/swig/api',            to: '/views/swig/api'},
-          {from: '/swig/cli',            to: '/views/swig/cli'},
-          {from: '/swig/browser',        to: '/views/swig/browser'},
-          {from: '/swig/migration',      to: '/views/swig/migration'},
-          {from: '/swig/security',       to: '/views/swig/security'},
-          {from: '/swig/twig',           to: '/views/swig/twig'},
-          {from: '/swig/twig/migration', to: '/views/swig/twig/migration'},
-          {from: '/swig/twig/parity',    to: '/views/swig/twig/parity'},
-          {from: '/swig/twig/non-goals', to: '/views/swig/twig/non-goals'},
-          // Nunjucks moved under /views/nunjucks/.
-          {from: '/nunjucks',            to: '/views/nunjucks'},
+          // Original /swig/* and /swig/twig/* URLs (pre-restructure, indexed).
+          {from: '/swig',                to: '/templating/swig'},
+          {from: '/swig/getting-started',to: '/templating/swig/getting-started'},
+          {from: '/swig/syntax',         to: '/templating/swig/syntax'},
+          {from: '/swig/tags',           to: '/templating/swig/tags'},
+          {from: '/swig/filters',        to: '/templating/swig/filters'},
+          {from: '/swig/loaders',        to: '/templating/swig/loaders'},
+          {from: '/swig/extending',      to: '/templating/swig/extending'},
+          {from: '/swig/api',            to: '/templating/swig/api'},
+          {from: '/swig/cli',            to: '/templating/swig/cli'},
+          {from: '/swig/browser',        to: '/templating/swig/browser'},
+          {from: '/swig/migration',      to: '/templating/swig/migration'},
+          {from: '/swig/security',       to: '/templating/swig/security'},
+          {from: '/swig/twig',           to: '/templating/twig'},
+          {from: '/swig/twig/migration', to: '/templating/twig/migration'},
+          {from: '/swig/twig/parity',    to: '/templating/twig/parity'},
+          {from: '/swig/twig/non-goals', to: '/templating/twig/non-goals'},
+          // Original /nunjucks URL.
+          {from: '/nunjucks',            to: '/templating/nunjucks'},
+          // Short-lived /views/* URLs (lived for ~1h before rename to
+          // /templating/*). Covered so any reader who grabbed a link in that
+          // window still lands correctly.
+          {from: '/views',                    to: '/templating'},
+          {from: '/views/swig',               to: '/templating/swig'},
+          {from: '/views/swig/getting-started',to: '/templating/swig/getting-started'},
+          {from: '/views/swig/syntax',        to: '/templating/swig/syntax'},
+          {from: '/views/swig/tags',          to: '/templating/swig/tags'},
+          {from: '/views/swig/filters',       to: '/templating/swig/filters'},
+          {from: '/views/swig/loaders',       to: '/templating/swig/loaders'},
+          {from: '/views/swig/extending',     to: '/templating/swig/extending'},
+          {from: '/views/swig/api',           to: '/templating/swig/api'},
+          {from: '/views/swig/cli',           to: '/templating/swig/cli'},
+          {from: '/views/swig/browser',       to: '/templating/swig/browser'},
+          {from: '/views/swig/migration',     to: '/templating/swig/migration'},
+          {from: '/views/swig/security',      to: '/templating/swig/security'},
+          {from: '/views/swig/twig',          to: '/templating/twig'},
+          {from: '/views/swig/twig/migration',to: '/templating/twig/migration'},
+          {from: '/views/swig/twig/parity',   to: '/templating/twig/parity'},
+          {from: '/views/swig/twig/non-goals',to: '/templating/twig/non-goals'},
+          {from: '/views/nunjucks',           to: '/templating/nunjucks'},
         ],
       },
     ],
@@ -96,7 +122,7 @@ const config = {
             return items.filter(item => {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
-              if (item.type === 'category' && item.label === 'Views') return false;
+              if (item.type === 'category' && item.label === 'Templating') return false;
               return true;
             });
           },
@@ -155,10 +181,10 @@ const config = {
           },
           {
             type: 'docSidebar',
-            sidebarId: 'viewsSidebar',
+            sidebarId: 'templatingSidebar',
             position: 'left',
-            label: 'Views',
-            className: 'navbar-views-link',
+            label: 'Templating',
+            className: 'navbar-templating-link',
           },
           {
             type: 'docSidebar',
