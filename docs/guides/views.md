@@ -122,4 +122,4 @@ Gina does not lock you into Swig. The rendering engine is pluggable per bundle v
 - **[Twig](/templating/twig)** — drop-in Twig-syntax frontend on the same engine (`@rhinostone/swig-twig`), opted in via `swig.package`.
 - **[Nunjucks](/templating/nunjucks)** — opt-in, project-installed (`nunjucks`). The framework never declares it as a dependency; bundles that don't opt in pay zero cost.
 
-See the [Templating overview](/templating) for the full comparison, dispatch flow, and per-engine configuration. If you need something else, you can always write the response directly in your controller action without calling `self.render()`.
+See the [Templating overview](/templating) for the full comparison, dispatch flow, and per-engine configuration. If you need something else, you can use any template engine by calling `res.render()` or writing the response directly in your controller action.
