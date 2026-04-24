@@ -338,6 +338,90 @@ cookie: {
 
 ---
 
+## Hardened cookie defaults — `gina.plugins.Session`
+
+Added in `0.3.7`. A framework-supplied wrapper around `express-session` that
+injects `sameSite` / `httpOnly` / `secure` defaults from `settings.json` into
+the cookie options **before** express-session sees them. Bundle-supplied
+`options.cookie` values still win — the plugin only fills in the flags you
+didn't set.
+
+### One-line adoption
+
+```js
+// before
+// var session = require('express-session');
+
+// after
+var session = require('gina').plugins.Session(require('express-session'));
+```
+
+Everything downstream is unchanged. `session(options)`, the `SessionStore`
+factory, passport integration — all identical.
+
+### Configure the defaults in `settings.json`
+
+```json title="src/api/config/settings.json"
+{
+  "session": {
+    "cookie": {
+      "sameSite": "lax",
+      "httpOnly": true,
+      "secure":   "auto"
+    }
+  }
+}
+```
+
+| Default | Value | Notes |
+|---|---|---|
+| `sameSite` | `"lax"` | `"strict"` blocks cross-origin navigation (breaks email-link logins). `"none"` permits cross-site sending and **requires** `secure: true`. |
+| `httpOnly` | `true` | Override to `false` only if a validator or toolbar has to read `document.cookie`. |
+| `secure`   | `"auto"` | express-session's idiom for "mirror the request security flag" — typically paired with `app.set('trust proxy', 1)`. |
+
+### Bundle choices always win
+
+```js
+// settings.json defaults: { sameSite: "lax", httpOnly: true, secure: "auto" }
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    store : new SqliteStore(),
+    cookie: {
+        httpOnly: false,      // bundle explicitly opts out — kept as false
+        maxAge  : 86400000    // unrelated flag — passes through
+        // sameSite not set   — plugin fills in "lax" from settings.json
+        // secure   not set   — plugin fills in "auto" from settings.json
+    }
+}));
+```
+
+### Cross-site cookie send (rare)
+
+Bundles that need cross-origin cookie delivery (third-party OAuth embeds,
+iframe flows) must set both flags explicitly:
+
+```js
+cookie: {
+    sameSite: 'none',
+    secure  : true,
+    maxAge  : 86400000
+}
+```
+
+Setting `sameSite: 'none'` without `secure: true` throws a clear
+`[gina session] invariant violation` error at bundle startup — the same
+rejection every modern browser performs silently when the cookie arrives.
+
+### No action required for existing bundles
+
+Bundles that continue calling `require('express-session')` directly keep
+working exactly as before. Hardening is opt-in: a single-line change whenever
+the bundle is ready. The plugin is the baseline for the broader CSRF track —
+`#CSRF2` signed double-submit token middleware (`0.3.8`) and `#CSRF3`
+Origin/Referer pre-filter (`0.4.0`) build on top of it.
+
+---
+
 ## Secrets
 
 Never hardcode `SECRET` in source. Inject it at runtime:

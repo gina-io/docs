@@ -21,6 +21,79 @@ upward to the target version.
 
 ## 0.3.6 → 0.3.7
 
+### Security: `gina.plugins.Session` — hardened cookie defaults _(one-line opt-in)_
+
+:::note New plugin — opt-in, default off for existing bundles
+Bundles can now wrap `express-session` with a framework-supplied plugin that
+injects SameSite / HttpOnly / Secure defaults from `config/settings.json`
+into the session cookie. The wrapper reads the `session.cookie` block, merges
+missing flags, and validates the browser-parity invariant
+(`SameSite=None` without `Secure` is rejected at bundle startup).
+
+**Adoption is a single line in the bundle bootstrap:**
+
+```js
+// before
+// var session = require('express-session');
+
+// after
+var session = require('gina').plugins.Session(require('express-session'));
+```
+
+Everything downstream — `app.use(session({...}))`, the `SessionStore`
+factory, passport integration — stays exactly the same.
+
+**Default values:**
+
+```json
+{
+  "session": {
+    "cookie": {
+      "sameSite": "lax",
+      "httpOnly": true,
+      "secure":   "auto"
+    }
+  }
+}
+```
+
+- `sameSite` — `"lax"` covers the common drive-by CSRF case. Use `"strict"`
+  for extra containment at the cost of breaking click-through login flows.
+  `"none"` permits cross-site cookie sending and **requires** `secure: true`
+  (browser-enforced).
+- `httpOnly` — `true` prevents client-side JS from reading the cookie. Set
+  to `false` only when a validator, toolbar, or similar needs
+  `document.cookie` access.
+- `secure` — `"auto"` is express-session's idiom for "mirror the request
+  security flag", typically paired with `app.set('trust proxy', 1)`.
+
+**Intentional bundle choices are preserved.** The plugin merges defaults only
+for flags the bundle did not set. A bundle that passes
+`cookie: { httpOnly: false, secure: true, ... }` keeps both values; the
+plugin only fills in the missing `sameSite`.
+
+**Cross-site cookie use case.** Bundles that rely on cross-site cookie send
+(third-party OAuth embeds, iframe flows) must set both flags explicitly:
+
+```js
+app.use(session({
+  // ...
+  cookie: { sameSite: 'none', secure: true, maxAge: 86400000 }
+}));
+```
+
+Passing `sameSite: 'none'` without `secure: true` throws a clear
+`[gina session] invariant violation` error at startup — matching what every
+modern browser does silently when the cookie arrives.
+
+**No action required** for existing bundles that keep
+`require('express-session')` directly. They continue working exactly as
+before, with their existing cookie configuration. Hardening is opt-in — a
+one-line change when the bundle is ready for it. This is the baseline for
+the broader CSRF track (#CSRF2 signed double-submit token middleware is
+planned for `0.3.8`; #CSRF3 Origin/Referer pre-filter for `0.4.0`).
+:::
+
 ### Added: `swig.useProject` — project-pinned swig override _(no action required)_
 
 :::note New feature — opt-in, default off
