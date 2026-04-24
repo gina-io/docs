@@ -142,6 +142,18 @@ Complete the removal of `eval` / `new Function` call sites from the published ta
 
 ---
 
+## Web Security
+
+Cross-site request forgery protection. Three-phase defense-in-depth plan aligned with OWASP ASVS 4.0 V4.2.1; each phase shippable on its own. Currently no CSRF defense in the framework — session cookies have no `SameSite` attribute, no token layer exists, and `Origin` is not validated on mutating endpoints.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| 📋 | **Cookie hardening (baseline)** — Default `SameSite=Lax` + `HttpOnly` + `Secure`-when-HTTPS on the session cookie. Exposed as `settings.json > session.cookie.sameSite` (default `"lax"`) / `.httpOnly` (default `true`) / `.secure` (default `auto`) for opt-out. Blocks the overwhelming majority of drive-by CSRF on modern browsers and covers older browsers that did not adopt Lax-by-default. Zero performance cost, transparent UX — existing bundles get safe defaults automatically on upgrade. Single-file change — squeezed into the `0.3.7` alpha train. | `0.3.7` | ASAP |
+| 📋 | **Signed double-submit token middleware** — Stateless signed-double-submit-cookie pattern (OWASP ASVS 4.0 V4.2.1). HMAC-SHA256 cookie bound to session ID + matching `X-Gina-CSRF-Token` header (or `_csrf` form field) required on POST/PUT/PATCH/DELETE; `timingSafeEqual` comparison; safe methods (GET/HEAD/OPTIONS) pass through. Per-route opt-out via `routing.json > "csrf": false` for webhook receivers (Stripe, GitHub, etc.). Client integration: the validator plugin auto-reads the cookie and sets the header on AJAX submits — zero user code change. Templates get `{{ gina.csrfToken }}` and `{{ gina.csrfInput \| safe }}` helpers for `<form>` hidden inputs. Stateless so it scales with distributed Redis/K8s sessions without server-side storage; signed so sibling subdomains cannot inject cookies. Performance: ~microseconds per mutating request. | `0.3.8` | Q3 2026 |
+| 📋 | **Origin/Referer pre-filter** — Secondary check on mutating methods, layered on top of the token middleware: `Origin` (or `Referer` fallback) must match the bundle's configured hostname or an explicit allowlist. Configured via `settings.json > csrf.allowedOrigins`. Belt-and-suspenders catching edge cases tokens might miss (referrer-header log leaks, legacy browser bugs, misconfigured reverse proxies). Performance: one string compare per mutating request. | `0.4.0` | Q4 2026 |
+
+---
+
 ## Connectors
 
 New database connectors follow the same interface as the existing Couchbase connector: declared in `connectors.json`, acquired via `getConnection()`.
