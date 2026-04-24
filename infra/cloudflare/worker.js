@@ -215,6 +215,30 @@ export default {
       return Response.redirect('https://gina.io' + TEMPLATING_REDIRECTS[trimmed] + url.search, 301);
     }
 
+    // 301 redirects for CLI reference pages served under id-form URLs. Each
+    // `docs/cli/<file>.md` has `id: cli-<file>` frontmatter which Docusaurus
+    // uses as the URL slug, so the canonical URL is `/docs/cli/cli-<file>`.
+    // External references that assume the filename-form (`/docs/cli/<file>`)
+    // would otherwise 404. Paired with meta-refresh redirects in
+    // docusaurus.config.js as a fallback for direct-to-Vercel access.
+    // Tracked at https://github.com/gina-io/docs/issues/11.
+    const CLI_REDIRECTS = {
+      '/docs/cli/bundle':    '/docs/cli/cli-bundle',
+      '/docs/cli/cache':     '/docs/cli/cli-cache',
+      '/docs/cli/connector': '/docs/cli/cli-connector',
+      '/docs/cli/env':       '/docs/cli/cli-env',
+      '/docs/cli/framework': '/docs/cli/cli-framework',
+      '/docs/cli/port':      '/docs/cli/cli-port',
+      '/docs/cli/project':   '/docs/cli/cli-project',
+      '/docs/cli/protocol':  '/docs/cli/cli-protocol',
+      '/docs/cli/scope':     '/docs/cli/cli-scope',
+      '/docs/cli/service':   '/docs/cli/cli-service',
+      '/docs/cli/view':      '/docs/cli/cli-view',
+    };
+    if (CLI_REDIRECTS[trimmed]) {
+      return Response.redirect('https://gina.io' + CLI_REDIRECTS[trimmed] + url.search, 301);
+    }
+
     // Strip /docs prefix and proxy to Vercel.
     // Docusaurus baseUrl '/docs/' embeds '/docs/' into all asset/page paths, so
     // the browser always requests gina.io/docs/*, Worker strips to /*, Vercel

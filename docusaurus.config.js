@@ -86,6 +86,21 @@ const config = {
           {from: '/views/swig/twig/parity',   to: '/templating/twig/parity'},
           {from: '/views/swig/twig/non-goals',to: '/templating/twig/non-goals'},
           {from: '/views/nunjucks',           to: '/templating/nunjucks'},
+          // CLI reference pages — filename-form → id-form. Each page's `id: cli-<file>`
+          // frontmatter routes the canonical URL to `/cli/cli-<file>`; these entries
+          // cover external references that assume filename-form. Paired with Cloudflare
+          // Worker 301s (infra/cloudflare/worker.js § CLI_REDIRECTS). See gina-io/docs#11.
+          {from: '/cli/bundle',    to: '/cli/cli-bundle'},
+          {from: '/cli/cache',     to: '/cli/cli-cache'},
+          {from: '/cli/connector', to: '/cli/cli-connector'},
+          {from: '/cli/env',       to: '/cli/cli-env'},
+          {from: '/cli/framework', to: '/cli/cli-framework'},
+          {from: '/cli/port',      to: '/cli/cli-port'},
+          {from: '/cli/project',   to: '/cli/cli-project'},
+          {from: '/cli/protocol',  to: '/cli/cli-protocol'},
+          {from: '/cli/scope',     to: '/cli/cli-scope'},
+          {from: '/cli/service',   to: '/cli/cli-service'},
+          {from: '/cli/view',      to: '/cli/cli-view'},
         ],
       },
     ],
