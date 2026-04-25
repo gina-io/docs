@@ -9,6 +9,9 @@ prereqs:
   - '[settings.json](/reference/settings)'
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Sessions
 
 Gina uses [`express-session`](https://github.com/expressjs/session) for session
@@ -66,8 +69,8 @@ loses all sessions on restart and does not scale across multiple processes.
 
 :::caution In-memory store — development only
 The default in-memory store leaks memory over time and resets on every restart.
-For staging and production use [SQLite](#sqlite-dev--staging--single-pod) or
-[Redis](#redis-production--multi-pod) instead.
+For staging and production pick a persistent backend in
+[Configuring the store](#configuring-the-store) instead.
 :::
 
 ---
@@ -77,17 +80,20 @@ For staging and production use [SQLite](#sqlite-dev--staging--single-pod) or
 | Store | When to use |
 |---|---|
 | In-memory (default) | Local development only |
-| [SQLite](#sqlite-dev--staging--single-pod) | Dev, staging, single-pod production |
-| [Redis](#redis-production--multi-pod) | Multi-pod / K8s horizontal scaling |
+| [SQLite](#configuring-the-store) | Dev, staging, single-pod production |
+| [Redis](#configuring-the-store) | Multi-pod / K8s horizontal scaling |
 
 ---
 
-## SQLite — dev / staging / single-pod
+## Configuring the store
+
+<Tabs groupId="session-store">
+  <TabItem value="sqlite" label="SQLite — dev / staging / single-pod" default>
 
 Uses the Node.js built-in `node:sqlite` module. **Zero npm dependencies.**
 Requires Node.js ≥ 22.5.0.
 
-### 1. Configure `connectors.json`
+**1. Configure `connectors.json`**
 
 ```json title="src/api/config/connectors.json"
 {
@@ -121,7 +127,7 @@ For a persistent file store (survives restarts):
 | `prefix` | `"sess:"` | Key prefix stored in the DB |
 | `cleanupInterval` | `900` | Seconds between expired-session purges. Set `0` to disable. |
 
-### 2. Wire the store in `bundle/index.js`
+**2. Wire the store in `bundle/index.js`**
 
 ```js title="src/api/index.js"
 var myapp        = require('gina');
@@ -148,7 +154,7 @@ myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
 
-### 3. Environment override
+**3. Environment override**
 
 Point dev at an in-memory store without touching `connectors.json`:
 
@@ -160,9 +166,8 @@ Point dev at an in-memory store without touching `connectors.json`:
 }
 ```
 
----
-
-## Redis — production / multi-pod
+  </TabItem>
+  <TabItem value="redis" label="Redis — production / multi-pod">
 
 Uses [`ioredis`](https://github.com/redis/ioredis). Required for horizontal
 scaling — SQLite is per-process and cannot be shared across pods.
@@ -171,7 +176,7 @@ scaling — SQLite is per-process and cannot be shared across pods.
 npm install ioredis
 ```
 
-### 1. Configure `connectors.json`
+**1. Configure `connectors.json`**
 
 **Standalone Redis:**
 
@@ -232,7 +237,7 @@ npm install ioredis
 | `ttl` | `86400` | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix in Redis |
 
-### 2. Wire the store in `bundle/index.js`
+**2. Wire the store in `bundle/index.js`**
 
 ```js title="src/api/index.js"
 var myapp        = require('gina');
@@ -262,7 +267,7 @@ myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
 
-### 3. Environment overlay
+**3. Environment overlay**
 
 Point dev at a local Redis without changing `connectors.json`:
 
@@ -276,6 +281,9 @@ Point dev at a local Redis without changing `connectors.json`:
   }
 }
 ```
+
+  </TabItem>
+</Tabs>
 
 ---
 
@@ -314,6 +322,15 @@ this.profile = function(req, res, next) {
 Gina stores the authenticated user at `req.session.user`, not `req.user`.
 Middleware that references `req.user` (Passport.js, etc.) will need a small
 adapter if used alongside gina's session pattern.
+:::
+
+:::tip Multi-tab behaviour
+All tabs of the same browser share one session — the cookie is per-origin.
+`express-session` reads, mutates, and writes the entire session blob each
+request, so two tabs racing on the same field will overwrite each other (lost
+update). Treat `req.session` as user state (login, role, locale, CSRF token),
+not as a counter or queue. This applies to every `express-session` store, not
+just gina's.
 :::
 
 ---
