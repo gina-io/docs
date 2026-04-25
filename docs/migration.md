@@ -268,11 +268,11 @@ Configurable via `settings.json` `inspector.redact.{patterns, types, replacement
 No code changes needed — defaults cover standard secret field names.
 :::
 
-### Security: pre-commit hook and CI guard for Claude-related paths _(no action required)_
+### Security: pre-commit hook and CI guard for local-tool configuration paths _(no action required)_
 
 :::note Internal — no action required
-A `.githooks/pre-commit` hook and GitHub Actions workflow now block Claude-related
-paths (`CLAUDE.md`, `.claude*`) from entering git history or the npm tarball.
+A `.githooks/pre-commit` hook and GitHub Actions workflow now block local-tool
+configuration paths from entering git history or the npm tarball.
 `post_install.js` installs the hook automatically for contributor clones. These are
 internal safeguards with no user-facing impact.
 :::
@@ -280,7 +280,7 @@ internal safeguards with no user-facing impact.
 ### Security: private-token leak gate _(no action required)_
 
 :::note Internal — no action required
-The npm `prepack` hook now scans the tarball listing for Claude-related paths and
+The npm `prepack` hook now scans the tarball listing for local-tool configuration paths and
 private-token patterns before every publish. No user-facing impact.
 :::
 

@@ -23,7 +23,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Q3 2026** | `0.3.3` ✅ | OpenAPI spec generation · CLI port:set & framework:get · TypeScript declarations · Explicit exports · Swig npm migration · Live index introspection · Popin perf · Docker fixes |
 | **Q3 2026** | `0.3.4` ✅ | Patch: `gna.js` stale framework path fix · Release lifecycle `gna.js` sync |
 | **Q3 2026** | `0.3.5` ✅ | Security: `@rhinostone/swig` 1.5.0 (CVE-2023-25345 extended guards) · Browser-side swig parity |
-| **Q4 2026** | `0.3.6` ✅ | Inspector payload redaction (#R7) · Pre-commit & CI Claude-path guards · Private-token leak gate · Whisper Error fix (#B12) · `framework:init` hardening (#B13) · CORS preflight fix · `syncDocs` lockfile regen |
+| **Q4 2026** | `0.3.6` ✅ | Inspector payload redaction (#R7) · Pre-commit & CI local-tool path guards · Private-token leak gate · Whisper Error fix (#B12) · `framework:init` hardening (#B13) · CORS preflight fix · `syncDocs` lockfile regen |
 | **Q4 2026** | `0.4.0` | AI agents (MCP) · ScyllaDB connector · PWA scaffold · Prometheus metrics · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Beemaster admin · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
@@ -355,4 +355,4 @@ Standalone gina dev and admin tool. A dedicated browser-tab app (`services/src/b
 
 ---
 
-*Last updated: 2026-04-16 (0.3.6 shipped — Inspector redaction, pre-commit & CI Claude-path guards, Whisper Error fix, CORS preflight fix, syncDocs lockfile regen) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
+*Last updated: 2026-04-16 (0.3.6 shipped — Inspector redaction, pre-commit & CI local-tool path guards, Whisper Error fix, CORS preflight fix, syncDocs lockfile regen) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
