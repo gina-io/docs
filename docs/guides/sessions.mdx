@@ -434,8 +434,9 @@ rejection every modern browser performs silently when the cookie arrives.
 Bundles that continue calling `require('express-session')` directly keep
 working exactly as before. Hardening is opt-in: a single-line change whenever
 the bundle is ready. The plugin is the baseline for the broader CSRF track —
-`#CSRF2` signed double-submit token middleware (`0.3.8`) and `#CSRF3`
-Origin/Referer pre-filter (`0.4.0`) build on top of it.
+[`#CSRF2` signed double-submit token middleware](/guides/csrf) shipped in
+`0.3.7-alpha.9` and `#CSRF3` Origin/Referer pre-filter (`0.4.0`) builds on
+top of it.
 
 ---
 

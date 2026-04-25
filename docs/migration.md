@@ -90,8 +90,96 @@ modern browser does silently when the cookie arrives.
 `require('express-session')` directly. They continue working exactly as
 before, with their existing cookie configuration. Hardening is opt-in — a
 one-line change when the bundle is ready for it. This is the baseline for
-the broader CSRF track (#CSRF2 signed double-submit token middleware is
-planned for `0.3.8`; #CSRF3 Origin/Referer pre-filter for `0.4.0`).
+the broader CSRF track — `#CSRF2` signed double-submit token middleware
+shipped in `0.3.7-alpha.9`; `#CSRF3` Origin/Referer pre-filter is planned
+for `0.4.0`.
+:::
+
+### Security: `gina.plugins.Csrf` — signed double-submit token middleware _(opt-in)_
+
+:::note New plugin — opt-in, default off for existing bundles
+Bundles can now register a stateless CSRF middleware that issues a HMAC-signed
+token cookie on safe-method requests and verifies a matching `X-Gina-CSRF-Token`
+header (or `_csrf` form field) on mutating requests
+(POST / PUT / PATCH / DELETE). Safe methods (GET / HEAD / OPTIONS) pass
+through. Aligned with [OWASP ASVS 4.0 V4.2.1](https://owasp.org/www-project-application-security-verification-standard/).
+
+**Adoption is two lines in the bundle bootstrap** — `Csrf` registers **after**
+`Session`:
+
+```js
+var session = require('gina').plugins.Session(require('express-session'));
+var csrf    = require('gina').plugins.Csrf();
+
+app.use(session({ /* ... */ }));   // must come FIRST
+app.use(csrf);
+```
+
+**Required env var:**
+
+```bash
+openssl rand -base64 64    # generate once
+```
+
+```json
+// src/api/config/env.json
+{ "dev": { "GINA_CSRF_SECRET": "<paste output>" } }
+```
+
+There is no dev fallback. Missing the env var throws at factory call time
+with an actionable message naming the env var and the generation command.
+
+**Default values** (under `csrf` in `settings.json`):
+
+```json
+{
+  "csrf": {
+    "cookieName":  "gina-csrf-token",
+    "headerName":  "X-Gina-CSRF-Token",
+    "fieldName":   "_csrf",
+    "rotate":      "per-session",
+    "safeMethods": ["GET", "HEAD", "OPTIONS"]
+  }
+}
+```
+
+**Per-route opt-out** for webhook receivers (Stripe, GitHub, etc.) that have
+their own origin verification:
+
+```jsonc
+// src/api/config/routing.json
+"stripe-webhook": {
+  "url":        "/webhooks/stripe",
+  "method":     "POST",
+  "csrfExempt": true,
+  "param":      { "control": "@webhook:stripe", "file": "stripe.js" }
+}
+```
+
+**Templates** get two helpers when the plugin is registered — `gina.csrfToken`
+(string) and `gina.csrfInput` (pre-formatted hidden input). Render the input
+inside any `<form>` and you are done:
+
+```swig
+<form method="POST" action="/invoice">
+    {{ gina.csrfInput | safe }}
+    <button type="submit">Send invoice</button>
+</form>
+```
+
+**AJAX integration is automatic** when your forms go through Gina's built-in
+validator plugin — the cookie is read and the header is injected on mutating
+methods with zero bundle code change. Hand-rolled `fetch` / `XHR` paths read
+the `gina-csrf-token` cookie and set `X-Gina-CSRF-Token` themselves.
+
+**No action required** for bundles that have not adopted the Csrf plugin —
+existing routes continue working exactly as before. Hardening is opt-in. The
+plugin requires `gina.plugins.Session` to be registered first (the `#CSRF1`
+baseline above); without a session id, `req.session.id` is missing and the
+middleware throws via `next(err)` with a clear message pointing at the fix.
+
+See the [CSRF guide](/guides/csrf) for the full reference, including AJAX
+patterns, error tables, and the request-flow diagram.
 :::
 
 ### Added: `swig.useProject` — project-pinned swig override _(no action required)_
