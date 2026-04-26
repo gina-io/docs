@@ -7,16 +7,16 @@ description: Bundle @rhinostone/swig-twig for the browser — memory loader only
 level: intermediate
 prereqs:
   - '[Overview](./)'
-  - '[Swig Browser Usage](../browser)'
-  - '[Security — the parser is the boundary](../security#the-parser-is-the-boundary)'
-  - '[Loaders](../loaders)'
+  - '[Swig Browser Usage](../swig/browser)'
+  - '[Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)'
+  - '[Loaders](../swig/loaders)'
 ---
 
 # Twig in the Browser
 
 `@rhinostone/swig-twig` runs in the browser the same way `@rhinostone/swig` does — memory loader only, no `fs` access, identical autoescape and CVE-2023-25345 guard perimeter inherited from `@rhinostone/swig-core`. The package does not ship a pre-built browser bundle; consumers bundle through their own toolchain (esbuild, Vite, Webpack, Rollup).
 
-This page covers the Twig-specific bits: how to bundle, how to install the peer-dependency pair during alpha, and a minimal first-template example using Twig syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
+This page covers the Twig-specific bits: how to bundle, how to install the peer-dependency pair during alpha, and a minimal first-template example using Twig syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../swig/browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
 
 ## Architecture
 
@@ -139,11 +139,11 @@ twig.renderFile('page.twig', { title: 'Hi', name: 'world' });
 // → "<!doctype html><title>Hi</title>Hello WORLD!"
 ```
 
-The loader contract is identical across frontends — see [Loaders](../loaders).
+The loader contract is identical across frontends — see [Loaders](../swig/loaders).
 
 ## AOT pre-compilation
 
-If bundle size or cold-render latency matters, pre-compile Twig templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + prime + render](../browser#pre-compile--prime--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
+If bundle size or cold-render latency matters, pre-compile Twig templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + prime + render](../swig/browser#pre-compile--prime--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
 
 ## Bundle size
 
@@ -159,7 +159,7 @@ For perf-critical paths, prefer AOT pre-compilation (previous section) — the r
 - **CVE-2023-25345 `_dangerousProps` guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in every context that writes to `_ctx`: dotted access, bracket-notation with string literals, `{% set %}` LHS, `{% for %}` loop variables, `{% macro %}` names, and `{% import %}` aliases. The guards are frontend-agnostic — both native swig and Twig run them.
 - **Template source is trusted.** Same model as upstream Twig, Jinja2, and Django. Never pass user-controlled strings directly to `twig.render(source, locals)`; keep locals data-only.
 
-See [Security — the parser is the boundary](../security#the-parser-is-the-boundary) for the full story.
+See [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary) for the full story.
 
 ## Gotchas
 
