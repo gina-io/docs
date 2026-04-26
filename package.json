@@ -32,7 +32,7 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.9.2",
     "@docusaurus/types": "3.9.2",
-    "gina": "^0.3.7-alpha.7",
+    "gina": "^0.3.7-alpha.9",
     "jsdoc-to-markdown": "^9.1.3"
   },
   "browserslist": {
