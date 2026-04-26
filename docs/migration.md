@@ -19,6 +19,45 @@ upward to the target version.
 
 ---
 
+## 0.3.7 → 0.3.8
+
+Patch release for the `0.3.7` install regression. **No API changes, no
+config changes** — upgrading is a one-liner:
+
+```bash
+npm install -g gina@latest --prefix=~/.npm-global
+```
+
+### What was wrong with 0.3.7
+
+`npm install -g gina@0.3.7` failed with `Cannot find module 'psl'` on
+both fresh installs and upgrade installs. The pre/post-install scripts
+loaded the framework `lib` registry, which transitively required `psl` —
+declared in `framework/v*/package.json` but only fetched by post-install's
+nested `npm install`, which runs *after* the pre-install crash. Anyone
+running `npm install -g gina@latest` between the release of `0.3.7`
+(2026-04-26) and the release of `0.3.8` saw the install fail.
+
+### What changed in 0.3.8
+
+- `psl` and `@rhinostone/swig` are now declared as **top-level npm
+  dependencies** in `package.json`. npm fetches them through the standard
+  install chain before any lifecycle script runs, so framework code's
+  `require('psl')` resolves through Node's normal module-resolution chain.
+- The pre/post-install scripts no longer load the framework `lib`
+  registry. Node's built-in `console` is sufficient for install-time
+  logging; `console.setLevel` (the only `lib.logger`-only method used by
+  these scripts) is gated behind a `typeof` check.
+- A filesystem-driven helpers preload in both install scripts ensures
+  `lib/logger`'s circular dependency with `framework/v*/helpers/`
+  completes before any internal helper's module-local `console` is
+  bound, so they receive the full Logger singleton from cache.
+
+No project-level changes are required. Bundle code, config files, and
+runtime behaviour are unchanged.
+
+---
+
 ## 0.3.6 → 0.3.7
 
 ### Security: `gina.plugins.Session` — hardened cookie defaults _(one-line opt-in)_
