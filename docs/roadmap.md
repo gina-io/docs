@@ -24,6 +24,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Q3 2026** | `0.3.4` ✅ | Patch: `gna.js` stale framework path fix · Release lifecycle `gna.js` sync |
 | **Q3 2026** | `0.3.5` ✅ | Security: `@rhinostone/swig` 1.5.0 (CVE-2023-25345 extended guards) · Browser-side swig parity |
 | **Q4 2026** | `0.3.6` ✅ | Inspector payload redaction (#R7) · Pre-commit & CI local-tool path guards · Private-token leak gate · Whisper Error fix (#B12) · `framework:init` hardening (#B13) · CORS preflight fix · `syncDocs` lockfile regen |
+| **Q4 2026** | `0.3.7` ✅ | Web Security CSRF trilogy (#CSRF1/2/3) · Nunjucks template engine opt-in (#NJ1–#NJ4) · Eval-safety hardening (#SCS1) · MCP server (#AI8 stdio + HTTP transports) · `connector:*` CLI (#CN10) · vendored-dep CVE-visibility lock · psl/optimist removal · Session.name drop-in identity |
 | **Q4 2026** | `0.4.0` | AI agents (MCP) · ScyllaDB connector · PWA scaffold · Prometheus metrics · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · HTTP/2 hardening · Trailer support · Beemaster core · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
 | **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Beemaster admin · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
