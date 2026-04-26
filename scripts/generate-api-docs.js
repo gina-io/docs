@@ -123,10 +123,20 @@ for (const mod of MODULES) {
     continue;
   }
 
+  // jsdoc-to-markdown emits `<a name="X"></a>` legacy anchors followed by a
+  // heading; Docusaurus does not honor those when checking links, so the
+  // in-page cross-references it also generates (`[X](#X)`) come up broken.
+  // Rewrite each pair into Docusaurus heading-id syntax so the same anchors
+  // resolve natively.
+  const mdProcessed = md.replace(
+    /<a name="([^"]+)"><\/a>\s*\n+(#{2,6} [^\n]+)/g,
+    '$2 {#$1}'
+  );
+
   const frontmatter =
     `---\nid: ${mod.id}\ntitle: ${mod.title}\nsidebar_label: ${mod.title}\nformat: md\n---\n\n`;
 
-  fs.writeFileSync(path.join(OUTPUT_DIR, `${mod.id}.md`), frontmatter + md);
+  fs.writeFileSync(path.join(OUTPUT_DIR, `${mod.id}.md`), frontmatter + mdProcessed);
   console.log(`[api-docs] generated docs/api/${mod.id}.md`);
   successful.push(mod);
 }

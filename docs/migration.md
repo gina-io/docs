@@ -19,6 +19,296 @@ upward to the target version.
 
 ---
 
+## 0.3.6 → 0.3.7
+
+### Security: `gina.plugins.Session` — hardened cookie defaults _(one-line opt-in)_
+
+:::note New plugin — opt-in, default off for existing bundles
+Bundles can now wrap `express-session` with a framework-supplied plugin that
+injects SameSite / HttpOnly / Secure defaults from `config/settings.json`
+into the session cookie. The wrapper reads the `session.cookie` block, merges
+missing flags, and validates the browser-parity invariant
+(`SameSite=None` without `Secure` is rejected at bundle startup).
+
+**Adoption is a single line in the bundle bootstrap:**
+
+```js
+// before
+// var session = require('express-session');
+
+// after
+var session = require('gina').plugins.Session(require('express-session'));
+```
+
+Everything downstream — `app.use(session({...}))`, the `SessionStore`
+factory, passport integration — stays exactly the same.
+
+**Default values:**
+
+```json
+{
+  "session": {
+    "cookie": {
+      "sameSite": "lax",
+      "httpOnly": true,
+      "secure":   "auto"
+    }
+  }
+}
+```
+
+- `sameSite` — `"lax"` covers the common drive-by CSRF case. Use `"strict"`
+  for extra containment at the cost of breaking click-through login flows.
+  `"none"` permits cross-site cookie sending and **requires** `secure: true`
+  (browser-enforced).
+- `httpOnly` — `true` prevents client-side JS from reading the cookie. Set
+  to `false` only when a validator, toolbar, or similar needs
+  `document.cookie` access.
+- `secure` — `"auto"` is express-session's idiom for "mirror the request
+  security flag", typically paired with `app.set('trust proxy', 1)`.
+
+**Intentional bundle choices are preserved.** The plugin merges defaults only
+for flags the bundle did not set. A bundle that passes
+`cookie: { httpOnly: false, secure: true, ... }` keeps both values; the
+plugin only fills in the missing `sameSite`.
+
+**Cross-site cookie use case.** Bundles that rely on cross-site cookie send
+(third-party OAuth embeds, iframe flows) must set both flags explicitly:
+
+```js
+app.use(session({
+  // ...
+  cookie: { sameSite: 'none', secure: true, maxAge: 86400000 }
+}));
+```
+
+Passing `sameSite: 'none'` without `secure: true` throws a clear
+`[gina session] invariant violation` error at startup — matching what every
+modern browser does silently when the cookie arrives.
+
+**No action required** for existing bundles that keep
+`require('express-session')` directly. They continue working exactly as
+before, with their existing cookie configuration. Hardening is opt-in — a
+one-line change when the bundle is ready for it. This is the baseline for
+the broader CSRF track — `#CSRF2` signed double-submit token middleware
+shipped in `0.3.7-alpha.9`; `#CSRF3` Origin/Referer pre-filter shipped in
+`0.3.7-alpha.10`.
+:::
+
+### Security: `gina.plugins.Csrf` — signed double-submit token middleware _(opt-in)_
+
+:::note New plugin — opt-in, default off for existing bundles
+Bundles can now register a stateless CSRF middleware that issues a HMAC-signed
+token cookie on safe-method requests and verifies a matching `X-Gina-CSRF-Token`
+header (or `_csrf` form field) on mutating requests
+(POST / PUT / PATCH / DELETE). Safe methods (GET / HEAD / OPTIONS) pass
+through. Aligned with [OWASP ASVS 4.0 V4.2.1](https://owasp.org/www-project-application-security-verification-standard/).
+
+**Adoption is two lines in the bundle bootstrap** — `Csrf` registers **after**
+`Session`:
+
+```js
+var session = require('gina').plugins.Session(require('express-session'));
+var csrf    = require('gina').plugins.Csrf();
+
+app.use(session({ /* ... */ }));   // must come FIRST
+app.use(csrf);
+```
+
+**Required env var:**
+
+```bash
+openssl rand -base64 64    # generate once
+```
+
+```json
+// src/api/config/env.json
+{ "dev": { "GINA_CSRF_SECRET": "<paste output>" } }
+```
+
+There is no dev fallback. Missing the env var throws at factory call time
+with an actionable message naming the env var and the generation command.
+
+**Default values** (under `csrf` in `settings.json`):
+
+```json
+{
+  "csrf": {
+    "cookieName":  "gina-csrf-token",
+    "headerName":  "X-Gina-CSRF-Token",
+    "fieldName":   "_csrf",
+    "rotate":      "per-session",
+    "safeMethods": ["GET", "HEAD", "OPTIONS"]
+  }
+}
+```
+
+**Per-route opt-out** for webhook receivers (Stripe, GitHub, etc.) that have
+their own origin verification:
+
+```jsonc
+// src/api/config/routing.json
+"stripe-webhook": {
+  "url":        "/webhooks/stripe",
+  "method":     "POST",
+  "csrfExempt": true,
+  "param":      { "control": "@webhook:stripe", "file": "stripe.js" }
+}
+```
+
+**Templates** get two helpers when the plugin is registered — `gina.csrfToken`
+(string) and `gina.csrfInput` (pre-formatted hidden input). Render the input
+inside any `<form>` and you are done:
+
+```swig
+<form method="POST" action="/invoice">
+    {{ gina.csrfInput | safe }}
+    <button type="submit">Send invoice</button>
+</form>
+```
+
+**AJAX integration is automatic** when your forms go through Gina's built-in
+validator plugin — the cookie is read and the header is injected on mutating
+methods with zero bundle code change. Hand-rolled `fetch` / `XHR` paths read
+the `gina-csrf-token` cookie and set `X-Gina-CSRF-Token` themselves.
+
+**No action required** for bundles that have not adopted the Csrf plugin —
+existing routes continue working exactly as before. Hardening is opt-in. The
+plugin requires `gina.plugins.Session` to be registered first (the `#CSRF1`
+baseline above); without a session id, `req.session.id` is missing and the
+middleware throws via `next(err)` with a clear message pointing at the fix.
+
+See the [CSRF guide](/guides/csrf) for the full reference, including AJAX
+patterns, error tables, and the request-flow diagram.
+:::
+
+### Security: `gina.plugins.Csrf` — Origin/Referer pre-filter (`#CSRF3`) _(automatic on adoption)_
+
+:::note Layered ON TOP of the token middleware — same plugin, second layer
+The Csrf middleware now runs an Origin/Referer pre-filter **before** the
+signed-token verify on every mutating request (POST/PUT/PATCH/DELETE):
+
+1. Read `Origin` first; fall back to parsing the host out of `Referer`
+   when `Origin` is absent.
+2. Match the parsed origin against `csrf.allowedOrigins`.
+3. Both headers missing → 403 `missing origin/referer`. Mismatch → 403
+   `origin not allowed`. Otherwise the request continues to the existing
+   `#CSRF2` token verify.
+
+A forged token with a matching cookie still gets rejected here when the
+request didn't come from an allowed origin — **token layer ≠ Origin
+layer**. Belt-and-suspenders for the token middleware: catches edge cases
+tokens might miss (referrer-header log leaks, legacy browser bugs that
+leak tokens in URLs, misconfigured reverse proxies that accept
+cross-origin requests).
+
+**Default allowlist** — when `csrf.allowedOrigins` is empty or unset, the
+plugin uses a single-entry allowlist: the bundle's configured hostname
+(`scheme://host[:port]`, derived from `conf[bundle][env].hostname` or
+composed from `server.scheme + host + server.port`). Most single-domain
+bundles need no configuration at all.
+
+**Explicit allowlist** — for multi-domain bundles, set
+`csrf.allowedOrigins` in `settings.json`:
+
+```json
+{
+  "csrf": {
+    "allowedOrigins": [
+      "https://example.com",
+      "https://www.example.com"
+    ]
+  }
+}
+```
+
+Entries are matched literally (case-insensitive). Different scheme on the
+same host doesn't match (`http://example.com` ≠ `https://example.com`),
+and different port doesn't match.
+
+**Per-route exempt** is consistent with the token layer — `routing.json
+> "csrfExempt": true` bypasses BOTH the Origin pre-filter AND the token
+verify. Webhook receivers that mark `csrfExempt: true` continue working
+as before.
+
+**Factory throws at startup** when `csrf.allowedOrigins` is empty AND no
+bundle hostname can be resolved from `conf[bundle][env]`. The error
+message points at both fixes (set the settings key, or fix the conf).
+
+**No action required** for bundles that have already adopted `#CSRF2` and
+serve from a single configured hostname — the pre-filter activates
+automatically on upgrade and the bundle hostname is auto-derived. Bundles
+that serve the same app on multiple hostnames (e.g. `.com` + `.co.uk`)
+must add their additional hostnames to `csrf.allowedOrigins` before
+upgrade or mutating requests from the secondary hostname will 403.
+
+See the [CSRF guide — Origin / Referer pre-filter](/guides/csrf#origin--referer-pre-filter)
+for the matrix of conditions and the failure-mode reference.
+:::
+
+### Added: `swig.useProject` — project-pinned swig override _(no action required)_
+
+:::note New feature — opt-in, default off
+Bundles can now load a project-pinned `@rhinostone/swig` (or
+`@rhinostone/swig-twig` for the Twig frontend) from the project's
+`node_modules/` in place of the framework's bundled copy, by setting
+`swig.useProject: true` in `config/settings.json`:
+
+```json
+{
+  "swig": {
+    "useProject": true,
+    "package": "@rhinostone/swig"
+  }
+}
+```
+
+The framework honours the override only when the project pin satisfies two
+safety gates — same major as the framework floor (currently `1.6.0`) **and**
+version at or above the floor. A rejected override falls back to the
+framework's copy and logs a one-line `[swig-resolver]` warning at bundle
+startup.
+
+Default remains `swig.useProject: false` — existing bundles see no behaviour
+change. See the [Swig overview](/templating/swig) for the full list of warning codes
+and the [Twig frontend](/templating/twig) for package override details.
+:::
+
+### Added: `render.engine = "nunjucks"` — opt-in nunjucks rendering _(no action required)_
+
+:::note New feature — opt-in, default off
+Bundles can now render templates with [nunjucks](https://mozilla.github.io/nunjucks/)
+instead of swig by setting `render.engine: "nunjucks"` in `config/settings.json`
+and installing the package in the project root:
+
+```json
+{
+  "render":   { "engine": "nunjucks" },
+  "nunjucks": { "autoescape": true }
+}
+```
+
+```bash
+npm install nunjucks
+```
+
+Default remains `render.engine: "swig"` — existing bundles see no
+behaviour change. The framework never declares nunjucks as a
+dependency; it's only loaded when a bundle opts in, and only from the
+project's `node_modules/`. A bundle that opts in without installing the
+package fails at startup with a clear `NUNJUCKS_NOT_INSTALLED` error
+rather than a silent mid-render failure.
+
+Basic `.njk` rendering works end-to-end in the MVP; the Inspector dev
+payload, HTTP/2 `stream.respond()` direct path, and error-page template
+routing shipped as follow-ups in `0.3.7-alpha.2` at parity with the swig
+path. Still deferred from the swig path: Early Hints 103 preloads and the
+static HTML response cache. See the [Nunjucks guide](/templating/nunjucks) for
+the full parity table.
+:::
+
+---
+
 ## 0.3.5 → 0.3.6
 
 ### Security: Inspector payload redaction _(no action required)_
@@ -42,11 +332,11 @@ Configurable via `settings.json` `inspector.redact.{patterns, types, replacement
 No code changes needed — defaults cover standard secret field names.
 :::
 
-### Security: pre-commit hook and CI guard for Claude-related paths _(no action required)_
+### Security: pre-commit hook and CI guard for local-tool configuration paths _(no action required)_
 
 :::note Internal — no action required
-A `.githooks/pre-commit` hook and GitHub Actions workflow now block Claude-related
-paths (`CLAUDE.md`, `.claude*`) from entering git history or the npm tarball.
+A `.githooks/pre-commit` hook and GitHub Actions workflow now block local-tool
+configuration paths from entering git history or the npm tarball.
 `post_install.js` installs the hook automatically for contributor clones. These are
 internal safeguards with no user-facing impact.
 :::
@@ -54,7 +344,7 @@ internal safeguards with no user-facing impact.
 ### Security: private-token leak gate _(no action required)_
 
 :::note Internal — no action required
-The npm `prepack` hook now scans the tarball listing for Claude-related paths and
+The npm `prepack` hook now scans the tarball listing for local-tool configuration paths and
 private-token patterns before every publish. No user-facing impact.
 :::
 
@@ -210,7 +500,7 @@ Route annotations (`description` fields in `routing.json`) become OpenAPI `descr
 ### Swig migration _(internal)_
 
 :::note Additive — no action required
-The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/swig) npm dependency (maintained fork with [CVE-2023-25345](/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
+The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/templating/swig) npm dependency (maintained fork with [CVE-2023-25345](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
 :::
 
 ### Live database index introspection _(additive)_
@@ -860,7 +1150,7 @@ Default is `false` (disabled).
 
 ### Security — swig CVE-2023-25345
 
-Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
+Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
 
 Template paths in `{% extends %}` tags and relative/absolute `file` paths are
 now validated against the template root before being read.

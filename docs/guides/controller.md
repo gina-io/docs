@@ -109,7 +109,7 @@ Every action must terminate with exactly one of these.
 
 ### `self.render(data)`
 
-Renders an HTML template using [Swig](/swig). The template is resolved from the route's `param.file`
+Renders an HTML template using [Swig](/templating/swig). The template is resolved from the route's `param.file`
 value (defaults to the rule name). Data is merged with environment and routing metadata before
 being passed to the template.
 
@@ -837,5 +837,5 @@ back to per-request eviction transparently.
 
 - [Routing guide](./routing) — Declaring routes and mapping them to controller actions
 - [Views and templates](./views) — Template rendering and the Swig template engine
-- [Swig reference](/swig) — Swig syntax, tags, filters, and API
+- [Swig reference](/templating/swig) — Swig syntax, tags, filters, and API
 - [Middleware guide](./middleware) — Code that runs between route matching and the controller

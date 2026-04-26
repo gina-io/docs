@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: swigSidebar
+displayed_sidebar: templatingSidebar
 title: Twig Frontend
 sidebar_label: Overview
 sidebar_position: 1
@@ -76,7 +76,7 @@ admin.render('{{ label|monospace }}', { locals: { label: 'READ-ME' } });
 // → "<code>READ-ME</code>"
 ```
 
-Instances are fully isolated — filters, tags, and extensions registered on `admin` are invisible to the default singleton and to any other instance. This matches the isolation contract documented in the [swig API reference](../api).
+Instances are fully isolated — filters, tags, and extensions registered on `admin` are invisible to the default singleton and to any other instance. This matches the isolation contract documented in the [swig API reference](../swig/api).
 
 ## Express integration
 
@@ -104,11 +104,11 @@ twig.setDefaults({
 });
 ```
 
-See [Loaders](../loaders) for the full contract — it is identical across frontends.
+See [Loaders](../swig/loaders) for the full contract — it is identical across frontends.
 
 ## Browser usage
 
-`@rhinostone/swig-twig` does not ship a pre-built browser bundle. Bundle `@rhinostone/swig-twig` through your own toolchain (esbuild, Vite, Webpack, Rollup) and follow the shared Swig [Browser Usage](../browser) recipe — memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
+`@rhinostone/swig-twig` does not ship a pre-built browser bundle. Bundle `@rhinostone/swig-twig` through your own toolchain (esbuild, Vite, Webpack, Rollup) and follow the shared Swig [Browser Usage](../swig/browser) recipe — memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
 
 Browser support is unverified during the alpha. It will be formally validated with a smoke-test bundle at `2.0.0` stable.
 

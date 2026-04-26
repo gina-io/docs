@@ -5,9 +5,7 @@ sidebar_label: UUID
 format: md
 ---
 
-<a name="module_lib/uuid"></a>
-
-## lib/uuid
+## lib/uuid {#module_lib/uuid}
 Lightweight, cryptographically secure ID generator.
 Produces short random strings from a base-62 alphabet (0-9 A-Z a-z).
 Uses `crypto.getRandomValues` with bitmask bias avoidance — zero external dependencies.
@@ -30,9 +28,7 @@ var id = lib.uuid();
 rec._id = lib.uuid();
 ```
 
-<a name="module_lib/uuid.uuid"></a>
-
-### lib/uuid(size) ⇒ <code>string</code>
+### lib/uuid(size) ⇒ <code>string</code> {#module_lib/uuid.uuid}
 Generate a cryptographically secure random ID from the base-62 alphabet.
 
 **Kind**: static method of [<code>lib/uuid</code>](#module_lib/uuid)  
@@ -49,9 +45,7 @@ uuid(8)    // 'kQ7mZp2R'
 uuid(12)   // 'V1StGXR8Z5jd'
 ```
 
-<a name="module_lib/uuid.customAlphabet"></a>
-
-### lib/uuid.customAlphabet(alphabet, defaultSize) ⇒ <code>function</code>
+### lib/uuid.customAlphabet(alphabet, defaultSize) ⇒ <code>function</code> {#module_lib/uuid.customAlphabet}
 Create a generator function for a custom alphabet and default size.
 The returned function uses the same `crypto.getRandomValues` + bitmask technique
 as the default `uuid()`, adapted to the given alphabet length.

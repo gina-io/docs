@@ -1,0 +1,149 @@
+---
+displayed_sidebar: templatingSidebar
+title: Templating
+sidebar_label: Overview
+sidebar_position: 1
+description: Gina renders HTML via a pluggable template engine. Swig is the default, Twig is a drop-in Twig-syntax variant, and Nunjucks is an opt-in alternative loaded from the project. This page explains how the render.engine setting works and which engine to pick.
+level: beginner
+prereqs:
+  - '[Views guide](/guides/views)'
+  - '[Controllers guide](/guides/controller)'
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta />
+
+Gina renders HTML through a **pluggable template engine**. Controllers call `self.render(data)` and Gina dispatches the call to whichever engine is configured for the bundle. The engine is chosen per bundle via `config/settings.json > render.engine`, and every engine receives the same `data.page` contract — the choice is a syntax decision, not an architectural one.
+
+## Available engines
+
+| Engine | Package | Syntax | Where it lives | When to pick |
+|---|---|---|---|---|
+| **[Swig](./swig)** (default) | `@rhinostone/swig` | Jinja2/Django-inspired (`{{ }}`, `{% %}`) | Framework dependency, ships with every bundle | Default for new bundles; keeps the framework's historical syntax |
+| **[Twig](./twig)** | `@rhinostone/swig-twig` | Twig (`{{ }}`, `{% %}`, stricter) | Drop-in swig replacement via `swig.package` | You have an existing Twig codebase, or your team writes Twig |
+| **[Nunjucks](./nunjucks)** | `nunjucks` (project-side) | Jinja2 (`{{ }}`, `{% %}`, async-friendly) | **Project-only** — never a framework dep | You want native Jinja2, async loaders, or nunjucks-specific extensions |
+
+Swig is the safe default. Twig swaps the parser on the same underlying engine, so migration is near-zero-cost. Nunjucks is a full parallel engine — opt in only when you need it, because it fails loud if the project hasn't `npm install`ed it.
+
+## Same template, three engines
+
+Below is a minimal `layout.html` that prints a page title and loops over a list of products. The data passed from the controller is:
+
+```javascript
+self.render({
+    title: 'Catalogue Yaoundé',
+    items: [
+        { name: 'Riz parfumé', price: 3500 },
+        { name: 'Huile de palme', price: 2200 }
+    ]
+});
+```
+
+Prices are XAF (Cameroon CFA franc). The `currency` filter is Gina's built-in locale-aware currency formatter — it reads the active locale from `req.locale` (`fr_CM` in this example) and emits `3 500 F CFA`.
+
+<Tabs groupId="templating-engine">
+<TabItem value="swig" label="Swig" default>
+
+```jinja2
+<h1>{{ page.data.title }}</h1>
+<ul>
+  {% for item in page.data.items %}
+    <li>{{ item.name }} — {{ item.price|currency }}</li>
+  {% endfor %}
+</ul>
+```
+
+Swig is the default engine. Templates live under `<bundle>/views/` and render against `data.page` without any extra configuration. The filter pipe `item.price|currency` applies the built-in currency filter.
+
+</TabItem>
+<TabItem value="twig" label="Twig">
+
+```twig
+<h1>{{ page.data.title }}</h1>
+<ul>
+  {% for item in page.data.items %}
+    <li>{{ item.name }} — {{ item.price|currency }}</li>
+  {% endfor %}
+</ul>
+```
+
+Twig is served by `@rhinostone/swig-twig`. The surface looks identical at this level — `{{ }}` for expressions, `{% %}` for tags — but Twig's parser is stricter about undefined variables, whitespace control, and filter argument shapes. Templates written for the PHP Twig engine port with minor adjustments (see the [Twig migration guide](./twig/migration) for the full delta).
+
+</TabItem>
+<TabItem value="nunjucks" label="Nunjucks">
+
+```jinja2
+<h1>{{ page.data.title }}</h1>
+<ul>
+  {% for item in page.data.items %}
+    <li>{{ item.name }} | {{ item.price | currency }}</li>
+  {% endfor %}
+</ul>
+```
+
+Nunjucks is a separate engine loaded from the project's `node_modules/nunjucks/`. The framework never declares nunjucks as a dependency — bundles that don't opt in pay zero cost. Templates use `.njk` by convention and whitespace around filter pipes is flexible. Gina-supplied filters (like `currency`) are registered on the nunjucks Environment at bundle start, matching the swig filter surface.
+
+</TabItem>
+</Tabs>
+
+## Picking an engine
+
+### Swig (default)
+
+Nothing to configure. New bundles render via swig out of the box. Templates go in `<bundle>/views/`, `self.render(data)` resolves the route's `param.file` and renders it with `data.page` in scope.
+
+[Read the Swig section →](./swig)
+
+### Twig
+
+Swap the package via `config/settings.json`:
+
+```json
+{
+  "swig": {
+    "useProject": true,
+    "package": "@rhinostone/swig-twig"
+  }
+}
+```
+
+The framework picks up your project's `@rhinostone/swig-twig` from `node_modules/` at bundle start. Templates must be written in Twig syntax — see the [Twig section](./twig) for the migration notes and parity table.
+
+### Nunjucks
+
+Install nunjucks in the **project** (not the framework) and flip `render.engine`:
+
+```bash
+cd <project>
+npm install nunjucks
+```
+
+```json
+{
+  "render": {
+    "engine": "nunjucks"
+  }
+}
+```
+
+The framework never declares nunjucks as a dependency — that's the core safety contract. Bundles that don't opt in pay zero cost and never have nunjucks in their runtime. Bundles that opt in without installing the package fail loud at startup with `NUNJUCKS_NOT_INSTALLED`.
+
+[Read the Nunjucks section →](./nunjucks)
+
+## Where the dispatch happens
+
+`core/controller/controller.js :: this.render()` reads `conf.render.engine` from the bundle's resolved settings and routes the call to one of:
+
+- `controller.render-swig.js` (engine `"swig"`, the default — also covers Twig, since Twig is swig-compatible at the engine level)
+- `controller.render-nunjucks.js` (engine `"nunjucks"`, loaded only when opt-in is set)
+
+The same `data.page` shape is passed in either direction, so controller code is engine-agnostic. A bundle can switch engines by changing a single settings key — no controller changes needed.
+
+## Related guides
+
+- [Views guide](/guides/views) — bundle-level views directory, layouts, partials
+- [Controllers guide](/guides/controller) — how `self.render(data)` populates the page
+- [connectors.json reference](/reference/connectors) — separate from templating, but often the data source behind it

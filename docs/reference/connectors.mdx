@@ -27,6 +27,10 @@ src/<bundle>/config/connectors.json
 Multiple connectors can coexist in the same file and are each independently available
 to any model in the bundle.
 
+:::tip Manage connectors from the CLI
+The [`connector:list`](/cli/cli-connector#connectorlist) command lists every connector across your projects with driver install status, and [`connector:add`](/cli/cli-connector#connectoradd) writes new entries to `shared/config/connectors.json` or a bundle-scoped `connectors.json` with the correct shape.
+:::
+
 ---
 
 ## Supported connectors
@@ -439,7 +443,7 @@ Requires `ioredis` installed in your project:
 npm install ioredis
 ```
 
-See the [Sessions guide](../guides/sessions#redis--production--multi-pod) for wiring instructions.
+See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring instructions.
 
 <Tabs>
   <TabItem value="standalone" label="Standalone">
@@ -502,7 +506,7 @@ SQLite is the recommended session store for **development, staging, and single-p
 production**. It uses the Node.js built-in `node:sqlite` module — zero npm dependencies.
 Requires Node.js ≥ 22.5.0.
 
-See the [Sessions guide](../guides/sessions#sqlite--dev--staging--single-pod) for wiring instructions.
+See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring instructions.
 
 <Tabs>
   <TabItem value="memory" label="In-memory (dev)">
@@ -574,6 +578,32 @@ every model in the bundle.
   }
 }
 ```
+
+---
+
+## Driver version pinning
+
+*New in 0.3.7-alpha.3*
+
+Each connector entry accepts an optional `version` field carrying a semver range that pins the underlying driver npm package:
+
+```json title="src/api/config/connectors.json"
+{
+  "myRedis": {
+    "connector" : "redis",
+    "host"      : "127.0.0.1",
+    "port"      : 6379,
+    "version"   : "^5.0.0"
+  }
+}
+```
+
+The `version` field is informational at runtime — the driver that actually loads is whichever version was installed by `npm install` at the project root. It is consumed by two tools:
+
+- [`connector:list`](/cli/cli-connector#connectorlist) reports the pin in the driver-info column and raises a `[ !! ]` warning when two bundles pin the same driver at different versions (npm resolves one version per project, so the first `npm install` wins).
+- [`connector:add`](/cli/cli-connector#connectoradd) uses the pin to print the exact `npm install <pkg>@"<range>"` command after writing the entry. Set it with `--driver-version=<range>`.
+
+Drivers without a pin fall back to the framework's `peerDependencies` range.
 
 ---
 

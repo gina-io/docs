@@ -159,7 +159,7 @@ module.exports = UserController;
   `require()` calls
 - **Per-request isolation** -- each request gets a fresh controller instance with its
   own `local` closure (no shared state between concurrent requests)
-- **Built-in rendering** -- `self.render()` for HTML ([Swig templates](/swig)),
+- **Built-in rendering** -- `self.render()` for HTML ([Swig templates](/templating/swig)),
   `self.renderJSON()` for JSON, `self.renderStream()` for SSE
 
 ---

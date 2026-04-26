@@ -6,7 +6,7 @@ description: Add HTML template support to a Gina bundle using the Swig template 
 level: beginner
 prereqs:
   - '[Controllers](/guides/controller)'
-  - '[Swig template syntax](/swig/syntax)'
+  - '[Swig template syntax](/templating/swig/syntax)'
 ---
 
 # Views and templates
@@ -49,7 +49,7 @@ Refresh your browser — the template is now rendered.
 
 ## Template engine — Swig
 
-Gina ships with [Swig](/swig) as the default template engine — see the [Swig documentation](/swig) for the full syntax reference, built-in [tags](/swig/tags) and [filters](/swig/filters), and the [programmatic API](/swig/api). Swig uses a syntax similar to Jinja2/Django:
+Gina ships with [Swig](/templating/swig) as the default template engine — see the [Swig documentation](/templating/swig) for the full syntax reference, built-in [tags](/templating/swig/tags) and [filters](/templating/swig/filters), and the [programmatic API](/templating/swig/api). Swig uses a syntax similar to Jinja2/Django:
 
 ```html
 <!DOCTYPE html>
@@ -92,7 +92,7 @@ Data passed to `self.render({ key: value })` is exposed as `page.data` in the te
 
 ### Layout inheritance
 
-Swig supports [layout inheritance](/swig/syntax#template-inheritance) with `{% extends %}` and `{% block %}`:
+Swig supports [layout inheritance](/templating/swig/syntax#template-inheritance) with `{% extends %}` and `{% block %}`:
 
 ```html
 {# base.html #}
@@ -116,4 +116,10 @@ Swig supports [layout inheritance](/swig/syntax#template-inheritance) with `{% e
 
 ## Using a different template engine
 
-Gina does not lock you into Swig. You can use any template engine by calling `res.render()` or writing the response directly in your controller action.
+Gina does not lock you into Swig. The rendering engine is pluggable per bundle via `config/settings.json > render.engine`, and `self.render(data)` dispatches to whichever engine the bundle is configured for. Three engines are supported out of the box:
+
+- **[Swig](/templating/swig)** — the default, Jinja2/Django-inspired syntax (`@rhinostone/swig`).
+- **[Twig](/templating/twig)** — drop-in Twig-syntax frontend on the same engine (`@rhinostone/swig-twig`), opted in via `swig.package`.
+- **[Nunjucks](/templating/nunjucks)** — opt-in, project-installed (`nunjucks`). The framework never declares it as a dependency; bundles that don't opt in pay zero cost.
+
+See the [Templating overview](/templating) for the full comparison, dispatch flow, and per-engine configuration. If you need something else, you can use any template engine by calling `res.render()` or writing the response directly in your controller action.

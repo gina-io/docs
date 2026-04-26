@@ -14,11 +14,9 @@ Gina is free, open-source software. It is developed and maintained by [gina-io](
 
 ## Sponsor on GitHub
 
-The most direct way to support Gina is through GitHub Sponsors.
+GitHub Sponsors support is being set up — the sponsor page is not yet live. Check back soon.
 
-[Sponsor Gina on GitHub →](https://github.com/sponsors/gina-automator)
-
-Recurring sponsorships of any amount are welcome. Even $5/month makes a meaningful difference for a small open-source project.
+Once available, recurring sponsorships of any amount will be welcome. Even $5/month makes a meaningful difference for a small open-source project.
 
 ---
 

@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → node_modules.
-const ginaVersion = '0.3.6';
+const ginaVersion = '0.3.7-alpha.9';
 const swigVersion = '1.6.0';
 
 /** @type {import('@docusaurus/types').Config} */
@@ -34,6 +34,76 @@ const config = {
       searchResultLimits: 10,
       explicitSearchResultPath: true,
     })],
+  ],
+
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        // Every old URL points directly to its final destination under
+        // /templating/*. No redirect chains. Paired with Cloudflare Worker
+        // 301s (infra/cloudflare/worker.js § TEMPLATING_REDIRECTS) so
+        // indexed backlinks resolve via HTTP 301 at the edge; this
+        // meta-refresh layer is the fallback for direct Vercel access.
+        redirects: [
+          // Original /swig/* and /swig/twig/* URLs (pre-restructure, indexed).
+          {from: '/swig',                to: '/templating/swig'},
+          {from: '/swig/getting-started',to: '/templating/swig/getting-started'},
+          {from: '/swig/syntax',         to: '/templating/swig/syntax'},
+          {from: '/swig/tags',           to: '/templating/swig/tags'},
+          {from: '/swig/filters',        to: '/templating/swig/filters'},
+          {from: '/swig/loaders',        to: '/templating/swig/loaders'},
+          {from: '/swig/extending',      to: '/templating/swig/extending'},
+          {from: '/swig/api',            to: '/templating/swig/api'},
+          {from: '/swig/cli',            to: '/templating/swig/cli'},
+          {from: '/swig/browser',        to: '/templating/swig/browser'},
+          {from: '/swig/migration',      to: '/templating/swig/migration'},
+          {from: '/swig/security',       to: '/templating/swig/security'},
+          {from: '/swig/twig',           to: '/templating/twig'},
+          {from: '/swig/twig/migration', to: '/templating/twig/migration'},
+          {from: '/swig/twig/parity',    to: '/templating/twig/parity'},
+          {from: '/swig/twig/non-goals', to: '/templating/twig/non-goals'},
+          // Original /nunjucks URL.
+          {from: '/nunjucks',            to: '/templating/nunjucks'},
+          // Short-lived /views/* URLs (lived for ~1h before rename to
+          // /templating/*). Covered so any reader who grabbed a link in that
+          // window still lands correctly.
+          {from: '/views',                    to: '/templating'},
+          {from: '/views/swig',               to: '/templating/swig'},
+          {from: '/views/swig/getting-started',to: '/templating/swig/getting-started'},
+          {from: '/views/swig/syntax',        to: '/templating/swig/syntax'},
+          {from: '/views/swig/tags',          to: '/templating/swig/tags'},
+          {from: '/views/swig/filters',       to: '/templating/swig/filters'},
+          {from: '/views/swig/loaders',       to: '/templating/swig/loaders'},
+          {from: '/views/swig/extending',     to: '/templating/swig/extending'},
+          {from: '/views/swig/api',           to: '/templating/swig/api'},
+          {from: '/views/swig/cli',           to: '/templating/swig/cli'},
+          {from: '/views/swig/browser',       to: '/templating/swig/browser'},
+          {from: '/views/swig/migration',     to: '/templating/swig/migration'},
+          {from: '/views/swig/security',      to: '/templating/swig/security'},
+          {from: '/views/swig/twig',          to: '/templating/twig'},
+          {from: '/views/swig/twig/migration',to: '/templating/twig/migration'},
+          {from: '/views/swig/twig/parity',   to: '/templating/twig/parity'},
+          {from: '/views/swig/twig/non-goals',to: '/templating/twig/non-goals'},
+          {from: '/views/nunjucks',           to: '/templating/nunjucks'},
+          // CLI reference pages — filename-form → id-form. Each page's `id: cli-<file>`
+          // frontmatter routes the canonical URL to `/cli/cli-<file>`; these entries
+          // cover external references that assume filename-form. Paired with Cloudflare
+          // Worker 301s (infra/cloudflare/worker.js § CLI_REDIRECTS). See gina-io/docs#11.
+          {from: '/cli/bundle',    to: '/cli/cli-bundle'},
+          {from: '/cli/cache',     to: '/cli/cli-cache'},
+          {from: '/cli/connector', to: '/cli/cli-connector'},
+          {from: '/cli/env',       to: '/cli/cli-env'},
+          {from: '/cli/framework', to: '/cli/cli-framework'},
+          {from: '/cli/port',      to: '/cli/cli-port'},
+          {from: '/cli/project',   to: '/cli/cli-project'},
+          {from: '/cli/protocol',  to: '/cli/cli-protocol'},
+          {from: '/cli/scope',     to: '/cli/cli-scope'},
+          {from: '/cli/service',   to: '/cli/cli-service'},
+          {from: '/cli/view',      to: '/cli/cli-view'},
+        ],
+      },
+    ],
   ],
 
   url: 'https://gina.io',
@@ -67,7 +137,7 @@ const config = {
             return items.filter(item => {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
-              if (item.type === 'category' && item.label === 'Swig Template Engine') return false;
+              if (item.type === 'category' && item.label === 'Templating') return false;
               return true;
             });
           },
@@ -126,10 +196,10 @@ const config = {
           },
           {
             type: 'docSidebar',
-            sidebarId: 'swigSidebar',
+            sidebarId: 'templatingSidebar',
             position: 'left',
-            label: 'Swig',
-            className: 'navbar-swig-link',
+            label: 'Templating',
+            className: 'navbar-templating-link',
           },
           {
             type: 'docSidebar',
