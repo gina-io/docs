@@ -2,7 +2,7 @@
 title: CSRF Protection
 sidebar_label: CSRF
 sidebar_position: 4.6
-description: Defend Gina apps against cross-site request forgery with the signed double-submit token middleware (gina.plugins.Csrf), per-route opt-out, automatic AJAX header injection, and template helpers.
+description: Defend Gina apps against cross-site request forgery with a two-layer middleware (gina.plugins.Csrf) — Origin/Referer pre-filter plus signed double-submit token, per-route opt-out, automatic AJAX header injection, and template helpers.
 level: intermediate
 prereqs:
   - '[Sessions](/guides/sessions)'
@@ -14,7 +14,7 @@ prereqs:
 import DocMeta from '@site/src/components/DocMeta';
 
 <DocMeta
-  minutes={9}
+  minutes={11}
   level="intermediate"
   prereqs={[
     '[Sessions](/guides/sessions)',
@@ -33,12 +33,20 @@ automatically on every navigation.
 
 `gina.plugins.Csrf` is the framework's stateless defense, aligned with
 [OWASP ASVS 4.0 V4.2.1](https://owasp.org/www-project-application-security-verification-standard/).
-It is a **signed double-submit token** middleware: every safe-method request
-issues a HMAC-signed cookie + matching token, and every mutating request
-(POST / PUT / PATCH / DELETE) must echo that token back in either the
-`X-Gina-CSRF-Token` header or a `_csrf` form field. The HMAC commits to the
-session ID, so a sibling subdomain that can set cookies on the parent domain
-cannot forge a usable value.
+On every mutating request (POST / PUT / PATCH / DELETE) it runs two layers
+in order:
+
+1. **Origin / Referer pre-filter (`#CSRF3`).** Reads the request's `Origin`
+   header (or parses the host out of `Referer` as a fallback) and rejects
+   with 403 if it doesn't appear in `csrf.allowedOrigins`. Cheap, runs
+   before any cryptographic work.
+2. **Signed double-submit token (`#CSRF2`).** Verifies an HMAC-signed
+   cookie against a matching `X-Gina-CSRF-Token` header (or `_csrf` form
+   field). The HMAC commits to the session ID, so a sibling subdomain that
+   can set cookies on the parent domain cannot forge a usable value.
+
+Safe methods (GET / HEAD / OPTIONS) issue a fresh token cookie and pass
+through without either check.
 
 The plugin builds on top of [`gina.plugins.Session`](/guides/sessions#hardened-cookie-defaults--ginapluginssession)
 (the `#CSRF1` cookie hardening baseline) — Session must be registered first.
@@ -61,22 +69,24 @@ sequenceDiagram
     C->>A: next()
     A-->>B: HTML + Set-Cookie: gina-csrf-token=...
 
-    Note over B,A: Mutating request — verification
-    B->>S: POST /invoice (cookie + X-Gina-CSRF-Token header)
+    Note over B,A: Mutating request — Origin pre-filter then token verify
+    B->>S: POST /invoice (Origin + cookie + X-Gina-CSRF-Token header)
     S->>C: req.session.id assigned
-    C->>C: timingSafeEqual(header, cookie)<br/>+ verifyToken(token, sessionId, secret)
-    alt token valid
+    C->>C: 1. parseRequestOrigin(req) ∈ allowedOrigins?<br/>2. timingSafeEqual(header, cookie)<br/>3. verifyToken(token, sessionId, secret)
+    alt origin allowed AND token valid
         C->>A: next()
         A-->>B: 200 OK
+    else origin missing / not allowed
+        C-->>B: 403 Forbidden — missing origin/referer | origin not allowed
     else token missing / mismatched / forged
-        C-->>B: 403 Forbidden
+        C-->>B: 403 Forbidden — missing token | invalid token
     end
 
-    Note over B,A: Per-route exempt
+    Note over B,A: Per-route exempt — bypasses BOTH layers
     B->>S: POST /webhooks/stripe
     S->>C: req.session.id assigned
     C->>C: routing.csrfExempt === true
-    C->>A: next() — bypass verify
+    C->>A: next() — bypass Origin AND token check
     A-->>B: 200 OK
 ```
 
@@ -169,11 +179,12 @@ defaults below are what ships with the framework.
 ```json title="src/api/config/settings.json"
 {
   "csrf": {
-    "cookieName":  "gina-csrf-token",
-    "headerName":  "X-Gina-CSRF-Token",
-    "fieldName":   "_csrf",
-    "rotate":      "per-session",
-    "safeMethods": ["GET", "HEAD", "OPTIONS"]
+    "cookieName":     "gina-csrf-token",
+    "headerName":     "X-Gina-CSRF-Token",
+    "fieldName":      "_csrf",
+    "rotate":         "per-session",
+    "safeMethods":    ["GET", "HEAD", "OPTIONS"],
+    "allowedOrigins": []
   }
 }
 ```
@@ -185,6 +196,7 @@ defaults below are what ships with the framework.
 | `fieldName` | string | `"_csrf"` | Form field read on mutating methods. Picked up from `req.body`, `req.post`, `req.put`, `req.patch`, `req.delete` (in that order). |
 | `rotate` | `"per-session"` \| `"per-request"` | `"per-session"` | When to mint a fresh token. `"per-session"` reuses the same token for the lifetime of the session cookie. `"per-request"` issues a brand-new token on every safe-method response — strictest, but breaks browser back/forward navigation that reuses a cached form. |
 | `safeMethods` | string[] | `["GET", "HEAD", "OPTIONS"]` | Methods that issue a token without verifying. Methods outside this list always require a verified token (unless the route is exempt — see [Per-route opt-out](#per-route-opt-out)). |
+| `allowedOrigins` | string[] | `[]` | #CSRF3 allowlist matched against `Origin` (or `Referer` host fallback) on mutating methods. Empty/unset = bundle's configured hostname only; non-empty = explicit allowlist. Format: `["https://example.com", "https://www.example.com"]`. See [Origin / Referer pre-filter](#origin--referer-pre-filter). |
 
 The secret is **never** stored in `settings.json` — env var only.
 
@@ -315,6 +327,61 @@ the bundle to seed the cookie.
 
 ---
 
+## Origin / Referer pre-filter
+
+A second layer runs **before** the token check on every mutating request:
+the bundle reads the request's `Origin` header (falling back to parsing the
+host out of `Referer` when `Origin` is absent — rare, but seen on some
+same-origin legacy browsers) and rejects with `403 Forbidden` if the parsed
+origin doesn't appear in `csrf.allowedOrigins`. Both headers missing → 403.
+
+The pre-filter is belt-and-suspenders for the token middleware: it catches
+edge cases tokens might miss — referrer-header log leaks, legacy browser
+bugs that leak tokens in URLs, misconfigured reverse proxies that accept
+cross-origin requests. A forged token with a matching cookie still gets
+rejected here when the request didn't come from an allowed origin —
+**token layer ≠ Origin layer**.
+
+By default the allowlist contains a single entry: the bundle's configured
+hostname (`scheme://host[:port]`, derived from
+`conf[bundle][env].hostname` or composed from `server.scheme + host +
+server.port`). Multi-domain bundles can override it via `settings.json`:
+
+```json title="src/api/config/settings.json"
+{
+  "csrf": {
+    "allowedOrigins": [
+      "https://example.com",
+      "https://www.example.com"
+    ]
+  }
+}
+```
+
+Entries are matched literally (case-insensitive). Different scheme on the
+same host doesn't match (`http://example.com` ≠ `https://example.com`),
+and different port doesn't match (`http://example.com` ≠
+`http://example.com:8443`). Browsers send the actual port the request was
+issued from — list each origin exactly as the browser will present it.
+
+| Condition | Outcome | Reject reason |
+|---|---|---|
+| `Origin` matches an allowlist entry | Pass to token verify | — |
+| `Origin` missing, `Referer` host matches | Pass to token verify | — |
+| Both `Origin` and `Referer` missing | 403 | `missing origin/referer` |
+| `Origin: null` (sandboxed iframe) + no `Referer` | 403 | `missing origin/referer` |
+| `Origin` (or `Referer` host) outside the allowlist | 403 | `origin not allowed` |
+| Route marked `csrfExempt: true` | Pre-filter bypassed (consistent with token check) | — |
+| Safe method (`GET`/`HEAD`/`OPTIONS`) | Pre-filter bypassed | — |
+
+The pre-filter is unconditional on mutating methods — there is no opt-out
+short of `csrfExempt: true` or appending the offending origin to
+`allowedOrigins`. If the factory cannot resolve any origin (no bundle
+hostname in conf, empty `allowedOrigins`), `Csrf()` throws at startup
+with a clear error pointing at the fix.
+
+---
+
 ## Per-route opt-out
 
 Webhook receivers (Stripe, GitHub, third-party callbacks) are not driven by a
@@ -348,13 +415,16 @@ mechanism — webhook signature headers (Stripe `Stripe-Signature`, GitHub
 | Condition | Outcome | Fix |
 |---|---|---|
 | `GINA_CSRF_SECRET` missing at startup | Factory throws — bundle does not start | Set the env var in `env.json` or shell profile |
+| `csrf.allowedOrigins` empty AND bundle hostname unresolvable | Factory throws — bundle does not start | Set `csrf.allowedOrigins` in `settings.json` or fix `conf[bundle][env].hostname` |
 | Csrf registered before Session | First request: `next(err)` with the sessionless message | Swap the `app.use()` order — Session first, then Csrf |
 | `req.session.id` missing on mutating request | `next(err)` with the sessionless message | Confirm session middleware is producing an `id`; if using Bearer auth, remove the Csrf plugin |
+| Mutating request with no `Origin` and no `Referer` | `403 Forbidden` + `[csrf] forbidden — missing origin/referer` | Some clients strip both headers; if the call is server-to-server, mark the route `csrfExempt: true` and verify origin another way |
+| `Origin` (or `Referer` host) outside `allowedOrigins` | `403 Forbidden` + `[csrf] forbidden — origin not allowed` | Add the missing origin to `csrf.allowedOrigins` if it is legitimate (e.g. a sibling domain serving the same bundle) |
 | Mutating request with no token / no cookie | `403 Forbidden` + `[csrf] forbidden — missing token on POST /...` | Check that the form rendered the token, or that the AJAX path injects the header |
 | Token / cookie length mismatch | `403 Forbidden` + `[csrf] forbidden — token/cookie length mismatch` | Often caused by a stale cookie surviving across logout — clear cookies |
 | Token / cookie value mismatch | `403 Forbidden` + `[csrf] forbidden — token/cookie mismatch` | Form was rendered for a different session (e.g. user logged out in another tab) |
 | HMAC mismatch (forged or stale token) | `403 Forbidden` + `[csrf] forbidden — invalid token` | Token was minted with a different `GINA_CSRF_SECRET` (rotated) or by a different bundle |
-| Route marked `csrfExempt: true` | Bypass — no token check, no log line | Intentional — confirm the route has alternative origin verification |
+| Route marked `csrfExempt: true` | Bypass — no Origin check, no token check, no log line | Intentional — confirm the route has alternative origin verification |
 
 The reject log line includes the request method and URL so you can correlate
 across multiple bundles in a multi-service setup.
@@ -366,5 +436,5 @@ across multiple bundles in a multi-service setup.
 - [Sessions](/guides/sessions) — `gina.plugins.Session` cookie hardening (the `#CSRF1` baseline)
 - [routing.json reference](/reference/routing) — `csrfExempt: true` and the rest of the route schema
 - [settings.json reference](/reference/settings) — the `csrf` block schema
-- [Migration Guide — 0.3.6 → 0.3.7](/migration#036--037) — `#CSRF2` adoption notes
+- [Migration Guide — 0.3.6 → 0.3.7](/migration#036--037) — `#CSRF2` and `#CSRF3` adoption notes
 - [OWASP ASVS V4.2.1 — CSRF](https://owasp.org/www-project-application-security-verification-standard/) — the verification standard the plugin aligns with

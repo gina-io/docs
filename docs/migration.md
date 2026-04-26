@@ -91,8 +91,8 @@ modern browser does silently when the cookie arrives.
 before, with their existing cookie configuration. Hardening is opt-in — a
 one-line change when the bundle is ready for it. This is the baseline for
 the broader CSRF track — `#CSRF2` signed double-submit token middleware
-shipped in `0.3.7-alpha.9`; `#CSRF3` Origin/Referer pre-filter is planned
-for `0.4.0`.
+shipped in `0.3.7-alpha.9`; `#CSRF3` Origin/Referer pre-filter shipped in
+`0.3.7-alpha.10`.
 :::
 
 ### Security: `gina.plugins.Csrf` — signed double-submit token middleware _(opt-in)_
@@ -180,6 +180,70 @@ middleware throws via `next(err)` with a clear message pointing at the fix.
 
 See the [CSRF guide](/guides/csrf) for the full reference, including AJAX
 patterns, error tables, and the request-flow diagram.
+:::
+
+### Security: `gina.plugins.Csrf` — Origin/Referer pre-filter (`#CSRF3`) _(automatic on adoption)_
+
+:::note Layered ON TOP of the token middleware — same plugin, second layer
+The Csrf middleware now runs an Origin/Referer pre-filter **before** the
+signed-token verify on every mutating request (POST/PUT/PATCH/DELETE):
+
+1. Read `Origin` first; fall back to parsing the host out of `Referer`
+   when `Origin` is absent.
+2. Match the parsed origin against `csrf.allowedOrigins`.
+3. Both headers missing → 403 `missing origin/referer`. Mismatch → 403
+   `origin not allowed`. Otherwise the request continues to the existing
+   `#CSRF2` token verify.
+
+A forged token with a matching cookie still gets rejected here when the
+request didn't come from an allowed origin — **token layer ≠ Origin
+layer**. Belt-and-suspenders for the token middleware: catches edge cases
+tokens might miss (referrer-header log leaks, legacy browser bugs that
+leak tokens in URLs, misconfigured reverse proxies that accept
+cross-origin requests).
+
+**Default allowlist** — when `csrf.allowedOrigins` is empty or unset, the
+plugin uses a single-entry allowlist: the bundle's configured hostname
+(`scheme://host[:port]`, derived from `conf[bundle][env].hostname` or
+composed from `server.scheme + host + server.port`). Most single-domain
+bundles need no configuration at all.
+
+**Explicit allowlist** — for multi-domain bundles, set
+`csrf.allowedOrigins` in `settings.json`:
+
+```json
+{
+  "csrf": {
+    "allowedOrigins": [
+      "https://example.com",
+      "https://www.example.com"
+    ]
+  }
+}
+```
+
+Entries are matched literally (case-insensitive). Different scheme on the
+same host doesn't match (`http://example.com` ≠ `https://example.com`),
+and different port doesn't match.
+
+**Per-route exempt** is consistent with the token layer — `routing.json
+> "csrfExempt": true` bypasses BOTH the Origin pre-filter AND the token
+verify. Webhook receivers that mark `csrfExempt: true` continue working
+as before.
+
+**Factory throws at startup** when `csrf.allowedOrigins` is empty AND no
+bundle hostname can be resolved from `conf[bundle][env]`. The error
+message points at both fixes (set the settings key, or fix the conf).
+
+**No action required** for bundles that have already adopted `#CSRF2` and
+serve from a single configured hostname — the pre-filter activates
+automatically on upgrade and the bundle hostname is auto-derived. Bundles
+that serve the same app on multiple hostnames (e.g. `.com` + `.co.uk`)
+must add their additional hostnames to `csrf.allowedOrigins` before
+upgrade or mutating requests from the secondary hostname will 403.
+
+See the [CSRF guide — Origin / Referer pre-filter](/guides/csrf#origin--referer-pre-filter)
+for the matrix of conditions and the failure-mode reference.
 :::
 
 ### Added: `swig.useProject` — project-pinned swig override _(no action required)_
