@@ -19,6 +19,73 @@ upward to the target version.
 
 ---
 
+## 0.3.8 → 0.3.9
+
+A consumer-feedback batch — 11 framework patches surfaced from a downstream production
+deployment. **Most fixes are seamless** (no API changes required); one **behavior change**
+for nunjucks template authors is called out below.
+
+### Action required (only if applicable)
+
+#### Nunjucks templates living at `<namespace>/<namespace>-<action>.njk`
+
+If your bundle uses `render.engine = "nunjucks"` AND your route names already carry their
+namespace (e.g. `project-get`, `client-list`), the framework now drops the redundant prefix
+when resolving template paths:
+
+| Route name | Namespace | Old path | New path |
+|---|---|---|---|
+| `project-get` | `project` | `project/project-get.njk` | `project/get.njk` |
+| `client-list` | `client` | `client/client-list.njk` | `client/list.njk` |
+
+**Migration**: rename your template files to drop the namespace prefix from the file
+segment. Routes that don't carry the namespace (e.g. `project/get`, `client/list`) are
+unaffected. Bundles using swig (the default) and nunjucks bundles whose template paths
+already match the new shape need no action.
+
+### What's fixed (seamless)
+
+- **Couchbase 4.x sessions** — `JsonTranscoder` returns the already-decoded value rather
+  than raw bytes. The v4 session-store now detects pre-parsed objects and short-circuits
+  before the legacy `.toString()` path. Closes a 500 on every authenticated request that
+  touched session retrieval under Couchbase Node SDK 4.x.
+- **Per-request middleware dispatch isolation** — `nextMiddleware` previously held
+  dispatch state on its own function-object properties; under concurrent requests,
+  request B's setup overwrote request A's, surfacing as sporadic `[csrf] no req.session.id`
+  500s. Each request now gets a fresh closure with isolated state.
+- **`length` filter null safety** (nunjucks + swig) — `{{ undefined | length }}` now
+  returns 0 instead of crashing with a `TypeError`. Matches upstream nunjucks
+  `runtime.length` and Jinja2 semantics.
+- **Asset-cataloguing for embedded `{{ }}`** — `getAssets()` no longer strips the inner
+  Swig string-literal quotes when `{{ }}` is embedded mid-URL (e.g.
+  `css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}`). Closes a `Unexpected colon on line N`
+  from the cached layout's runtime Swig pass.
+- **Six render-nunjucks improvements** — `lib` registry import survives `refreshCore()`
+  cache poisoning; `userData` keys now reach the top-level template context (`{{ foo }}`
+  works in addition to `{{ page.data.foo }}`); `data.data` is aliased to `data.page.data`
+  so `{% set X = data.Y %}` resolves under nunjucks layout inheritance; `{{ page.X }}`
+  placeholders inside the framework's `ginaLoader` HTML now substitute correctly (was
+  breaking `gina.popin` / `gina.session` / `gina.forms` / `window.onGenericXhrResponse`
+  on every page); plus the namespace-prefix change above.
+- **Plugin env vars** — `process.env` now reflects framework env vars after the
+  `bin/cli` filter strip; CSRF middleware and other third-party plugins that read
+  `process.env` directly now see expected values.
+
+### What's new (opt-in, no migration)
+
+- **Bundle filter wraps for nunjucks** — bundles can register a filter wrap function on
+  `process.gina._bundleFilterWraps[bundleName]`; the framework applies it inside the
+  per-request filter factory. Survives dev-mode `refreshCore()` evictions of the `lib`
+  singleton. No-op until you register one.
+
+### Upgrade
+
+```bash
+npm install -g gina@latest --prefix=~/.npm-global
+```
+
+---
+
 ## 0.3.7 → 0.3.8
 
 Patch release for the `0.3.7` install regression. **No API changes, no
