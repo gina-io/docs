@@ -1,6 +1,7 @@
 # Local-only, never track
 CLAUDE.md
 .claude/
+.claudeignore
 
 # Dependencies
 /node_modules
