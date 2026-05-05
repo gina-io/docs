@@ -6,6 +6,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → node_modules.
 const ginaVersion = '0.3.9';
 const swigVersion = '1.6.0';
+const twigVersion = '2.0.0-alpha.7';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -162,6 +163,7 @@ const config = {
 
   customFields: {
     swigVersion,
+    twigVersion,
   },
 
   themeConfig:
@@ -169,7 +171,7 @@ const config = {
     ({
       image: 'img/social-card.jpg',
       colorMode: {
-        respectPrefersColorScheme: true,
+        respectPrefersColorScheme: false,
       },
       navbar: {
         title: 'Gina',
@@ -209,14 +211,21 @@ const config = {
             className: 'navbar-roadmap-link',
           },
           {
-            label: 'v' + ginaVersion,
-            href: 'https://github.com/gina-io/gina/releases',
+            type: 'html',
             position: 'right',
-          },
-          {
-            href: 'https://github.com/gina-io/gina',
-            label: 'GitHub',
-            position: 'right',
+            value:
+              '<span class="navbar-dual-badge">' +
+                '<a href="https://github.com/gina-io/gina/releases" target="_blank" rel="noopener noreferrer" class="navbar-dual-badge__version" aria-label="Changelog">v' + ginaVersion + '</a>' +
+                '<a href="https://github.com/gina-io/gina" target="_blank" rel="noopener noreferrer" class="navbar-dual-badge__github" aria-label="GitHub repository">' +
+                  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>' +
+                '</a>' +
+                '<a href="https://www.npmjs.com/package/gina/v/' + ginaVersion + '" target="_blank" rel="noopener noreferrer" class="navbar-dual-badge__npm" aria-label="npm package (stable)">' +
+                  '<svg viewBox="0 0 27.23 27.23" width="20" height="20" aria-hidden="true" focusable="false">' +
+                    '<rect width="27.23" height="27.23" fill="#cb3837"/>' +
+                    '<polygon fill="#fff" points="5.8 21.75 13.6 21.75 13.6 9.59 17.49 9.59 17.49 21.75 21.43 21.75 21.43 5.69 5.8 5.69"/>' +
+                  '</svg>' +
+                '</a>' +
+              '</span>',
           },
         ],
       },
@@ -259,7 +268,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright © 2009-${new Date().getFullYear()} gina-io.`,
+        copyright: `Copyright © 2009-${new Date().getFullYear()} Gina I/O.`,
       },
       prism: {
         theme: prismThemes.github,

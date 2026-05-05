@@ -83,25 +83,112 @@
   color: var(--gina-amber) !important;
 }
 
-/* Search icon */
+/* Search field — translucent on dark navbar with amber focus ring.
+   Override the icon SVG with a fixed 50%-white fill so it matches the
+   placeholder hue, independent of the input's `color` (which drives typed text). */
 .navbar__search-input {
-  background-color: rgba(255, 255, 255, 0.1);
+  --ifm-navbar-search-input-icon: url("data:image/svg+xml;utf8,<svg fill='rgba(255%2C255%2C255%2C0.5)' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' height='16px' width='16px'><path d='M6.02945,10.20327a4.17382,4.17382,0,1,1,4.17382-4.17382A4.15609,4.15609,0,0,1,6.02945,10.20327Zm9.69195,4.2199L10.8989,9.59979A5.88021,5.88021,0,0,0,12.058,6.02856,6.00467,6.00467,0,1,0,9.59979,10.8989l4.82338,4.82338a.89729.89729,0,0,0,1.29912,0,.89749.89749,0,0,0-.00087-1.29909Z'/></svg>");
+  background-color: rgba(255, 255, 255, 0.08);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  height: 32px;
+  padding-left: 36px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, width 0.2s ease;
+  width: 220px;
+}
+
+.navbar__search-input:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.navbar__search-input:focus {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--gina-amber);
+  box-shadow: 0 0 0 3px rgba(240, 176, 54, 0.22);
+  outline: none;
+  width: 280px;
 }
 
 .navbar__search-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
 }
 
-/* Color mode toggle — button uses currentColor for SVG fill */
-.navbar button[class*='toggleButton'] {
+/* Keyboard-shortcut hint chips (Cmd/Ctrl + K) */
+.navbar__search-input + .searchHintContainer_BoIB,
+.navbarSearchContainer_Bca1 kbd {
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  box-shadow: none;
+  padding: 1px 5px;
+}
+
+/* Dual badge in the navbar: version (links to changelog) + GitHub icon,
+   joined into one pill with a divider between halves. */
+.navbar-dual-badge {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  margin: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.navbar-dual-badge:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.navbar-dual-badge__version,
+.navbar-dual-badge__github,
+.navbar-dual-badge__npm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
   color: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.navbar button[class*='toggleButton']:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
+.navbar-dual-badge__version,
+.navbar-dual-badge__github {
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.navbar-dual-badge__github svg {
+  width: 16px;
+  height: 16px;
+}
+
+.navbar-dual-badge__npm svg {
+  width: 20px;
+  height: 20px;
+}
+
+.navbar-dual-badge__version:hover,
+.navbar-dual-badge__github:hover,
+.navbar-dual-badge__npm:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  text-decoration: none;
+}
+
+/* npm icon keeps its brand red regardless of hover/text colour */
+.navbar-dual-badge__npm svg rect {
+  fill: #cb3837;
+}
+.navbar-dual-badge__npm svg polygon {
+  fill: #fff;
 }
 
 /* Mobile hamburger */

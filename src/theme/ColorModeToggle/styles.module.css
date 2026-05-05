@@ -1,0 +1,63 @@
+/* Slide toggle lifted from the gina Inspector (.bm-toggle).
+   Navbar is always dark in this site, so the dark-theme palette is fixed. */
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.track {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background: #2a2b30;
+  border: 1px solid #444;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 5px;
+  font-size: 13px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--ifm-color-primary);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.input:checked ~ .track::after {
+  transform: translateX(24px);
+}
+
+.input:focus-visible ~ .track {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.input:disabled ~ .track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sun  { color: #f4b125; }
+.moon { color: #5ba1cf; }
