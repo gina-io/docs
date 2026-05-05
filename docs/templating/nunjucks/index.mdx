@@ -28,7 +28,7 @@ Pick nunjucks over swig if:
 
 Stick with swig if:
 
-- You need full parity with the swig rendering path — a couple of integrations (Early Hints 103 auto-send, static HTML cache) are not yet ported. See [Deferred features](#deferred-features) below.
+- You need 100% parity with the swig path's Inspector dev tooling — three sub-items (`statusbar.html` include, flow pipeline, queries pipeline) remain deferred to `0.5.0`. Production behaviour is at parity since `0.3.7-alpha.4`. See [Deferred features](#deferred-features) below.
 - You're writing a new bundle without prior template history and want the most-polished Gina experience today.
 
 ## Opt-in
@@ -166,21 +166,49 @@ env.addFilter('upper', function (s) { return String(s).toUpperCase(); });
 
 The built-in filters and your custom ones coexist on the same `nunjucks.Environment` — additions don't clobber Gina's registry.
 
+## What's new in `0.3.9`
+
+Six consumer-feedback patches landed in the `0.3.9` render pipeline. None change the public API; bundles already on the nunjucks path pick them up automatically.
+
+- **Top-level `userData` keys** — `self.render({ foo: 1 })` now exposes `{{ foo }}` directly in templates, in addition to `{{ page.data.foo }}`. Same shape as the swig path.
+- **`data.data` alias for layout inheritance** — the framework aliases `data.data` to `data.page.data` before `env.render()`, so `{% set X = data.Y %}` resolves under nunjucks layout inheritance.
+- **`length` filter null safety** — `{{ undefined | length }}` returns `0` instead of throwing `TypeError`. Matches upstream nunjucks `runtime.length` and Jinja2 semantics.
+- **`ginaLoader` placeholder substitution** — `{{ page.X }}` / `{{ page.environment.X }}` / `{{ page.data.session.X }}` placeholders inside the framework's injected `ginaLoader` HTML now substitute correctly. Fixes `gina.popin` / `gina.session` / `gina.forms` / `window.onGenericXhrResponse` being undefined when the loader was injected after layout render.
+- **Namespace-prefix drop** — `resolveTemplatePath()` resolves `project-get` to `project/get.njk` (was: `project/project-get.njk`). Bundles whose template files live at `<namespace>/<namespace>-<action>.njk` need to drop the second prefix; bundles with single-segment routes are unaffected.
+- **`refreshCore()` cache survival** — dev-mode framework hot-reload no longer evicts the `lib/nunjucks-filters` singleton; the filter registry stays bound across `refreshCore()` cycles.
+
+### Bundle filter wraps (opt-in)
+
+Bundles can register a filter wrap function on `process.gina._bundleFilterWraps[bundleName]`; the framework applies it inside the per-request filter factory. The wrap survives dev-mode `refreshCore()` evictions of the `lib` singleton. No-op until you register one.
+
+```javascript
+// In bundle bootstrap (once per process):
+process.gina._bundleFilterWraps = process.gina._bundleFilterWraps || {};
+process.gina._bundleFilterWraps['mybundle'] = function (filters) {
+  filters.upper = function (s) { return String(s).toUpperCase(); };
+  return filters;
+};
+```
+
 ## Deferred features
 
-The 0.3.7 release is a **minimum viable MVP**. Several features that the swig rendering path provides are deliberately not yet ported — they're documented in `controller.render-nunjucks.js`'s header comment so nothing is hidden:
+The four-session parity track (`#NJ1`–`#NJ4`) wrapped with `0.3.7-alpha.4`. All production-facing features are now at parity with the swig rendering path. The table below is the parity log:
 
-| Feature | Status | Workaround |
-| --- | --- | --- |
-| Inspector `__ginaData` dev payload | **Shipped in `0.3.7-alpha.2`** | — |
-| HTTP/2 `stream.respond()` direct path | **Shipped in `0.3.7-alpha.2`** | — |
-| Error-page template routing | **Shipped in `0.3.7-alpha.2`** | — |
-| Early Hints 103 auto-send for CSS/JS preloads | **Deferred** | Manually call `self.setEarlyHints(linkHeader)` in the action if needed. |
-| Static HTML cache (`cache` key in `routing.json`) | **Deferred** | Every request re-renders even when the route has `cache` configured. |
-| `setResources` asset cataloguing / `<gina>` layout placeholders | **Shipped in `0.3.7-alpha.3`** | — |
-| Gina's built-in filter registry (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`) | **Shipped in `0.3.7-alpha.3`** | — |
+| Feature | Status |
+| --- | --- |
+| Inspector `__ginaData` dev payload | Shipped in `0.3.7-alpha.2` |
+| HTTP/2 `stream.respond()` direct path | Shipped in `0.3.7-alpha.2` |
+| Error-page template routing | Shipped in `0.3.7-alpha.2` |
+| `setResources` asset cataloguing / `<gina>` layout placeholders (#NJ2) | Shipped in `0.3.7-alpha.3` |
+| Gina's built-in filter registry — `getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears` (#NJ1) | Shipped in `0.3.7-alpha.3` |
+| Static HTML cache (`cache` key in `routing.json`) (#NJ3) | Shipped in `0.3.7-alpha.4` |
+| Early Hints 103 auto-send for CSS/JS preloads (#NJ4) | Shipped in `0.3.7-alpha.4` |
 
-Each remaining deferred item is a focused follow-up session when the gap bites.
+Three Inspector dev-mode sub-items remain deferred to `0.5.0` — they don't affect production behaviour:
+
+- `statusbar.html` include (swig-templated)
+- `data.page.flow` pipeline from `local._timeline`
+- `data.page.queries` from `local._queryLog`
 
 ## Safety contract (negative invariants)
 
@@ -204,3 +232,7 @@ Three rules are enforced by source-inspection tests in `test/lib/render-engine-d
 
 - `0.3.7-alpha.2` (2026-04-22) — `lib/nunjucks-resolver` primitive shipped in commit `0eacab84`.
 - `0.3.7-alpha.2` (2026-04-22) — `controller.render-nunjucks.js` MVP + dispatch shipped in commit `3128e729`.
+- `0.3.7-alpha.2` (2026-04-22) — Inspector `__ginaData` dev payload, HTTP/2 `stream.respond()` direct path, error-page template routing.
+- `0.3.7-alpha.3` (2026-04-23) — `lib/nunjucks-filters` (#NJ1) + `setResources` / `<gina>` layout placeholders (#NJ2).
+- `0.3.7-alpha.4` (2026-04-23) — Static HTML cache parity (#NJ3) + Early Hints 103 auto-send (#NJ4) — closes the four-session parity track.
+- `0.3.9` (2026-05-04) — Six consumer-feedback render-pipeline patches: `length`-filter null safety · `lib` registry `refreshCore()` fallback · top-level `userData` · `data.data` alias for layout inheritance · `ginaLoader` placeholder substitution · namespace-prefix drop in `resolveTemplatePath` · per-bundle filter wraps via `process.gina._bundleFilterWraps[bundleName]`.
