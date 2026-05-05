@@ -1,4 +1,5 @@
-import React from 'react';
+import React, {useEffect} from 'react';
+import {useLocation} from '@docusaurus/router';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Category from '@theme-original/DocSidebarItem/Category';
 import styles from './styles.module.css';
@@ -23,7 +24,7 @@ const BADGE_CONFIG = {
   },
 };
 
-function buildBadgeHtml(cfg, version) {
+function buildInnerHtml(cfg, version) {
   return (
     '<div class="' + styles.swigBadge + '">' +
       '<a class="' + styles.swigPkg + '" href="' + cfg.npmHref + '" target="_blank" rel="noopener noreferrer" title="View ' + cfg.pkg + ' on npm">' +
@@ -42,24 +43,25 @@ export default function CategoryWrapper(props) {
   const {siteConfig} = useDocusaurusContext();
   const cfg = item?.label && BADGE_CONFIG[item.label];
   const version = cfg && siteConfig.customFields?.[cfg.versionField];
+  const location = useLocation();
 
-  if (!cfg || !version) {
-    return <Category {...props} />;
-  }
+  useEffect(() => {
+    if (!cfg || !version || !item.href) return;
+    const link = document.querySelector(
+      '.theme-doc-sidebar-item-category > .menu__list-item-collapsible > a[href="' + item.href + '"]'
+    );
+    if (!link) return;
+    const li = link.closest('.theme-doc-sidebar-item-category');
+    if (!li) return;
+    if (li.querySelector(':scope > [data-gina-badge="' + cfg.pkg + '"]')) return;
+    const headerDiv = li.querySelector(':scope > .menu__list-item-collapsible');
+    if (!headerDiv) return;
+    const wrap = document.createElement('div');
+    wrap.className = styles.swigBadgeInjected;
+    wrap.setAttribute('data-gina-badge', cfg.pkg);
+    wrap.innerHTML = buildInnerHtml(cfg, version);
+    headerDiv.parentNode.insertBefore(wrap, headerDiv.nextSibling);
+  }, [cfg, version, item.href, location.pathname]);
 
-  const patchedItem = {
-    ...item,
-    collapsed: false,
-    items: [
-      {
-        type: 'html',
-        value: buildBadgeHtml(cfg, version),
-        defaultStyle: false,
-        className: styles.swigBadgeListItem,
-      },
-      ...(item.items || []),
-    ],
-  };
-
-  return <Category {...props} item={patchedItem} />;
+  return <Category {...props} />;
 }

@@ -1,7 +1,5 @@
-.swigBadgeListItem {
-  list-style: none;
-  padding: 6px 12px;
-  margin-left: -8px;
+.swigBadgeInjected {
+  padding: 6px 12px 8px;
 }
 
 .swigBadge {
