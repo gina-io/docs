@@ -19,6 +19,64 @@ upward to the target version.
 
 ---
 
+## 0.3.9 → 0.3.10
+
+A FormValidator hardening release covering HTML5 form-reassociated controls
+(`<input form="X">`), plus reverse-proxy path-prefix awareness via the standard
+`X-Forwarded-Prefix` request header. **All changes are seamless** — no API
+changes, no config changes, no behavior changes for the common single-form-owner
+case or for bundles not sitting behind a reverse proxy on a sub-path.
+
+### Action required
+
+None. Every change in this release is a no-op for the normal shape (controls in
+their own form, no reverse proxy in front of the bundle). If your bundle uses
+HTML5 form reassociation OR sits behind a reverse proxy on a sub-path, the new
+behaviour is automatic.
+
+### What's fixed (seamless)
+
+- **FormValidator binding for form-reassociated controls** — `bindForm` now
+  collects controls via `HTMLFormControlsCollection` (`form.elements`) for
+  owner-aware collection. A parent form no longer accidentally collects
+  descendants reassociated to other forms. Per-control listeners are attached on
+  out-of-tree reassociated controls (whose events don't bubble to the form), and
+  `unbindForm` symmetrically drains the side-table on cleanup.
+- **FormValidator radio mutual-exclusion grouping** — `updateRadio` now scopes
+  the peer set by form-owner. Same-name radios in different form-owners are no
+  longer cross-fired into each other's mutual-exclusion loop. On init, the IDL
+  `.checked` is reconciled with the HTML `checked` attribute when they disagree,
+  recovering author intent for radios that surface the parse-time IDL/attribute
+  desync browsers produce in mixed DOM-tree + form-owner layouts.
+- **FormValidator reset for form-reassociated radios** — `bindForm`'s
+  `fieldsSet[id].defaultChecked` cache now reads the IDL `defaultChecked`
+  property (which mirrors the HTML `checked` attribute regardless of the live
+  IDL state) instead of the live `.checked`. A `type="reset"` action on the form
+  correctly restores the originally-checked option for radios that hit the
+  parse-time desync.
+
+### What's new (opt-in, no migration)
+
+- **`X-Forwarded-Prefix` reverse-proxy support** — when a reverse proxy mounts
+  the bundle on a sub-path and forwards `proxy_set_header X-Forwarded-Prefix /sub;`,
+  the framework composes a public webroot (proxy prefix + bundle internal
+  `server.webroot`) and templates it into `gina.config.webroot`. Client-side URL
+  construction (`/_gina/assets/routing.json` fetch, `gina.min.css` link
+  injection, etc.) targets the correct upstream through the proxy. Header value
+  is normalised (leading slash, trailing slashes stripped, empty / `"/"`
+  dropped); back-compat preserved when the header is absent. The bundle's
+  internal `server.webroot` is unchanged; only the value templated into the
+  rendered page (`page.environment.webroot` and the client-side
+  `gina.config.webroot`) carries the prefix.
+
+### Upgrade
+
+```bash
+npm install -g gina@latest --prefix=~/.npm-global
+```
+
+---
+
 ## 0.3.8 → 0.3.9
 
 A consumer-feedback batch — 11 framework patches surfaced from a downstream production
