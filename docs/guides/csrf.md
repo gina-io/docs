@@ -11,19 +11,6 @@ prereqs:
   - '[OWASP ASVS V4.2.1](https://owasp.org/www-project-application-security-verification-standard/)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta
-  minutes={11}
-  level="intermediate"
-  prereqs={[
-    '[Sessions](/guides/sessions)',
-    '[routing.json reference](/reference/routing)',
-    '[settings.json reference](/reference/settings)',
-    '[OWASP ASVS V4.2.1](https://owasp.org/www-project-application-security-verification-standard/)',
-  ]}
-/>
-
 # CSRF Protection
 
 Cross-site request forgery (CSRF) lets a malicious page trigger an authenticated
