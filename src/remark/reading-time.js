@@ -1,6 +1,18 @@
 // Remark plugin — injects a DocMeta component into every doc page.
 // Runs at build time on all .md / .mdx files under /docs/.
 // Reads `level` and `prereqs` from frontmatter (file.data.frontMatter).
+//
+// IMPORTANT for guide authors:
+//   - Do NOT add a manual `<DocMeta>` import + JSX block to guide source.
+//     This plugin auto-injects both. All metadata flows through frontmatter
+//     (`level`, `prereqs`); reading time is computed from word count.
+//   - On `.md` files, Docusaurus' `format: 'detect'` does not reliably
+//     promote a file to MDX from JSX usage alone — a manual `<DocMeta>`
+//     block leaks the import + JSX as visible text instead of rendering.
+//   - The plugin is idempotent: if a `<DocMeta>` JSX node is already in
+//     the tree (author override with explicit `minutes={N}`), the plugin
+//     skips the insert. This is the supported escape hatch — but the
+//     normal case is to omit the manual block entirely.
 
 function countWords(nodes) {
   let n = 0;
@@ -131,7 +143,10 @@ export default function readingTimePlugin() {
       children: [],
     };
 
-    // Insert import at position 0, then DocMeta at pos+1 (accounting for the import)
+    // Insert import at position 0, then DocMeta at pos+1 (accounting for the
+    // import). Both inserts are idempotent — if a manual `<DocMeta>` block
+    // is already in the source (author override with explicit minutes={N}),
+    // the plugin leaves it untouched.
     const alreadyImported = tree.children.some(
       (n) => n.type === 'mdxjsEsm' && (n.value ?? '').includes('DocMeta'),
     );
@@ -139,6 +154,11 @@ export default function readingTimePlugin() {
       tree.children.splice(0, 0, importNode);
       pos += 1;
     }
-    tree.children.splice(pos, 0, jsxNode);
+    const alreadyJsx = tree.children.some(
+      (n) => n.type === 'mdxJsxFlowElement' && n.name === 'DocMeta',
+    );
+    if (!alreadyJsx) {
+      tree.children.splice(pos, 0, jsxNode);
+    }
   };
 }
