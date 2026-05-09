@@ -21,15 +21,17 @@ upward to the target version.
 
 ## 0.3.10 → 0.3.11
 
-Two purely-additive feature releases on top of `0.3.10`:
-internationalisation primitives (#I18N1 + #I18N2) and a built-in Prometheus
-metrics endpoint (#OBS1). **All changes are seamless** — no API changes, no
-config changes, no behaviour changes for projects that don't opt in.
+Three purely-additive feature releases on top of `0.3.10`:
+internationalisation primitives (#I18N1 + #I18N2), a built-in Prometheus
+metrics endpoint (#OBS1), and a MongoDB ORM connector + session store
+(#CN6). **All changes are seamless** — no API changes, no config changes, no
+behaviour changes for projects that don't opt in.
 
 ### Action required
 
-None for either feature. Both are opt-in via `app.json` / `settings.json`;
-existing bundles continue to work unchanged.
+None for any of the three features. Each is opt-in via `app.json` /
+`connectors.json` / `settings.json`; existing bundles continue to work
+unchanged.
 
 ### What's available — Internationalisation (#I18N1, #I18N2)
 
@@ -70,6 +72,28 @@ status-aware fallback labels for unmatched paths. Endpoint is IP-restricted
 by default (loopback only).
 
 See [Observability guide](/guides/observability) for adoption.
+
+### What's available — MongoDB connector (#CN6)
+
+ORM connector + session store wrapping the official `mongodb` driver
+(registry pin `>=7.0.0`). JSON pipeline files at
+`bundle/models/<db>/pipelines/<Entity>/*.json` declare one operation each,
+with JSDoc-style headers for `@param` BSON-type coercion and `@return`
+shape. Three placeholder shapes — `{$arg: N}` for caller-supplied positional
+args, `{$oid: "<hex>"}` for ObjectId literals, and a literal `"$scope"`
+string for environment isolation. Eleven operations supported (`findOne` /
+`find` / `aggregate` / `countDocuments` / `insertOne` / `insertMany` /
+`updateOne` / `updateMany` / `replaceOne` / `deleteOne` / `deleteMany`).
+
+The session store creates a TTL index on the first `set()` call (deferred so
+ORM-only setups never run DDL) and filters `get` / `length` / `all` on
+`expiresAt > now` to cover the 60-second TTL-monitor lag.
+
+Install `mongodb` as a peer dependency in your project
+(`npm install mongodb`) and declare a `connectors.json` entry with
+`"connector": "mongodb"`.
+
+See [MongoDB ORM guide](/guides/connectors-mongodb) for adoption.
 
 ---
 
