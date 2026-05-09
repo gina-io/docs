@@ -19,6 +19,60 @@ upward to the target version.
 
 ---
 
+## 0.3.10 → 0.3.11
+
+Two purely-additive feature releases on top of `0.3.10`:
+internationalisation primitives (#I18N1 + #I18N2) and a built-in Prometheus
+metrics endpoint (#OBS1). **All changes are seamless** — no API changes, no
+config changes, no behaviour changes for projects that don't opt in.
+
+### Action required
+
+None for either feature. Both are opt-in via `app.json` / `settings.json`;
+existing bundles continue to work unchanged.
+
+### What's available — Internationalisation (#I18N1, #I18N2)
+
+Per-bundle JSON catalogs at `bundle/locales/<culture>.json` (e.g.
+`en.json`, `en_US.json`, `fr.json`) plus a `t(key, params, culture)` global
+helper, controller `self.t()` auto-binding `req.culture`, and swig +
+nunjucks `t` template filter. CLDR plural support via Node's built-in
+`Intl.PluralRules`. ICU MessageFormat opt-in via `t.icu()` powered by
+`intl-messageformat`. Per-request locale negotiation from URL prefix /
+cookie / `Accept-Language` / settings default. CLI: `gina i18n:scan / add /
+export / import` for translator round-trip (PO / CSV / JSON).
+
+The legacy `__()` placeholder (helpers/text.js) is rewired as a one-arg
+alias of `t()` — existing callers keep working with no behaviour change
+when no catalog is loaded.
+
+See [Internationalisation guide](/guides/i18n) for adoption.
+
+### What's available — Prometheus metrics endpoint (#OBS1)
+
+Built-in `/_gina/metrics` endpoint exposing Prometheus exposition format.
+Opt-in via `app.json`:
+
+```json title="src/<bundle>/config/app.json"
+{
+  "metrics": {
+    "enabled": true,
+    "allowFrom": ["127.0.0.1", "::1"]
+  }
+}
+```
+
+Install `prom-client` as a peer dependency in your project
+(`npm install prom-client`). Default metrics include Node.js process state
+(heap, GC, event loop lag) plus per-request HTTP counter and duration
+histogram. Route labels come from `req.routing.rule` (cardinality-safe);
+status-aware fallback labels for unmatched paths. Endpoint is IP-restricted
+by default (loopback only).
+
+See [Observability guide](/guides/observability) for adoption.
+
+---
+
 ## 0.3.9 → 0.3.10
 
 A FormValidator hardening release covering HTML5 form-reassociated controls
