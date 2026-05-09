@@ -77,6 +77,7 @@ internally, so `"home"` becomes `"home@frontend"` and is unique across the proje
 | `requirements` | — | — | Per-parameter validation. Regex string or `validator::{ ... }` |
 | `param.control` | ✓ | — | Controller method to invoke |
 | `param.file` | — | rule name | Template path relative to the views directory |
+| `param.section` | — | — | Auto-promoted to `page.section` (sub-section dispatch from a single template) |
 | `param.title` | — | — | Page title. Supports `:param` substitution |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action, in order |
 | `scopes` | — | current scope | Scopes where this route is active |

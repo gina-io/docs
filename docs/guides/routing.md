@@ -112,6 +112,7 @@ unique across the project.
 | `requirements` | — | — | Regex or validator constraints per URL parameter |
 | `param.control` | ✓ | — | Controller method to invoke |
 | `param.file` | — | rule name | Template path relative to the namespace views dir |
+| `param.section` | — | — | Auto-promoted to `page.section` for sub-section dispatch — a single template fans out to per-section partials based on the matched route |
 | `param.title` | — | — | Page title. Supports `:param` substitution |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action |
 | `scopes` | — | `[current scope]` | Scopes where this route is active |
@@ -351,6 +352,42 @@ module.exports = AccountController;
 When a namespace controller exists, the inheritance chain is:
 `NamespaceController → MainController (controller.js) → SuperController`.
 Without a namespace: `Controller (controller.js) → SuperController`.
+
+---
+
+## Section dispatch
+
+When a single template fans out to per-section partials based on the matched route, declare the section in `param.section` — the framework auto-promotes it to `page.section` for the template, so the controller doesn't have to set `data.page.section` itself.
+
+```json title="config/routing.json"
+"account-billing": {
+  "namespace": "account",
+  "url": "/account/billing",
+  "param": {
+    "control": "get",
+    "file": "index",
+    "section": "billing"
+  }
+},
+"account-profile": {
+  "namespace": "account",
+  "url": "/account/profile",
+  "param": {
+    "control": "get",
+    "file": "index",
+    "section": "profile"
+  }
+}
+```
+
+The shared `index.html` composes the include path from `page.section`:
+
+```swig title="templates/account/index.html"
+{% set t = './includes/' + page.section + '.html' %}
+{% include t %}
+```
+
+Both routes render `templates/account/index.html`, but include `templates/account/includes/billing.html` for the first and `templates/account/includes/profile.html` for the second.
 
 ---
 
