@@ -409,18 +409,38 @@ compatibility.
 
 ### Bundle bootstrap
 
-```javascript
-var session      = require('express-session');
-session.name     = 'session';
-var MongodbStore = require('gina/framework/v0.3.11-alpha.2/core/connectors/mongodb/lib/session-store')(session, 'mybundle');
+The framework exposes a generic `SessionStore` factory on `gina.lib`. It reads
+`config/connectors.json`, looks up the entry whose key matches `session.name`,
+and returns the connector-specific Store class — the same one-line wiring used
+for every other connector (Redis, SQLite, Couchbase, ScyllaDB).
 
-app.use(session({
-    store : new MongodbStore(),
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false
-}));
+```javascript
+var myapp        = require('gina');
+var session      = require('express-session');
+var SessionStore = myapp.lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'session';                        // key in connectors.json
+    var MongodbStore = new SessionStore(session);    // returns the MongodbStore class
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new MongodbStore()
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
 ```
+
+`session.name` must match the key in `connectors.json` whose `connector` field
+is `"mongodb"` (above the entry is named `"session"`, so `session.name = 'session'`).
+No framework path or version string ever appears in user code — `require('gina')`
+and the `lib.SessionStore` factory shield bundles from version drift.
 
 ### TTL index — auto-create on first `set()`
 
