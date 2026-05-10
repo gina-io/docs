@@ -17,7 +17,12 @@ import TabItem from '@theme/TabItem';
 Gina uses [`express-session`](https://github.com/expressjs/session) for session
 management. Sessions are opt-in — you wire the middleware yourself in
 `bundle/index.js` so you control exactly how they behave.
-Three store backends are supported out of the box: in-memory for local development, SQLite for single-process deployments, and Redis for horizontally scaled production clusters.
+Four store backends are documented here: in-memory for local development,
+SQLite for single-process deployments, Redis for horizontally scaled
+production clusters, and Couchbase for bundles that already use Couchbase as
+their primary database. Two specialty stores (ScyllaDB, MongoDB) are
+documented alongside their respective connector guides — see
+[Cross-reference](#cross-reference) below.
 
 ---
 
@@ -82,6 +87,9 @@ For staging and production pick a persistent backend in
 | In-memory (default) | Local development only |
 | [SQLite](#configuring-the-store) | Dev, staging, single-pod production |
 | [Redis](#configuring-the-store) | Multi-pod / K8s horizontal scaling |
+| [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v2 / v3 / v4 auto-selected |
+| [ScyllaDB](/guides/scylladb-orm#session-store-via-cql-using-ttl) | Bundles already using ScyllaDB; CQL `USING TTL` per-row reaping |
+| [MongoDB](/guides/connectors-mongodb#session-store-via-ttl-index) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
 
 ---
 
@@ -283,7 +291,104 @@ Point dev at a local Redis without changing `connectors.json`:
 ```
 
   </TabItem>
+  <TabItem value="couchbase" label="Couchbase — when Couchbase is already the primary store">
+
+Uses the same connector that powers the Couchbase ORM. Couchbase has native
+per-document expiry — the `expiry` argument on `upsert` makes the server reap
+the document automatically. No TTL index, no sweeper job. The dispatcher
+auto-selects v2 / v3 / v4 SDK based on the project's `couchbase` pin.
+
+```bash
+npm install couchbase
+```
+
+**1. Configure `connectors.json`**
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector": "couchbase",
+    "protocol":  "couchbase://",
+    "host":      "127.0.0.1:8091",
+    "bucket":    "sessions",
+    "username":  "appuser",
+    "password":  "${COUCHBASE_PASSWORD}",
+    "ttl":       86400,
+    "prefix":    "sess:"
+  }
+}
+```
+
+For Capella / Couchbase Cloud, switch to `protocol: "couchbases://"` and pass
+the cluster hostname.
+
+| Field | Default | Description |
+|---|---|---|
+| `connector` | — | Must be `"couchbase"` |
+| `protocol` | `"couchbase://"` | `couchbases://` for TLS |
+| `host` | — | One or more `host:port` entries (`;`-separated string or array) |
+| `bucket` | — | Bucket dedicated to sessions (recommended) |
+| `username` | — | RBAC user |
+| `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
+| `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the doc key |
+
+**2. Wire the store in `bundle/index.js`**
+
+```js title="src/api/index.js"
+var myapp        = require('gina');
+var lib          = myapp.lib;
+var session      = require('express-session');
+var SessionStore = lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'session';                          // key in connectors.json
+    var CouchbaseStore = new SessionStore(session);    // returns the CouchbaseStore class
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new CouchbaseStore(),
+        cookie           : { secure: true, maxAge: 86400000 }
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
+```
+
+:::note SDK v2 deprecated since 0.2.0
+The dispatcher still selects v2 when the project pins `couchbase@^2.x`, but new
+bundles should pin v3 or v4. v2 reached upstream end-of-life in 2021 and emits
+a deprecation warning at connection time. v4 is recommended for any greenfield
+bundle.
+:::
+
+:::caution `length()`, `clear()`, `all()` not implemented
+The CouchbaseStore exposes `get` / `set` / `destroy` / `touch` only.
+express-session does not call the others on the request path — they're used by
+admin tooling. Run a `SELECT COUNT(*) FROM <bucket>` from the Couchbase UI or
+`cbq` shell when you need a session count or sweep.
+:::
+
+  </TabItem>
 </Tabs>
+
+---
+
+## Cross-reference
+
+Bundles whose primary database is ScyllaDB or MongoDB can use the same
+connector for sessions. The wiring is identical to the four tabs above
+(declare a `connectors.json` entry, set `session.name` to its key, instantiate
+via `lib.SessionStore`); the connector-specific TTL strategy and document
+shape are documented alongside each connector's ORM guide:
+
+- [ScyllaDB session store](/guides/scylladb-orm#session-store-via-cql-using-ttl) — CQL `USING TTL`, server-side reaping, requires explicit `CREATE TABLE`
+- [MongoDB session store](/guides/connectors-mongodb#session-store-via-ttl-index) — TTL index auto-created on first `set()`, 60s TTL-monitor lag covered by `expiresAt > now` filter on reads
 
 ---
 

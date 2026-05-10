@@ -383,10 +383,142 @@ connector. It can be overridden per environment in `env.json`.
 
 ---
 
+## Session store via per-document `expiry`
+
+The connector also ships an express-session-compatible session store. Couchbase
+has native per-document expiry — the `expiry` argument on `upsert` tells the
+server to delete the document automatically when its TTL elapses. There is no
+separate TTL index or sweeper job.
+
+Three implementations live alongside the ORM connector at
+`core/connectors/couchbase/lib/session-store.v{2,3,4}.js`. The dispatcher at
+`session-store.js` reads the project's `couchbase` SDK version pin from
+`package.json` and selects the matching variant automatically — `v2` (legacy
+callbacks), `v3` (Promise + bucket API), or `v4` (Promise + cluster /
+collection API). v2 has been deprecated since `0.2.0` and emits a deprecation warning at
+connection time; new bundles should pin v3 or v4.
+
+### Configuration
+
+A bundle can use the same Couchbase cluster for both ORM and sessions, or
+declare a separate connector entry. The store reads from the entry whose key
+matches `session.name`:
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector": "couchbase",
+    "protocol":  "couchbase://",
+    "host":      "127.0.0.1:8091",
+    "bucket":    "sessions",
+    "username":  "appuser",
+    "password":  "${COUCHBASE_PASSWORD}",
+    "ttl":       86400,
+    "prefix":    "sess:"
+  }
+}
+```
+
+| Option | Default | Notes |
+|---|---|---|
+| `connector` | (required) | Must be `"couchbase"` |
+| `protocol` | `"couchbase://"` | `couchbases://` for TLS (Capella, Couchbase Cloud) |
+| `host` | — | One or more `host:port` entries; `;`-separated string or array |
+| `bucket` | — | Bucket dedicated to sessions (recommended — separates session lifecycle from primary data) |
+| `username` | — | Bucket / RBAC user |
+| `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds. Stamped into each document via Couchbase's `expiry` argument |
+| `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the document key |
+| `operationTimeout` | `10000` | Per-operation timeout in ms |
+| `connectionTimeout` | `10000` | Connect-time timeout in ms |
+
+### Bundle bootstrap
+
+The same `lib.SessionStore` factory used for every other connector resolves to
+the right `CouchbaseStore` class — no version path, no explicit
+SDK-variant import:
+
+```javascript
+var myapp        = require('gina');
+var session      = require('express-session');
+var SessionStore = myapp.lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'session';                          // key in connectors.json
+    var CouchbaseStore = new SessionStore(session);    // returns the CouchbaseStore class
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new CouchbaseStore()
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
+```
+
+### TTL strategy — `expiry` on `upsert`
+
+Couchbase documents carry their TTL in document metadata. Every `set()` writes
+the session with the resolved TTL, and the server reaps the document
+server-side once it elapses. `touch()` rewrites with the same body + fresh TTL,
+short-circuiting if `lastModified` was stamped recently enough to skip the
+rewrite (an internal throttle to avoid hot-row-style write amplification on
+every request).
+
+| Express-session method | Couchbase operation |
+|---|---|
+| `set(sid, sess, fn)` | `cluster.upsert("<prefix><sid>", JSON.stringify(sess), { expiry: ttl })` |
+| `touch(sid, sess, fn)` | Same as `set`, with throttled `lastModified` updates |
+| `get(sid, fn)` | `cluster.get("<prefix><sid>")` (returns parsed session or `null` on key-not-found) |
+| `destroy(sid, fn)` | `cluster.remove("<prefix><sid>")` |
+
+### Document shape
+
+```json
+{
+  "<prefix><sid>": {
+    "cookie":       { "originalMaxAge": 86400000, "secure": false, "httpOnly": true, "sameSite": "lax" },
+    "user":         { "id": 42, "name": "Martin", "role": "admin" },
+    "lastModified": "2026-05-09T22:32:38.000Z"
+  }
+}
+```
+
+The session body is stored as a JSON string (Couchbase's binary format
+roundtrips strings transparently). Couchbase Node.js SDK 4.x uses
+`JsonTranscoder` by default and returns the parsed object — the connector's
+`get()` handles both pre-parsed and raw-bytes shapes for forward compatibility.
+
+### Promise → callback safety
+
+`destroy()` and `touch()` go through a `.then(function() { fn(null); })` /
+`.catch(fn)` pattern rather than `.then(fn)` directly. The Couchbase
+`MutationResult` (`{ cas, token }`) returned from a successful Promise would
+otherwise reach express-session as the `err` argument, propagate as a 500, and
+render the result token in the response body. This trap is documented in
+[architecture/connectors.md §8 — `#CB-BUG-4`](https://github.com/gina-io/gina/blob/develop/llms.txt) and applies to every Promise-based store.
+
+:::caution `length()`, `clear()`, `all()` are not implemented
+The CouchbaseStore exposes `get` / `set` / `destroy` / `touch` only. Couchbase
+discourages full-bucket scans without a secondary view or N1QL index, so
+sweeping all sessions or counting them is left to operators (run a one-off
+`SELECT COUNT(*) FROM <bucket>` from the Couchbase UI / `cbq` shell when
+needed). express-session does not call these methods on the request path —
+they are only used by admin tooling like `connect-test-suite`.
+:::
+
+---
+
 ## Further reading
 
 - [Models guide](/guides/models) -- entity definitions, relationships, validation
-- [Connectors reference](/reference/connectors) -- all supported connectors (Couchbase, MySQL, PostgreSQL, SQLite, Redis)
+- [Sessions guide](/guides/sessions) -- choose-a-store overview, cookie options, controller patterns
+- [Connectors reference](/reference/connectors) -- all supported connectors (Couchbase, MongoDB, ScyllaDB, MySQL, PostgreSQL, SQLite, Redis)
 - [Scopes](/concepts/scopes) -- scope model and data isolation
 - [Inspector guide](/guides/inspector) -- query instrumentation and flow waterfall
 - [Async helpers](/globals/async) -- `onCompleteCall()` for Promise/async-await bridging
