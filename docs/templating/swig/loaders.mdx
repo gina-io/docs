@@ -114,11 +114,11 @@ function myLoader(endpoint, opts) {
 swig.setDefaults({ loader: myLoader('https://…') });
 ```
 
-### Sync vs async
+### Sync vs async loaders
 
-Swig's core pipeline is synchronous. `render`, `compile`, and `precompile` invoke `loader.load(id)` without a callback and expect a string return. Only `renderFile` / `compileFile` accept a callback from the caller.
+Swig's core compile pipeline is synchronous. `render`, `compile`, and `precompile` invoke `loader.load(id)` without a callback and expect a string return. `renderFile` / `compileFile` accept a caller-side callback, but they still resolve nested `{% extends %}`, `{% include %}`, and `{% import %}` through the sync `load(id)` path during compilation — so they cannot be satisfied by an async-only loader (S3, Redis, CDN, `fetch`-backed) either.
 
-If your loader is **async-only**, you can only call the `*File` variants. `{% extends %}` / `{% include %}` / `{% import %}` fall through the sync `load(id)` path during compilation — they cannot be satisfied by an async-only loader.
+For async-only loaders, use the [`renderFileAsync`](./api#renderfileasync) and [`compileFileAsync`](./api#compilefileasync) entry points added in `2.1.0` — see [Async loaders](#async-loaders) below.
 
 ### Determinism
 
@@ -149,6 +149,74 @@ swig.setDefaults({ loader: swig.loaders.memory(precompiledMap) });
 ```
 
 See [Browser Usage](./browser) for the full workflow.
+
+---
+
+## Async loaders
+
+When your templates live behind an asynchronous source — S3, Redis, a CDN, an HTTP endpoint — neither `renderFile` / `compileFile` (with a callback) nor the core sync `render` / `compile` will cover the case. `{% extends %}`, `{% include %}`, and `{% import %}` inside a template fall through to the sync `load(id)` path during compilation, and an async-only loader has no sync arm to return from.
+
+Added in `2.1.0`, [`renderFileAsync(path, locals, cb)`](./api#renderfileasync) and [`compileFileAsync(path, options, cb)`](./api#compilefileasync) close that gap. They pre-walk the template's dependency graph asynchronously through the user loader's `load(id, cb)` arm, populate an in-memory map keyed by resolved path, then run the existing sync pipeline against a memory wrapper for the duration of the call.
+
+### Static-path requirement
+
+The pre-walker text-scans each loaded template for static `{% extends "…" %}`, `{% include "…" %}`, and `{% import "…" %}` targets (plus `{% from "…" import … %}` in `@rhinostone/swig-twig`). **String literals only** — dynamic paths surface at render time as:
+
+```text
+Error: Pre-walked map missing path: "/some/template"
+```
+
+Use a string-literal parent (or an `{% if %}` chain that selects one of N literal parents) when targeting an async-only loader. Full async-parse support for dynamic paths is tracked separately.
+
+### Example — fetch-backed loader
+
+```js
+var swig = require('@rhinostone/swig');
+
+function fetchBackedLoader(endpoint) {
+  return {
+    resolve: function (to, from) {
+      if (to.charAt(0) === '/') { return to; }
+      return '/' + to;
+    },
+    load: function (id, cb) {
+      fetch(endpoint + id)
+        .then(function (res) { return res.text(); })
+        .then(function (src) { cb(null, src); })
+        .catch(cb);
+    }
+  };
+}
+
+var instance = new swig.Swig({
+  loader: fetchBackedLoader('https://cdn.example.com/views')
+});
+
+instance.renderFileAsync('page.html', { name: 'World' }, function (err, html) {
+  if (err) { return console.error(err); }
+  console.log(html);
+});
+```
+
+`compileFileAsync` returns a renderable closure that captures the pre-walked map, so subsequent calls render synchronously without a fresh network round-trip:
+
+```js
+instance.compileFileAsync('greeting.html', {}, function (err, fn) {
+  if (err) { return console.error(err); }
+  fn({ name: 'world' });  // → "Hello, world!"
+  fn({ name: 'mars' });   // → "Hello, mars!"
+});
+```
+
+### Caveat — don't reassign `loader` mid-flight
+
+The async entry points isolate themselves by transactionally swapping `instance.options.loader` to a memory wrapper for the duration of each sync render, then restoring the original. Safe under JS event-loop semantics because the sync render never yields, so concurrent `renderFileAsync` calls don't interleave their render phases.
+
+Do **not** reassign `instance.options.loader` from outside while an async render is pending — the value at the time the async call started is what will be restored when the call completes, overwriting any intervening assignment.
+
+### Twig flavor
+
+`@rhinostone/swig-twig` exposes the same `renderFileAsync(path, locals, cb)` and `compileFileAsync(path, options, cb)` on both the default singleton and any `new twig.Twig({…})` instance. The Twig pre-walker additionally scans `{% from "macros.twig" import … %}` — the keyword Twig uses to import individual macros — so macro libraries imported via `from` are pre-resolved alongside `extends` / `include` / `import` targets.
 
 ---
 

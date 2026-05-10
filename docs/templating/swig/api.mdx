@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: API
 sidebar_label: API
 sidebar_position: 6
-description: Programmatic API for @rhinostone/swig — render, compile, compileFile, renderFile, run, setFilter, setTag, setExtension, setDefaults, setDefaultTZOffset, invalidateCache, and the Swig constructor.
+description: Programmatic API for @rhinostone/swig — render, compile, compileFile, compileFileAsync, renderFile, renderFileAsync, run, setFilter, setTag, setExtension, setDefaults, setDefaultTZOffset, invalidateCache, and the Swig constructor.
 level: intermediate
 prereqs:
   - '[Template Syntax](./syntax)'
@@ -46,7 +46,7 @@ The `SwigOpts` object is accepted by `setDefaults`, the constructor, and most pe
 ## version
 
 ```js
-swig.version  // → "1.6.0"
+swig.version  // → "2.1.0"
 ```
 
 The current package version.
@@ -154,6 +154,35 @@ swig.renderFile('/views/page.html', { title: 'Home' }, function (err, html) {
 
 ---
 
+## renderFileAsync
+
+```js
+swig.renderFileAsync(pathName, locals, cb)
+```
+
+_Added in `v2.1.0`._
+
+Load + compile + render a file via an async-only loader (S3, Redis, CDN, `fetch`-backed). Pre-walks the template's `{% extends %}` / `{% include %}` / `{% import %}` chain asynchronously through the loader's `load(id, cb)` arm, then runs the existing sync render pipeline against an in-memory wrapper. Use this when your loader has no sync `load()` arm — `renderFile` cannot resolve nested templates against such a loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+
+| Arg | Type | Description |
+| --- | --- | --- |
+| `pathName` | string | Path handed to the active loader's `resolve`. |
+| `locals` | object | Render context. Pass the callback as the second argument to omit. |
+| `cb` | `(err, output) => void` | Node-style callback. **Required** — `renderFileAsync` returns `undefined`. |
+
+```js
+swig.setDefaults({ loader: myAsyncLoader });
+
+swig.renderFileAsync('page.html', { name: 'World' }, function (err, html) {
+  if (err) throw err;
+  res.send(html);
+});
+```
+
+Template paths inside `{% extends %}`, `{% include %}`, and `{% import %}` must be string literals — dynamic paths surface as `Pre-walked map missing path: "<id>"`. See [Loaders — Static-path requirement](./loaders#static-path-requirement).
+
+---
+
 ## compile
 
 ```js
@@ -185,6 +214,34 @@ tpl({ title: 'Home' });
 ```
 
 Compiled templates are cached by the loader's resolved filename when `options.cache !== false`.
+
+---
+
+## compileFileAsync
+
+```js
+swig.compileFileAsync(pathName, options, cb)
+```
+
+_Added in `v2.1.0`._
+
+Load + compile a file via an async-only loader. Returns (via `cb`) a renderable closure that captures the pre-walked memory map, so subsequent calls render synchronously without re-running the dependency walk. Use this when your loader has no sync `load()` arm — `compileFile` cannot resolve nested templates against such a loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+
+| Arg | Type | Description |
+| --- | --- | --- |
+| `pathName` | string | Path handed to the active loader's `resolve`. |
+| `options` | object | Compilation options. Pass the callback as the second argument to omit. |
+| `cb` | `(err, fn) => void` | Node-style callback receiving the compiled function. |
+
+```js
+swig.compileFileAsync('greeting.html', {}, function (err, fn) {
+  if (err) throw err;
+  console.log(fn({ name: 'world' }));  // → "Hello, world!"
+  console.log(fn({ name: 'mars' }));   // → "Hello, mars!"
+});
+```
+
+Subsequent runtime `{% include %}`s inside the compiled template resolve against the captured memory map — no further loader access.
 
 ---
 
