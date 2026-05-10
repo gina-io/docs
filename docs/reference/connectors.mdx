@@ -44,7 +44,7 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [Redis](#redis) | Key-value store | Session store | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
 | [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
-| ScyllaDB | Wide-column | High-throughput application data | ✅ Yes — distributed by design | Planned — 0.4.0 |
+| [ScyllaDB / Cassandra](/guides/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
 
 ---
 
@@ -211,26 +211,77 @@ for Couchbase Cloud and Capella deployments.
 
 ### MongoDB
 
-Gina's MongoDB connector supports both self-hosted and Atlas deployments. Use
-`mongodb+srv://` for Atlas and DNS-seeded connection strings.
+Gina's MongoDB connector wraps the official `mongodb` driver and supports
+both self-hosted (single node, replica set) and Atlas deployments. Install
+the driver in your project:
+
+```bash
+npm install mongodb
+```
+
+The connector accepts either a fully-formed `uri` (preferred when set) OR
+decomposed fields. Use `uri` for Atlas (`mongodb+srv://`) or replica-set
+connection strings; use decomposed fields for simple single-host setups.
+
+<Tabs>
+  <TabItem value="uri" label="URI (Atlas / replica set)">
 
 ```json title="src/api/config/connectors.json"
 {
-  "mongodb": {
-    "protocol" : "mongodb://",
-    "host"     : "127.0.0.1:27017",
-    "database" : "myapp"
+  "primary": {
+    "connector": "mongodb",
+    "uri":       "mongodb+srv://<user>:<pass>@cluster0.example.net/myapp?authSource=admin",
+    "database":  "myapp"
   }
 }
 ```
 
+  </TabItem>
+  <TabItem value="decomposed" label="Decomposed (self-hosted)">
+
+```json title="src/api/config/connectors.json"
+{
+  "primary": {
+    "connector":  "mongodb",
+    "host":       "127.0.0.1",
+    "port":       27017,
+    "database":   "myapp",
+    "username":   "appuser",
+    "password":   "${MONGO_PASSWORD}",
+    "authSource": "admin"
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
 **Field reference**
 
-| Field | Type | Description |
-|---|---|---|
-| `protocol` | `"mongodb://"` \| `"mongodb+srv://"` | Use `mongodb+srv://` for Atlas and DNS seedlist connections |
-| `host` | string | Host and port for self-hosted, or Atlas cluster hostname for SRV |
-| `database` | string | Database name |
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"mongodb"` | — | Selects the MongoDB connector |
+| `uri` | string | — | Full connection string. Preferred when set; takes priority over decomposed fields |
+| `host` | string | `"127.0.0.1"` | Server host (decomposed mode only) |
+| `port` | number | `27017` | Server port (decomposed mode only) |
+| `database` | string | — | Database name. Also names the model directory (`models/<database>/`) |
+| `username` | string | — | Auth user. URL-encoded automatically when assembling the URI |
+| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution. URL-encoded automatically |
+| `authSource` | string | — | Auth database, when different from `database` |
+| `replicaSet` | string | — | Replica set name |
+| `ssl` | boolean \| object | — | `true` to enable TLS, or an object whose keys are passed through to the driver as `tlsOptions` |
+
+For the full ORM workflow — JSON pipeline files at
+`models/<db>/pipelines/<Entity>/*.json`, JSDoc-style `@param`/`@return`
+annotations, BSON type casting, and the eleven supported operations
+(`findOne` / `find` / `aggregate` / `countDocuments` / `insertOne` /
+`insertMany` / `updateOne` / `updateMany` / `replaceOne` / `deleteOne` /
+`deleteMany`) — see the [MongoDB ORM guide](/guides/connectors-mongodb).
+
+The same connector also backs the **MongoDB session store** — TTL index
+auto-created on first `set()`, with `expiresAt > now` filtering on reads to
+cover the 60-second TTL-monitor lag. See the
+[Sessions guide — MongoDB tab](/guides/sessions#configuring-the-store).
 
 ---
 

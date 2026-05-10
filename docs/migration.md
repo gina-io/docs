@@ -21,15 +21,16 @@ upward to the target version.
 
 ## 0.3.10 → 0.3.11
 
-Three purely-additive feature releases on top of `0.3.10`:
+Four purely-additive feature releases on top of `0.3.10`:
 internationalisation primitives (#I18N1 + #I18N2), a built-in Prometheus
-metrics endpoint (#OBS1), and a MongoDB ORM connector + session store
-(#CN6). **All changes are seamless** — no API changes, no config changes, no
-behaviour changes for projects that don't opt in.
+metrics endpoint (#OBS1), a ScyllaDB / Cassandra ORM connector + session
+store (#CN5), and a MongoDB ORM connector + session store (#CN6). **All
+changes are seamless** — no API changes, no config changes, no behaviour
+changes for projects that don't opt in.
 
 ### Action required
 
-None for any of the three features. Each is opt-in via `app.json` /
+None for any of the four features. Each is opt-in via `app.json` /
 `connectors.json` / `settings.json`; existing bundles continue to work
 unchanged.
 
@@ -72,6 +73,36 @@ status-aware fallback labels for unmatched paths. Endpoint is IP-restricted
 by default (loopback only).
 
 See [Observability guide](/guides/observability) for adoption.
+
+### What's available — ScyllaDB / Cassandra connector (#CN5)
+
+ORM connector + session store wrapping the official `cassandra-driver`
+(Apache Software Foundation; registry pin `>=4.0.0`). CQL prepared
+statements declared as `.sql` files at
+`bundle/models/<keyspace>/cql/<Entity>/*.sql`, with JSDoc-style headers for
+`@param` CQL-type coercion (`uuid`, `timeuuid`, `bigint`, `decimal`,
+`timestamp`, etc.) and `@return` shape. Lightweight transactions
+(`IF NOT EXISTS`, `IF version = ?`) supported with `[applied]` boolean
+extraction. Same `$scope` substitution and `_scope` filtering as the
+Couchbase connector.
+
+The session store uses CQL `USING TTL` for per-row server-side reaping.
+The sessions table must be created up front (the store does not run DDL —
+deliberate, since `CREATE TABLE` requires keyspace-level privileges most
+session-bind users won't have):
+
+```cql
+CREATE TABLE IF NOT EXISTS sessions (
+    sid  TEXT PRIMARY KEY,
+    sess TEXT
+) WITH default_time_to_live = 86400;
+```
+
+Install `cassandra-driver` as a peer dependency in your project
+(`npm install cassandra-driver`) and declare a `connectors.json` entry
+with `"connector": "scylladb"`. Requires Node `>=20`.
+
+See [ScyllaDB ORM guide](/guides/scylladb-orm) for adoption.
 
 ### What's available — MongoDB connector (#CN6)
 

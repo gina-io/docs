@@ -2,7 +2,7 @@
 title: Sessions
 sidebar_label: Sessions
 sidebar_position: 4.5
-description: Configure session management in Gina with express-session — in-memory, SQLite, and Redis stores, cookie options, secrets, and Kubernetes deployment.
+description: Configure session management in Gina with express-session — in-memory, SQLite, Redis, Couchbase, ScyllaDB, and MongoDB stores, cookie options, secrets, and Kubernetes deployment.
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -17,12 +17,10 @@ import TabItem from '@theme/TabItem';
 Gina uses [`express-session`](https://github.com/expressjs/session) for session
 management. Sessions are opt-in — you wire the middleware yourself in
 `bundle/index.js` so you control exactly how they behave.
-Four store backends are documented here: in-memory for local development,
+Six store backends are documented here: in-memory for local development,
 SQLite for single-process deployments, Redis for horizontally scaled
-production clusters, and Couchbase for bundles that already use Couchbase as
-their primary database. Two specialty stores (ScyllaDB, MongoDB) are
-documented alongside their respective connector guides — see
-[Cross-reference](#cross-reference) below.
+production clusters, and three database-native stores (Couchbase, ScyllaDB,
+MongoDB) for bundles that already use one of those as their primary database.
 
 ---
 
@@ -88,8 +86,8 @@ For staging and production pick a persistent backend in
 | [SQLite](#configuring-the-store) | Dev, staging, single-pod production |
 | [Redis](#configuring-the-store) | Multi-pod / K8s horizontal scaling |
 | [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v2 / v3 / v4 auto-selected |
-| [ScyllaDB](/guides/scylladb-orm#session-store-via-cql-using-ttl) | Bundles already using ScyllaDB; CQL `USING TTL` per-row reaping |
-| [MongoDB](/guides/connectors-mongodb#session-store-via-ttl-index) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
+| [ScyllaDB](#configuring-the-store) | Bundles already using ScyllaDB / Cassandra; CQL `USING TTL` per-row reaping |
+| [MongoDB](#configuring-the-store) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
 
 ---
 
@@ -375,20 +373,199 @@ admin tooling. Run a `SELECT COUNT(*) FROM <bucket>` from the Couchbase UI or
 :::
 
   </TabItem>
+  <TabItem value="scylladb" label="ScyllaDB / Cassandra — wide-column, native CQL TTL">
+
+Uses the same connector that powers the ScyllaDB / Cassandra ORM. CQL has no
+Redis-EXPIRE equivalent — TTL is set per-row at INSERT/UPDATE time via `USING
+TTL`, and the server reaps rows automatically once the TTL elapses. The
+underlying driver is `cassandra-driver` (Apache Software Foundation; Node.js
+has no first-party shard-aware ScyllaDB driver, so token-aware routing is
+used).
+
+```bash
+npm install cassandra-driver
+```
+
+**1. Configure `connectors.json`**
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector":       "scylladb",
+    "contactPoints":   ["127.0.0.1:9042"],
+    "localDataCenter": "datacenter1",
+    "keyspace":        "session_store",
+    "table":           "sessions",
+    "ttl":             86400
+  }
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `connector` | — | Must be `"scylladb"` |
+| `contactPoints` | `["127.0.0.1:9042"]` | Array of `host:port` entries (or comma-separated string) |
+| `localDataCenter` | `"datacenter1"` | Required by cassandra-driver 4.x for token-aware routing |
+| `keyspace` | (required) | Falls back to `database` for parity with other connectors |
+| `table` | `"sessions"` | Sessions table name |
+| `credentials` | — | `{ username, password }` — wraps in `PlainTextAuthProvider` |
+| `ttl` | `86400` | Default session TTL in seconds. Stamped via CQL `USING TTL` |
+
+**2. Create the sessions table** (the store does not auto-create)
+
+```cql
+CREATE TABLE IF NOT EXISTS session_store.sessions (
+    sid  TEXT PRIMARY KEY,
+    sess TEXT
+) WITH default_time_to_live = 86400;
+```
+
+**3. Wire the store in `bundle/index.js`**
+
+```js title="src/api/index.js"
+var myapp        = require('gina');
+var lib          = myapp.lib;
+var session      = require('express-session');
+var SessionStore = lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'session';                         // key in connectors.json
+    var ScylladbStore = new SessionStore(session);    // returns the ScylladbStore class
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new ScylladbStore(),
+        cookie           : { secure: true, maxAge: 86400000 }
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
+```
+
+:::note Node 20 required
+`cassandra-driver@>=4.0.0` requires Node `>=20`. Bundles using ScyllaDB
+inherit that constraint.
+:::
+
+:::caution `length()`, `clear()`, `all()` are full-table operations
+`length()` runs `SELECT COUNT(*)`, `clear()` runs `TRUNCATE` (a heavy cluster
+operation), and `all()` runs a full scan. Avoid in hot paths — use them only
+from admin tooling. See the [ScyllaDB ORM guide](/guides/scylladb-orm#session-store-via-cql-using-ttl)
+for the full API mapping and document shape.
+:::
+
+  </TabItem>
+  <TabItem value="mongodb" label="MongoDB — document store with TTL index">
+
+Uses the same connector that powers the MongoDB ORM. MongoDB has built-in
+support for **TTL indexes** — a special index on a `Date` field with
+`expireAfterSeconds: 0` causes the server to delete documents once their date
+has passed. The store auto-creates the index on first `set()` (deferred so
+ORM-only setups never run DDL).
+
+```bash
+npm install mongodb
+```
+
+**1. Configure `connectors.json`** — URI form (Atlas, replica set):
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector":  "mongodb",
+    "uri":        "mongodb+srv://<user>:<pass>@cluster0.example.net/?authSource=admin",
+    "database":   "session_store",
+    "collection": "sessions",
+    "ttl":        86400
+  }
+}
+```
+
+Or decomposed form (self-hosted single node):
+
+```json
+{
+  "session": {
+    "connector":  "mongodb",
+    "host":       "127.0.0.1",
+    "port":       27017,
+    "database":   "session_store",
+    "collection": "sessions",
+    "ttl":        86400
+  }
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `connector` | — | Must be `"mongodb"` |
+| `uri` | — | Full connection string. Preferred when set; takes priority over decomposed fields |
+| `host` | `"127.0.0.1"` | Server host (decomposed mode) |
+| `port` | `27017` | Server port (decomposed mode) |
+| `database` | (required) | Database name |
+| `collection` | `"sessions"` | Collection name |
+| `username` | — | Auth user. URL-encoded automatically when assembling the URI |
+| `password` | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `authSource` | — | Auth database, when different from `database` |
+| `replicaSet` | — | Replica set name |
+| `ssl` | — | `true` to enable TLS, or an object passed through to the driver as `tlsOptions` |
+| `ttl` | `86400` | Default expiry in seconds |
+
+**2. Wire the store in `bundle/index.js`**
+
+```js title="src/api/index.js"
+var myapp        = require('gina');
+var lib          = myapp.lib;
+var session      = require('express-session');
+var SessionStore = lib.SessionStore;
+
+myapp.onInitialize(function(event, app) {
+    session.name = 'session';                        // key in connectors.json
+    var MongodbStore = new SessionStore(session);    // returns the MongodbStore class
+
+    app.use(session({
+        secret           : process.env.SESSION_SECRET,
+        resave           : false,
+        saveUninitialized: false,
+        store            : new MongodbStore(),
+        cookie           : { secure: true, maxAge: 86400000 }
+    }));
+
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
+```
+
+:::note 60-second TTL-monitor lag — handled
+MongoDB's TTL monitor runs on a 60-second tick, so a recently-expired document
+can linger up to a minute. The store filters `get()` / `length()` / `all()` on
+`expiresAt > now` to never return an expired session — the filter cost is one
+indexed range scan against the existing TTL index. See the [MongoDB ORM guide](/guides/connectors-mongodb#session-store-via-ttl-index)
+for the full API mapping and document shape.
+:::
+
+  </TabItem>
 </Tabs>
 
 ---
 
-## Cross-reference
+## Connector ORM guides
 
-Bundles whose primary database is ScyllaDB or MongoDB can use the same
-connector for sessions. The wiring is identical to the four tabs above
-(declare a `connectors.json` entry, set `session.name` to its key, instantiate
-via `lib.SessionStore`); the connector-specific TTL strategy and document
-shape are documented alongside each connector's ORM guide:
+For the full ORM context of each database-native session store — entity
+wiring, query / pipeline files, scope-based data isolation, dev-mode query
+instrumentation — see each connector's dedicated guide:
 
-- [ScyllaDB session store](/guides/scylladb-orm#session-store-via-cql-using-ttl) — CQL `USING TTL`, server-side reaping, requires explicit `CREATE TABLE`
-- [MongoDB session store](/guides/connectors-mongodb#session-store-via-ttl-index) — TTL index auto-created on first `set()`, 60s TTL-monitor lag covered by `expiresAt > now` filter on reads
+- [Couchbase ORM](/guides/couchbase-orm) — N1QL, document scope isolation, multi-node cluster
+- [ScyllaDB ORM](/guides/scylladb-orm) — CQL, prepared statements, lightweight transactions
+- [MongoDB ORM](/guides/connectors-mongodb) — JSON pipeline files, BSON type casting, aggregation
+- [SQL connectors](/guides/models) — MySQL, PostgreSQL, SQLite
 
 ---
 
