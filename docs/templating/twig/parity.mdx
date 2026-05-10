@@ -15,7 +15,7 @@ prereqs:
 
 # Twig Parity
 
-This page lists exactly what `@rhinostone/swig-twig@2.0.0-alpha.8` accepts — operators, tags, filters, and is-tests — cross-referenced against upstream PHP Twig and the native `@rhinostone/swig` frontend.
+This page lists exactly what `@rhinostone/swig-twig@2.0.1` accepts — operators, tags, filters, and is-tests — cross-referenced against upstream PHP Twig and the native `@rhinostone/swig` frontend.
 
 The matrices below are ground truth: each row maps to a symbol actually exported by the shipped source. For features that throw at parse time, see [Non-Goals](./non-goals).
 
@@ -35,6 +35,19 @@ Twig-specific operators that `@rhinostone/swig-twig` accepts and the native swig
 | `#{…}` | `"hello #{name}"` | String interpolation inside double-quoted strings. | Expression replacement during tokenization. |
 
 The `~` operator is Twig's dedicated string-concat operator (`+` in Twig is strictly numeric). `#{…}` works only inside double-quoted strings.
+
+## Whitespace control
+
+`{{- … -}}` and `{%- … -%}` strip surrounding whitespace at chunk boundaries — same shape as upstream PHP Twig. Shipped in `@rhinostone/swig-twig@2.0.1`.
+
+| Marker | Effect |
+| --- | --- |
+| `{{- foo }}` | Strip the preceding chunk's trailing whitespace. |
+| `{{ foo -}}` | Strip the following chunk's leading whitespace. |
+| `{{- foo -}}` | Strip both. |
+| `{%- if … %}` / `{%- endif %}` | Same, on tag-statement boundaries. |
+
+The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of the immediately enclosing tag's last child only, not deeper. See [native swig syntax → Whitespace control](../swig/syntax#whitespace-control) for the full pattern; both frontends are consistent.
 
 ## `is` tests {#is-tests}
 
@@ -68,8 +81,8 @@ twig.render('{{ n is positive ? "yes" : "no" }}', { locals: { n: 3 } });
 | Tag | Ends | Upstream Twig | Native swig | Notes |
 | --- | --- | --- | --- | --- |
 | `set` | No¹ | Yes | Yes | Supports `{% set foo = 1 %}`, `{% set foo = [1,2] %}`, and body-form `{% set foo %}…{% endset %}`. Bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
-| `if` / `endif` | Yes | Yes | Yes | `{% else %}` and `{% elseif %}` branches deferred in alpha.8 — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
-| `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred in alpha.8 — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
+| `if` / `endif` | Yes | Yes | Yes | `{% else %}` and `{% elseif %}` branches deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
+| `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
 | `block` / `endblock` | Yes | Yes | Yes | Named block for template inheritance. |
 | `extends` | No | Yes | Yes | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
 | `include` | No | Yes | Yes | Supports `with { … }` and `only`. |

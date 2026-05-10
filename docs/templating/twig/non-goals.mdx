@@ -58,7 +58,7 @@ Upstream Twig supports positional and keyword macro calls:
 {{ field("email", value=user.email, class="required") }}
 ```
 
-swig-twig accepts the positional form — `{{ field("email", user.email, "required") }}` — but **rejects the keyword-argument form**. Lowering kwargs needs a per-macro parameter map in the IR, plus a runtime dispatcher in `swig-core`. That landed on the Phase 4 target list but slipped past alpha.5.
+swig-twig accepts the positional form — `{{ field("email", user.email, "required") }}` — but **rejects the keyword-argument form**. Lowering kwargs needs a per-macro parameter map in the IR, plus a runtime dispatcher in `swig-core`. Deferred — [open an issue](https://github.com/gina-io/swig/issues) with a concrete use case to prioritise.
 
 Workarounds:
 
@@ -109,7 +109,7 @@ Rationale: bracket-notation writes at runtime can reach through the prototype ch
 
 ## Conditional branches (deferred)
 
-Upstream Twig supports multi-branch conditionals — `{% if %} … {% elseif %} … {% else %} … {% endif %}` — and an empty-fallback form on `{% for %}` — `{% for %} … {% else %} … {% endfor %}` (runs when the iterable is empty). swig-twig alpha.8 ships only the single-branch form.
+Upstream Twig supports multi-branch conditionals — `{% if %} … {% elseif %} … {% else %} … {% endif %}` — and an empty-fallback form on `{% for %}` — `{% for %} … {% else %} … {% endfor %}` (runs when the iterable is empty). swig-twig currently ships only the single-branch form.
 
 | Shape | Accepted? | Error |
 | --- | --- | --- |
@@ -119,9 +119,9 @@ Upstream Twig supports multi-branch conditionals — `{% if %} … {% elseif %} 
 | `{% for x in items %}…{% endfor %}` | Yes | — |
 | `{% for x in items %}…{% else %}…{% endfor %}` | No | `Unexpected tag "else"` |
 
-Rationale: the single-branch shape shipped first to unblock the rest of the Twig parser surface. Multi-branch lowering needs a dedicated branch-chain IR node plus the frontend handler that consumes `else` / `elseif` tokens without pushing them on the open-tag stack. Not blocking `2.0.0` stable. [Open an issue](https://github.com/gina-io/swig/issues) with a concrete use case to prioritise.
+Rationale: the single-branch shape shipped first to unblock the rest of the Twig parser surface. Multi-branch lowering needs a dedicated branch-chain IR node plus the frontend handler that consumes `else` / `elseif` tokens without pushing them on the open-tag stack. [Open an issue](https://github.com/gina-io/swig/issues) with a concrete use case to prioritise.
 
-Workarounds that parse under alpha.8:
+Available workarounds:
 
 - **`{% if %} / {% else %}` → two `if` blocks with `not`:**
   ```twig
