@@ -16,11 +16,7 @@ prereqs:
 
 `@rhinostone/swig-twig` is a **Twig-flavored frontend** on top of the shared `@rhinostone/swig-core` engine. It lets you render templates written in [upstream PHP Twig syntax](https://twig.symfony.com/doc/3.x/) from Node.js — with the same security model, IR backend, and compilation pipeline that powers `@rhinostone/swig`.
 
-The package is currently pre-release:
-
-- **Version:** `2.0.0-alpha.8`
-- **Dist-tag:** `alpha`
-- **Stable target:** `2.0.0` (lockstep release with `swig-core` and `swig`)
+The package is **stable** since `2.0.0` and releases in lockstep with `@rhinostone/swig` and `@rhinostone/swig-core` — all three packages share the same version number on every cut.
 
 It is a **strict subset** of upstream Twig: everything it accepts compiles to the same IR as the native `swig` frontend and runs under the same `new Function(...)` sandbox boundary. Syntax that it does not yet support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. See [Non-Goals](./non-goals).
 
@@ -42,10 +38,10 @@ Every frontend (native swig, swig-twig, future Jinja2, future Django) lowers its
 ## Install
 
 ```bash
-npm install @rhinostone/swig-twig@alpha
+npm install @rhinostone/swig-twig
 ```
 
-`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin (`2.0.0-alpha.8`). The IR ABI is unstable across alpha minors, so npm will install the matching core automatically — do not override it.
+`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin matching the installed `@rhinostone/swig-twig`. The lockstep release cadence keeps the three packages on matching versions — npm installs the right core automatically; do not override it.
 
 ## Your first template
 
@@ -108,9 +104,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 
 ## Browser usage
 
-`@rhinostone/swig-twig` does not ship a pre-built browser bundle. Bundle `@rhinostone/swig-twig` through your own toolchain (esbuild, Vite, Webpack, Rollup) and follow the shared Swig [Browser Usage](../swig/browser) recipe — memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
-
-Browser support is unverified during the alpha. It will be formally validated with a smoke-test bundle at `2.0.0` stable.
+`@rhinostone/swig-twig` runs in the browser through your own bundler (esbuild, Vite, Webpack, Rollup) — see [Twig in the Browser](./browser) for the recipe and bundle-size measurements. Memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
 
 ## Relationship to `@rhinostone/swig`
 
@@ -135,26 +129,4 @@ Use **native swig** if you have existing Jinja2-inspired templates or want the b
 - **[Parity](./parity)** — operators, tags, filters, and is-tests, each grounded in the shipped source.
 - **[Non-Goals](./non-goals)** — upstream Twig features that throw at parse time or are deferred.
 - **[Migrating from upstream PHP Twig](./migration)** — behavioural differences when porting real Twig templates.
-
-## Alpha caveat
-
-The IR ABI is unstable across alpha minors. Pin `@rhinostone/swig-twig` and `@rhinostone/swig-core` to matching exact versions (npm's peerDependency range does this for you on a fresh install). Do not mix alpha versions of the two packages — the compiled IR will not match the backend emitter.
-
-Production users who want a stable API should wait for `2.0.0` stable. The alpha channel is suitable for evaluation, integration testing, and contributing fixture coverage.
-
-### `2.0.0-alpha.8` — `exports.parse` removed
-
-The soft-deprecated `parse(source, options)` wrapper on the module's default export has been removed. It was soft-deprecated since `2.0.0-alpha.4`. Migrate to the per-instance API:
-
-```js
-var twig = require('@rhinostone/swig-twig');
-
-// Default instance — render, compile, precompile, renderFile are all attached
-twig.render('Hello {{ name }}!', { locals: { name: 'World' } });
-
-// Isolated instance — honours per-instance setFilter / setTag / setExtension overrides
-var instance = new twig.Twig({ autoescape: false });
-instance.render('<b>{{ html }}</b>', { locals: { html: '<em>ok</em>' } });
-```
-
-The full-instance path honours per-instance extensions; the old wrapper did not. Internal plumbing (`twig.parser.parse`, `twig.parseFile`) is unaffected and remains available.
+- **[Twig in the Browser](./browser)** — bundling recipe and bundle-size measurements.

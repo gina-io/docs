@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Swig
 sidebar_label: Overview
 sidebar_position: 1
-description: Swig is the Jinja2/Django-inspired template engine vendored by Gina. This section documents the @rhinostone/swig fork that Gina ships — syntax, built-in tags and filters, the API, loaders, the CLI, and the browser build.
+description: Swig is the Jinja2/Django-inspired template engine that Gina consumes via npm. This section documents @rhinostone/swig directly — syntax, built-in tags and filters, the API, loaders, the CLI, and the browser build.
 level: beginner
 prereqs:
   - '[Views guide](/guides/views)'
@@ -15,15 +15,15 @@ prereqs:
 
 Swig is the default HTML template engine shipped with Gina. Its syntax is **inspired by Jinja2 and Django** — variables are wrapped in `{{ … }}`, logic tags in `{% … %}`, and layout inheritance happens through `{% extends %}` / `{% block %}` — but it is **not drop-in compatible** with either. If you are porting templates from a Jinja2 or Django project, read the [Migration Guide](./migration) first.
 
-Gina vendors the browser build of [`@rhinostone/swig`](https://github.com/gina-io/swig) under `framework/v*/core/deps/swig-client/`. This section documents that fork directly — installing it standalone, the template syntax, the full API, and how to extend it with custom tags, filters, and loaders.
+Gina consumes [`@rhinostone/swig`](https://github.com/gina-io/swig) as a regular npm dependency, declared at a semver floor in the framework's `package.json`. This section documents `@rhinostone/swig` directly — installing it standalone, the template syntax, the full API, and how to extend it with custom tags, filters, and loaders.
 
 ## About this fork
 
-The upstream project ([`paularmstrong/swig`](https://github.com/paularmstrong/swig)) is abandoned. `@rhinostone/swig` is the maintained fork that Gina depends on. Security patches (including [CVE-2023-25345](./security)) land here first, then are ported into Gina's vendored copy.
+The upstream project ([`paularmstrong/swig`](https://github.com/paularmstrong/swig)) is abandoned. `@rhinostone/swig` is the maintained successor that Gina depends on. Security patches (including [CVE-2023-25345](./security)) land here first; Gina picks them up on its next semver-allowed npm update.
 
 - **Package:** `@rhinostone/swig` on npm
 - **License:** MIT
-- **Version:** `1.6.0` — the current recommended version for production use.
+- **Version:** `2.2.0` — the current recommended version for production use.
 - **Source:** [github.com/gina-io/swig](https://github.com/gina-io/swig)
 - **Engine:** Node.js ≥ 12, all major browsers
 
@@ -114,7 +114,7 @@ Rejected override (any reason):
 
 ### Twig frontend
 
-Set `swig.package: "@rhinostone/swig-twig"` to use the [Twig-syntax frontend](../twig) instead. The API is drop-in — `self.render(data)` still works — but templates must be written in Twig syntax, not swig. The framework floor for the Twig frontend is `2.0.0-alpha.8`.
+Set `swig.package: "@rhinostone/swig-twig"` to use the [Twig-syntax frontend](../twig) instead. The API is drop-in — `self.render(data)` still works — but templates must be written in Twig syntax, not swig. See the [Twig Frontend](../twig) section for install details.
 
 ### Multi-bundle processes
 

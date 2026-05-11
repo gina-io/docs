@@ -16,7 +16,7 @@ prereqs:
 
 `@rhinostone/swig-twig` runs in the browser the same way `@rhinostone/swig` does — memory loader only, no `fs` access, identical autoescape and CVE-2023-25345 guard perimeter inherited from `@rhinostone/swig-core`. The package does not ship a pre-built browser bundle; consumers bundle through their own toolchain (esbuild, Vite, Webpack, Rollup).
 
-This page covers the Twig-specific bits: how to bundle, how to install the peer-dependency pair during alpha, and a minimal first-template example using Twig syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../swig/browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
+This page covers the Twig-specific bits: how to bundle, how to install the peer-dependency pair, and a minimal first-template example using Twig syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../swig/browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
 
 ## Architecture
 
@@ -38,22 +38,22 @@ Same flow as native swig, with two deltas:
 ## Install
 
 ```bash
-npm install @rhinostone/swig-twig@alpha @rhinostone/swig-core@alpha
+npm install @rhinostone/swig-twig
 ```
 
-During the `2.0.0-alpha.x` cycle the IR ABI is unstable across minors, so `@rhinostone/swig-twig`'s `peerDependencies` pin `@rhinostone/swig-core` to the **exact matching version** (no caret). Install both together at the same alpha — mixing minors is not supported.
+`@rhinostone/swig-twig`'s `peerDependencies` pin `@rhinostone/swig-core` to the **exact matching version** (no caret) — the lockstep release cadence keeps frontends and the core engine moving together. Install at the same version; mixing across releases is not supported.
 
 ```json
-// package.json — example consumer during alpha
+// package.json — example consumer
 {
   "dependencies": {
-    "@rhinostone/swig-core": "2.0.0-alpha.8",
-    "@rhinostone/swig-twig": "2.0.0-alpha.8"
+    "@rhinostone/swig-core": "2.2.0",
+    "@rhinostone/swig-twig": "2.2.0"
   }
 }
 ```
 
-At `2.0.0` stable the pin loosens to `^2.0.0`.
+`@rhinostone/swig-core` resolves automatically via npm's peer-dep handling on a fresh install — declaring it in `dependencies` is optional but makes the lockstep pin explicit for audit tools.
 
 ## Bundle with esbuild
 
@@ -147,7 +147,7 @@ If bundle size or cold-render latency matters, pre-compile Twig templates to pla
 
 ## Bundle size
 
-As of `2.0.0-alpha.8`, a minified browser bundle of `@rhinostone/swig-twig` plus its transitive `@rhinostone/swig-core` dependency weighs approximately **82 KB minified** (~27 KB gzipped) via esbuild `--minify --format=iife` — measured against an entry point that imports the default Twig instance, wires up a memory loader, and exposes it on `window.twig`.
+As of `2.2.0`, a minified browser bundle of `@rhinostone/swig-twig` plus its transitive `@rhinostone/swig-core` dependency weighs approximately **82 KB minified** (~27 KB gzipped) via esbuild `--minify --format=iife` — measured against an entry point that imports the default Twig instance, wires up a memory loader, and exposes it on `window.twig`.
 
 For perf-critical paths, prefer AOT pre-compilation (previous section) — the runtime footprint drops substantially because the lexer and parser are not shipped.
 
@@ -164,10 +164,7 @@ See [Security — the parser is the boundary](../swig/security#the-parser-is-the
 ## Gotchas
 
 - **Filesystem loader throws in the browser.** Always call `twig.setDefaults({ loader: twig.loaders.memory({}) })` at module init time — before any render.
-- **Peer-dependency pinning.** During alpha, `@rhinostone/swig-core` and `@rhinostone/swig-twig` must be installed at the **exact same version**. Bundlers that rely on npm's `node_modules/@rhinostone/swig-core` symlink (as in a workspace dev checkout) can mask a missing `dependencies` declaration. Verify by bundling against a fresh `node_modules`.
+- **Peer-dependency pinning.** `@rhinostone/swig-core` and `@rhinostone/swig-twig` must be installed at the **exact same version** — they release in lockstep. Bundlers that rely on npm's `node_modules/@rhinostone/swig-core` symlink (as in a workspace dev checkout) can mask a missing `dependencies` declaration. Verify by bundling against a fresh `node_modules`.
 - **Cache persistence.** The compiled-template cache lives on the Twig instance — reset on page reload. Hot-reload consumers should call `twig.invalidateCache()` before re-priming.
 - **`swig run` is not a sandbox.** Same warning as the native frontend — the function body is `eval`'d. Never hand user-controlled strings to it.
 
-## Gina's browser build
-
-Gina's vendored browser build at `framework/v*/core/deps/swig-client/swig.js` currently ships the native-swig bundle only. A vendored swig-twig bundle is scheduled for the `2.0.0` stable release; track progress in the [project roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md).
