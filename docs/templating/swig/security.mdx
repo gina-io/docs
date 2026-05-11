@@ -142,13 +142,3 @@ No other `eval` or `new Function` usage exists in the codebase.
 
 Security issues for `@rhinostone/swig` go to the [gina-io/swig issue tracker](https://github.com/gina-io/swig/issues) — private disclosure first if the bug is live. Upstream (`paularmstrong/swig`) is unmaintained and should not be treated as a reporting channel.
 
-## Gina consumers
-
-`@rhinostone/swig` is the source-of-truth for the copy vendored at `framework/v*/core/deps/swig-client/`. Security patches land here first, then are ported into the vendored tree. When in doubt, diff:
-
-```bash
-diff -q node_modules/@rhinostone/swig/dist/swig.js \
-        framework/v*/core/deps/swig-client/swig.js
-```
-
-A matching diff + `grep 'exports.version' swig.js` returning the same version confirms the port is current.
