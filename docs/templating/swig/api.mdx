@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: API
 sidebar_label: API
 sidebar_position: 6
-description: Programmatic API for @rhinostone/swig — render, compile, compileFile, compileFileAsync, renderFile, renderFileAsync, run, setFilter, setTag, setExtension, setDefaults, setDefaultTZOffset, invalidateCache, and the Swig constructor.
+description: Programmatic API for @rhinostone/swig — render, compile, compileFile, renderFile (with async-loader cb dispatch), the 2.1.0 entry-points renderFileAsync / compileFileAsync (soft-deprecated in 2.2.0), run, setFilter, setTag, setExtension, setDefaults, setDefaultTZOffset, invalidateCache, and the Swig constructor.
 level: intermediate
 prereqs:
   - '[Template Syntax](./syntax)'
@@ -145,12 +145,37 @@ Load + compile + render a file. Express-compatible when used as `app.engine('htm
 // Sync
 var html = swig.renderFile('/views/page.html', { title: 'Home' });
 
-// Async
+// Async (sync-cb form against a sync or dual-mode loader)
 swig.renderFile('/views/page.html', { title: 'Home' }, function (err, html) {
   if (err) throw err;
   res.send(html);
 });
 ```
+
+### Async-loader cb dispatch
+
+_Available since `v2.2.0`._
+
+When the active loader sets `loader.async === true`, the cb form of `renderFile` routes through the async-codegen path automatically — pre-walking the dependency graph through `loader.load(id, cb)`, then rendering against an in-memory wrapper. No call-site change is required; opt-in is via the loader flag.
+
+```js
+var asyncLoader = {
+  async: true,                                       // ← opt-in flag
+  resolve: function (to, from) { return '/' + to; },
+  load:    function (id, cb)   { fetchAsync(id, cb); }
+};
+
+swig.setDefaults({ loader: asyncLoader });
+
+swig.renderFile('page.html', { name: 'World' }, function (err, html) {
+  if (err) throw err;
+  res.send(html);
+});
+```
+
+Dispatch is **explicit-flag only** — `load.length` is not consulted, so the built-in dual-mode `swig.loaders.fs()` and `swig.loaders.memory()` (which accept both sync and cb forms) keep their existing sync-cb path.
+
+Template paths inside `{% extends %}`, `{% include %}`, and `{% import %}` must be string literals — dynamic paths surface as `Pre-walked map missing path: "<id>"`. See [Loaders — Static-path requirement](./loaders#static-path-requirement).
 
 ---
 
@@ -160,9 +185,15 @@ swig.renderFile('/views/page.html', { title: 'Home' }, function (err, html) {
 swig.renderFileAsync(pathName, locals, cb)
 ```
 
-_Added in `v2.1.0`._
+_Added in `v2.1.0`. **Soft-deprecated in `v2.2.0`**; will be removed in `v3.0`._
 
-Load + compile + render a file via an async-only loader (S3, Redis, CDN, `fetch`-backed). Pre-walks the template's `{% extends %}` / `{% include %}` / `{% import %}` chain asynchronously through the loader's `load(id, cb)` arm, then runs the existing sync render pipeline against an in-memory wrapper. Use this when your loader has no sync `load()` arm — `renderFile` cannot resolve nested templates against such a loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+:::warning Deprecated since 2.2.0
+New code should use [`renderFile(path, locals, cb)`](#renderfile) on a loader that sets `loader.async === true` — the cb-form dispatches to the same async-codegen path automatically. See [Async-loader cb dispatch](#async-loader-cb-dispatch) above.
+
+The deprecation is JSDoc-only — no runtime warning is emitted (avoids Express log spam). Existing `renderFileAsync` calls keep working through the `v2.x` line.
+:::
+
+Load + compile + render a file via an async-only loader (S3, Redis, CDN, `fetch`-backed). Pre-walks the template's `{% extends %}` / `{% include %}` / `{% import %}` chain asynchronously through the loader's `load(id, cb)` arm, then runs the existing sync render pipeline against an in-memory wrapper. Use this when your loader has no sync `load()` arm — `renderFile` (sync-cb form against a dual-mode loader) cannot resolve nested templates against an async-only loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
 
 | Arg | Type | Description |
 | --- | --- | --- |
@@ -215,6 +246,24 @@ tpl({ title: 'Home' });
 
 Compiled templates are cached by the loader's resolved filename when `options.cache !== false`.
 
+### Async codegen
+
+_Available since `v2.2.0`._
+
+Pass `{ codegenMode: 'async' }` to opt the compiled body into the async-codegen path. The returned compiled function yields a `Promise<{output, exports}>` instead of a string — async filters, dynamic `{% include %}` paths, and async-only loaders are all reachable from this shape. Use against a loader that sets `loader.async === true`.
+
+```js
+swig.compileFile('page.html', { codegenMode: 'async' }, function (err, fn) {
+  if (err) throw err;
+  fn({ name: 'World' }).then(function (result) {
+    console.log(result.output);   // → rendered string
+    // result.exports holds any top-level macros exposed by the template
+  });
+});
+```
+
+The `exports` field is what async `{% import %}` / `{% from … import %}` consult when binding macros across templates.
+
 ---
 
 ## compileFileAsync
@@ -223,9 +272,15 @@ Compiled templates are cached by the loader's resolved filename when `options.ca
 swig.compileFileAsync(pathName, options, cb)
 ```
 
-_Added in `v2.1.0`._
+_Added in `v2.1.0`. **Soft-deprecated in `v2.2.0`**; will be removed in `v3.0`._
 
-Load + compile a file via an async-only loader. Returns (via `cb`) a renderable closure that captures the pre-walked memory map, so subsequent calls render synchronously without re-running the dependency walk. Use this when your loader has no sync `load()` arm — `compileFile` cannot resolve nested templates against such a loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+:::warning Deprecated since 2.2.0
+New code should use [`compileFile(path, { codegenMode: 'async' }, cb)`](#async-codegen) on a loader that sets `loader.async === true`. The returned compiled function yields a `Promise<{output, exports}>` instead of a string — the call site changes, so migration is not a drop-in rename. See [Async codegen](#async-codegen) above for the new shape.
+
+The deprecation is JSDoc-only — no runtime warning is emitted. Existing `compileFileAsync` calls keep working through the `v2.x` line.
+:::
+
+Load + compile a file via an async-only loader. Returns (via `cb`) a renderable closure that captures the pre-walked memory map, so subsequent calls render synchronously without re-running the dependency walk. Use this when your loader has no sync `load()` arm — `compileFile` (sync-cb form against a dual-mode loader) cannot resolve nested templates against an async-only loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
 
 | Arg | Type | Description |
 | --- | --- | --- |
