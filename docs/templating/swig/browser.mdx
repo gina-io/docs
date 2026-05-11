@@ -120,7 +120,3 @@ Consuming via a bundler (Webpack, Rollup, esbuild, Vite) — `require('@rhinosto
 - **The filesystem loader throws in the browser.** Always set a custom loader (memory or pre-compiled cache) before the first render. Ideally call `swig.setDefaults({ loader: swig.loaders.memory({}) })` at module init time.
 - **`swig run` is not a sandbox.** The function body is evaluated. Do not hand it untrusted input — see [Security](./security#swig-run-is-not-a-sandbox).
 - **Cache persistence.** The in-memory cache lives on the Swig instance. Reloading the page resets it. If you hot-reload the bundle, call [`swig.invalidateCache()`](./api#invalidatecache) before re-priming to avoid stale entries.
-
-## Gina's browser build
-
-Gina vendors the `swig-client` browser build at `framework/v*/core/deps/swig-client/swig.js`. It is byte-identical to `dist/swig.js` from this repository at release time. The banner reads `"Swig v2.0.0"` (the client-shim version); the real library version lives inside as `exports.version = "1.5.0"`.
