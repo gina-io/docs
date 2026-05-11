@@ -114,11 +114,13 @@ function myLoader(endpoint, opts) {
 swig.setDefaults({ loader: myLoader('https://…') });
 ```
 
-### Sync vs async
+### Sync vs async loaders
 
-Swig's core pipeline is synchronous. `render`, `compile`, and `precompile` invoke `loader.load(id)` without a callback and expect a string return. Only `renderFile` / `compileFile` accept a callback from the caller.
+Swig's core compile pipeline is synchronous. `render`, `compile`, and `precompile` invoke `loader.load(id)` without a callback and expect a string return. The cb form of `renderFile` / `compileFile` accepts a caller-side callback, but against a dual-mode or sync loader it still resolves nested `{% extends %}`, `{% include %}`, and `{% import %}` through the sync `load(id)` path during compilation — so a loader whose `load` arm cannot return synchronously needs a different entry point.
 
-If your loader is **async-only**, you can only call the `*File` variants. `{% extends %}` / `{% include %}` / `{% import %}` fall through the sync `load(id)` path during compilation — they cannot be satisfied by an async-only loader.
+For async-only loaders (S3, Redis, CDN, `fetch`-backed), set `loader.async === true` on the loader object and use the cb form of [`renderFile`](./api#renderfile) or [`compileFile`](./api#compilefile) — the dispatch routes through the async-codegen path automatically, pre-walking the dependency graph through the loader's `load(id, cb)` arm before rendering. Available since `v2.2.0`; see [Async loaders](#async-loaders) below.
+
+The `v2.1.0` entry points [`renderFileAsync`](./api#renderfileasync) and [`compileFileAsync`](./api#compilefileasync) remain available for users still on `2.1.0` but are soft-deprecated in `2.2.0` in favor of the unified dispatch. New code should target the `renderFile` / `compileFile` cb path.
 
 ### Determinism
 
@@ -149,6 +151,96 @@ swig.setDefaults({ loader: swig.loaders.memory(precompiledMap) });
 ```
 
 See [Browser Usage](./browser) for the full workflow.
+
+---
+
+## Async loaders
+
+When your templates live behind an asynchronous source — S3, Redis, a CDN, an HTTP endpoint — the sync arm of `load` is unreachable. Without it, neither the core sync `render` / `compile` nor the sync-cb form of `renderFile` / `compileFile` against a dual-mode loader can resolve nested `{% extends %}`, `{% include %}`, or `{% import %}` during compilation.
+
+Available since `v2.2.0`, the cb form of [`renderFile(path, locals, cb)`](./api#renderfile) and [`compileFile(path, { codegenMode: 'async' }, cb)`](./api#async-codegen) closes the gap. Set `loader.async === true` on the loader object and the dispatch automatically routes through the async-codegen path: pre-walk the template's dependency graph asynchronously through the user loader's `load(id, cb)` arm, populate an in-memory map keyed by resolved path, then run the existing sync pipeline against a memory wrapper for the duration of the call.
+
+Dispatch is **explicit-flag only** — `load.length` is not consulted. The built-in dual-mode loaders (`swig.loaders.fs()` and `swig.loaders.memory()`) keep their existing sync-cb path. Opt-in is per-loader via the `async: true` flag.
+
+### Static-path requirement
+
+The pre-walker text-scans each loaded template for static `{% extends "…" %}`, `{% include "…" %}`, and `{% import "…" %}` targets (plus `{% from "…" import … %}` in `@rhinostone/swig-twig`). **String literals only** — dynamic paths surface at render time as:
+
+```text
+Error: Pre-walked map missing path: "/some/template"
+```
+
+Use a string-literal parent (or an `{% if %}` chain that selects one of N literal parents) when targeting an async-only loader. Full async-parse support for dynamic paths is tracked separately.
+
+### Example — fetch-backed loader
+
+The forward-looking shape — `renderFile` cb dispatch (available since `v2.2.0`):
+
+```js
+var swig = require('@rhinostone/swig');
+
+function fetchBackedLoader(endpoint) {
+  return {
+    async: true,                                     // ← opt-in flag
+    resolve: function (to, from) {
+      if (to.charAt(0) === '/') { return to; }
+      return '/' + to;
+    },
+    load: function (id, cb) {
+      fetch(endpoint + id)
+        .then(function (res) { return res.text(); })
+        .then(function (src) { cb(null, src); })
+        .catch(cb);
+    }
+  };
+}
+
+var instance = new swig.Swig({
+  loader: fetchBackedLoader('https://cdn.example.com/views')
+});
+
+instance.renderFile('page.html', { name: 'World' }, function (err, html) {
+  if (err) { return console.error(err); }
+  console.log(html);
+});
+```
+
+`compileFile` with `{ codegenMode: 'async' }` returns a renderable closure whose call yields a `Promise<{output, exports}>` — compile once, render many times without a fresh network round-trip:
+
+```js
+instance.compileFile('greeting.html', { codegenMode: 'async' }, function (err, fn) {
+  if (err) { return console.error(err); }
+  fn({ name: 'world' }).then(function (r) { console.log(r.output); });
+  fn({ name: 'mars'  }).then(function (r) { console.log(r.output); });
+});
+```
+
+The compiled function's return shape (`Promise<{output, exports}>`) differs from the sync-cb form's compiled function (returns a string synchronously). Migrating from `compileFileAsync` requires updating each call site to await the promise and read `.output`.
+
+### Caveat — don't reassign `loader` mid-flight
+
+The async dispatch isolates itself by transactionally swapping `instance.options.loader` to a memory wrapper for the duration of each sync render, then restoring the original. Safe under JS event-loop semantics because the sync render never yields, so concurrent calls don't interleave their render phases.
+
+Do **not** reassign `instance.options.loader` from outside while an async render is pending — the value at the time the async call started is what will be restored when the call completes, overwriting any intervening assignment. (Same caveat applies whether you're on the `v2.2.0` dispatch path or the legacy `v2.1.0` entry-points below.)
+
+### Twig flavor
+
+`@rhinostone/swig-twig` exposes the same `renderFile` cb dispatch + `compileFile { codegenMode: 'async' }` shapes on both the default singleton and any `new twig.Twig({…})` instance. The Twig pre-walker additionally scans `{% from "macros.twig" import … %}` — the keyword Twig uses to import individual macros — so macro libraries imported via `from` are pre-resolved alongside `extends` / `include` / `import` targets.
+
+### Legacy `v2.1.0` entry-points
+
+For users still on `@rhinostone/swig@2.1.0`, the `renderFileAsync(path, locals, cb)` / `compileFileAsync(path, options, cb)` methods cover the same async-loader case. They share the pre-walker mechanism and the static-path requirement above. Both methods are **soft-deprecated in `v2.2.0`** (JSDoc-only — no runtime warning) and will be removed in `v3.0`; new code should target the `renderFile` / `compileFile` cb path described above.
+
+Same loader from the example, called via the legacy entry-point:
+
+```js
+instance.renderFileAsync('page.html', { name: 'World' }, function (err, html) {
+  if (err) { return console.error(err); }
+  console.log(html);
+});
+```
+
+See the API reference for the full per-method documentation: [`renderFileAsync`](./api#renderfileasync), [`compileFileAsync`](./api#compilefileasync).
 
 ---
 
