@@ -6,7 +6,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → node_modules.
 const ginaVersion = '0.3.11';
 const swigVersion = '2.0.1';
-const twigVersion = '2.1.0';
+const twigVersion = '2.2.0';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
