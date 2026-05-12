@@ -19,6 +19,90 @@ upward to the target version.
 
 ---
 
+## 0.3.11 → 0.3.12
+
+Seven bug fixes and one dependency-floor refresh on top of `0.3.11`. **No
+action required** — all changes are seamless behaviour corrections at
+established contracts; no API changes, no config changes.
+
+### Action required
+
+None. Run `npm install -g gina@latest` (or `gina@^0.3.12` for project-local
+installs) — every fix takes effect automatically.
+
+### What's fixed — URL query-string and urlencoded body `+` decoding
+
+Two complementary parsers had the same missing-decoder bug. The Isaac
+engine's URL query-string parser never substituted `+` for space in either
+of its two branches (multi-value `&` loop + single-key `=` no-`&` path), so
+`GET /search?name=Hello+World` surfaced as
+`request.query.name === "Hello+World"` instead of `"Hello World"`. The
+`application/x-www-form-urlencoded` body parser had its content-type test
+inverted, leaving `+` literal in `req.post` / `req.put` / `req.patch`
+values (`name=Hello+World` → `"Hello+World"`). Both now decode correctly
+per RFC 1866 / WHATWG URL spec.
+
+Express engine was already spec-correct via `qs` / `querystring.unescape`
+defaults; no change there. Closes [#B17](https://github.com/gina-io/gina/issues).
+
+### What's fixed — Render-pipeline async-race safety (#M1 family)
+
+Three independent fixes for concurrent-render edge cases.
+
+`render-swig.js` captures `local.req` / `local.res` / `local.next` into
+function-scoped locals at the top of the exported `render()` function, so
+post-`await` reads remain race-safe when a second `self.throwError()` fires
+during an in-flight `renderCustomError` and nulls the controller's `local`
+closure. Same shape extended to `render-nunjucks.js`'s full call chain —
+`renderNunjucks()` captures req/res/_next at the top, and the
+`sendHtmlResponse` / `registerGinaFilters` / `writeCache` helpers take the
+captures as trailing parameters. `render-json.js` retrofitted in its
+`writeCache` helper: the post-`await` `throwError` on `invalidateOnEvents`
+misconfiguration now goes through a captured `res` parameter instead of
+`local.res`.
+
+A separate dev-mode layout cache ENOENT race in `render-swig.js`'s
+per-template layout cache: two parallel requests for the same
+`{% extends %}` URL could see the cached layout file deleted between its
+priming-block write and the post-priming read, surfacing as a 500. The
+cache write now uses an atomic temp+rename pattern so concurrent readers
+always observe either the prior or new content. Production was unaffected
+— cached mode (`_cacheIsEnabled = true`) skips the delete-rewrite path
+entirely. CVE-2023-25345 path-traversal boundary check preserved verbatim.
+
+### What's fixed — FormValidator HTML5 form-reassociated radio serialization
+
+Third sister fix in the HTML5 form-reassociation series. The `isRequired`
+validator's radio-group case walked `document.getElementsByName($el.name)`
+without filtering by form-owner — at submit time, the first matching
+`.checked` radio in document order won regardless of which form was being
+serialized. A sibling form's checked radio could leak into the
+form-under-submission's payload (and the form-under-submission's own
+default-checked radio could lose against an already-checked sibling-form
+radio sharing the same name).
+
+The fix scopes the walk to the validator-bound radio's form-owner, mirroring
+the equivalent filter applied in 0.3.10's `updateRadio` peer-set scoping
+(commit `80dd89f9`) and `bindForm` `defaultChecked` cache (commit
+`6e544411`). No-op for the normal single-form-owner shape — only changes
+behaviour in the form-reassociated layouts that were affected.
+
+### What's changed — `@rhinostone/swig` floor bumped to `^2.2.0`
+
+Version-currency drift fix to keep the framework's declared floor in
+lockstep with the latest stable. The 2.1.0 release introduced a multi-flavor
+architecture (shared `@rhinostone/swig-core` plus per-flavor frontends
+including `@rhinostone/swig-twig` for Twig syntax); the native
+`@rhinostone/swig` package remains drop-in compatible with the API surface
+gina depends on (`swig.compile`, `swig.setFilter`, `swig.setTag`,
+`swig.renderFile`). `swigResolver DEFAULT_MIN` stays at `2.0.0` — the
+framework does not depend on any new 2.1.0 / 2.2.0-only API.
+
+Projects pinning `swig.useProject: true` should ensure their own
+`node_modules/@rhinostone/swig` resolves to `^2.0.0` or newer.
+
+---
+
 ## 0.3.10 → 0.3.11
 
 Four purely-additive feature releases on top of `0.3.10`:
