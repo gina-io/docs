@@ -32,32 +32,43 @@ The pattern is the standard 12-factor split:
 
 Substitution runs **once per bundle** during the config-load cycle. After
 the first pass, downstream consumers — `getConfig()` calls in controllers,
-`self.getConfig()` inside actions, every middleware that reads from
-`req.config` — see resolved values transparently. There's nothing to wire
-up in your code.
+`self.getConfig(...)` inside controller actions, plugin / middleware code
+that reads through the same `getConfig` API — see resolved values
+transparently. There's nothing to wire up in your code.
 
 ---
 
 ## Syntax
 
 A `${secret:KEY}` placeholder must be the **entire** value of a JSON
-string field:
+string field. The connectors registry is a typical adoption surface:
 
-```json title="<bundle>/config/connector.couchbase.json"
+```json title="<bundle>/config/connectors.json"
 {
-  "local": {
-    "default": {
-      "host": "localhost",
-      "username": "admin",
-      "password": "${secret:COUCHBASE_PASSWORD}"
-    }
-  },
-  "production": {
-    "default": {
-      "host": "cb.prod.internal",
-      "username": "app",
-      "password": "${secret:COUCHBASE_PASSWORD}"
-    }
+  "$schema": "https://gina.io/schema/connectors.json",
+  "myDb": {
+    "connector": "couchbase",
+    "protocol": "couchbase://",
+    "host":     "localhost",
+    "database": "api",
+    "username": "appuser",
+    "password": "${secret:COUCHBASE_PASSWORD}",
+    "ping":     "2m"
+  }
+}
+```
+
+Per-environment overrides go in sibling files alongside the base
+`connectors.json` — `connectors.dev.json`, `connectors.production.json`,
+etc. — and need only contain the keys that differ from the base.
+Placeholders are resolved in every variant before they merge into
+`self.envConf`:
+
+```json title="<bundle>/config/connectors.production.json"
+{
+  "myDb": {
+    "host":     "cb.prod.internal",
+    "password": "${secret:COUCHBASE_PASSWORD_PROD}"
   }
 }
 ```
@@ -134,8 +145,9 @@ sequenceDiagram
 
 The resolver walks the merged config recursively — every object key,
 every array element. It mutates the singleton in place, so all
-downstream readers (`getConfig`, `Config#getInstance`, `req.config`)
-see resolved values without further substitution.
+downstream readers (`getConfig`, `Config#getInstance`, controller
+`self.getConfig(...)`) see resolved values without further
+substitution.
 
 Resolution happens **once per bundle restart**. Mutating the
 environment variable after the bundle has started does not affect any
@@ -277,8 +289,12 @@ common shapes:
 sops -d /etc/secrets/env.enc > /tmp/env.sh
 . /tmp/env.sh
 rm /tmp/env.sh
-exec gina-container bundle:start api
+exec gina-container api @myproject
 ```
+
+`gina-container` takes `<bundle> @<project>` positional arguments —
+see [K8s & Docker](/guides/k8s-docker) for the full container-runtime
+shape.
 
 The framework only cares about what's in `process.env` by the time it
 reads bundle config. Storage layer is fully decoupled.
@@ -338,12 +354,38 @@ Things the resolver deliberately does **not** do:
 
 ---
 
+## Framework integration
+
+Three framework surfaces participate in the placeholder story today:
+
+| Surface | How the resolver flows through |
+| ------- | ------------------------------ |
+| Bundle JSON configs under `<bundle>/config/*.json` and `shared/config/*.json` | Resolved by `core/config.js::loadBundleConfig` after the per-bundle merge. Every read via `getConfig` / `self.getConfig(...)` / `Config#getInstance` sees resolved values. |
+| `gina.plugins.Csrf()` HMAC secret | Reads from `settings.json > csrf.secret` first (placeholder-compatible — `lib/secrets` fills the placeholder at config-load time), with fallback to `process.env.GINA_CSRF_SECRET` for back-compat. See [CSRF Protection](/guides/csrf). |
+| `mcp.json > server.authToken` for `gina bundle:mcp-start` | The cmd handler reads `mcp.json` outside the bundle-config load path, so it explicitly calls `secrets.resolve(mcpDoc)` after the parse. `${secret:KEY}` placeholders in `mcp.json` get filled before downstream readers pick them up. Fallback to `process.env.GINA_MCP_AUTH_TOKEN` stays in place. |
+
+Bundle-author code that consumes secrets via `self.getConfig(...)` is
+covered automatically — whatever JSON file you put the placeholder in
+flows through the same resolver. Code that reads `process.env`
+directly does not — adopt the placeholder pattern by routing the read
+through a config slot.
+
+`gina.plugins.Session()` (the cookie-hardening session wrapper) does
+not own a session-signing secret of its own — the bundle's `index.js`
+passes the secret into `expressSession(...)`. To bring that secret
+under the placeholder story, read it via `self.getConfig('session').secret`
+with a `bundle/config/session.json` like `{"secret": "${secret:SESSION_SECRET}"}`.
+See [Sessions](/guides/sessions).
+
+---
+
 ## See also
 
-- [Sessions](/guides/sessions) — `gina.plugins.Session` reads its
-  signing secret from a placeholder.
-- [CSRF Protection](/guides/csrf) — `GINA_CSRF_SECRET` is the
-  canonical env-var name for the Csrf plugin's HMAC secret.
+- [Sessions](/guides/sessions) — session signing secret participates
+  when read via `self.getConfig('session').secret`.
+- [CSRF Protection](/guides/csrf) — the new `settings.csrf.secret`
+  slot is placeholder-compatible; `process.env.GINA_CSRF_SECRET`
+  remains the back-compat fallback.
 - [settings.json reference](/reference/settings) — config layout for
   framework-level settings.
 - [Scopes](/concepts/scopes) — how per-environment config slices are

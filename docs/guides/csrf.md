@@ -128,15 +128,48 @@ session id.
 
 ## Server secret
 
-The plugin reads `process.env.GINA_CSRF_SECRET` once, at factory call time,
-and refuses to start if the variable is missing — there is **no dev fallback**.
+The plugin resolves the HMAC secret at factory call time from a
+three-step chain and refuses to start if all three are missing — there
+is **no dev fallback**:
 
-Generate the secret once and store it in your bundle's `env.json` or your
-shell profile:
+1. **`opts.secret`** — passed to `gina.plugins.Csrf({ secret: ... })`.
+   Reserved for the test harness.
+2. **`settings.json > csrf.secret`** — recommended for new bundles.
+   Supports `${secret:KEY}` placeholders (filled by `lib/secrets` at
+   config-load time from `process.env[KEY]`), so the env var can carry
+   any name your deployment uses. See [Secrets in bundle config](/guides/secrets)
+   for the resolver story.
+3. **`process.env.GINA_CSRF_SECRET`** — back-compat. Always honoured
+   when the other two are unset.
+
+Generate the secret once:
 
 ```bash
 openssl rand -base64 64
 ```
+
+### Option A — `settings.json > csrf.secret` (recommended)
+
+```json title="src/api/config/settings.json"
+{
+  "csrf": {
+    "secret": "${secret:MY_CSRF_KEY}"
+  }
+}
+```
+
+```json title="src/api/config/env.json"
+{
+  "dev": {
+    "MY_CSRF_KEY": "<paste output of openssl rand -base64 64>"
+  }
+}
+```
+
+`${secret:MY_CSRF_KEY}` is filled from `process.env.MY_CSRF_KEY` at
+config-load time, before the plugin reads `settings.csrf.secret`.
+
+### Option B — `GINA_CSRF_SECRET` env var (back-compat)
 
 ```json title="src/api/config/env.json"
 {
@@ -149,8 +182,10 @@ openssl rand -base64 64
 A missing secret throws at factory call time (before the server starts):
 
 ```text
-[gina csrf] GINA_CSRF_SECRET env var is required. Generate once: openssl rand
--base64 64. Place in your bundle's env.json or your shell profile.
+[gina csrf] GINA_CSRF_SECRET env var is required (or set settings.json
+> csrf.secret — supports ${secret:KEY} placeholders). Generate once:
+openssl rand -base64 64. Place in your bundle's env.json or your shell
+profile.
 ```
 
 Rotating the secret invalidates every outstanding token — every browser tab
