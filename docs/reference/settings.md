@@ -172,6 +172,50 @@ Enable WebSocket support by adding an `engine.io` block.
 | `pingTimeout` | number (ms) | — | Time before a silent client is disconnected |
 | `upgradeTimeout` | number (ms) | — | Time allowed for transport upgrade |
 
+### `csrf`
+
+Configures the optional `gina.plugins.Csrf()` middleware (signed double-submit
+token + Origin/Referer pre-filter). Only consulted when the bundle registers
+the plugin. See the [CSRF guide](../guides/csrf) for the full reference.
+
+```json
+{
+  "csrf": {
+    "secret":         "${secret:GINA_CSRF_SECRET}",
+    "cookieName":     "gina-csrf-token",
+    "headerName":     "X-Gina-CSRF-Token",
+    "fieldName":      "_csrf",
+    "rotate":         "per-session",
+    "safeMethods":    ["GET", "HEAD", "OPTIONS"],
+    "allowedOrigins": ["https://example.com"]
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `secret` | string | — | HMAC secret used to sign and verify CSRF tokens. Accepts a `${secret:KEY}` [placeholder](../guides/secrets) that resolves from `process.env[KEY]` at config-load time. Falls back to `process.env.GINA_CSRF_SECRET` when absent. The factory throws at bundle startup when none of the three sources (`opts.secret` > `settings.csrf.secret` > env var) resolves to a non-empty value |
+| `cookieName` | string | `"gina-csrf-token"` | Name of the signed token cookie issued on safe-method requests |
+| `headerName` | string | `"X-Gina-CSRF-Token"` | Request header the middleware reads on mutating requests (POST / PUT / PATCH / DELETE) |
+| `fieldName` | string | `"_csrf"` | Form field the middleware accepts as a fallback when the header is absent |
+| `rotate` | string | `"per-session"` | Token rotation policy. `"per-session"` issues one token per session lifetime |
+| `safeMethods` | string[] | `["GET", "HEAD", "OPTIONS"]` | HTTP methods that pass through without verification |
+| `allowedOrigins` | string[] | `[<bundleHostname>]` | Allowlist for the Origin / Referer pre-filter. When empty or unset, defaults to a single-entry list with the bundle's own auto-derived hostname (`scheme://host[:port]`). Set explicitly for multi-domain bundles |
+
+**Secret precedence** (highest wins):
+
+1. `opts.secret` passed to `gina.plugins.Csrf({ secret: ... })` — test override
+2. `settings.csrf.secret` — placeholder-resolved at config-load time
+3. `process.env.GINA_CSRF_SECRET` — back-compat fallback for bundles that adopted CSRF in `0.3.7`
+
+:::tip Generate a strong secret
+```bash
+openssl rand -base64 64
+```
+Set the resulting value in `env.json` (`{ "dev": { "GINA_CSRF_SECRET": "<paste>" } }`)
+or pass it directly via the deployment platform's secret-injection mechanism.
+:::
+
 ---
 
 ## settings.server.json {#settingsserverjson}

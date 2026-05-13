@@ -19,6 +19,144 @@ upward to the target version.
 
 ---
 
+## 0.3.12 → 0.3.13
+
+A small additive batch on top of `0.3.12`: a `${secret:KEY}` placeholder
+substitution layer for bundle JSON configs, a `settings.csrf.secret`
+slot that flows through it, `${secret:KEY}` support for `mcp.json`, plus
+a `requireJSON` line-comment fix. **No action required** — all changes
+are additive (the secrets resolver) or seamless behaviour corrections;
+no API changes, no breaking config changes.
+
+### Action required
+
+None. Run `npm install -g gina@latest` (or `gina@^0.3.13` for project-local
+installs) — every change is back-compatible.
+
+### What's new — `${secret:KEY}` placeholder substitution
+
+Bundle JSON configs (`settings.json`, `app.json`, `connectors.json`, etc.)
+can now embed `${secret:KEY}` placeholders that the framework resolves at
+config-load time from `process.env[KEY]` before the merged config is
+finalised. Downstream readers (`getConfig()`, plugin factories) see the
+resolved values transparently.
+
+```json title="src/api/config/settings.json"
+{
+  "csrf": {
+    "secret": "${secret:GINA_CSRF_SECRET}"
+  }
+}
+```
+
+```json title="src/api/config/connectors.json"
+{
+  "claude": {
+    "connector": "ai",
+    "protocol":  "anthropic://",
+    "api-key":   "${secret:ANTHROPIC_API_KEY}"
+  }
+}
+```
+
+**Syntax** — only the bare `${secret:KEY}` form (entire string value)
+is substituted. `KEY` matches `^[A-Z_][A-Z0-9_]*$`. Mixed strings
+(`"prefix-${secret:K}-suffix"`) pass through unchanged. Non-string values
+are walked recursively but never mutated.
+
+**Fail-closed** — an unset or empty env var throws
+`Error('Secret resolution failed')` at bundle-start time. The error
+intentionally does not include the key name (the key is attached as a
+non-enumerable `_ginaSecretKey` property for debug logging only).
+Silent empty substitution would mask misconfiguration.
+
+**Caching** — resolution happens once per config-load cycle. A bundle
+restart re-reads `process.env`. Secret rotation requires a process
+restart (the running supervisor process inherits its env from container
+init).
+
+**Backends** — only the `process.env` backend ships in this iteration.
+The function signature is designed so a future plug-in selector
+(file-based, Vault, SOPS, K8s Secrets, etc.) can be slotted in without
+changing the resolver API.
+
+### What's new — `settings.csrf.secret` slot
+
+`gina.plugins.Csrf()` now accepts the HMAC secret from
+`settings.json > csrf.secret` in addition to the existing
+`process.env.GINA_CSRF_SECRET` env var. Combined with the placeholder
+syntax above, the recommended shape is now:
+
+```json title="src/api/config/settings.json"
+{
+  "csrf": {
+    "secret": "${secret:GINA_CSRF_SECRET}"
+  }
+}
+```
+
+**Precedence** (highest wins):
+
+1. `opts.secret` passed to `gina.plugins.Csrf({ secret: ... })` — test override
+2. `settings.csrf.secret` (placeholder-resolved)
+3. `process.env.GINA_CSRF_SECRET` — back-compat fallback
+
+Existing bundles that read the secret from `process.env.GINA_CSRF_SECRET`
+keep working unchanged. The factory still throws at startup when none
+of the three sources resolves to a non-empty value.
+
+### What's new — `mcp.json` `${secret:KEY}` support
+
+`gina bundle:mcp-start` now routes the parsed `mcp.json` manifest through
+the secrets resolver immediately after `requireJSON()`. Any field that
+holds a `${secret:KEY}` placeholder — most commonly `server.authToken`
+for the Streamable HTTP transport's bearer auth — gets substituted from
+`process.env[KEY]` before the MCP server reads it.
+
+```json title="mcp.json"
+{
+  "server": {
+    "authToken": "${secret:GINA_MCP_AUTH_TOKEN}"
+  }
+}
+```
+
+The previous direct-env-var path
+(`GINA_MCP_AUTH_TOKEN` read inside `mcp-start`) is unchanged — it still
+acts as the last fallback in the precedence chain.
+
+### What's changed — Bundle scaffolding updated
+
+Templates produced by `gina project:add` and `gina bundle:add` now show
+the `${secret:KEY}` shape as the recommended pattern for session and
+CSRF secrets:
+
+- `core/template/conf/settings.json` documents the `csrf.secret` slot
+  alongside the `GINA_CSRF_SECRET` env-var fallback.
+- `core/template/boilerplate/bundle/index.js` shows the
+  `self.getConfig('session').secret` wiring with a placeholder-bearing
+  `bundle/config/session.json`.
+
+**No action required** for existing bundles — the scaffolding affects
+only new projects / new bundles created after upgrade. Existing bundles
+keep their current secret-handling shape.
+
+### What's fixed — `requireJSON` line-comment / URL collision
+
+The framework's `requireJSON` helper previously failed to strip bare
+`//` line-comment separators in JSON config files when the same file
+also contained a URL string value (`"key": "https://example.com/..."`).
+The greedy `match` + `indexOf` pass collided on the URL's `://`, the
+URL guard re-fired against the wrong character, and the real separator
+was never stripped — `JSON.parse` then threw `Expected double-quoted
+property name`.
+
+The pass is now per-line on the leftmost `//`, with the same `:` / `"` /
+`\` char-before guard as before. Comment-bearing JSON config files with
+URL values now load cleanly. No action required.
+
+---
+
 ## 0.3.11 → 0.3.12
 
 Seven bug fixes and one dependency-floor refresh on top of `0.3.11`. **No
