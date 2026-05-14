@@ -11,10 +11,6 @@ prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta />
-
 The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, and lints / auto-fixes common schema drift. Every subcommand is **offline** — no framework socket or network call.
 
 - **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.

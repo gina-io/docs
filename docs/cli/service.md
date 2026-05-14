@@ -10,10 +10,6 @@ prereqs:
   - '[CLI bundle reference](/cli/cli-bundle)'
 ---
 
-import DocMeta from '@site/src/components/DocMeta';
-
-<DocMeta />
-
 The `service` command group lists **framework-internal services** — bundles that ship alongside gina and run as companion processes (currently `proxy` and `inspector`). These services are registered under the reserved `@gina` project.
 
 :::info Gina-internal surface
