@@ -260,7 +260,7 @@ process** to be picked up:
 | Kubernetes | Roll the Deployment (`kubectl rollout restart deployment/<name>`) — the new Pod's container starts with the rotated env. |
 | Docker / Compose | `docker compose up -d --force-recreate <service>` |
 | systemd | `systemctl restart <unit>` |
-| Bare process | `gina bundle:stop` then `gina bundle:start` (or a `bundle:restart` that re-spawns under a fresh entrypoint — see [Bundle CLI](/cli/bundle)) |
+| Bare process | `gina bundle:stop` then `gina bundle:start` (or a `bundle:restart` that re-spawns under a fresh entrypoint — see [Bundle CLI](/cli/cli-bundle)) |
 
 A `gina bundle:restart` under an existing supervisor inherits the
 supervisor's env from the original container init — to pick up a
