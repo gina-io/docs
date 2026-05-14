@@ -21,12 +21,15 @@ upward to the target version.
 
 ## 0.3.12 → 0.3.13
 
-A small additive batch on top of `0.3.12`: a `${secret:KEY}` placeholder
-substitution layer for bundle JSON configs, a `settings.csrf.secret`
-slot that flows through it, `${secret:KEY}` support for `mcp.json`, plus
-a `requireJSON` line-comment fix. **No action required** — all changes
-are additive (the secrets resolver) or seamless behaviour corrections;
-no API changes, no breaking config changes.
+`0.3.13` is an additive release on top of `0.3.12`. The headline is a
+`${secret:KEY}` placeholder substitution layer for bundle JSON configs —
+with a `settings.csrf.secret` slot and `mcp.json` support flowing
+through it. Shipping alongside: a Progressive Web App scaffold for new
+views, an application-level HTTP/2 rapid-reset rate limiter, a
+`@rhinostone/swig` dependency-floor bump, the removal of two dormant
+internal plugin directories, and two seamless bug fixes. **No action
+required** — every change is additive or a seamless behaviour
+correction; no API changes, no breaking config changes.
 
 ### Action required
 
@@ -125,6 +128,49 @@ The previous direct-env-var path
 (`GINA_MCP_AUTH_TOKEN` read inside `mcp-start`) is unchanged — it still
 acts as the last fallback in the precedence chain.
 
+### What's new — Progressive Web App scaffold
+
+`gina view:add` now scaffolds a starter Progressive Web App setup
+alongside the view files. The bundle's `public/` directory gets a
+`manifest.webmanifest` and a cache-first service-worker stub (`sw.js`),
+and the default HTML layout is wired with the manifest `<link>`, a
+`theme-color` `<meta>`, an apple-touch-icon `<link>`, and an inline
+service-worker registration `<script>`. Zero runtime dependency — it is
+static files plus layout tags.
+
+**No action required** for existing bundles — the scaffold affects only
+views created with `view:add` after upgrade. To adopt it, edit
+`manifest.webmanifest` to describe your app and drop your own icon PNGs
+into `public/` (the bundle's `public/readme.md` lists the expected
+filenames).
+
+### What's new — HTTP/2 rapid-reset rate limiter
+
+The Isaac HTTP/2 server now bounds how many new streams a single session
+may open within a rolling one-second window. When a connection opens
+more than `maxStreamsPerSecond` (default `200`) new streams in one
+window, Isaac sends a `GOAWAY` and closes that session — a targeted,
+application-level defense against rapid-reset floods (CVE-2023-44487) on
+top of the OS-level mitigation in modern Node.js. It complements the
+existing `maxSessionRejectedStreams` guard, which counts *refused*
+streams rather than *created* ones.
+
+```json title="src/api/config/settings.server.json"
+{
+  "server": {
+    "http2Options": {
+      "maxStreamsPerSecond": 200
+    }
+  }
+}
+```
+
+**No action required** — the limiter is on by default with a
+conservative threshold that legitimate clients do not reach.
+Public-facing deployments that front high-fan-out HTTP/2 clients can
+tune `http2Options.maxStreamsPerSecond` upward. The `/_gina/info`
+endpoint exposes a new `rapidResetBlocked` counter for breach events.
+
 ### What's changed — Bundle scaffolding updated
 
 Templates produced by `gina project:add` and `gina bundle:add` now show
@@ -141,6 +187,32 @@ CSRF secrets:
 only new projects / new bundles created after upgrade. Existing bundles
 keep their current secret-handling shape.
 
+### What's changed — `@rhinostone/swig` floor bumped to `^2.3.0`
+
+The `@rhinostone/swig` dependency floor in `framework/v*/package.json`
+moves from `^2.2.0` to `^2.3.0`. Version `2.3.0` drops `yargs` and
+`terser` from the published package's production dependencies — CLI
+argument parsing is now a built-in zero-dependency parser, and `terser`
+(used only by `swig compile --minify`) moved to `devDependencies` and
+loads lazily. A library install of `@rhinostone/swig` now pulls in only
+`@rhinostone/swig-core`, so installing gina has a smaller transitive
+dependency tree.
+
+**No action required** — there is no template-engine API or behaviour
+change, and `npm install -g gina@latest` picks up the new floor. The
+`swig.useProject` resolver floor stays at `2.0.0`; the framework does
+not depend on any `2.3.0`-only API.
+
+### What's changed — Dormant plugin directories removed
+
+Two unused internal plugin directories — `core/plugins/lib/file/` and
+`core/plugins/lib/intl/` — have been removed. They had no consumers in
+any known bundle and carried no runtime wiring; dropping them trims the
+npm tarball slightly with no functional change.
+
+**No action required.** Bundles never imported these paths directly —
+they were framework-internal and unreferenced.
+
 ### What's fixed — `requireJSON` line-comment / URL collision
 
 The framework's `requireJSON` helper previously failed to strip bare
@@ -154,6 +226,19 @@ property name`.
 The pass is now per-line on the leftmost `//`, with the same `:` / `"` /
 `\` char-before guard as before. Comment-bearing JSON config files with
 URL values now load cleanly. No action required.
+
+### What's fixed — dev-mode hot-reload crash on `refreshCore()`
+
+In development mode, `refreshCore()` rebuilt the `lib` and `plugins`
+`require.cache` entries with their exports objects instead of `Module`
+instances. A subsequent plain `require('../../lib')` then read
+`.exports` off a plain object, got `undefined`, and the controller
+render delegates crashed with `Cannot read properties of undefined`
+after a hot reload.
+
+`refreshCore()` now deletes the cache entry and lets the next
+`require()` rebuild a proper `Module`. Production mode was never
+affected — it has no hot-reload path. No action required.
 
 ---
 
