@@ -84,6 +84,8 @@ Now edit `src/frontend/controllers/controller.content.js` and change `self.rende
 
 Gina uses [Swig](/templating/swig) as its default template engine. You can use any other template engine if you prefer.
 
+`view:add` also scaffolds a starter [Progressive Web App](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps) setup — a `manifest.webmanifest` and a cache-first service worker (`sw.js`) under `public/`, with the manifest link and an inline service-worker registration already wired into the default layout. Edit `manifest.webmanifest` to describe your app, then drop your own icon PNGs into `public/` (the bundle's `public/readme.md` lists the expected filenames).
+
 ---
 
 ## Start all bundles in a project

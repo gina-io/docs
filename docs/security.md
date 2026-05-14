@@ -23,7 +23,7 @@ Gina on a public HTTP/2 endpoint.
 
 | CVE | Name | Severity | Gina mitigation | Node.js required |
 |---|---|---|---|---|
-| [CVE-2023-44487](https://nvd.nist.gov/vuln/detail/CVE-2023-44487) | HTTP/2 Rapid Reset | **Critical** | `maxSessionRejectedStreams` + Node.js patch | ≥ 20.12.1 |
+| [CVE-2023-44487](https://nvd.nist.gov/vuln/detail/CVE-2023-44487) | HTTP/2 Rapid Reset | **Critical** | `maxSessionRejectedStreams` + `maxStreamsPerSecond` + Node.js patch | ≥ 20.12.1 |
 | [CVE-2024-27316](https://nvd.nist.gov/vuln/detail/CVE-2024-27316) | CONTINUATION flood | **High** | `maxSessionInvalidFrames` + Node.js patch | ≥ 20.12.1 |
 | [CVE-2024-27983](https://nvd.nist.gov/vuln/detail/CVE-2024-27983) | CONTINUATION flood (Node.js) | **High** | Node.js patch | ≥ 20.12.1 |
 | [CVE-2019-9514](https://nvd.nist.gov/vuln/detail/CVE-2019-9514) | RST flood | **High** | `maxSessionRejectedStreams` | any |
@@ -48,8 +48,15 @@ http2Options.maxSessionRejectedStreams = 100;
 When a session exceeds 100 rejected streams, Node.js closes it with a `GOAWAY` frame.
 This caps the amplification factor per TCP connection.
 
+Gina adds a second, application-level layer: a per-session rolling-one-second-window
+stream counter. When a connection opens more than `maxStreamsPerSecond` new streams
+(default 200) within one window, Gina sends a `GOAWAY` and closes that session
+itself — catching created-then-reset floods that `maxSessionRejectedStreams` (which
+counts *refused* streams) does not. The `/_gina/info` endpoint reports a
+`rapidResetBlocked` counter for breach events.
+
 **OS-level fix:** Node.js ≥ 20.12.1 includes the upstream `nghttp2` patch that rate-limits
-stream resets at the HTTP/2 framing layer. Both layers are required for full protection.
+stream resets at the HTTP/2 framing layer. All three layers are required for full protection.
 
 ---
 
@@ -129,16 +136,20 @@ at zero cost to legitimate use cases.
 
 ## Configuring HTTP/2 security limits
 
-The `maxSessionRejectedStreams` and `maxSessionInvalidFrames` values are not currently
-user-configurable (they are set to conservative defaults). The `maxConcurrentStreams`
-and `initialWindowSize` settings can be tuned in your bundle's `settings.server.json`:
+The stream, window, and flood-defense limits are tunable in your bundle's
+`settings.server.json` under `http2Options` — they ship as conservative defaults, so
+override them only when you have a specific reason. The hardcoded security guards
+(`maxHeaderListSize`, `enablePush: false`) are not configurable by design.
 
 ```json
 {
   "server": {
     "http2Options": {
       "maxConcurrentStreams": 256,
-      "initialWindowSize": 655350
+      "initialWindowSize": 655350,
+      "maxSessionRejectedStreams": 100,
+      "maxSessionInvalidFrames": 1000,
+      "maxStreamsPerSecond": 200
     }
   }
 }

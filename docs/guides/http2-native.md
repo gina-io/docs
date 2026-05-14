@@ -160,6 +160,7 @@ Isaac includes built-in protection against known HTTP/2 attack vectors:
 |---|---|---|
 | HPACK bomb | Header table size limit | 4 KB (`headerTableSize`) |
 | Rapid Reset (CVE-2023-44487) | Rejected stream limit | 100 (`maxSessionRejectedStreams`) |
+| Rapid Reset (CVE-2023-44487) | Per-session new-stream rate limit | 200/s (`maxStreamsPerSecond`) |
 | CONTINUATION flood | Invalid frame limit | 1000 (`maxSessionInvalidFrames`) |
 | Settings flood | Settings ACK timeout | 10 s |
 | Stream exhaustion | Concurrent stream limit | 256 (`maxConcurrentStreams`) |
@@ -176,11 +177,19 @@ Security limits (`headerTableSize`, `maxHeaderListSize`) remain hardcoded:
       "maxConcurrentStreams": 256,
       "initialWindowSize": 655350,
       "maxSessionRejectedStreams": 100,
-      "maxSessionInvalidFrames": 1000
+      "maxSessionInvalidFrames": 1000,
+      "maxStreamsPerSecond": 200
     }
   }
 }
 ```
+
+`maxStreamsPerSecond` (default 200) bounds how many new streams a single
+session may open within a rolling one-second window. When a session exceeds
+it, Isaac sends a `GOAWAY` and closes that session — a targeted,
+application-level defense against rapid-reset floods (CVE-2023-44487) on top
+of the OS-level mitigation in modern Node.js. The `/_gina/info` endpoint
+reports a `rapidResetBlocked` counter for breach events.
 
 :::tip
 The defaults are tuned for general-purpose web applications. Increase
