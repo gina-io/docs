@@ -54,13 +54,23 @@ Identifiers resolve against the locals context passed at render time.
 Arithmetic: `+  -  *  /  %`
 Comparison: `==  ===  !=  !==  <  >  <=  >=  in`
 Logical: `and  &&  or  ||  not  !`
+Conditional: `? :` (ternary), `?:` (Elvis)
 
 ```swig
 {{ a + b }}
 {{ price * 0.9 }}
 {% if count > 0 and user.active %}…{% endif %}
 {% if "admin" in user.roles %}…{% endif %}
+
+{# ternary: the truthy branch, otherwise the alternative #}
+{{ user.active ? "online" : "offline" }}
+{% set label = count > 0 ? "items" : "none" %}
+
+{# Elvis: the value itself when truthy, otherwise the fallback #}
+{{ user.nickname ?: user.name }}
 ```
+
+The ternary's `else` branch is required — `{{ x ? "a" }}` throws `Expected colon in ternary expression`. Both operators work in `{{ }}` output and in tag arguments such as `{% if %}`, `{% set %}`, and `{% for %}`.
 
 ### Function calls
 

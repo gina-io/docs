@@ -15,7 +15,7 @@ prereqs:
 
 # Twig Parity
 
-This page lists exactly what `@rhinostone/swig-twig@2.2.0` accepts — operators, tags, filters, and is-tests — cross-referenced against upstream PHP Twig and the native `@rhinostone/swig` frontend.
+This page lists exactly what `@rhinostone/swig-twig@2.4.0` accepts — operators, tags, filters, and is-tests — cross-referenced against upstream PHP Twig and the native `@rhinostone/swig` frontend.
 
 The matrices below are ground truth: each row maps to a symbol actually exported by the shipped source. For features that throw at parse time, see [Non-Goals](./non-goals).
 
@@ -28,8 +28,6 @@ Twig-specific operators that `@rhinostone/swig-twig` accepts and the native swig
 | `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
 | `..` | `a..b` | Integer or single-character range. | `_utils.range(a, b)` |
 | `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
-| `?:` | `a ?: b` | Elvis. Falls back if `a` is falsy. | `a ? a : b` |
-| `? :` | `cond ? a : b` | Ternary. | Native JS ternary. |
 | `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
 | `is not` | `x is not <test>` | Negated predicate. | `!(_ext._test_<name>(...))` |
 | `#{…}` | `"hello #{name}"` | String interpolation inside double-quoted strings. | Expression replacement during tokenization. |
