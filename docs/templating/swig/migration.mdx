@@ -16,7 +16,7 @@ import TabItem from '@theme/TabItem';
 
 # Migrating from Jinja2, Django, or Twig
 
-Swig shares the **Jinja2 lineage** — so Jinja2 itself, Django templates, and Twig (PHP) all look familiar but none are drop-in compatible. Marker shapes, filter syntax, inheritance, and most tag names line up — but concrete constructs do break on paste, especially `is`-tests (Jinja2 / Twig), `forloop.*` (Django), and the `~` / `??` / `?:` / `..` / `#{}` operators (Twig). This page lists every gap we are aware of, with workarounds.
+Swig shares the **Jinja2 lineage** — so Jinja2 itself, Django templates, and Twig (PHP) all look familiar but none are drop-in compatible. Marker shapes, filter syntax, inheritance, and most tag names line up — but concrete constructs do break on paste, especially `is`-tests (Jinja2 / Twig), `forloop.*` (Django), and the `~` / `??` / `..` / `#{}` operators (Twig). This page lists every gap we are aware of, with workarounds.
 
 :::tip Multi-flavor frontends
 Swig's 2.0 line ships a pluggable frontend architecture. The Twig frontend is available now as [`@rhinostone/swig-twig`](https://www.npmjs.com/package/@rhinostone/swig-twig) — see the [Twig Frontend](../twig) section for install, scope, and the full parity matrix. Dedicated Jinja2 and Django frontends are on the roadmap; track progress in the [swig roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md).
@@ -206,8 +206,6 @@ These fail with `Unexpected tag`, `Unable to parse …`, or "Mismatched nesting 
 | `{{ "hello " ~ name }}` | `{{ "hello " + name }}` | Swig has **no `~` operator**. Use `+` (JS concat). If either side may be numeric, cast explicitly — JS coerces with `+`. |
 | `{{ 1..10 }}` | `range(1, 11)` via locals | No range operator. Pass a `range` helper through locals (see the Jinja2 section). |
 | `{{ x ?? 'fallback' }}` | `{% if x %}{{ x }}{% else %}fallback{% endif %}` | No null-coalescing operator. |
-| `{{ x ?: 'fallback' }}` | Same as above | Short ternary isn't lexed. |
-| `{{ x ? 'a' : 'b' }}` | `{% if x %}a{% else %}b{% endif %}` | No `?:` ternary operator. |
 | `{{ x is defined }}` | `{{ x !== undefined }}` or `{{ x }}` | No `is` operator. No tests. |
 | `{{ x is null }}` | `{{ x === null }}` | |
 | `{{ x is empty }}` | `{{ not x or x.length === 0 }}` or register an `empty` filter | |
@@ -354,7 +352,7 @@ gt  gte  lt  lte   ← Swig-only word aliases for <, <=, >, >=
 ```
 
 Missing from Jinja2 / Twig that Swig also omits: `is`, `is not`, `not in`.
-Missing from Twig that Swig also omits: `~` (string concat), `??` (null coalesce), `?:` (short ternary), `..` (range).
+Missing from Twig that Swig also omits: `~` (string concat), `??` (null coalesce), `..` (range).
 **Kept by Swig** (absent from Jinja2 / Django / Twig): strict equality `===` / `!==` (JS-native).
 
 ## Autoescape parity
@@ -386,7 +384,7 @@ Use this as a per-template review pass:
 9. **Search for filters** — audit against the filter parity table above; register missing ones via [`setFilter`](./extending#custom-filters).
 10. **Search for `//` and `**`** (Jinja2 only) — rewrite using `Math.floor` / `Math.pow` or a filter.
 11. **Search for `~`** (Twig only) — rewrite string concatenation as `+`.
-12. **Search for `??` and `?:`** (Twig only) — rewrite as `{% if %}{% else %}{% endif %}`.
+12. **Search for `??`** (Twig only) — rewrite as `{% if %}{% else %}{% endif %}`.
 13. **Search for `..` range literals** (Twig only) — replace with a `range()` helper passed through locals.
 14. **Search for `#{` inside double-quoted strings** (Twig only) — rewrite as `+` concatenation.
 15. **Search for `{% embed %}` / `{% use %}` / `{% verbatim %}` / `{% do %}` / `{% sandbox %}` / `{% apply %}` / `{% set x %}…{% endset %}`** (Twig only) — see the Twig tab for per-tag rewrites.
