@@ -755,6 +755,96 @@ No tunable options. The `settings.json > xDownloadOptions` slot is reserved for 
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 | Modern browser (Chrome / Firefox / Safari / Edge)        | Header ignored silently — harmless                   |
 
+## X-Permitted-Cross-Domain-Policies (`#HDR12`)
+
+`gina.plugins.XPermittedCrossDomainPolicies({ value })` emits the `X-Permitted-Cross-Domain-Policies` response header on every response, restricting Adobe Flash and PDF readers from honouring cross-domain policy files served from this origin.
+
+**Closes Phase 1.5** (helmet-parity gap-fill) of the gina security-headers track.
+
+### Why
+
+Adobe Flash and Adobe Reader used a `crossdomain.xml` policy file served at the origin to grant permission for SWF / PDF content to load data from this origin into another. A misconfigured (or absent `X-Permitted-Cross-Domain-Policies`) origin could allow malicious Flash content on another site to read data from this one, bypassing the same-origin policy.
+
+`X-Permitted-Cross-Domain-Policies: none` (the default) instructs the Flash / PDF reader to NOT honour any `crossdomain.xml` file from this origin — defending against the cross-domain-data-read shape regardless of what (if any) policy file is served.
+
+Flash is end-of-life since December 2020. Adobe Reader historically honoured the header but most modern PDF readers ignore it. helmet still ships `xPermittedCrossDomainPolicies` for defense-in-depth + security-scanner-parity narrative.
+
+### Browser / reader status in 2026
+
+- **Modern browsers** ignore the header entirely (no native Flash support since 2020).
+- **Modern PDF readers** mostly ignore the header.
+- **Adobe Reader (legacy)** historically honoured the header.
+- **Adobe Flash Player** end-of-life since 31 December 2020.
+
+The header is largely a no-op in 2026. Ships for defense-in-depth + helmet-parity narrative.
+
+### Adoption
+
+```js title="src/<bundle>/index.js"
+var myapp                         = require('gina');
+var xPermittedCrossDomainPolicies = require('gina').plugins.XPermittedCrossDomainPolicies();
+
+myapp.onInitialize(function(event, app) {
+    app.use(xPermittedCrossDomainPolicies);
+    event.emit('complete', app);
+});
+```
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "xPermittedCrossDomainPolicies": {
+    "value": "none"
+  }
+}
+```
+
+| Field   | Type   | Default | Valid values                                                          |
+|---------|--------|---------|-----------------------------------------------------------------------|
+| `value` | string | `none`  | `none`, `master-only`, `by-content-type`, `all`                       |
+
+### Four values per the Adobe Cross-Domain Policy File Specification
+
+| Token              | Behaviour                                                                                |
+|--------------------|------------------------------------------------------------------------------------------|
+| `none`             | **Default**. No cross-domain policy files honoured; Flash / PDF cross-origin loading blocked. The most restrictive value; recommended unless you specifically need cross-domain Flash/PDF policy loading. |
+| `master-only`      | Only the master policy file at `/crossdomain.xml` is honoured. Other policy files elsewhere on the origin are ignored. |
+| `by-content-type`  | Only files served with `Content-Type: text/x-cross-domain-policy` are treated as policy files. Lighter than `master-only` — non-XML files cannot accidentally be parsed as policies. |
+| `all`              | ANY cross-domain policy file at any path is honoured. **NOT recommended** — the most permissive value, defeats the header's purpose. |
+
+Caller-supplied options always win over settings:
+
+```js
+var xPermittedCrossDomainPolicies = require('gina').plugins.XPermittedCrossDomainPolicies({ value: 'master-only' });
+```
+
+Tokens are case-insensitive at the plugin layer — values are normalised to lowercase before validation and emission. Unknown tokens throw at factory call time.
+
+### Mapping from helmet's API
+
+helmet's `xPermittedCrossDomainPolicies` middleware uses a different option-key name: `{ permittedPolicies: <enum> }`. gina uses `{ value: <enum> }` matching the existing single-token-enum convention of `#HDR2` (XFrame), `#HDR3` (ReferrerPolicy), `#HDR6` (Coep), `#HDR9` (XDnsPrefetchControl), `#HDR13` (Coop), `#HDR14` (Corp).
+
+| helmet                                                              | gina                                                                          |
+|---------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `helmet.xPermittedCrossDomainPolicies()`                            | `gina.plugins.XPermittedCrossDomainPolicies()`                                |
+| `helmet.xPermittedCrossDomainPolicies({ permittedPolicies: 'master-only' })` | `gina.plugins.XPermittedCrossDomainPolicies({ value: 'master-only' })`        |
+
+Same emitted header, different option-key name. **Silent-fallback gotcha for migrators**: passing `{ permittedPolicies: 'master-only' }` to gina does NOT switch the emission — `merged.value` is undefined, so the factory uses the default `"none"`. Pass `{ value: '...' }` explicitly.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| `value` omitted                                          | Defaults to `none`                                    |
+| `value` is not one of the 4 Adobe tokens                 | Factory throws at call time (bundle won't start)     |
+| `value` is not a string                                  | Factory throws at call time                          |
+| Plugin not registered                                    | Header not emitted; Flash / PDF readers fall back to their own default policy resolution |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+| Modern browser (no Flash support)                        | Header ignored silently — harmless                   |
+| `{ permittedPolicies: '...' }` passed (helmet shape)     | Silent fallback to default `none` — use `{ value: '...' }` |
+
 ## Cross-Origin-Opener-Policy (`#HDR13`)
 
 `gina.plugins.Coop({ value })` emits `Cross-Origin-Opener-Policy` (COOP) on every response, controlling how the page's browsing context relates to popups and cross-origin `window.opener` references on top-level navigation.
@@ -1101,7 +1191,7 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 - `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
 - `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
 
-**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8), `X-DNS-Prefetch-Control` (#HDR9), `X-XSS-Protection` (#HDR10), and `X-Download-Options` (#HDR11) shipped 2026-05-17 (see the [Hide X-Powered-By](#hide-x-powered-by-hdr8), [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9), [X-XSS-Protection](#x-xss-protection-hdr10), and [X-Download-Options](#x-download-options-hdr11) sections above); only `X-Permitted-Cross-Domain-Policies` (#HDR12) remains queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
+**Phase 1.5 — helmet-parity gap-fill — CLOSED** (`0.3.16-alpha`): all five plugins shipped 2026-05-17 — `HidePoweredBy` (#HDR8), `X-DNS-Prefetch-Control` (#HDR9), `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), and `X-Permitted-Cross-Domain-Policies` (#HDR12) — see the [Hide X-Powered-By](#hide-x-powered-by-hdr8), [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9), [X-XSS-Protection](#x-xss-protection-hdr10), [X-Download-Options](#x-download-options-hdr11), and [X-Permitted-Cross-Domain-Policies](#x-permitted-cross-domain-policies-hdr12) sections above. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
 **Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
 
@@ -1123,4 +1213,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 + HDR9 + HDR10 + HDR11 shipped)
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 1.5 + Phase 2 closed — all 15 #HDR plugins shipped; wrapper extension to include HDR8-12 in safe-set defaults pending)
