@@ -514,6 +514,64 @@ If your bundle relies on `document.domain` to bridge same-site origins (e.g. `ap
 | Browser predates the feature                             | Header ignored silently — harmless                   |
 | Same-origin policy relies on `document.domain`           | Will break; do not register the plugin               |
 
+## Hide X-Powered-By (`#HDR8`)
+
+`gina.plugins.HidePoweredBy()` removes the `X-Powered-By` response header that gina emits by default at `core/server.js:2425` (plus `core/template/conf/env.json > response.header`). Opens **Phase 1.5** (helmet-parity gap-fill) of the gina security-headers track.
+
+The header reveals the framework identity AND the version to anyone inspecting the response — useful intel for attackers scanning for known-vulnerable stacks. Removing it costs zero bytes (the response is smaller) and reduces the attacker's reconnaissance surface by one fact: they no longer know what server software answered the request. They can still fingerprint via behaviour (response timing, error pages, header order, TLS fingerprint, etc.) — this isn't a silver bullet — but it raises the floor a notch.
+
+Mirrors helmet's `hidePoweredBy` shape (no opts; helmet warns + falls back if options are passed). Different SHAPE from `#HDR1`–`#HDR7` / `#HDR13`–`#HDR14`: REMOVE pattern (`res.removeHeader`) not SET.
+
+### Adoption
+
+One block in the bundle bootstrap:
+
+```js title="src/<bundle>/index.js"
+var myapp         = require('gina');
+var hidePoweredBy = require('gina').plugins.HidePoweredBy();
+
+myapp.onInitialize(function(event, app) {
+    app.use(hidePoweredBy);
+    event.emit('complete', app);
+});
+```
+
+Order with other gina middlewares: mount AFTER any middleware that might explicitly set `X-Powered-By` (otherwise the explicit set would fire after this removal and re-add the header). In practice, the framework sets the header before any user `app.use()` mount runs, so registering `HidePoweredBy` anywhere in the user middleware chain works on the Express engine.
+
+### Configuration
+
+No tunable options. The `settings.json > hidePoweredBy` slot is reserved for future fields:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "hidePoweredBy": {}
+}
+```
+
+Registering opts in; not registering opts out. There is no `value` field — the only behaviour is to remove the header.
+
+### Express engine vs Isaac engine effectiveness
+
+The plugin's effectiveness depends on which server engine your bundle uses.
+
+**Express engine**: works as expected. The framework's `response.setHeader('X-Powered-By', ...)` at `core/server.js:2425` runs in early framework middleware before any user-mounted plugin, so `HidePoweredBy`'s middleware fires AFTER and `res.removeHeader('x-powered-by')` removes the header cleanly before the response is written to the wire.
+
+**Isaac engine** (gina's default built-in HTTP/HTTP2 engine): does NOT work. `server.isaac.js` has 15+ direct `response.writeHead({ 'X-Powered-By': ... })` call sites that bypass the `setHeader`/`removeHeader` interface entirely. The plugin still runs and calls `removeHeader` (no-op for Isaac since the header isn't set at middleware time); then `writeHead` emits the header directly to the response.
+
+Bundles on the Isaac engine that need to hide the header have two options today: switch to the Express engine for the affected bundle, or open an issue against `gina-io/gina` to track a framework-level settings-flag gate that would suppress the `writeHead` `X-Powered-By` emissions natively.
+
+To check which engine your bundle uses, look at `bundles/<name>/config/settings.json > server.engine` (defaults to the Isaac engine when absent on most installs).
+
+### Failure modes
+
+| Condition                                                            | Outcome                                                                          |
+|----------------------------------------------------------------------|----------------------------------------------------------------------------------|
+| Plugin not registered                                                | `X-Powered-By: Gina/<version>` continues to be emitted                            |
+| Plugin registered on Express engine                                  | Header removed cleanly                                                            |
+| Plugin registered on Isaac engine                                    | Header still emitted via direct `writeHead` (see above)                            |
+| User middleware sets `X-Powered-By` AFTER this plugin runs           | Re-added; mount `HidePoweredBy` LAST in the chain to prevent                      |
+| Response already sent (`res.headersSent === true`)                   | Node's `removeHeader` no-ops; request resumes                                    |
+
 ## Cross-Origin-Opener-Policy (`#HDR13`)
 
 `gina.plugins.Coop({ value })` emits `Cross-Origin-Opener-Policy` (COOP) on every response, controlling how the page's browsing context relates to popups and cross-origin `window.opener` references on top-level navigation.
@@ -860,7 +918,7 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 - `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
 - `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
 
-**Phase 1.5 — helmet-parity gap-fill** (roadmapped for `0.3.16-alpha`+): the lower-priority headers helmet bundles but we don't yet cover (`HidePoweredBy` #HDR8, `X-DNS-Prefetch-Control` #HDR9, `X-XSS-Protection` #HDR10, `X-Download-Options` #HDR11, `X-Permitted-Cross-Domain-Policies` #HDR12). Defense-in-depth + parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
+**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8) shipped 2026-05-17 (opens Phase 1.5 — see the [Hide X-Powered-By section](#hide-x-powered-by-hdr8) above); `X-DNS-Prefetch-Control` (#HDR9), `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), `X-Permitted-Cross-Domain-Policies` (#HDR12) remain queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
 **Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
 
@@ -882,4 +940,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 deferred)
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 shipped)
