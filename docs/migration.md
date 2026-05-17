@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.3.14 → 0.3.15
 
-`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first plugin (`XContentTypeOptions` — #HDR1) lands in this cycle; the rest of Phase 1 follows in subsequent commits within the same `0.3.15-alpha` cycle.
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first two plugins (`XContentTypeOptions` — #HDR1, `XFrameOptions` — #HDR2) land in this cycle; the rest of Phase 1 follows in subsequent commits within the same `0.3.15-alpha` cycle.
 
 ### No action required
 
@@ -47,9 +47,38 @@ The header instructs browsers to honour the declared `Content-Type` strictly, bl
 
 See the [Security Headers guide](/guides/security-headers) for the full reference and the per-plugin failure-mode table.
 
+### What's new — `gina.plugins.XFrameOptions({ value })` (#HDR2)
+
+Opt-in middleware that emits the `X-Frame-Options` response header on every response, defending against clickjacking by controlling whether the page may be rendered inside a `<frame>`, `<iframe>`, `<embed>` or `<object>`. Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express       = require('express');
+var xFrameOptions = require('gina').plugins.XFrameOptions();
+var app           = express();
+
+app.use(xFrameOptions);
+```
+
+Default is `SAMEORIGIN` — the page may be framed only by same-origin pages. Override via settings or caller options:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "xFrameOptions": { "value": "DENY" }
+}
+```
+
+```js
+var xFrameOptions = require('gina').plugins.XFrameOptions({ value: 'DENY' });
+```
+
+Values are normalised to uppercase (so `"deny"` is accepted and emitted as `DENY`).
+
+**Rejected: `ALLOW-FROM <uri>`.** The legacy ALLOW-FROM value is rejected at factory call time — modern browsers ignore it (Chrome / Edge / Safari never honoured it cross-vendor, Firefox dropped it in 70). Use `Content-Security-Policy: frame-ancestors <source-list>` instead — it works cross-browser and accepts richer source expressions. The factory throws with a message pointing at the MDN reference.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
 ### Coming in the rest of `0.3.15-alpha` — Phase 1 completion
 
-- **`gina.plugins.XFrameOptions({ value })` (#HDR2)** — clickjacking defense via the `X-Frame-Options` header. Settings: `xFrameOptions.value: "DENY"` or `"SAMEORIGIN"` (default `"SAMEORIGIN"`).
 - **`gina.plugins.ReferrerPolicy({ value })` (#HDR3)** — referrer leak control via the `Referrer-Policy` header. Default `"strict-origin-when-cross-origin"` matches the browser default since ~2021.
 - **`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)** — HTTPS-only enforcement via the `Strict-Transport-Security` header. Browser-parity invariant on `preload: true` (requires `includeSubDomains: true` AND `maxAge >= 31536000`).
 
