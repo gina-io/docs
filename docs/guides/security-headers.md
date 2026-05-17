@@ -572,6 +572,74 @@ To check which engine your bundle uses, look at `bundles/<name>/config/settings.
 | User middleware sets `X-Powered-By` AFTER this plugin runs           | Re-added; mount `HidePoweredBy` LAST in the chain to prevent                      |
 | Response already sent (`res.headersSent === true`)                   | Node's `removeHeader` no-ops; request resumes                                    |
 
+## X-DNS-Prefetch-Control (`#HDR9`)
+
+`gina.plugins.XDnsPrefetchControl({ value })` emits the `X-DNS-Prefetch-Control` response header on every response, controlling whether the browser proactively resolves DNS for links, images, CSS, and JavaScript referenced by the page.
+
+DNS prefetching is a browser optimisation: the browser kicks off DNS lookups for hostnames referenced by the page (in `<link>`, `<img>`, external scripts, etc.) before the user clicks the link. Faster perceived navigation when the link is clicked; leaks the user's "intent surface" to the DNS resolver — typically the user's ISP, plus any caching resolver in between — even for links the user never visits.
+
+`off` (the default) is the privacy-respecting choice: the browser does not pre-resolve DNS for unclicked links, so the resolver only sees the hostnames the user actually navigates to. `on` is the perceived-performance choice when DNS lookups are slow relative to the rest of the page load.
+
+Marginal practical value in 2026 — modern Chrome / Firefox have their own DNS-prefetch heuristics that mostly ignore the header. The defense-in-depth + helmet-parity rationale is why this ships.
+
+### Adoption
+
+```js title="src/<bundle>/index.js"
+var myapp               = require('gina');
+var xDnsPrefetchControl = require('gina').plugins.XDnsPrefetchControl();
+
+myapp.onInitialize(function(event, app) {
+    app.use(xDnsPrefetchControl);
+    event.emit('complete', app);
+});
+```
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "xDnsPrefetchControl": {
+    "value": "off"
+  }
+}
+```
+
+| Field   | Type   | Default | Valid values |
+|---------|--------|---------|--------------|
+| `value` | string | `off`   | `on`, `off`   |
+
+Caller-supplied options always win over settings:
+
+```js
+var xDnsPrefetchControl = require('gina').plugins.XDnsPrefetchControl({ value: 'on' });
+```
+
+Tokens are case-insensitive at the plugin layer — values are normalised to lowercase before validation and emission. Unknown tokens throw at factory call time.
+
+### Mapping from helmet's API
+
+helmet's `xDnsPrefetchControl` middleware uses `{ allow: boolean }` where `allow: true` emits `on` and `allow: false` emits `off`. gina uses `{ value: 'on' | 'off' }` matching the single-token-enum convention of `#HDR2` (XFrame), `#HDR3` (ReferrerPolicy), `#HDR6` (Coep), `#HDR13` (Coop), `#HDR14` (Corp).
+
+| helmet                                          | gina                                                       |
+|-------------------------------------------------|------------------------------------------------------------|
+| `helmet.xDnsPrefetchControl()`                  | `gina.plugins.XDnsPrefetchControl()`                       |
+| `helmet.xDnsPrefetchControl({ allow: true })`   | `gina.plugins.XDnsPrefetchControl({ value: 'on' })`        |
+| `helmet.xDnsPrefetchControl({ allow: false })`  | `gina.plugins.XDnsPrefetchControl({ value: 'off' })`       |
+
+Same emitted header, different option shape. **Silent-fallback gotcha for migrators**: passing `{ allow: true }` to gina's `XDnsPrefetchControl` does NOT enable DNS prefetching — `merged.value` is undefined, so the factory uses the default `"off"`. Pass `{ value: 'on' }` explicitly to enable.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| `value` omitted                                          | Defaults to `off`                                     |
+| `value` is not one of `on` / `off`                       | Factory throws at call time (bundle won't start)     |
+| `value` is not a string                                  | Factory throws at call time                          |
+| Plugin not registered                                    | Header not emitted; browser uses its built-in DNS prefetch heuristics |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+| `{ allow: true }` passed (helmet shape)                  | Silent fallback to default `off` — use `{ value: 'on' }` |
+
 ## Cross-Origin-Opener-Policy (`#HDR13`)
 
 `gina.plugins.Coop({ value })` emits `Cross-Origin-Opener-Policy` (COOP) on every response, controlling how the page's browsing context relates to popups and cross-origin `window.opener` references on top-level navigation.
@@ -918,7 +986,7 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 - `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
 - `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
 
-**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8) shipped 2026-05-17 (opens Phase 1.5 — see the [Hide X-Powered-By section](#hide-x-powered-by-hdr8) above); `X-DNS-Prefetch-Control` (#HDR9), `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), `X-Permitted-Cross-Domain-Policies` (#HDR12) remain queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
+**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8) and `X-DNS-Prefetch-Control` (#HDR9) shipped 2026-05-17 (see the [Hide X-Powered-By](#hide-x-powered-by-hdr8) and [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9) sections above); `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), `X-Permitted-Cross-Domain-Policies` (#HDR12) remain queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
 **Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
 
@@ -940,4 +1008,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 shipped)
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 + HDR9 shipped)
