@@ -676,6 +676,145 @@ See the W3C HTML spec section on [cross-origin isolation](https://html.spec.what
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 | Cross-origin embed with `same-origin`                    | Embed BLOCKED — pick `same-site` or `cross-origin` for the embed-target bundle |
 
+## Security Headers combined wrapper (`#HDR15`)
+
+`gina.plugins.SecurityHeaders({...})` composes the nine per-header plugins above into a single mount point with one `settings.json` block — the one-mount + one-config convenience layer for bundles that want the full set without the verbosity of nine individual `app.use(...)` calls. Mirrors helmet's `helmet()` orchestrator shape so bundles migrating from helmet find the API familiar.
+
+Closes Phase 2 of the gina security-headers track.
+
+### Adoption — default (batteries-included safe set)
+
+```js title="src/<bundle>/index.js"
+var express          = require('express');
+var securityHeaders  = require('gina').plugins.SecurityHeaders();
+var app              = express();
+
+app.use(securityHeaders);
+```
+
+With no opts, mounts the **seven non-footgun plugins** with their per-plugin defaults:
+
+| Sub-plugin                    | Header                          | Default value                          |
+|-------------------------------|---------------------------------|----------------------------------------|
+| `XContentTypeOptions` (HDR1)  | `X-Content-Type-Options`        | `nosniff`                              |
+| `XFrameOptions` (HDR2)        | `X-Frame-Options`               | `SAMEORIGIN`                           |
+| `ReferrerPolicy` (HDR3)       | `Referrer-Policy`               | `strict-origin-when-cross-origin`      |
+| `Hsts` (HDR4)                 | `Strict-Transport-Security`     | `max-age=15552000` (180 days)          |
+| `OriginAgentCluster` (HDR7)   | `Origin-Agent-Cluster`          | `?1`                                   |
+| `Coop` (HDR13)                | `Cross-Origin-Opener-Policy`    | `same-origin`                          |
+| `Corp` (HDR14)                | `Cross-Origin-Resource-Policy`  | `same-origin`                          |
+
+The two **opt-in-only plugins** (#HDR5 Csp + #HDR6 Coep) are NOT mounted by default because they have known footguns:
+
+- **CSP** (#HDR5) throws on missing directives — there's no sensible cross-bundle default since every bundle has its own resource graph.
+- **COEP** (#HDR6) default `require-corp` BREAKS pages that load cross-origin resources without matching CORP / CORS headers.
+
+### Opt in to CSP and COEP
+
+```js
+var securityHeaders = require('gina').plugins.SecurityHeaders({
+    csp: {
+        directives: {
+            'default-src': ["'self'"],
+            'script-src':  ["'self'", 'https://cdn.example.com'],
+            'style-src':   ["'self'", "'unsafe-inline'"],
+            'img-src':     ["'self'", 'data:']
+        }
+    },
+    coep: true                              // require-corp default
+});
+app.use(securityHeaders);
+```
+
+`csp: { directives: {...} }` is required when opting in — `csp: {}` or `csp: true` throws at factory call time (CSP needs directives, this is a config error). Use `csp: false` (or omit the key) to keep CSP off.
+
+### Opt out of a safe-set plugin
+
+```js
+var securityHeaders = require('gina').plugins.SecurityHeaders({
+    hsts: false                             // HTTP-only bundle
+});
+app.use(securityHeaders);
+```
+
+Per-sub-config `false` (or `null`) skips that plugin even when it's in the safe set. Useful for HTTP-only bundles (skip HSTS), bundles relying on `document.domain` (skip OriginAgentCluster), or multi-domain bundles needing permissive cross-origin (skip Coop / Corp).
+
+### Override defaults on a safe-set plugin
+
+```js
+var securityHeaders = require('gina').plugins.SecurityHeaders({
+    xFrameOptions:  { value: 'DENY' },      // override SAMEORIGIN default
+    referrerPolicy: { value: 'no-referrer' },
+    hsts:           { maxAge: 31536000, includeSubDomains: true, preload: true }
+});
+app.use(securityHeaders);
+```
+
+Sub-config objects replace the per-plugin defaults wholesale (shallow merge).
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "securityHeaders": {
+    "xContentTypeOptions": true,
+    "xFrameOptions":       { "value": "SAMEORIGIN" },
+    "referrerPolicy":      { "value": "strict-origin-when-cross-origin" },
+    "hsts":                { "maxAge": 15552000, "includeSubDomains": false, "preload": false },
+    "originAgentCluster":  true,
+    "coop":                { "value": "same-origin" },
+    "corp":                { "value": "same-origin" },
+
+    "csp":                 { "directives": { "default-src": ["'self'"] } },
+    "coep":                { "value": "require-corp" }
+  }
+}
+```
+
+All sub-config keys are optional. Sub-configs absent from `settings.json` fall back to the per-plugin defaults (safe-set plugins are mounted; CSP / COEP stay opt-in-only). Sub-config shapes match the standalone plugins' settings.json keys above.
+
+### Settings precedence
+
+Four layers, lowest-to-highest:
+
+1. **Per-plugin defaults** (in each plugin's source — e.g. `xFrameOptions` defaults to `SAMEORIGIN`).
+2. **`settings.json > <key>.*`** (each standalone plugin reads its own settings key — e.g. `xFrameOptions.value` in `settings.json`).
+3. **`settings.json > securityHeaders.<key>.*`** (the wrapper reads this and passes to the per-plugin factory).
+4. **Wrapper opts (`SecurityHeaders({...})`)** (caller opts override everything).
+
+### Power-user escape hatch — individual plugins still mountable
+
+The standalone plugins continue to work independently:
+
+```js
+var csp = require('gina').plugins.Csp({
+    directives: {
+        'default-src': ["'self'"],
+        'script-src':  ["'self'", "'nonce-XXXXX'"]
+    }
+});
+app.use(csp);
+```
+
+Each plugin uses the **idempotent first-writer-wins** pattern (via `res.getHeader`), so stacking the wrapper with an upstream individual mount produces no double-emit — the first one to set the header wins.
+
+This means you can mix-and-match: use `SecurityHeaders()` for the seven safe-set plugins, mount `gina.plugins.Csp()` separately with a per-request nonce, mount nothing for COEP. All three behaviours coexist cleanly.
+
+### Failure modes
+
+| Condition                                                                  | Outcome                                                                       |
+|----------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `SecurityHeaders()` with no opts                                           | Safe-set mounted (HDR1/2/3/4/7/13/14); CSP and COEP skipped                   |
+| Sub-config = `false` or `null`                                             | That plugin skipped — explicit opt-out                                        |
+| Sub-config = `true`                                                        | That plugin mounted with per-plugin defaults (boolean shorthand)              |
+| Sub-config = `{}`                                                          | Same as `true` for safe-set plugins. CSP throws (directives required); COEP mounts with `require-corp` default. |
+| Sub-config = object with invalid keys/values                               | Per-plugin factory throws at call time (matches standalone behaviour)         |
+| Sub-config = string / number / array / function                            | Wrapper throws at call time with the offending sub-config key in the message  |
+| Header already set by an earlier middleware                                | Existing value preserved (idempotent first-writer-wins, per-plugin)           |
+| Stacked with an upstream individual `gina.plugins.<X>` mount               | First writer wins; the second skip is a no-op                                 |
+
+The fail-fast posture (throws at factory call time for invalid sub-configs) is inherited from each per-plugin factory.
+
 ## Phase 1 complete (modern coverage)
 
 All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
@@ -688,17 +827,17 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 
 **Phase 1.5 — helmet-parity gap-fill** (roadmapped for `0.3.16-alpha`+): the lower-priority headers helmet bundles but we don't yet cover (`HidePoweredBy` #HDR8, `X-DNS-Prefetch-Control` #HDR9, `X-XSS-Protection` #HDR10, `X-Download-Options` #HDR11, `X-Permitted-Cross-Domain-Policies` #HDR12). Defense-in-depth + parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
-**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`): `Csp` (#HDR5) **shipped** with static directives only — per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the future combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all **shipped**. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) closes Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (mirrors helmet's `helmet()` combined wrapper).
+**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
 
-## Phase 2 — in progress (`0.4.0-alpha`)
+## Phase 2 complete (`0.4.0-alpha`)
 
-The dynamic / higher-break-risk headers ship in Phase 2:
+The dynamic / higher-break-risk headers shipped in Phase 2:
 
 - **`gina.plugins.Csp({ directives, reportOnly })` (#HDR5)** — Content-Security-Policy with static directives. **Shipped** — see the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference. Per-response nonce wiring deferred to a future CSP-aware view-layer plugin.
 - **`gina.plugins.Coep({ value })` (#HDR6)** — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense). **Shipped** — see the [Cross-Origin-Embedder-Policy section](#cross-origin-embedder-policy-hdr6) above.
 - **`gina.plugins.Coop({ value })` (#HDR13)** — Cross-Origin-Opener-Policy. Isolates `window.opener` references on top-level navigation. **Shipped** — see the [Cross-Origin-Opener-Policy section](#cross-origin-opener-policy-hdr13) above.
 - **`gina.plugins.Corp({ value })` (#HDR14)** — Cross-Origin-Resource-Policy. Restricts which other origins can fetch this resource. **Shipped** — see the [Cross-Origin-Resource-Policy section](#cross-origin-resource-policy-hdr14) above.
-- **`gina.plugins.SecurityHeaders({...})` (#HDR15)** — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Mirrors helmet's `helmet()` combined wrapper. **Coming up — closes Phase 2.**
+- **`gina.plugins.SecurityHeaders({...})` (#HDR15)** — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Batteries-included safe set; CSP and COEP opt-in only. Mirrors helmet's `helmet()` orchestrator. **Shipped — closes Phase 2** — see the [Security Headers combined wrapper section](#security-headers-combined-wrapper-hdr15) above.
 
 ## CORS vs response-header policies
 
@@ -708,4 +847,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status and Phase 2 plans
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 deferred)
