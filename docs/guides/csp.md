@@ -29,21 +29,18 @@ CSP also defeats whole classes of:
 ```mermaid
 sequenceDiagram
     participant Client as Browser
-    participant App as express()
     participant Plugin as gina.plugins.Csp
     participant Ctrl as Controller
 
-    Note over App,Plugin: app.use(gina.plugins.Csp({directives:{...}}))<br/>built at boot, directives validated once
+    Note over Plugin: app.use(gina.plugins.Csp({directives:{...}}))<br/>built at boot, directives validated once
 
-    Client->>App: HTTP request
-    App->>Plugin: middleware fires
+    Client->>Plugin: HTTP request
     Plugin->>Plugin: res.getHeader('content-security-policy')?
     alt header already set upstream
-        Plugin->>App: next() — no overwrite
+        Plugin->>Ctrl: next() — no overwrite
     else header not set
-        Plugin->>App: res.setHeader('content-security-policy', '<policy>'), then next()
+        Plugin->>Ctrl: res.setHeader('content-security-policy', '<policy>'), then next()
     end
-    App->>Ctrl: routing → controller
     Ctrl->>Client: response (with CSP header)
     Note over Client: Browser enforces policy<br/>blocks any resource not on allowlist
 ```

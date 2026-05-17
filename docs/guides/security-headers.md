@@ -21,19 +21,16 @@ The pattern mirrors the existing `Session` ([#CSRF1](/guides/sessions#hardened-c
 ```mermaid
 sequenceDiagram
     participant Client as Browser
-    participant App as express()
     participant Plugin as gina.plugins.XContentTypeOptions
     participant Ctrl as Controller
 
-    Client->>App: HTTP request
-    App->>Plugin: middleware fires
+    Client->>Plugin: HTTP request
     Plugin->>Plugin: res.getHeader('x-content-type-options')?
     alt header already set upstream
-        Plugin->>App: next() — no overwrite
+        Plugin->>Ctrl: next() — no overwrite
     else header not set
-        Plugin->>App: res.setHeader('x-content-type-options', 'nosniff'), then next()
+        Plugin->>Ctrl: res.setHeader('x-content-type-options', 'nosniff'), then next()
     end
-    App->>Ctrl: routing → controller
     Ctrl->>Client: response (with x-content-type-options: nosniff)
 ```
 
