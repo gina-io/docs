@@ -1,7 +1,7 @@
 ---
 title: Observability — Prometheus Metrics
 sidebar_label: Observability
-sidebar_position: 4.7
+sidebar_position: 5.5
 description: Built-in Prometheus metrics endpoint for Gina bundles. Opt-in via app.json metrics.enabled. Exposes Node.js process metrics plus HTTP request counters and duration histograms with cardinality-safe route labels. IP allowlist by default.
 level: intermediate
 prereqs:

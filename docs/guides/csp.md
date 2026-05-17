@@ -1,7 +1,7 @@
 ---
 title: Content-Security-Policy
 sidebar_label: Content-Security-Policy
-sidebar_position: 46
+sidebar_position: 4.62
 description: Opt-in middleware plugin that emits the Content-Security-Policy response header — the modern defense against cross-site scripting (XSS), clickjacking, mixed-content downgrade, and base-tag manipulation. Strict whitelist of 27 CSP Level 3 standard directives. Static directives only at v0 (per-response nonce wiring defers to a future CSP-aware view-layer plugin). Opens Phase 2 of the security-headers track in 0.4.0-alpha.
 level: intermediate
 prereqs:

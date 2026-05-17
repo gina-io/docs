@@ -1,7 +1,7 @@
 ---
 title: Native HTTP/2 Server in Node.js
 sidebar_label: HTTP/2 Native
-sidebar_position: 20
+sidebar_position: 6.6
 description: Gina is a Node.js HTTP/2 framework with a built-in server engine (Isaac) that uses node:http2 directly — no Express, no adapters, full multiplexing and server push support.
 level: intermediate
 prereqs:

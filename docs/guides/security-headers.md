@@ -1,7 +1,7 @@
 ---
 title: Security Headers
 sidebar_label: Security Headers
-sidebar_position: 45
+sidebar_position: 4.61
 description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS, Origin-Agent-Cluster, and Content-Security-Policy. Phase 1 modern coverage shipped in 0.3.15-alpha; Phase 2 opens with #HDR5 Csp in 0.4.0-alpha.
 level: intermediate
 prereqs:
