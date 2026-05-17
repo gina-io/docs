@@ -2,7 +2,7 @@
 title: Security Headers
 sidebar_label: Security Headers
 sidebar_position: 45
-description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS, and Origin-Agent-Cluster. Phase 1 modern coverage complete in 0.3.15-alpha.
+description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS, Origin-Agent-Cluster, and Content-Security-Policy. Phase 1 modern coverage shipped in 0.3.15-alpha; Phase 2 opens with #HDR5 Csp in 0.4.0-alpha.
 level: intermediate
 prereqs:
   - '[Sessions guide](/guides/sessions)'
@@ -289,6 +289,84 @@ The plugin's design favours proxy-deployment robustness (no dependency on `x-for
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 
+## Content-Security-Policy (`#HDR5`)
+
+`gina.plugins.Csp({ directives, reportOnly })` emits the `Content-Security-Policy` (or `Content-Security-Policy-Report-Only`) response header on every response, limiting which resources the browser is allowed to load and from where. CSP is the modern defense against cross-site scripting (XSS) and data injection — by declaring an allowlist of permitted source origins for scripts, styles, images, fonts, frames, and connections, the browser refuses to execute anything that doesn't match the policy, even if an attacker manages to inject content via stored XSS.
+
+**Opens Phase 2** of the security-headers track in `0.4.0-alpha`. CSP has a larger configuration surface than the Phase 1 plugins — see the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference (directive whitelist, value formats, security guidance, failure modes).
+
+### Adoption
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var csp     = require('gina').plugins.Csp({
+    directives: {
+        'default-src': ["'self'"],
+        'script-src':  ["'self'", 'https://cdn.example.com'],
+        'style-src':   ["'self'", "'unsafe-inline'"],
+        'img-src':     ["'self'", 'data:', 'https:'],
+        'upgrade-insecure-requests': true
+    }
+});
+var app     = express();
+
+app.use(csp);
+```
+
+`directives` is required — there is no sensible cross-bundle default since every bundle has its own resource graph. The factory throws at call time if `directives` is missing or empty.
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "csp": {
+    "directives": {
+      "default-src": ["'self'"],
+      "script-src":  ["'self'", "https://cdn.example.com"],
+      "style-src":   ["'self'", "'unsafe-inline'"],
+      "img-src":     ["'self'", "data:"],
+      "upgrade-insecure-requests": true
+    },
+    "reportOnly": false
+  }
+}
+```
+
+| Field        | Type    | Default | Notes                                                                |
+|--------------|---------|---------|----------------------------------------------------------------------|
+| `directives` | object  | —       | **Required.** Throws if missing or empty.                            |
+| `reportOnly` | boolean | `false` | When `true`, emits `Content-Security-Policy-Report-Only` instead.   |
+
+### Strict whitelist on directive names
+
+The plugin enforces a **strict whitelist of 27 CSP Level 3 standard directives**. Unknown directive names throw at factory call time — fail-fast is the only way to catch typos like `scrpt-src` (browsers silently ignore unknown directives, so without the throw the page would be unprotected with no error). Full directive list and value-format reference in the [dedicated guide](/guides/csp).
+
+### `reportOnly` — non-enforcing migration testing
+
+Setting `reportOnly: true` switches the response header name from `Content-Security-Policy` to `Content-Security-Policy-Report-Only`. Browsers report violations but do not block any resources. Useful when rolling out a new policy: ship it as report-only first, collect violations from real traffic for a few days, refine the policy, then flip to enforcing.
+
+### v0 limitation — static directives only
+
+v0 ships **static directives only**. Per-response nonce wiring (emitting `script-src 'nonce-<random>'` with a fresh nonce per render that the template engine then writes onto inline `<script>` tags) requires template-render integration and defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering.
+
+For now, inline scripts and styles must use `'unsafe-inline'` (loosens the policy — only acceptable when the rest of the policy is strict enough to make XSS injection of inline content hard) or be moved to external files served from a script-src-allowed origin.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| `directives` omitted / null / non-object                 | Factory throws at call time                          |
+| `directives` is an empty object                          | Factory throws with directives-list pointer          |
+| `directives` contains an unknown directive name          | Factory throws with full whitelist in message        |
+| Boolean-only directive given a non-boolean value         | Factory throws with directive name in message        |
+| Source-list directive given `true` (and not `sandbox`)   | Factory throws with directive-category explanation   |
+| Source-list directive array contains a non-string entry  | Factory throws with index in message                 |
+| All directives resolve to `false` (omitted)              | Factory throws — empty CSP is invalid                |
+| `reportOnly` is non-boolean                              | Factory throws                                       |
+| Plugin not registered                                    | Header not emitted; browser applies no CSP           |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+
 ## Origin-Agent-Cluster (`#HDR7`)
 
 `gina.plugins.OriginAgentCluster()` emits `Origin-Agent-Cluster: ?1` on every response, requesting that the browser place this page's origin in its own agent cluster (origin-keyed) rather than the default site-keyed (eTLD+1) cluster.
@@ -347,14 +425,17 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 
 **Phase 1.5 — helmet-parity gap-fill** (roadmapped for `0.3.16-alpha`+): the lower-priority headers helmet bundles but we don't yet cover (`HidePoweredBy` #HDR8, `X-DNS-Prefetch-Control` #HDR9, `X-XSS-Protection` #HDR10, `X-Download-Options` #HDR11, `X-Permitted-Cross-Domain-Policies` #HDR12). Defense-in-depth + parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
-**Phase 2 — dynamic / higher-break-risk** (deferred to `0.4.0`): `Csp` (#HDR5) needs template-render integration for per-response nonce wiring; `CrossOriginPolicies` (#HDR6 — COEP/COOP/CORP) can break legitimate cross-origin loads and needs more careful adoption guidance.
+**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`): `Csp` (#HDR5) **shipped** with static directives only — per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the future combined-wrapper API. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) closes Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (mirrors helmet's `helmet()` combined wrapper).
 
-## Phase 2 — deferred to `0.4.0`
+## Phase 2 — in progress (`0.4.0-alpha`)
 
-The dynamic / higher-break-risk headers ship later, in a separate phase:
+The dynamic / higher-break-risk headers ship in Phase 2:
 
-- **`gina.plugins.Csp({ directives, reportOnly })` (#HDR5)** — Content-Security-Policy with static directives. Per-response nonce wiring requires template-render integration and defers to a separate CSP-aware view-layer plugin.
-- **`gina.plugins.CrossOriginPolicies({ embedder, opener, resource })` (#HDR6)** — COEP/COOP/CORP browsing-context isolation (SharedArrayBuffer gating, `window.opener` isolation, cross-origin resource embedding). Can break legitimate cross-origin loads; opt-in even more conservatively than Phase 1.
+- **`gina.plugins.Csp({ directives, reportOnly })` (#HDR5)** — Content-Security-Policy with static directives. **Shipped** — see the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference. Per-response nonce wiring deferred to a future CSP-aware view-layer plugin.
+- **`gina.plugins.Coep({ value })` (#HDR6)** — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense). **Coming up.**
+- **`gina.plugins.Coop({ value })` (#HDR13)** — Cross-Origin-Opener-Policy. Isolates `window.opener` references on top-level navigation. **Coming up.**
+- **`gina.plugins.Corp({ value })` (#HDR14)** — Cross-Origin-Resource-Policy. Restricts which other origins can fetch this resource. **Coming up.**
+- **`gina.plugins.SecurityHeaders({...})` (#HDR15)** — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Mirrors helmet's `helmet()` combined wrapper. **Coming up — closes Phase 2.**
 
 ## CORS vs response-header policies
 

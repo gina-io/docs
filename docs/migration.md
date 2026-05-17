@@ -19,9 +19,70 @@ upward to the target version.
 
 ---
 
+## 0.3.15 → 0.4.0
+
+`0.4.0-alpha` opens **Phase 2** of the HTTP security response headers track (`#HDR`), starting with `Csp` (#HDR5). Phase 2 covers the dynamic / higher-break-risk headers — those that need richer configuration than the Phase 1 static-value plugins, or that can break legitimate cross-origin loads if mis-configured.
+
+`#HDR5 Csp` ships as the first Phase 2 plugin. The remaining Phase 2 plugins (Coep / Coop / Corp = #HDR6 / #HDR13 / #HDR14) follow in subsequent alphas; the combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) — mirrors helmet's `helmet()` for one-mount + one-config-block convenience — closes Phase 2.
+
+### No action required
+
+This is a purely additive release. Bundles that don't adopt the new `Csp` plugin continue to work unchanged. Existing Phase 1 plugins (HDR1-7) are unaffected.
+
+### What's new — `gina.plugins.Csp({ directives, reportOnly })` (#HDR5)
+
+Opt-in middleware that emits the `Content-Security-Policy` (or `Content-Security-Policy-Report-Only`) response header on every response, limiting which resources the browser is allowed to load and from where — the modern defense against cross-site scripting (XSS), clickjacking via `frame-ancestors`, mixed-content downgrade, and base-tag manipulation.
+
+Adoption is one block in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var csp     = require('gina').plugins.Csp({
+    directives: {
+        'default-src': ["'self'"],
+        'script-src':  ["'self'", 'https://cdn.example.com'],
+        'style-src':   ["'self'", "'unsafe-inline'"],
+        'img-src':     ["'self'", 'data:', 'https:'],
+        'upgrade-insecure-requests': true
+    }
+});
+var app     = express();
+
+app.use(csp);
+```
+
+**`directives` is REQUIRED.** There is no sensible cross-bundle default; every bundle has its own resource graph. The factory throws at call time if `directives` is missing or empty.
+
+**Strict whitelist of 27 CSP Level 3 standard directives.** Unknown directive names throw at factory call time — fail-fast catches typos like `scrpt-src` that browsers would otherwise silently ignore (leaving the page unprotected with no error).
+
+**Value formats:**
+- Array of source-list tokens — joined with space: `["'self'", 'https:']` → `'self' https:`
+- Pre-formatted string — emitted as-is: `"'self' https:"` → `'self' https:`
+- Boolean `true` — emit directive name alone (boolean-only directives `upgrade-insecure-requests` / `block-all-mixed-content` + hybrid `sandbox`).
+- Boolean `false` — omit the directive entirely.
+
+**`reportOnly: true`** switches the response header name to `Content-Security-Policy-Report-Only` — browsers report violations but do not block any resources. Use for non-enforcing migration testing: ship the policy as report-only first, collect violations from real traffic, refine, then flip to enforcing.
+
+**v0 limitation — static directives only.** Per-response nonce wiring requires template-render integration and defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. For now, inline scripts and styles must either use `'unsafe-inline'` (loosens the policy substantially) or be moved to external files served from a `script-src`-allowed origin.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates (first-writer-wins).
+
+See the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference — directive whitelist, value-format details, security guidance (avoid `'unsafe-inline'` and `'unsafe-eval'`, lock down `frame-ancestors` and `object-src`), and the full failure-mode table.
+
+### Coming up in 0.4.0-alpha
+
+Phase 2 continues with the cross-origin policies (three separate plugins for consistency with the future combined wrapper) plus the combined wrapper itself:
+
+- `gina.plugins.Coep({ value })` (#HDR6) — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense).
+- `gina.plugins.Coop({ value })` (#HDR13) — Cross-Origin-Opener-Policy. Isolates `window.opener` references on top-level navigation.
+- `gina.plugins.Corp({ value })` (#HDR14) — Cross-Origin-Resource-Policy. Restricts which other origins can fetch this resource.
+- `gina.plugins.SecurityHeaders({...})` (#HDR15) — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Mirrors helmet's `helmet()`. **Closes Phase 2.**
+
+---
+
 ## 0.3.14 → 0.3.15
 
-`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all five modern critical plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4), `OriginAgentCluster` (#HDR7). Phase 1.5 (helmet-parity gap-fill: `HidePoweredBy`, `XDnsPrefetchControl`, `XXssProtection`, `XDownloadOptions`, `XPermittedCrossDomainPolicies`) is roadmapped for follow-up alphas; Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) for `0.4.0`.
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all five modern critical plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4), `OriginAgentCluster` (#HDR7). Phase 1.5 (helmet-parity gap-fill: `HidePoweredBy`, `XDnsPrefetchControl`, `XXssProtection`, `XDownloadOptions`, `XPermittedCrossDomainPolicies`) is roadmapped for follow-up alphas; Phase 2 opens in `0.4.0-alpha` with `Csp` (#HDR5) — see the "0.3.15 → 0.4.0" section below.
 
 ### No action required
 
