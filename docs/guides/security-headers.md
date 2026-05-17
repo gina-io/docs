@@ -640,6 +640,65 @@ Same emitted header, different option shape. **Silent-fallback gotcha for migrat
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 | `{ allow: true }` passed (helmet shape)                  | Silent fallback to default `off` — use `{ value: 'on' }` |
 
+## X-XSS-Protection (`#HDR10`)
+
+`gina.plugins.XXssProtection()` emits the literal header `X-XSS-Protection: 0` on every response, **DISABLING** Chrome's legacy XSS auditor.
+
+### The value `0` is deliberate — not a typo
+
+Chrome's `X-XSS-Protection` feature was a built-in XSS auditor in older versions of the browser. Setting the header to `1` enabled it; `1; mode=block` enabled it in block-rather-than-sanitise mode; `0` disabled it. The naming suggests "0 means no protection" — counter-intuitive for a security header.
+
+**The auditor itself had its own vulnerabilities** — cross-site information disclosure shapes — and the modern security recommendation per [MDN](https://developer.mozilla.org/docs/Web/HTTP/Headers/X-XSS-Protection) is to DISABLE the auditor entirely (`0`) rather than rely on it. The actual XSS defense is `Content-Security-Policy` (`#HDR5`) with a strong policy (in particular, banning `'unsafe-inline'` in `script-src`).
+
+helmet ships `xXssProtection` for the same reason — defense-in-depth against the vanishing edge case of a legacy Chrome client (pre-v78) or a security scanner that flags the absence of this header.
+
+### Browser status in 2026
+
+- **Chrome** dropped the XSS auditor entirely in v78 (October 2019).
+- **Edge** follows Chrome.
+- **Firefox** never implemented it.
+- **Safari** never implemented it.
+- **IE11** honoured it but is end-of-life as of 2022.
+
+The header is effectively a no-op in modern browsers. Ships for defense-in-depth + helmet-parity narrative.
+
+### Adoption
+
+```js title="src/<bundle>/index.js"
+var myapp          = require('gina');
+var xXssProtection = require('gina').plugins.XXssProtection();
+
+myapp.onInitialize(function(event, app) {
+    app.use(xXssProtection);
+    event.emit('complete', app);
+});
+```
+
+### Configuration
+
+No tunable options. The `settings.json > xXssProtection` slot is reserved for future fields:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "xXssProtection": {}
+}
+```
+
+Registering opts in; not registering opts out.
+
+### Why not other values?
+
+The `X-XSS-Protection` header historically accepted `1`, `1; mode=block`, `1; report=<uri>`. gina (matching helmet) deliberately does NOT support those — the auditor mechanism is unsafe regardless of mode. If you need a working XSS defense, use the [Content-Security-Policy guide](/guides/csp) with a strong policy.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| Plugin not registered                                    | Header not emitted; legacy Chrome pre-v78 may run the auditor (potential exfiltration risk on vulnerable pages) |
+| Header already set by an earlier middleware (even unsafe `"1; mode=block"`) | Existing value preserved (idempotent first-writer-wins); mount BEFORE the upstream middleware to override |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+| Browser predates X-XSS-Protection (very old browsers)    | Header ignored silently — harmless                   |
+
 ## Cross-Origin-Opener-Policy (`#HDR13`)
 
 `gina.plugins.Coop({ value })` emits `Cross-Origin-Opener-Policy` (COOP) on every response, controlling how the page's browsing context relates to popups and cross-origin `window.opener` references on top-level navigation.
@@ -986,7 +1045,7 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 - `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
 - `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
 
-**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8) and `X-DNS-Prefetch-Control` (#HDR9) shipped 2026-05-17 (see the [Hide X-Powered-By](#hide-x-powered-by-hdr8) and [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9) sections above); `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), `X-Permitted-Cross-Domain-Policies` (#HDR12) remain queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
+**Phase 1.5 — helmet-parity gap-fill** (in progress on `0.3.16-alpha`): `HidePoweredBy` (#HDR8), `X-DNS-Prefetch-Control` (#HDR9), and `X-XSS-Protection` (#HDR10) shipped 2026-05-17 (see the [Hide X-Powered-By](#hide-x-powered-by-hdr8), [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9), and [X-XSS-Protection](#x-xss-protection-hdr10) sections above); `X-Download-Options` (#HDR11) and `X-Permitted-Cross-Domain-Policies` (#HDR12) remain queued. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
 **Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
 
@@ -1008,4 +1067,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 + HDR9 shipped)
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 2 closed; Phase 1.5 in progress — HDR8 + HDR9 + HDR10 shipped)
