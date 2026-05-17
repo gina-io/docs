@@ -556,9 +556,20 @@ The plugin's effectiveness depends on which server engine your bundle uses.
 
 **Express engine**: works as expected. The framework's `response.setHeader('X-Powered-By', ...)` at `core/server.js:2425` runs in early framework middleware before any user-mounted plugin, so `HidePoweredBy`'s middleware fires AFTER and `res.removeHeader('x-powered-by')` removes the header cleanly before the response is written to the wire.
 
-**Isaac engine** (gina's default built-in HTTP/HTTP2 engine): does NOT work. `server.isaac.js` has 15+ direct `response.writeHead({ 'X-Powered-By': ... })` call sites that bypass the `setHeader`/`removeHeader` interface entirely. The plugin still runs and calls `removeHeader` (no-op for Isaac since the header isn't set at middleware time); then `writeHead` emits the header directly to the response.
+**Isaac engine** (gina's default built-in HTTP/HTTP2 engine) — **use `server.hidePoweredBy: true` instead of (or in addition to) this middleware**. Isaac writes `X-Powered-By` directly via 15 `response.writeHead({ 'X-Powered-By': ... })` sites. `writeHead` bypasses the `setHeader`/`removeHeader` interface entirely — once `writeHead` is called with the headers object, those headers are committed regardless of any prior `removeHeader` call. This middleware still runs and calls `removeHeader` on Isaac (no-op since the header isn't set at middleware time), but `writeHead` then emits the header directly. The middleware therefore does NOT suppress the header on Isaac.
 
-Bundles on the Isaac engine that need to hide the header have two options today: switch to the Express engine for the affected bundle, or open an issue against `gina-io/gina` to track a framework-level settings-flag gate that would suppress the `writeHead` `X-Powered-By` emissions natively.
+The framework-level `server.hidePoweredBy` settings flag closes that gap (`#HDR8` Phase 2, shipped in `0.3.16-alpha`). Set it in your bundle's `config/settings.json`:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "engine": "isaac",
+    "hidePoweredBy": true
+  }
+}
+```
+
+The flag (default `false`) makes the Isaac engine skip the `X-Powered-By` emission at all 15 `writeHead` sites. It is a no-op on the Express engine — use `gina.plugins.HidePoweredBy()` middleware there. Bundles that want belt-and-suspenders coverage across both engines can set the flag AND register the middleware (each is a no-op on the engine the other handles).
 
 To check which engine your bundle uses, look at `bundles/<name>/config/settings.json > server.engine` (defaults to the Isaac engine when absent on most installs).
 
@@ -568,7 +579,8 @@ To check which engine your bundle uses, look at `bundles/<name>/config/settings.
 |----------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | Plugin not registered                                                | `X-Powered-By: Gina/<version>` continues to be emitted                            |
 | Plugin registered on Express engine                                  | Header removed cleanly                                                            |
-| Plugin registered on Isaac engine                                    | Header still emitted via direct `writeHead` (see above)                            |
+| Plugin registered on Isaac engine (no `server.hidePoweredBy` flag)   | Header still emitted via direct `writeHead` — set `settings.json > server.hidePoweredBy: true` |
+| Isaac engine + `server.hidePoweredBy: true`                          | Header suppressed at `writeHead` emission; this middleware is a no-op (safe redundancy)         |
 | User middleware sets `X-Powered-By` AFTER this plugin runs           | Re-added; mount `HidePoweredBy` LAST in the chain to prevent                      |
 | Response already sent (`res.headersSent === true`)                   | Node's `removeHeader` no-ops; request resumes                                    |
 
@@ -1052,7 +1064,7 @@ With no opts, mounts the **twelve non-footgun plugins** with their per-plugin de
 | `ReferrerPolicy` (HDR3)                   | `Referrer-Policy`                   | `strict-origin-when-cross-origin`            |
 | `Hsts` (HDR4)                             | `Strict-Transport-Security`         | `max-age=15552000` (180 days)                |
 | `OriginAgentCluster` (HDR7)               | `Origin-Agent-Cluster`              | `?1`                                         |
-| `HidePoweredBy` (HDR8)                    | `X-Powered-By`                      | **REMOVED** (Express engine only)            |
+| `HidePoweredBy` (HDR8)                    | `X-Powered-By`                      | **REMOVED** (Express; Isaac: `server.hidePoweredBy` flag) |
 | `XDnsPrefetchControl` (HDR9)              | `X-DNS-Prefetch-Control`            | `off`                                        |
 | `XXssProtection` (HDR10)                  | `X-XSS-Protection`                  | `0` (deliberately disables Chrome auditor)   |
 | `XDownloadOptions` (HDR11)                | `X-Download-Options`                | `noopen` (IE-legacy)                         |
