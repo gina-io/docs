@@ -234,6 +234,40 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in this cycle:
 
 **Phase 2** (`Csp` #HDR5, the three-plugin cross-origin split COEP/COOP/CORP #HDR6/#HDR13/#HDR14, the `SecurityHeaders` combined wrapper #HDR15, and the HDR8 framework-level Phase 2 `server.hidePoweredBy` settings flag) also shipped on develop 2026-05-17 in the 0.3.15-alpha cycle. CSP is the dynamic / higher-break-risk header that requires template-render-integration thinking — static directives only at v0; per-response nonce wiring defers to a separate CSP-aware view-layer plugin.
 
+### What's new — `isInList` form-validator rule
+
+New rule in the `is*` family that constrains a form field's value to a closed set of accepted primitives. Adoption is one extra key in the routing-rule JSON; the rule fires on both server-side routing validation and client-side browser enforcement (single shared implementation in the form-validator).
+
+```json title="src/<bundle>/config/routing.json"
+"status-update": {
+  "url": "/status",
+  "method": "PUT",
+  "requirements": {
+    "status": "validator::{ isRequired: true, isString: true, isInList: [\"draft\", \"pending\", \"sent\", \"paid\"] }"
+  },
+  "param": { "control": "updateStatus" }
+}
+```
+
+**Semantics**: strict `===` equality. `isInList: [1, 2, 3]` rejects the string `"2"`. Empty allowed-list rejects every value. Non-array rule values (e.g. `isInList: "draft"`) throw a configuration error at first invocation. Mixed primitive types (string / number / boolean) are accepted in the same list. Non-primitive entries throw.
+
+**Conditional opt-in** plugs into the existing `_case_<field>` resolver without special-case handling:
+
+```json
+"_case_field[type]": {
+  "conditions": [
+    {
+      "case": "/^individual$/",
+      "rules": {
+        "field[subtype]": { "isInList": ["primary", "secondary"] }
+      }
+    }
+  ]
+}
+```
+
+**What this does NOT cover**: async value-list resolution (lists are static at rule-load time — use a custom rule or `Collection.findOne` for remote enums), wildcard / regex patterns inside the list (use the existing `isString` regex options or a custom rule), case-insensitive matching (strict `===` is the only mode; a future opt-in object shape `isInList: { values: [...], caseInsensitive: true }` could add it if a use case emerges). Client-side datalist sourcing (`isInListFromDatalist: "<id>"`) is also out of scope for this slice.
+
 ---
 
 ## 0.3.13 → 0.3.14
