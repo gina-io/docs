@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.3.14 → 0.3.15
 
-`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all four static-value plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4). Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is roadmapped for `0.4.0`.
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all five modern critical plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4), `OriginAgentCluster` (#HDR7). Phase 1.5 (helmet-parity gap-fill: `HidePoweredBy`, `XDnsPrefetchControl`, `XXssProtection`, `XDownloadOptions`, `XPermittedCrossDomainPolicies`) is roadmapped for follow-up alphas; Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) for `0.4.0`.
 
 ### No action required
 
@@ -139,16 +139,39 @@ Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: f
 
 **Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
 
-### Phase 1 is complete
+### What's new — `gina.plugins.OriginAgentCluster()` (#HDR7)
 
-All four Phase 1 plugins on the `#HDR` track shipped in this cycle:
+Opt-in middleware that emits `Origin-Agent-Cluster: ?1` on every response, requesting origin-keyed agent clustering. Same-site cross-origin pages get isolated agents (can no longer reach in via `document.domain`), which mitigates one class of Spectre side-channel attack. Adoption is one line:
+
+```js title="src/<bundle>/index.js"
+var express            = require('express');
+var originAgentCluster = require('gina').plugins.OriginAgentCluster();
+var app                = express();
+
+app.use(originAgentCluster);
+```
+
+No required configuration — per the [HTML spec](https://html.spec.whatwg.org/multipage/document-sequences.html#origin-keyed-agent-clusters), `?1` (Structured Header boolean true) is the only useful value; `?0` is the browser default and emitting it would be a no-op. There is no `enabled` flag.
+
+**Browser support**: Chrome 88+, Edge 88+, Firefox 109+, Safari 15+. Older browsers ignore the header silently.
+
+**When NOT to register**: if your bundle relies on `document.domain` to bridge same-site origins (e.g. setting `document.domain = "example.com"` to script across `app.example.com` and `legacy.example.com`), Origin-Agent-Cluster will break that pattern. The pattern is rare in modern web apps but worth checking.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### Phase 1 is complete (modern coverage)
+
+All five modern Phase 1 plugins on the `#HDR` track shipped in this cycle:
 
 - `gina.plugins.XContentTypeOptions()` (#HDR1) — MIME-sniffing defense
 - `gina.plugins.XFrameOptions({ value })` (#HDR2) — clickjacking defense
 - `gina.plugins.ReferrerPolicy({ value })` (#HDR3) — referrer leakage control
 - `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
+- `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
 
-Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is roadmapped for `0.4.0` — the dynamic / higher-break-risk headers that require template-render integration or can break legitimate cross-origin loads.
+**Phase 1.5** (helmet-parity gap-fill, roadmapped for `0.3.16-alpha`+): `HidePoweredBy` (#HDR8), `XDnsPrefetchControl` (#HDR9), `XXssProtection` (#HDR10), `XDownloadOptions` (#HDR11), `XPermittedCrossDomainPolicies` (#HDR12). Defense-in-depth + parity narrative; the four legacy ones have minimal practical value in 2026.
+
+**Phase 2** (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is roadmapped for `0.4.0` — the dynamic / higher-break-risk headers that require template-render integration or can break legitimate cross-origin loads.
 
 ---
 

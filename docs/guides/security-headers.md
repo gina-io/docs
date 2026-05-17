@@ -2,7 +2,7 @@
 title: Security Headers
 sidebar_label: Security Headers
 sidebar_position: 45
-description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and HSTS. Phase 1 complete in 0.3.15-alpha.
+description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS, and Origin-Agent-Cluster. Phase 1 modern coverage complete in 0.3.15-alpha.
 level: intermediate
 prereqs:
   - '[Sessions guide](/guides/sessions)'
@@ -289,9 +289,65 @@ The plugin's design favours proxy-deployment robustness (no dependency on `x-for
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 
-## Phase 1 complete
+## Origin-Agent-Cluster (`#HDR7`)
 
-All four Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`. Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is deferred to `0.4.0` — the dynamic / higher-break-risk headers that require template-render integration or can break legitimate cross-origin loads.
+`gina.plugins.OriginAgentCluster()` emits `Origin-Agent-Cluster: ?1` on every response, requesting that the browser place this page's origin in its own agent cluster (origin-keyed) rather than the default site-keyed (eTLD+1) cluster.
+
+By default, two same-site cross-origin pages (e.g. `app.example.com` and `marketing.example.com`) share an agent cluster — they can synchronously script each other if either page sets `document.domain`. Origin-Agent-Cluster opts the page out of this: it gets its own agent, isolated from sibling-origin pages, and `document.domain` becomes a no-op. The browser may also place origin-keyed agents in their own OS process where possible, limiting the blast radius of Spectre-class side-channel attacks.
+
+### Adoption
+
+One line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express            = require('express');
+var originAgentCluster = require('gina').plugins.OriginAgentCluster();
+var app                = express();
+
+app.use(originAgentCluster);
+```
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "originAgentCluster": {}
+}
+```
+
+The block is reserved for future fields (e.g. per-route opt-out). Today the plugin has no tunable options — `?1` (Structured Header boolean true) is the only useful value per the [HTML spec](https://html.spec.whatwg.org/multipage/document-sequences.html#origin-keyed-agent-clusters); `?0` is the browser default and emitting it would be a no-op. There is no `enabled` flag; register the plugin to opt in, do not register to opt out.
+
+### Browser support
+
+Chrome 88+, Edge 88+, Firefox 109+, Safari 15+. Older browsers ignore the header silently — safe to register unconditionally.
+
+### When NOT to register
+
+If your bundle relies on `document.domain` to bridge same-site origins (e.g. `app.example.com` and `legacy.example.com` setting `document.domain = "example.com"` to script each other), Origin-Agent-Cluster will break that pattern. The pattern is rare in modern web apps but worth checking.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| Plugin not registered                                    | Header not emitted; browser uses default site-keyed agent |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+| Browser predates the feature                             | Header ignored silently — harmless                   |
+| Same-origin policy relies on `document.domain`           | Will break; do not register the plugin               |
+
+## Phase 1 complete (modern coverage)
+
+All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
+
+- `gina.plugins.XContentTypeOptions()` (#HDR1) — MIME-sniffing defense
+- `gina.plugins.XFrameOptions({ value })` (#HDR2) — clickjacking defense
+- `gina.plugins.ReferrerPolicy({ value })` (#HDR3) — referrer leakage control
+- `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
+- `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
+
+**Phase 1.5 — helmet-parity gap-fill** (roadmapped for `0.3.16-alpha`+): the lower-priority headers helmet bundles but we don't yet cover (`HidePoweredBy` #HDR8, `X-DNS-Prefetch-Control` #HDR9, `X-XSS-Protection` #HDR10, `X-Download-Options` #HDR11, `X-Permitted-Cross-Domain-Policies` #HDR12). Defense-in-depth + parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
+
+**Phase 2 — dynamic / higher-break-risk** (deferred to `0.4.0`): `Csp` (#HDR5) needs template-render integration for per-response nonce wiring; `CrossOriginPolicies` (#HDR6 — COEP/COOP/CORP) can break legitimate cross-origin loads and needs more careful adoption guidance.
 
 ## Phase 2 — deferred to `0.4.0`
 
