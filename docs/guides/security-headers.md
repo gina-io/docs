@@ -2,7 +2,7 @@
 title: Security Headers
 sidebar_label: Security Headers
 sidebar_position: 45
-description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, and Referrer-Policy today, with HSTS landing in the rest of the 0.3.15-alpha cycle.
+description: Opt-in middleware plugins that emit HTTP security response headers — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and HSTS. Phase 1 complete in 0.3.15-alpha.
 level: intermediate
 prereqs:
   - '[Sessions guide](/guides/sessions)'
@@ -202,11 +202,96 @@ Tokens are case-insensitive per the spec — values are normalised to lowercase 
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 
-## Coming in the rest of `0.3.15-alpha`
+## HSTS (`#HDR4`)
 
-Phase 1 ships four plugins; the remaining one is queued for a follow-up commit within the same `0.3.15-alpha` cycle:
+`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` emits the `Strict-Transport-Security` response header on every response, instructing browsers to access the host exclusively over HTTPS for the next `maxAge` seconds. Once a browser receives a valid HSTS policy from a host, it refuses to make plain HTTP requests to that host for the duration — attempts get upgraded to HTTPS before the network even sees them. This defeats SSL-stripping attacks where an active MITM intercepts the client's first HTTP request and prevents it from ever escalating to HTTPS.
 
-- **`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)** — HTTPS-only enforcement via the `Strict-Transport-Security` header. Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: false`. Browser-parity invariant: `preload: true` requires `includeSubDomains: true` AND `maxAge >= 31536000` (1 year) per the HSTS preload-list submission requirements; the factory throws at call time when the combination is invalid.
+### Adoption
+
+One line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var hsts    = require('gina').plugins.Hsts();
+var app     = express();
+
+app.use(hsts);
+```
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "hsts": {
+    "maxAge":            15552000,
+    "includeSubDomains": false,
+    "preload":           false
+  }
+}
+```
+
+| Field               | Type    | Default     | Notes                                      |
+|---------------------|---------|-------------|--------------------------------------------|
+| `maxAge`            | number  | `15552000`  | Seconds. Default = 180 days.               |
+| `includeSubDomains` | boolean | `false`     | Apply HSTS to all sub-domains too.         |
+| `preload`           | boolean | `false`     | Opt into the HSTS preload list.            |
+
+Caller-supplied options always win over settings:
+
+```js
+var hsts = require('gina').plugins.Hsts({
+    maxAge:            63072000,
+    includeSubDomains: true,
+    preload:           true
+});
+```
+
+### Browser-parity invariant on `preload`
+
+`preload: true` requires `includeSubDomains: true` AND `maxAge >= 31536000` (1 year) per the [HSTS preload-list submission requirements](https://hstspreload.org/#deployment-recommendations). The factory throws at call time when the combination is invalid:
+
+```
+[gina.plugins.Hsts] preload=true requires includeSubDomains=true per the
+HSTS preload-list submission requirements — see
+https://hstspreload.org/#deployment-recommendations
+```
+
+```
+[gina.plugins.Hsts] preload=true requires maxAge>=31536000 (1 year)
+per the HSTS preload-list submission requirements; received
+maxAge=15552000. See https://hstspreload.org/#deployment-recommendations
+```
+
+The HSTS preload list is the browsers' hard-coded HSTS database. Once your hostname is in it, all browsers treat HSTS as active from the moment they install the browser update, regardless of whether they've ever fetched a response from your host. Removal takes months and isn't guaranteed — opting in is a one-way operation in practical terms.
+
+### Choosing values
+
+- **`maxAge`** — start small (`300` = 5 minutes) during initial rollout to bound the blast radius of a mistake; ramp to `15552000` (180 days) for steady state; `63072000` (2 years) is the conventional value for preload-list submission.
+- **`includeSubDomains`** — only enable if you're certain *every* sub-domain (including ones added in the future) will be HTTPS-only. Common foot-gun: `app.example.com` enabling `includeSubDomains` and breaking `legacy.example.com` that's stuck on HTTP.
+- **`preload`** — only opt in once you've run stable in steady-state for weeks, audited every sub-domain, and accepted that removal is slow.
+
+### Spec note — transport gating
+
+This plugin emits the header on every response regardless of transport. RFC 6797 §7.2 says "An HSTS Host MUST NOT include the STS header field in HTTP responses conveyed over non-secure transport". However, §8.1 also says the user agent "MUST ignore any present STS header field(s)" received over insecure transport — the receiver enforces the policy correctly regardless of what the server sends.
+
+The plugin's design favours proxy-deployment robustness (no dependency on `x-forwarded-proto` being preserved by intermediaries) over sender-side spec purity. helmet's `Strict-Transport-Security` middleware takes the same approach, so adopters migrating from helmet see identical wire behaviour. Bundles that need strict §7.2 compliance can simply not register the plugin in non-HTTPS bundles.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| All fields omitted                                       | Emits `max-age=15552000`                             |
+| `maxAge` is not a non-negative integer                   | Factory throws at call time                          |
+| `preload=true` with `includeSubDomains=false`            | Factory throws with hstspreload.org pointer          |
+| `preload=true` with `maxAge<31536000`                    | Factory throws with hstspreload.org pointer          |
+| `maxAge=0`                                               | Emits `max-age=0` (clears existing HSTS policy)      |
+| Plugin not registered                                    | Header not emitted; browser uses no HSTS policy      |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+
+## Phase 1 complete
+
+All four Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`. Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is deferred to `0.4.0` — the dynamic / higher-break-risk headers that require template-render integration or can break legitimate cross-origin loads.
 
 ## Phase 2 — deferred to `0.4.0`
 

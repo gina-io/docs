@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.3.14 → 0.3.15
 
-`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first three plugins (`XContentTypeOptions` — #HDR1, `XFrameOptions` — #HDR2, `ReferrerPolicy` — #HDR3) land in this cycle; HSTS (#HDR4) follows in a subsequent commit within the same `0.3.15-alpha` cycle.
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all four static-value plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4). Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is roadmapped for `0.4.0`.
 
 ### No action required
 
@@ -107,9 +107,48 @@ Values are normalised to lowercase per the W3C spec's case-insensitive matching 
 
 **Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
 
-### Coming in the rest of `0.3.15-alpha` — Phase 1 completion
+### What's new — `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)
 
-- **`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)** — HTTPS-only enforcement via the `Strict-Transport-Security` header. Browser-parity invariant on `preload: true` (requires `includeSubDomains: true` AND `maxAge >= 31536000`).
+Opt-in middleware that emits the `Strict-Transport-Security` response header on every response, instructing browsers to access the host exclusively over HTTPS for the next `maxAge` seconds. Defeats SSL-stripping attacks by preventing browsers from making plain HTTP requests to the host once the policy is in effect.
+
+Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var hsts    = require('gina').plugins.Hsts();
+var app     = express();
+
+app.use(hsts);
+```
+
+Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: false`. Override via settings or caller options:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "hsts": {
+    "maxAge":            63072000,
+    "includeSubDomains": true,
+    "preload":           true
+  }
+}
+```
+
+**Browser-parity invariant on `preload`**: `preload: true` requires `includeSubDomains: true` AND `maxAge >= 31536000` (1 year) per the [HSTS preload-list submission requirements](https://hstspreload.org/#deployment-recommendations). The factory throws at call time when the combination is invalid — fast-fail at bootstrap, the bundle won't start with a misconfigured header. The preload-list submission is effectively a one-way operation (removal takes months and isn't guaranteed); the invariant guards against accidental lockouts.
+
+**Spec note on transport gating**: this plugin emits the header on every response regardless of transport, matching helmet's behaviour. RFC 6797 §7.2 says senders MUST NOT include the header on HTTP, but §8.1 also says browsers MUST IGNORE it on HTTP — the receiver enforces the policy correctly regardless. The design favours proxy-deployment robustness (no dependency on `x-forwarded-proto` being preserved) over sender-side spec purity. Bundles that need strict §7.2 compliance can simply not register the plugin in non-HTTPS bundles.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### Phase 1 is complete
+
+All four Phase 1 plugins on the `#HDR` track shipped in this cycle:
+
+- `gina.plugins.XContentTypeOptions()` (#HDR1) — MIME-sniffing defense
+- `gina.plugins.XFrameOptions({ value })` (#HDR2) — clickjacking defense
+- `gina.plugins.ReferrerPolicy({ value })` (#HDR3) — referrer leakage control
+- `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
+
+Phase 2 (`Csp` #HDR5 + `CrossOriginPolicies` #HDR6) is roadmapped for `0.4.0` — the dynamic / higher-break-risk headers that require template-render integration or can break legitimate cross-origin loads.
 
 ---
 
