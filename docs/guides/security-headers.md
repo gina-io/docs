@@ -31,7 +31,7 @@ sequenceDiagram
     alt header already set upstream
         Plugin->>App: next() — no overwrite
     else header not set
-        Plugin->>App: res.setHeader('x-content-type-options', 'nosniff'); next()
+        Plugin->>App: res.setHeader('x-content-type-options', 'nosniff'), then next()
     end
     App->>Ctrl: routing → controller
     Ctrl->>Client: response (with x-content-type-options: nosniff)
@@ -45,14 +45,16 @@ Each plugin is idempotent — if an earlier middleware already set the header, t
 
 ### Adoption
 
-One block in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express             = require('express');
+var myapp               = require('gina');
 var xContentTypeOptions = require('gina').plugins.XContentTypeOptions();
-var app                 = express();
 
-app.use(xContentTypeOptions);
+myapp.onInitialize(function(event, app) {
+    app.use(xContentTypeOptions);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is emitted on the response, not consumed from the request.
@@ -83,14 +85,16 @@ The block is reserved for future fields (e.g. per-route opt-out). Today the plug
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express       = require('express');
+var myapp         = require('gina');
 var xFrameOptions = require('gina').plugins.XFrameOptions();
-var app           = express();
 
-app.use(xFrameOptions);
+myapp.onInitialize(function(event, app) {
+    app.use(xFrameOptions);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -140,14 +144,16 @@ Modern browsers (Chrome 85+, Firefox 87+, Safari 14.5+, Edge 85+) default to `st
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express        = require('express');
+var myapp          = require('gina');
 var referrerPolicy = require('gina').plugins.ReferrerPolicy();
-var app            = express();
 
-app.use(referrerPolicy);
+myapp.onInitialize(function(event, app) {
+    app.use(referrerPolicy);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -208,14 +214,16 @@ Tokens are case-insensitive per the spec — values are normalised to lowercase 
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var hsts    = require('gina').plugins.Hsts();
-var app     = express();
+var myapp = require('gina');
+var hsts  = require('gina').plugins.Hsts();
 
-app.use(hsts);
+myapp.onInitialize(function(event, app) {
+    app.use(hsts);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -298,8 +306,8 @@ The plugin's design favours proxy-deployment robustness (no dependency on `x-for
 ### Adoption
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var csp     = require('gina').plugins.Csp({
+var myapp = require('gina');
+var csp   = require('gina').plugins.Csp({
     directives: {
         'default-src': ["'self'"],
         'script-src':  ["'self'", 'https://cdn.example.com'],
@@ -308,9 +316,11 @@ var csp     = require('gina').plugins.Csp({
         'upgrade-insecure-requests': true
     }
 });
-var app     = express();
 
-app.use(csp);
+myapp.onInitialize(function(event, app) {
+    app.use(csp);
+    event.emit('complete', app);
+});
 ```
 
 `directives` is required — there is no sensible cross-bundle default since every bundle has its own resource graph. The factory throws at call time if `directives` is missing or empty.
@@ -379,14 +389,16 @@ Browser support: Chrome 83+, Edge 83+, Firefox 79+, Safari 15.2+.
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var coep    = require('gina').plugins.Coep();
-var app     = express();
+var myapp = require('gina');
+var coep  = require('gina').plugins.Coep();
 
-app.use(coep);
+myapp.onInitialize(function(event, app) {
+    app.use(coep);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -462,14 +474,16 @@ By default, two same-site cross-origin pages (e.g. `app.example.com` and `market
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express            = require('express');
+var myapp              = require('gina');
 var originAgentCluster = require('gina').plugins.OriginAgentCluster();
-var app                = express();
 
-app.use(originAgentCluster);
+myapp.onInitialize(function(event, app) {
+    app.use(originAgentCluster);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -512,14 +526,16 @@ Browser support: Chrome 83+, Edge 83+, Firefox 79+, Safari 15.2+. `noopener-allo
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var coop    = require('gina').plugins.Coop();
-var app     = express();
+var myapp = require('gina');
+var coop  = require('gina').plugins.Coop();
 
-app.use(coop);
+myapp.onInitialize(function(event, app) {
+    app.use(coop);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -602,14 +618,16 @@ Browser support: Chrome 73+, Edge 79+, Firefox 74+, Safari 12+. Older browsers i
 
 ### Adoption
 
-One line in the bundle bootstrap, after the express app is created:
+One block in the bundle bootstrap:
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var corp    = require('gina').plugins.Corp();
-var app     = express();
+var myapp = require('gina');
+var corp  = require('gina').plugins.Corp();
 
-app.use(corp);
+myapp.onInitialize(function(event, app) {
+    app.use(corp);
+    event.emit('complete', app);
+});
 ```
 
 ### Configuration
@@ -685,11 +703,13 @@ Closes Phase 2 of the gina security-headers track.
 ### Adoption — default (batteries-included safe set)
 
 ```js title="src/<bundle>/index.js"
-var express          = require('express');
-var securityHeaders  = require('gina').plugins.SecurityHeaders();
-var app              = express();
+var myapp           = require('gina');
+var securityHeaders = require('gina').plugins.SecurityHeaders();
 
-app.use(securityHeaders);
+myapp.onInitialize(function(event, app) {
+    app.use(securityHeaders);
+    event.emit('complete', app);
+});
 ```
 
 With no opts, mounts the **seven non-footgun plugins** with their per-plugin defaults:
@@ -712,6 +732,7 @@ The two **opt-in-only plugins** (#HDR5 Csp + #HDR6 Coep) are NOT mounted by defa
 ### Opt in to CSP and COEP
 
 ```js
+var myapp           = require('gina');
 var securityHeaders = require('gina').plugins.SecurityHeaders({
     csp: {
         directives: {
@@ -723,7 +744,11 @@ var securityHeaders = require('gina').plugins.SecurityHeaders({
     },
     coep: true                              // require-corp default
 });
-app.use(securityHeaders);
+
+myapp.onInitialize(function(event, app) {
+    app.use(securityHeaders);
+    event.emit('complete', app);
+});
 ```
 
 `csp: { directives: {...} }` is required when opting in — `csp: {}` or `csp: true` throws at factory call time (CSP needs directives, this is a config error). Use `csp: false` (or omit the key) to keep CSP off.
@@ -731,10 +756,15 @@ app.use(securityHeaders);
 ### Opt out of a safe-set plugin
 
 ```js
+var myapp           = require('gina');
 var securityHeaders = require('gina').plugins.SecurityHeaders({
     hsts: false                             // HTTP-only bundle
 });
-app.use(securityHeaders);
+
+myapp.onInitialize(function(event, app) {
+    app.use(securityHeaders);
+    event.emit('complete', app);
+});
 ```
 
 Per-sub-config `false` (or `null`) skips that plugin even when it's in the safe set. Useful for HTTP-only bundles (skip HSTS), bundles relying on `document.domain` (skip OriginAgentCluster), or multi-domain bundles needing permissive cross-origin (skip Coop / Corp).
@@ -742,12 +772,17 @@ Per-sub-config `false` (or `null`) skips that plugin even when it's in the safe 
 ### Override defaults on a safe-set plugin
 
 ```js
+var myapp           = require('gina');
 var securityHeaders = require('gina').plugins.SecurityHeaders({
     xFrameOptions:  { value: 'DENY' },      // override SAMEORIGIN default
     referrerPolicy: { value: 'no-referrer' },
     hsts:           { maxAge: 31536000, includeSubDomains: true, preload: true }
 });
-app.use(securityHeaders);
+
+myapp.onInitialize(function(event, app) {
+    app.use(securityHeaders);
+    event.emit('complete', app);
+});
 ```
 
 Sub-config objects replace the per-plugin defaults wholesale (shallow merge).

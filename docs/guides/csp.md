@@ -41,7 +41,7 @@ sequenceDiagram
     alt header already set upstream
         Plugin->>App: next() — no overwrite
     else header not set
-        Plugin->>App: res.setHeader('content-security-policy', '<policy>'); next()
+        Plugin->>App: res.setHeader('content-security-policy', '<policy>'), then next()
     end
     App->>Ctrl: routing → controller
     Ctrl->>Client: response (with CSP header)
@@ -52,11 +52,11 @@ The plugin is **idempotent** — if an earlier middleware already set the header
 
 ## Adoption
 
-One block in the bundle bootstrap (`src/<bundle>/index.js`), after the express app is created:
+One block in the bundle bootstrap (`src/<bundle>/index.js`):
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var csp     = require('gina').plugins.Csp({
+var myapp = require('gina');
+var csp   = require('gina').plugins.Csp({
     directives: {
         'default-src': ["'self'"],
         'script-src':  ["'self'", 'https://cdn.example.com'],
@@ -65,9 +65,11 @@ var csp     = require('gina').plugins.Csp({
         'upgrade-insecure-requests': true
     }
 });
-var app     = express();
 
-app.use(csp);
+myapp.onInitialize(function(event, app) {
+    app.use(csp);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is emitted on the response, not consumed from the request.
