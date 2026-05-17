@@ -367,6 +367,93 @@ For now, inline scripts and styles must use `'unsafe-inline'` (loosens the polic
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 
+## Cross-Origin-Embedder-Policy (`#HDR6`)
+
+`gina.plugins.Coep({ value })` emits `Cross-Origin-Embedder-Policy` (COEP) on every response, controlling which cross-origin resources the page may embed.
+
+COEP is half of the **cross-origin isolation** pair (the other half is `Cross-Origin-Opener-Policy` / #HDR13). Setting both to their strictest values (`COEP: require-corp` + `COOP: same-origin`) unlocks browser features gated behind isolation: `SharedArrayBuffer` (required by WebAssembly threads, multi-threaded `OffscreenCanvas`), and high-resolution `performance.now()` (sub-millisecond precision, coarsened otherwise to mitigate Spectre side-channel attacks).
+
+COEP also independently defends against cross-site script injection: with `require-corp` set, the browser refuses to load any cross-origin resource that doesn't explicitly opt in via `Cross-Origin-Resource-Policy` (CORP, #HDR14) or CORS. An attacker who injects `<script src="https://evil.com/x.js">` can't load the script unless `evil.com` returns the matching CORP or CORS header.
+
+Browser support: Chrome 83+, Edge 83+, Firefox 79+, Safari 15.2+.
+
+### Adoption
+
+One line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var coep    = require('gina').plugins.Coep();
+var app     = express();
+
+app.use(coep);
+```
+
+### Configuration
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "coep": {
+    "value": "require-corp"
+  }
+}
+```
+
+| Field   | Type   | Default        | Valid values                                       |
+|---------|--------|----------------|----------------------------------------------------|
+| `value` | string | `require-corp` | `require-corp`, `credentialless`, `unsafe-none`    |
+
+### Three values per the W3C HTML spec
+
+| Token            | Behaviour                                                                                  |
+|------------------|--------------------------------------------------------------------------------------------|
+| `require-corp`   | **Default**. Cross-origin resources must opt-in via CORP or CORS, otherwise blocked. Required (paired with `COOP: same-origin`) for `SharedArrayBuffer` and high-res `performance.now()`. |
+| `credentialless` | Cross-origin no-CORS requests sent WITHOUT credentials (cookies, HTTP auth). Less restrictive than `require-corp` but still gates the cross-origin-isolation combo. |
+| `unsafe-none`    | Browser default. No restrictions; equivalent to not setting the header. Use to explicitly opt OUT (e.g. to override a stricter upstream default). |
+
+Tokens are case-insensitive at the plugin layer — values are normalised to lowercase before validation and emission. The spec defines them as lowercase enumerated strings; browsers parse case-sensitively, so the emitted header is always lowercase.
+
+Caller-supplied options always win over settings:
+
+```js
+var coep = require('gina').plugins.Coep({ value: 'credentialless' });
+```
+
+### Tradeoff with the `require-corp` default
+
+The strict default `require-corp` enables the SharedArrayBuffer + cross-origin-isolation combo, but BREAKS pages that load cross-origin resources (images, fonts, scripts on a CDN, embedded videos) that don't carry the matching `Cross-Origin-Resource-Policy` (CORP) or CORS header. Symptoms: blocked resources appear as failed network requests in DevTools with a `NotSameOriginAfterDefaultedToSameOriginByCoep` error.
+
+Three escape hatches when `require-corp` breaks an embed:
+
+1. **Set CORP on the embedded resource** (preferred) — if you control the origin serving the embed, add `Cross-Origin-Resource-Policy: cross-origin` (or use #HDR14 `gina.plugins.Corp()` on that bundle).
+2. **Downgrade to `credentialless`** — cookies and HTTP auth are stripped on cross-origin no-CORS requests, but no explicit CORP header is required. Compatible with most public CDN content (fonts, images) that don't need credentials.
+3. **Downgrade to `unsafe-none`** — gives up cross-origin isolation entirely. The page can embed anything but loses `SharedArrayBuffer` and high-resolution timers.
+
+### Pair with COOP for the SharedArrayBuffer combo
+
+To enable `SharedArrayBuffer` and the rest of the cross-origin-isolated-context features, register BOTH plugins together (COOP ships in a follow-up slice):
+
+```js
+var coep = require('gina').plugins.Coep();                          // require-corp (default)
+var coop = require('gina').plugins.Coop({ value: 'same-origin' });  // default — when #HDR13 ships
+app.use(coep);
+app.use(coop);
+```
+
+The page becomes cross-origin-isolated and `window.crossOriginIsolated` returns `true`. See the W3C HTML spec section on [cross-origin isolation](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-isolated) for the full feature gate.
+
+### Failure modes
+
+| Condition                                                | Outcome                                              |
+|----------------------------------------------------------|------------------------------------------------------|
+| `value` omitted                                          | Defaults to `require-corp`                            |
+| `value` is not one of the 3 W3C tokens                   | Factory throws at call time (bundle won't start)     |
+| `value` is not a string                                  | Factory throws at call time                          |
+| Plugin not registered                                    | Header not emitted; browser uses default behaviour   |
+| Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
+| Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
+| Cross-origin embed without matching CORP/CORS            | Embed BLOCKED (DevTools shows the `NotSameOriginAfterDefaultedToSameOriginByCoep` error) — see the three escape hatches above |
+
 ## Origin-Agent-Cluster (`#HDR7`)
 
 `gina.plugins.OriginAgentCluster()` emits `Origin-Agent-Cluster: ?1` on every response, requesting that the browser place this page's origin in its own agent cluster (origin-keyed) rather than the default site-keyed (eTLD+1) cluster.
@@ -425,14 +512,14 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 
 **Phase 1.5 — helmet-parity gap-fill** (roadmapped for `0.3.16-alpha`+): the lower-priority headers helmet bundles but we don't yet cover (`HidePoweredBy` #HDR8, `X-DNS-Prefetch-Control` #HDR9, `X-XSS-Protection` #HDR10, `X-Download-Options` #HDR11, `X-Permitted-Cross-Domain-Policies` #HDR12). Defense-in-depth + parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
-**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`): `Csp` (#HDR5) **shipped** with static directives only — per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the future combined-wrapper API. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) closes Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (mirrors helmet's `helmet()` combined wrapper).
+**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`): `Csp` (#HDR5) **shipped** with static directives only — per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the future combined-wrapper API; `Coep` (#HDR6) **shipped**, `Coop` and `Corp` follow. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) closes Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (mirrors helmet's `helmet()` combined wrapper).
 
 ## Phase 2 — in progress (`0.4.0-alpha`)
 
 The dynamic / higher-break-risk headers ship in Phase 2:
 
 - **`gina.plugins.Csp({ directives, reportOnly })` (#HDR5)** — Content-Security-Policy with static directives. **Shipped** — see the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference. Per-response nonce wiring deferred to a future CSP-aware view-layer plugin.
-- **`gina.plugins.Coep({ value })` (#HDR6)** — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense). **Coming up.**
+- **`gina.plugins.Coep({ value })` (#HDR6)** — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense). **Shipped** — see the [Cross-Origin-Embedder-Policy section](#cross-origin-embedder-policy-hdr6) above.
 - **`gina.plugins.Coop({ value })` (#HDR13)** — Cross-Origin-Opener-Policy. Isolates `window.opener` references on top-level navigation. **Coming up.**
 - **`gina.plugins.Corp({ value })` (#HDR14)** — Cross-Origin-Resource-Policy. Restricts which other origins can fetch this resource. **Coming up.**
 - **`gina.plugins.SecurityHeaders({...})` (#HDR15)** — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Mirrors helmet's `helmet()` combined wrapper. **Coming up — closes Phase 2.**
