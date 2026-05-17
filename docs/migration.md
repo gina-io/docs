@@ -19,6 +19,42 @@ upward to the target version.
 
 ---
 
+## 0.3.14 → 0.3.15
+
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first plugin (`XContentTypeOptions` — #HDR1) lands in this cycle; the rest of Phase 1 follows in subsequent commits within the same `0.3.15-alpha` cycle.
+
+### No action required
+
+This is a purely additive release. Bundles that don't adopt the new plugins continue to work unchanged. CORS handling stays where it lives today (request-side, in the framework's server engine) — these new plugins are response-side policy headers, a distinct concern.
+
+### What's new — `gina.plugins.XContentTypeOptions()` (#HDR1)
+
+Opt-in middleware that emits the `X-Content-Type-Options: nosniff` response header on every response. Adoption is two lines in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express             = require('express');
+var xContentTypeOptions = require('gina').plugins.XContentTypeOptions();
+var app                 = express();
+
+app.use(xContentTypeOptions);
+```
+
+The header instructs browsers to honour the declared `Content-Type` strictly, blocking MIME-sniffing attacks. Per RFC 7034 / WHATWG Fetch Standard, `nosniff` is the only valid value — there is no `enabled` flag in the configuration surface; register the plugin to opt in, don't register to opt out.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+**Order with other gina security plugins does not matter** — the header is emitted on the response, not consumed from the request.
+
+See the [Security Headers guide](/guides/security-headers) for the full reference and the per-plugin failure-mode table.
+
+### Coming in the rest of `0.3.15-alpha` — Phase 1 completion
+
+- **`gina.plugins.XFrameOptions({ value })` (#HDR2)** — clickjacking defense via the `X-Frame-Options` header. Settings: `xFrameOptions.value: "DENY"` or `"SAMEORIGIN"` (default `"SAMEORIGIN"`).
+- **`gina.plugins.ReferrerPolicy({ value })` (#HDR3)** — referrer leak control via the `Referrer-Policy` header. Default `"strict-origin-when-cross-origin"` matches the browser default since ~2021.
+- **`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)** — HTTPS-only enforcement via the `Strict-Transport-Security` header. Browser-parity invariant on `preload: true` (requires `includeSubDomains: true` AND `maxAge >= 31536000`).
+
+---
+
 ## 0.3.13 → 0.3.14
 
 `0.3.14` is an additive release on top of `0.3.13`. The headline is **server-side stack-frame leak prevention** on both error-response wire shapes (JSON + fallback HTML), gated fail-closed on local scope, plus a **per-bundle IP allowlist** for the admin-grade `/_gina/info` and `/_gina/cache/stats` endpoints. Shipping alongside: a `gina project:rm --force` UX fix for partial-breakage states, `bundle:list` argv parsing cleanup, two HTMLFormElement guard tightenings in the validator, a router hot-reload tech-debt fix, and a `@rhinostone/swig` floor bump to `^2.4.0`.
