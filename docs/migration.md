@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.3.14 → 0.3.15
 
-`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first two plugins (`XContentTypeOptions` — #HDR1, `XFrameOptions` — #HDR2) land in this cycle; the rest of Phase 1 follows in subsequent commits within the same `0.3.15-alpha` cycle.
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Phase 1 ships four plugins (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 (CSP + COEP/COOP/CORP) is roadmapped for `0.4.0`. The first three plugins (`XContentTypeOptions` — #HDR1, `XFrameOptions` — #HDR2, `ReferrerPolicy` — #HDR3) land in this cycle; HSTS (#HDR4) follows in a subsequent commit within the same `0.3.15-alpha` cycle.
 
 ### No action required
 
@@ -77,9 +77,38 @@ Values are normalised to uppercase (so `"deny"` is accepted and emitted as `DENY
 
 **Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
 
+### What's new — `gina.plugins.ReferrerPolicy({ value })` (#HDR3)
+
+Opt-in middleware that emits the `Referrer-Policy` response header on every response, controlling how much referrer information the browser includes when navigating away from the page or fetching sub-resources. Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express        = require('express');
+var referrerPolicy = require('gina').plugins.ReferrerPolicy();
+var app            = express();
+
+app.use(referrerPolicy);
+```
+
+Default is `strict-origin-when-cross-origin` — matches the modern browser default since ~2021. Override via settings or caller options to pick one of the other seven W3C tokens:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "referrerPolicy": { "value": "no-referrer" }
+}
+```
+
+```js
+var referrerPolicy = require('gina').plugins.ReferrerPolicy({ value: 'no-referrer' });
+```
+
+The eight valid tokens per the [W3C Referrer Policy spec](https://www.w3.org/TR/referrer-policy/): `no-referrer`, `no-referrer-when-downgrade`, `origin`, `origin-when-cross-origin`, `same-origin`, `strict-origin`, `strict-origin-when-cross-origin` (default), `unsafe-url` (dangerous — leaks paths and queries).
+
+Values are normalised to lowercase per the W3C spec's case-insensitive matching (so `"NO-REFERRER"` is accepted and emitted as `no-referrer`). Invalid tokens throw at factory call time with the full eight-token list + W3C spec URL in the message — fast-fail at bootstrap.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
 ### Coming in the rest of `0.3.15-alpha` — Phase 1 completion
 
-- **`gina.plugins.ReferrerPolicy({ value })` (#HDR3)** — referrer leak control via the `Referrer-Policy` header. Default `"strict-origin-when-cross-origin"` matches the browser default since ~2021.
 - **`gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)** — HTTPS-only enforcement via the `Strict-Transport-Security` header. Browser-parity invariant on `preload: true` (requires `includeSubDomains: true` AND `maxAge >= 31536000`).
 
 ---
