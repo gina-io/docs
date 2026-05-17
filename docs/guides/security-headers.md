@@ -1027,9 +1027,9 @@ See the W3C HTML spec section on [cross-origin isolation](https://html.spec.what
 
 ## Security Headers combined wrapper (`#HDR15`)
 
-`gina.plugins.SecurityHeaders({...})` composes the nine per-header plugins above into a single mount point with one `settings.json` block — the one-mount + one-config convenience layer for bundles that want the full set without the verbosity of nine individual `app.use(...)` calls. Mirrors helmet's `helmet()` orchestrator shape so bundles migrating from helmet find the API familiar.
+`gina.plugins.SecurityHeaders({...})` composes the fourteen per-header plugins above into a single mount point with one `settings.json` block — the one-mount + one-config convenience layer for bundles that want the full set without the verbosity of fourteen individual `app.use(...)` calls. Mirrors helmet's `helmet()` orchestrator shape so bundles migrating from helmet find the API familiar.
 
-Closes Phase 2 of the gina security-headers track.
+Closes Phase 2 of the gina security-headers track; **extended 2026-05-17** with the Phase 1.5 helmet-parity plugins (#HDR8–#HDR12) — the wrapper's batteries-included safe set grew from 7 to 12 plugins.
 
 ### Adoption — default (batteries-included safe set)
 
@@ -1043,17 +1043,22 @@ myapp.onInitialize(function(event, app) {
 });
 ```
 
-With no opts, mounts the **seven non-footgun plugins** with their per-plugin defaults:
+With no opts, mounts the **twelve non-footgun plugins** with their per-plugin defaults:
 
-| Sub-plugin                    | Header                          | Default value                          |
-|-------------------------------|---------------------------------|----------------------------------------|
-| `XContentTypeOptions` (HDR1)  | `X-Content-Type-Options`        | `nosniff`                              |
-| `XFrameOptions` (HDR2)        | `X-Frame-Options`               | `SAMEORIGIN`                           |
-| `ReferrerPolicy` (HDR3)       | `Referrer-Policy`               | `strict-origin-when-cross-origin`      |
-| `Hsts` (HDR4)                 | `Strict-Transport-Security`     | `max-age=15552000` (180 days)          |
-| `OriginAgentCluster` (HDR7)   | `Origin-Agent-Cluster`          | `?1`                                   |
-| `Coop` (HDR13)                | `Cross-Origin-Opener-Policy`    | `same-origin`                          |
-| `Corp` (HDR14)                | `Cross-Origin-Resource-Policy`  | `same-origin`                          |
+| Sub-plugin                                | Header                              | Default value                                |
+|-------------------------------------------|-------------------------------------|----------------------------------------------|
+| `XContentTypeOptions` (HDR1)              | `X-Content-Type-Options`            | `nosniff`                                    |
+| `XFrameOptions` (HDR2)                    | `X-Frame-Options`                   | `SAMEORIGIN`                                 |
+| `ReferrerPolicy` (HDR3)                   | `Referrer-Policy`                   | `strict-origin-when-cross-origin`            |
+| `Hsts` (HDR4)                             | `Strict-Transport-Security`         | `max-age=15552000` (180 days)                |
+| `OriginAgentCluster` (HDR7)               | `Origin-Agent-Cluster`              | `?1`                                         |
+| `HidePoweredBy` (HDR8)                    | `X-Powered-By`                      | **REMOVED** (Express engine only)            |
+| `XDnsPrefetchControl` (HDR9)              | `X-DNS-Prefetch-Control`            | `off`                                        |
+| `XXssProtection` (HDR10)                  | `X-XSS-Protection`                  | `0` (deliberately disables Chrome auditor)   |
+| `XDownloadOptions` (HDR11)                | `X-Download-Options`                | `noopen` (IE-legacy)                         |
+| `XPermittedCrossDomainPolicies` (HDR12)   | `X-Permitted-Cross-Domain-Policies` | `none` (Flash/PDF-legacy)                    |
+| `Coop` (HDR13)                            | `Cross-Origin-Opener-Policy`        | `same-origin`                                |
+| `Corp` (HDR14)                            | `Cross-Origin-Resource-Policy`      | `same-origin`                                |
 
 The two **opt-in-only plugins** (#HDR5 Csp + #HDR6 Coep) are NOT mounted by default because they have known footguns:
 
@@ -1100,6 +1105,21 @@ myapp.onInitialize(function(event, app) {
 
 Per-sub-config `false` (or `null`) skips that plugin even when it's in the safe set. Useful for HTTP-only bundles (skip HSTS), bundles relying on `document.domain` (skip OriginAgentCluster), or multi-domain bundles needing permissive cross-origin (skip Coop / Corp).
 
+#### Opting out of the Phase 1.5 legacy headers
+
+The 2026-05-17 wrapper extension added five Phase 1.5 helmet-parity plugins (`HidePoweredBy`, `XDnsPrefetchControl`, `XXssProtection`, `XDownloadOptions`, `XPermittedCrossDomainPolicies`) to the safe set. These are defense-in-depth + helmet-parity narrative headers; their practical impact on modern browsers is minimal (Chrome dropped the XSS auditor in v78; Flash is EOL since 2020; IE10/11 are EOL since 2022). Bundles wanting the prior 7-plugin behaviour can opt out:
+
+```js
+var securityHeaders = require('gina').plugins.SecurityHeaders({
+    hidePoweredBy:                  false,
+    xDnsPrefetchControl:            false,
+    xXssProtection:                 false,
+    xDownloadOptions:               false,
+    xPermittedCrossDomainPolicies:  false
+});
+app.use(securityHeaders);
+```
+
 ### Override defaults on a safe-set plugin
 
 ```js
@@ -1123,16 +1143,21 @@ Sub-config objects replace the per-plugin defaults wholesale (shallow merge).
 ```jsonc title="src/<bundle>/config/settings.json"
 {
   "securityHeaders": {
-    "xContentTypeOptions": true,
-    "xFrameOptions":       { "value": "SAMEORIGIN" },
-    "referrerPolicy":      { "value": "strict-origin-when-cross-origin" },
-    "hsts":                { "maxAge": 15552000, "includeSubDomains": false, "preload": false },
-    "originAgentCluster":  true,
-    "coop":                { "value": "same-origin" },
-    "corp":                { "value": "same-origin" },
+    "xContentTypeOptions":           true,
+    "xFrameOptions":                 { "value": "SAMEORIGIN" },
+    "referrerPolicy":                { "value": "strict-origin-when-cross-origin" },
+    "hsts":                          { "maxAge": 15552000, "includeSubDomains": false, "preload": false },
+    "originAgentCluster":            true,
+    "hidePoweredBy":                 true,
+    "xDnsPrefetchControl":           { "value": "off" },
+    "xXssProtection":                true,
+    "xDownloadOptions":              true,
+    "xPermittedCrossDomainPolicies": { "value": "none" },
+    "coop":                          { "value": "same-origin" },
+    "corp":                          { "value": "same-origin" },
 
-    "csp":                 { "directives": { "default-src": ["'self'"] } },
-    "coep":                { "value": "require-corp" }
+    "csp":                           { "directives": { "default-src": ["'self'"] } },
+    "coep":                          { "value": "require-corp" }
   }
 }
 ```
@@ -1164,13 +1189,13 @@ app.use(csp);
 
 Each plugin uses the **idempotent first-writer-wins** pattern (via `res.getHeader`), so stacking the wrapper with an upstream individual mount produces no double-emit — the first one to set the header wins.
 
-This means you can mix-and-match: use `SecurityHeaders()` for the seven safe-set plugins, mount `gina.plugins.Csp()` separately with a per-request nonce, mount nothing for COEP. All three behaviours coexist cleanly.
+This means you can mix-and-match: use `SecurityHeaders()` for the twelve safe-set plugins, mount `gina.plugins.Csp()` separately with a per-request nonce, mount nothing for COEP. All three behaviours coexist cleanly.
 
 ### Failure modes
 
 | Condition                                                                  | Outcome                                                                       |
 |----------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| `SecurityHeaders()` with no opts                                           | Safe-set mounted (HDR1/2/3/4/7/13/14); CSP and COEP skipped                   |
+| `SecurityHeaders()` with no opts                                           | Safe-set mounted (HDR1/2/3/4/7/8/9/10/11/12/13/14 — 12 plugins); CSP and COEP skipped |
 | Sub-config = `false` or `null`                                             | That plugin skipped — explicit opt-out                                        |
 | Sub-config = `true`                                                        | That plugin mounted with per-plugin defaults (boolean shorthand)              |
 | Sub-config = `{}`                                                          | Same as `true` for safe-set plugins. CSP throws (directives required); COEP mounts with `require-corp` default. |
@@ -1193,7 +1218,7 @@ All five modern Phase 1 plugins on the `#HDR` track shipped in `0.3.15-alpha`:
 
 **Phase 1.5 — helmet-parity gap-fill — CLOSED** (`0.3.16-alpha`): all five plugins shipped 2026-05-17 — `HidePoweredBy` (#HDR8), `X-DNS-Prefetch-Control` (#HDR9), `X-XSS-Protection` (#HDR10), `X-Download-Options` (#HDR11), and `X-Permitted-Cross-Domain-Policies` (#HDR12) — see the [Hide X-Powered-By](#hide-x-powered-by-hdr8), [X-DNS-Prefetch-Control](#x-dns-prefetch-control-hdr9), [X-XSS-Protection](#x-xss-protection-hdr10), [X-Download-Options](#x-download-options-hdr11), and [X-Permitted-Cross-Domain-Policies](#x-permitted-cross-domain-policies-hdr12) sections above. Defense-in-depth + helmet-parity narrative; the four legacy ones (#HDR10–12 + #HDR9 to a lesser extent) have minimal practical value in 2026.
 
-**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator).
+**Phase 2 — dynamic / higher-break-risk** (targeted at `0.4.0-alpha`) — **CLOSED**: `Csp` (#HDR5) shipped with static directives only (per-response nonce wiring defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering). Cross-origin policies (#HDR6) revised to a three-plugin split (Coep / Coop / Corp = HDR6 / HDR13 / HDR14) for consistency with the combined-wrapper API; `Coep` (#HDR6), `Coop` (#HDR13) and `Corp` (#HDR14) all shipped. The combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) shipped to close Phase 2 — one mount + one settings block composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 (batteries-included safe set with CSP + COEP opt-in-only; mirrors helmet's `helmet()` orchestrator). **Extended 2026-05-17** with the Phase 1.5 helmet-parity plugins (HDR8-12) — the wrapper safe set now composes 12 plugins (the original 7 plus the 5 Phase 1.5 additions).
 
 ## Phase 2 complete (`0.4.0-alpha`)
 
