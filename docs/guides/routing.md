@@ -310,6 +310,22 @@ array values are passed as arguments:
 }
 ```
 
+Available rule names mirror the gina form-validator `is*` family — including
+`isRequired`, `isString`, `isInteger`, `isFloat`, `isNumber`, `isEmail`,
+`isBoolean`, `isDate`, and `isInList` (closed-set membership; values that are
+not strict-equal to any list member are rejected):
+
+```json
+"webhook-event": {
+  "url": "/webhook",
+  "method": "POST",
+  "requirements": {
+    "event": "validator::{ isRequired: true, isString: true, isInList: [\"received\", \"processed\", \"failed\"] }"
+  },
+  "param": { "control": "ingest" }
+}
+```
+
 If a requirement value starts with neither `/` nor `validator::`, the bundle fails
 to start with a configuration error.
 

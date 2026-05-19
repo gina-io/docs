@@ -1,7 +1,7 @@
 ---
 title: Inspector
 sidebar_label: Inspector
-sidebar_position: 8
+sidebar_position: 7.5
 description: Use the Gina Inspector to inspect per-request data, query performance, and real-time logs in dev mode — a standalone SPA served at /_gina/inspector/ with zero configuration.
 level: beginner
 prereqs:

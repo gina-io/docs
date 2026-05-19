@@ -19,6 +19,263 @@ upward to the target version.
 
 ---
 
+## 0.3.15 → 0.4.0
+
+`0.4.0-alpha` opens **Phase 2** of the HTTP security response headers track (`#HDR`), starting with `Csp` (#HDR5). Phase 2 covers the dynamic / higher-break-risk headers — those that need richer configuration than the Phase 1 static-value plugins, or that can break legitimate cross-origin loads if mis-configured.
+
+`#HDR5 Csp` ships as the first Phase 2 plugin. The remaining Phase 2 plugins (Coep / Coop / Corp = #HDR6 / #HDR13 / #HDR14) follow in subsequent alphas; the combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) — mirrors helmet's `helmet()` for one-mount + one-config-block convenience — closes Phase 2.
+
+### No action required
+
+This is a purely additive release. Bundles that don't adopt the new `Csp` plugin continue to work unchanged. Existing Phase 1 plugins (HDR1-7) are unaffected.
+
+### What's new — `gina.plugins.Csp({ directives, reportOnly })` (#HDR5)
+
+Opt-in middleware that emits the `Content-Security-Policy` (or `Content-Security-Policy-Report-Only`) response header on every response, limiting which resources the browser is allowed to load and from where — the modern defense against cross-site scripting (XSS), clickjacking via `frame-ancestors`, mixed-content downgrade, and base-tag manipulation.
+
+Adoption is one block in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var csp     = require('gina').plugins.Csp({
+    directives: {
+        'default-src': ["'self'"],
+        'script-src':  ["'self'", 'https://cdn.example.com'],
+        'style-src':   ["'self'", "'unsafe-inline'"],
+        'img-src':     ["'self'", 'data:', 'https:'],
+        'upgrade-insecure-requests': true
+    }
+});
+var app     = express();
+
+app.use(csp);
+```
+
+**`directives` is REQUIRED.** There is no sensible cross-bundle default; every bundle has its own resource graph. The factory throws at call time if `directives` is missing or empty.
+
+**Strict whitelist of 27 CSP Level 3 standard directives.** Unknown directive names throw at factory call time — fail-fast catches typos like `scrpt-src` that browsers would otherwise silently ignore (leaving the page unprotected with no error).
+
+**Value formats:**
+- Array of source-list tokens — joined with space: `["'self'", 'https:']` → `'self' https:`
+- Pre-formatted string — emitted as-is: `"'self' https:"` → `'self' https:`
+- Boolean `true` — emit directive name alone (boolean-only directives `upgrade-insecure-requests` / `block-all-mixed-content` + hybrid `sandbox`).
+- Boolean `false` — omit the directive entirely.
+
+**`reportOnly: true`** switches the response header name to `Content-Security-Policy-Report-Only` — browsers report violations but do not block any resources. Use for non-enforcing migration testing: ship the policy as report-only first, collect violations from real traffic, refine, then flip to enforcing.
+
+**v0 limitation — static directives only.** Per-response nonce wiring requires template-render integration and defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. For now, inline scripts and styles must either use `'unsafe-inline'` (loosens the policy substantially) or be moved to external files served from a `script-src`-allowed origin.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates (first-writer-wins).
+
+See the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference — directive whitelist, value-format details, security guidance (avoid `'unsafe-inline'` and `'unsafe-eval'`, lock down `frame-ancestors` and `object-src`), and the full failure-mode table.
+
+### Coming up in 0.4.0-alpha
+
+Phase 2 continues with the cross-origin policies (three separate plugins for consistency with the future combined wrapper) plus the combined wrapper itself:
+
+- `gina.plugins.Coep({ value })` (#HDR6) — Cross-Origin-Embedder-Policy. Required for SharedArrayBuffer access (Spectre defense).
+- `gina.plugins.Coop({ value })` (#HDR13) — Cross-Origin-Opener-Policy. Isolates `window.opener` references on top-level navigation.
+- `gina.plugins.Corp({ value })` (#HDR14) — Cross-Origin-Resource-Policy. Restricts which other origins can fetch this resource.
+- `gina.plugins.SecurityHeaders({...})` (#HDR15) — Combined wrapper composing HDR1-7 + HDR5 + HDR6 / HDR13 / HDR14 for one-mount + one-config-block convenience. Mirrors helmet's `helmet()`. **Closes Phase 2.**
+
+---
+
+## 0.3.14 → 0.3.15
+
+`0.3.15-alpha` opens a new **HTTP security response headers** track (`#HDR`) — opt-in `gina.plugins.*` middlewares that emit individual security headers on the response, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. **Phase 1 is complete in this cycle** — all five modern critical plugins ship together: `XContentTypeOptions` (#HDR1), `XFrameOptions` (#HDR2), `ReferrerPolicy` (#HDR3), `Hsts` (#HDR4), `OriginAgentCluster` (#HDR7). Phase 1.5 (helmet-parity gap-fill: `HidePoweredBy`, `XDnsPrefetchControl`, `XXssProtection`, `XDownloadOptions`, `XPermittedCrossDomainPolicies`) and Phase 2 (`Csp` #HDR5, COEP/COOP/CORP #HDR6/#HDR13/#HDR14, `SecurityHeaders` combined wrapper #HDR15, and the HDR8 framework-level Phase 2 `server.hidePoweredBy` settings flag that closes the Isaac-engine X-Powered-By gap the Phase 1 middleware cannot reach) also shipped in the 0.3.15-alpha cycle — see the "0.3.15 → 0.4.0" section below.
+
+### No action required
+
+This is a purely additive release. Bundles that don't adopt the new plugins continue to work unchanged. CORS handling stays where it lives today (request-side, in the framework's server engine) — these new plugins are response-side policy headers, a distinct concern.
+
+### What's new — `gina.plugins.XContentTypeOptions()` (#HDR1)
+
+Opt-in middleware that emits the `X-Content-Type-Options: nosniff` response header on every response. Adoption is two lines in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express             = require('express');
+var xContentTypeOptions = require('gina').plugins.XContentTypeOptions();
+var app                 = express();
+
+app.use(xContentTypeOptions);
+```
+
+The header instructs browsers to honour the declared `Content-Type` strictly, blocking MIME-sniffing attacks. Per RFC 7034 / WHATWG Fetch Standard, `nosniff` is the only valid value — there is no `enabled` flag in the configuration surface; register the plugin to opt in, don't register to opt out.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+**Order with other gina security plugins does not matter** — the header is emitted on the response, not consumed from the request.
+
+See the [Security Headers guide](/guides/security-headers) for the full reference and the per-plugin failure-mode table.
+
+### What's new — `gina.plugins.XFrameOptions({ value })` (#HDR2)
+
+Opt-in middleware that emits the `X-Frame-Options` response header on every response, defending against clickjacking by controlling whether the page may be rendered inside a `<frame>`, `<iframe>`, `<embed>` or `<object>`. Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express       = require('express');
+var xFrameOptions = require('gina').plugins.XFrameOptions();
+var app           = express();
+
+app.use(xFrameOptions);
+```
+
+Default is `SAMEORIGIN` — the page may be framed only by same-origin pages. Override via settings or caller options:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "xFrameOptions": { "value": "DENY" }
+}
+```
+
+```js
+var xFrameOptions = require('gina').plugins.XFrameOptions({ value: 'DENY' });
+```
+
+Values are normalised to uppercase (so `"deny"` is accepted and emitted as `DENY`).
+
+**Rejected: `ALLOW-FROM <uri>`.** The legacy ALLOW-FROM value is rejected at factory call time — modern browsers ignore it (Chrome / Edge / Safari never honoured it cross-vendor, Firefox dropped it in 70). Use `Content-Security-Policy: frame-ancestors <source-list>` instead — it works cross-browser and accepts richer source expressions. The factory throws with a message pointing at the MDN reference.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### What's new — `gina.plugins.ReferrerPolicy({ value })` (#HDR3)
+
+Opt-in middleware that emits the `Referrer-Policy` response header on every response, controlling how much referrer information the browser includes when navigating away from the page or fetching sub-resources. Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express        = require('express');
+var referrerPolicy = require('gina').plugins.ReferrerPolicy();
+var app            = express();
+
+app.use(referrerPolicy);
+```
+
+Default is `strict-origin-when-cross-origin` — matches the modern browser default since ~2021. Override via settings or caller options to pick one of the other seven W3C tokens:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "referrerPolicy": { "value": "no-referrer" }
+}
+```
+
+```js
+var referrerPolicy = require('gina').plugins.ReferrerPolicy({ value: 'no-referrer' });
+```
+
+The eight valid tokens per the [W3C Referrer Policy spec](https://www.w3.org/TR/referrer-policy/): `no-referrer`, `no-referrer-when-downgrade`, `origin`, `origin-when-cross-origin`, `same-origin`, `strict-origin`, `strict-origin-when-cross-origin` (default), `unsafe-url` (dangerous — leaks paths and queries).
+
+Values are normalised to lowercase per the W3C spec's case-insensitive matching (so `"NO-REFERRER"` is accepted and emitted as `no-referrer`). Invalid tokens throw at factory call time with the full eight-token list + W3C spec URL in the message — fast-fail at bootstrap.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### What's new — `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4)
+
+Opt-in middleware that emits the `Strict-Transport-Security` response header on every response, instructing browsers to access the host exclusively over HTTPS for the next `maxAge` seconds. Defeats SSL-stripping attacks by preventing browsers from making plain HTTP requests to the host once the policy is in effect.
+
+Adoption is one line in the bundle bootstrap, after the express app is created:
+
+```js title="src/<bundle>/index.js"
+var express = require('express');
+var hsts    = require('gina').plugins.Hsts();
+var app     = express();
+
+app.use(hsts);
+```
+
+Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: false`. Override via settings or caller options:
+
+```jsonc title="src/<bundle>/config/settings.json"
+{
+  "hsts": {
+    "maxAge":            63072000,
+    "includeSubDomains": true,
+    "preload":           true
+  }
+}
+```
+
+**Browser-parity invariant on `preload`**: `preload: true` requires `includeSubDomains: true` AND `maxAge >= 31536000` (1 year) per the [HSTS preload-list submission requirements](https://hstspreload.org/#deployment-recommendations). The factory throws at call time when the combination is invalid — fast-fail at bootstrap, the bundle won't start with a misconfigured header. The preload-list submission is effectively a one-way operation (removal takes months and isn't guaranteed); the invariant guards against accidental lockouts.
+
+**Spec note on transport gating**: this plugin emits the header on every response regardless of transport, matching helmet's behaviour. RFC 6797 §7.2 says senders MUST NOT include the header on HTTP, but §8.1 also says browsers MUST IGNORE it on HTTP — the receiver enforces the policy correctly regardless. The design favours proxy-deployment robustness (no dependency on `x-forwarded-proto` being preserved) over sender-side spec purity. Bundles that need strict §7.2 compliance can simply not register the plugin in non-HTTPS bundles.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### What's new — `gina.plugins.OriginAgentCluster()` (#HDR7)
+
+Opt-in middleware that emits `Origin-Agent-Cluster: ?1` on every response, requesting origin-keyed agent clustering. Same-site cross-origin pages get isolated agents (can no longer reach in via `document.domain`), which mitigates one class of Spectre side-channel attack. Adoption is one line:
+
+```js title="src/<bundle>/index.js"
+var express            = require('express');
+var originAgentCluster = require('gina').plugins.OriginAgentCluster();
+var app                = express();
+
+app.use(originAgentCluster);
+```
+
+No required configuration — per the [HTML spec](https://html.spec.whatwg.org/multipage/document-sequences.html#origin-keyed-agent-clusters), `?1` (Structured Header boolean true) is the only useful value; `?0` is the browser default and emitting it would be a no-op. There is no `enabled` flag.
+
+**Browser support**: Chrome 88+, Edge 88+, Firefox 109+, Safari 15+. Older browsers ignore the header silently.
+
+**When NOT to register**: if your bundle relies on `document.domain` to bridge same-site origins (e.g. setting `document.domain = "example.com"` to script across `app.example.com` and `legacy.example.com`), Origin-Agent-Cluster will break that pattern. The pattern is rare in modern web apps but worth checking.
+
+**Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates or with other plugins that emit the same header (first-writer-wins).
+
+### Phase 1 is complete (modern coverage)
+
+All five modern Phase 1 plugins on the `#HDR` track shipped in this cycle:
+
+- `gina.plugins.XContentTypeOptions()` (#HDR1) — MIME-sniffing defense
+- `gina.plugins.XFrameOptions({ value })` (#HDR2) — clickjacking defense
+- `gina.plugins.ReferrerPolicy({ value })` (#HDR3) — referrer leakage control
+- `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })` (#HDR4) — HTTPS-only enforcement
+- `gina.plugins.OriginAgentCluster()` (#HDR7) — origin-keyed isolation
+
+**Phase 1.5** (helmet-parity gap-fill, shipped on develop 2026-05-17 in the 0.3.15-alpha cycle): `HidePoweredBy` (#HDR8), `XDnsPrefetchControl` (#HDR9), `XXssProtection` (#HDR10), `XDownloadOptions` (#HDR11), `XPermittedCrossDomainPolicies` (#HDR12). Defense-in-depth + parity narrative; the four legacy ones have minimal practical value in 2026.
+
+**Phase 2** (`Csp` #HDR5, the three-plugin cross-origin split COEP/COOP/CORP #HDR6/#HDR13/#HDR14, the `SecurityHeaders` combined wrapper #HDR15, and the HDR8 framework-level Phase 2 `server.hidePoweredBy` settings flag) also shipped on develop 2026-05-17 in the 0.3.15-alpha cycle. CSP is the dynamic / higher-break-risk header that requires template-render-integration thinking — static directives only at v0; per-response nonce wiring defers to a separate CSP-aware view-layer plugin.
+
+### What's new — `isInList` form-validator rule
+
+New rule in the `is*` family that constrains a form field's value to a closed set of accepted primitives. Adoption is one extra key in the routing-rule JSON; the rule fires on both server-side routing validation and client-side browser enforcement (single shared implementation in the form-validator).
+
+```json title="src/<bundle>/config/routing.json"
+"status-update": {
+  "url": "/status",
+  "method": "PUT",
+  "requirements": {
+    "status": "validator::{ isRequired: true, isString: true, isInList: [\"draft\", \"pending\", \"sent\", \"paid\"] }"
+  },
+  "param": { "control": "updateStatus" }
+}
+```
+
+**Semantics**: strict `===` equality. `isInList: [1, 2, 3]` rejects the string `"2"`. Empty allowed-list rejects every value. Non-array rule values (e.g. `isInList: "draft"`) throw a configuration error at first invocation. Mixed primitive types (string / number / boolean) are accepted in the same list. Non-primitive entries throw.
+
+**Conditional opt-in** plugs into the existing `_case_<field>` resolver without special-case handling:
+
+```json
+"_case_field[type]": {
+  "conditions": [
+    {
+      "case": "/^individual$/",
+      "rules": {
+        "field[subtype]": { "isInList": ["primary", "secondary"] }
+      }
+    }
+  ]
+}
+```
+
+**What this does NOT cover**: async value-list resolution (lists are static at rule-load time — use a custom rule or `Collection.findOne` for remote enums), wildcard / regex patterns inside the list (use the existing `isString` regex options or a custom rule), case-insensitive matching (strict `===` is the only mode; a future opt-in object shape `isInList: { values: [...], caseInsensitive: true }` could add it if a use case emerges). Client-side datalist sourcing (`isInListFromDatalist: "<id>"`) is also out of scope for this slice.
+
+### Security — CVE-2026-45736 closed (CWE-908 in `ws@8.18.3`)
+
+`engine.io` is bumped to `^6.6.7` and `engine.io-client` to `^6.6.4`, but the vulnerable `ws@8.18.3` is still pinned transitively by `engine.io@6.6.7` itself. The fix uses an npm `overrides` block in `package.json` to force `ws@^8.20.1` at install time — the only remediation path per Snyk's advisory. A transitive bump alone would have left the vulnerable version reachable.
+
+**No action required**: gina is the only consumer of `engine.io` / `engine.io-client` in the resolved tree, and the override applies at install time. `npm install gina@0.3.15` produces a tree with `ws@^8.20.1` only. Bundles that declare `ws` directly should also pin `^8.20.1` to stay aligned.
+
+---
+
 ## 0.3.13 → 0.3.14
 
 `0.3.14` is an additive release on top of `0.3.13`. The headline is **server-side stack-frame leak prevention** on both error-response wire shapes (JSON + fallback HTML), gated fail-closed on local scope, plus a **per-bundle IP allowlist** for the admin-grade `/_gina/info` and `/_gina/cache/stats` endpoints. Shipping alongside: a `gina project:rm --force` UX fix for partial-breakage states, `bundle:list` argv parsing cleanup, two HTMLFormElement guard tightenings in the validator, a router hot-reload tech-debt fix, and a `@rhinostone/swig` floor bump to `^2.4.0`.
