@@ -69,6 +69,28 @@ app.use(csp);
 
 See the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference — directive whitelist, value-format details, security guidance (avoid `'unsafe-inline'` and `'unsafe-eval'`, lock down `frame-ancestors` and `object-src`), and the full failure-mode table.
 
+### What's new — `throwError(statusCode, Error|string)` honors the explicit status code
+
+Before this release, the 2-arg shorthand form `self.throwError(404, new Error('not found'))` (or `self.throwError(400, 'Bad input')`) silently fell back to HTTP 500 — the framework's internal status-coercion read the wrapped error's `.status` (missing on a bare `Error`) rather than the explicit number passed as the first argument, and defaulted to 500. The 2-arg shorthand is now correctly handled and the explicit status code reaches the response:
+
+```js
+// In any controller action — these now work as intended:
+self.throwError(404, new Error('Invoice not found'));   // → status 404
+self.throwError(400, 'Bad input');                       // → status 400
+
+// Unchanged — these shapes were already correct:
+self.throwError(412, { status: 412, fields: { name: 'Required' } });
+self.throwError(new Error('boom'));                      // → 500 fallback (no explicit code)
+self.throwError({ status: 403, error: 'Forbidden' });    // → status 403
+self.throwError(res, 500, new Error('upstream'));        // → status 500 (3-arg internal form)
+```
+
+The fix only affects the `(statusCode, Error|string)` shape — the framework's internal Error/string-coercion branch was the one mis-reading the explicit number. The `(statusCode, errorObj)` shape and the 1-arg and 3-arg forms were already handled correctly by other internal branches and are unchanged.
+
+**If you were working around the silent 500 fallback** (typically by hand-constructing an error object with `status` and passing it as a 1-arg, or by switching to the 3-arg `throwError(res, code, msg)` form), the workaround is no longer needed — but it stays valid. No action required to keep existing code working. Bundles whose controllers were relying on the silent-500 fallback as a feature will now receive the intended status code; the fallback was undocumented and the call shape `throwError(404, ...)` always intended status 404.
+
+A new `throwError(code: number, err: Error | string): void` overload is declared in `types/index.d.ts` for IDE autocomplete and type-checking on TypeScript projects.
+
 ### Coming up in 0.4.0-alpha
 
 Phase 2 continues with the cross-origin policies (three separate plugins for consistency with the future combined wrapper) plus the combined wrapper itself:
