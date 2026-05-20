@@ -153,7 +153,8 @@ appropriate database index exists for the query's target table:
 |---|---|---|
 | Index name | Green | A secondary index covers the table |
 | `PRIMARY` | Amber | Only a primary key scan is available |
-| `no index` | Red | Index file exists but no index covers this table |
+| `no index` | Red | The query's target table has no index at all |
+| `no index for filter` | Amber-gold | Indexes exist, but none cover the columns this query filters on (SQL connectors) |
 | `N/A` | Grey | Connector does not support index reporting |
 
 **Couchbase** extracts indexes automatically from the query execution plan — no
@@ -167,6 +168,8 @@ your schema:
 CREATE INDEX idx_invoice_date ON invoices (created_at);
 CREATE UNIQUE INDEX idx_user_email ON users (email);
 ```
+
+For MySQL, PostgreSQL, and SQLite the badge also checks **column coverage**: a query counts as covered only when one of the table's declared indexes *leads with* a column the query filters on (the leftmost-prefix rule). If the table has indexes but none match the query's `WHERE` columns, an amber-gold "no index for filter" badge appears. This is a heuristic read of your `indexes.sql` against the query's `WHERE` clause — a design-time hint, not a guarantee of what the database planner does at runtime.
 
 Index badge names are clickable — click to copy the index name to the clipboard.
 
