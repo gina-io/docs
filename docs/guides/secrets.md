@@ -357,6 +357,15 @@ config. Both are correct for the placeholder model, where every
 `${secret:KEY}` is an authored literal.
 :::
 
+**Per-scope deploys.** If you keep per-scope config in sibling `config_<scope>/`
+directories that your deploy merges, `secrets:scan --scope=<s>` and
+`secrets:check --scope=<s>` read-only overlay those dirs over the base config
+(deep-merge, scope wins) so the report reflects the *effective* secrets that
+scope's deploy needs; and `secrets:check --env-file=<path>` validates a
+decrypted/exported env file (e.g. a SOPS output) instead of the live
+`process.env`. The runtime loader stays scope-agnostic — this only inspects what
+your deploy applies. See the [secrets CLI reference](/cli/cli-secrets).
+
 Run `gina secrets:help` for the full command reference.
 
 ---
