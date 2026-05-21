@@ -107,16 +107,17 @@ gina secrets:help
 If your project keeps per-scope config in sibling `config_<scope>/` directories (e.g. `shared/config_production/` overriding `shared/config/`) that your deploy merges per scope, `--scope=<scope>` makes the CLI mirror that overlay **read-only** so you can audit a scope from a laptop or CI:
 
 ```bash
-# what secrets will the production deploy of this project need?
+# which keys does the production deploy of this project require?
 $ gina secrets:scan @myproject --scope=production
 
-# are they all present in the decrypted production env?
-$ sops -d secrets.prod.env > /run/secrets.env
+# decrypt the one secrets store, then verify production's
+# required keys are all present in it
+$ sops -d secrets.sops.env > /run/secrets.env
 $ gina secrets:check @myproject --scope=production --env-file=/run/secrets.env
 $ echo $?   # 0 if every required key is set, non-zero otherwise
 ```
 
-`--scope` deep-merges each `config_<scope>/<name>.json` over the base `config/<name>.json` (scope wins on conflicting keys; base values the scope doesn't redefine are preserved) and reports the keys of the *effective* result. The framework's runtime config loader stays scope-agnostic — per-scope config selection remains your deploy's responsibility; this command only inspects it.
+`--scope` deep-merges each `config_<scope>/<name>.json` over the base `config/<name>.json` (scope wins on conflicting keys; base values the scope doesn't redefine are preserved) and reports the keys of the *effective* result. The two flags work on **separate axes**: `--scope` selects which config to inspect (and therefore which keys are required), while `--env-file` supplies the values to check them against — a single encrypted secrets store is fine here, because scope drives config selection, not which secrets file you decrypt. The framework's runtime config loader stays scope-agnostic — per-scope config selection remains your deploy's responsibility; this command only inspects it.
 
 ---
 
