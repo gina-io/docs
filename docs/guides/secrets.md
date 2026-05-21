@@ -154,6 +154,42 @@ environment variable after the bundle has started does not affect any
 already-resolved value — that's not a bug, it's the explicit contract.
 See [Rotation](#rotation) below.
 
+### One flat environment per process
+
+The resolver reads the **single, flat `process.env` of the bundle's own
+process** — there is no per-bundle and no per-scope secret namespace. Two
+consequences worth knowing:
+
+- **Per bundle.** The canonical deployment runs one bundle per container
+  (`gina-container` is the container's foreground process), so each bundle
+  gets its own injected environment and the *same* key name resolves to a
+  per-bundle value automatically. Under a single local `gina start` daemon,
+  every bundle instead inherits that one daemon environment — so if two
+  co-hosted bundles need *different* values for the *same* logical secret
+  there, give them **distinct key names** (`ADMIN_DB_PASSWORD`,
+  `API_DB_PASSWORD`).
+- **Per scope.** `scope` (`NODE_SCOPE`) is one runtime value per process, and
+  the resolver stays scope-agnostic: it reads a fixed `<bundle>/config/` and
+  `shared/config/` and resolves once per `[bundle][env]`, with no scope
+  dimension. Scope plays two roles, and neither requires the resolver to be
+  scope-aware:
+    - As a **data-partition tag** (the `_scope` column and `$scope` query
+      filter), local, beta, and production rows coexist behind the *same*
+      connection, filtered at query time — here a scope change needs **no new
+      secret**: the credentials are shared, only the visible rows differ.
+    - As a **deployment-target marker**, a scope often maps to different
+      infrastructure (a production cluster vs local) with its own
+      credentials. Because the framework reads a fixed config dir and a flat
+      environment, that difference is produced at **deploy time** — deploy
+      the scope-appropriate config and inject the scope-appropriate
+      environment (`NODE_SCOPE` plus matching secrets), exactly as for
+      per-bundle isolation.
+
+Differentiating secrets by bundle or scope is the **deployment layer's**
+job (per-container environment, `NODE_SCOPE` set per deployment) — not the
+resolver's. The resolver only reads `process.env`, which is what keeps the
+framework out of storing or namespacing secrets.
+
 ---
 
 ## Fail-closed semantics
@@ -247,6 +283,81 @@ plaintext in git history — even a stale value from a long-deleted
 commit — is still discoverable via `git log -p`. After adopting the
 resolver, rotate every secret that was historically plaintext, since
 the rotation invalidates the old value wherever it leaked.
+
+---
+
+## Inspecting required secrets
+
+Two read-only CLI commands answer "which secrets does this bundle need,
+and are they set?" — without resolving, and therefore without ever
+exposing, a single value. They never read a secret's value, never write
+anything, and never touch a running bundle. Use `secrets:scan` while
+adopting the pattern (step 1 above) and `secrets:check` as a pre-deploy
+gate.
+
+### `secrets:scan` — discover required keys
+
+`scan` walks each bundle's `<src>/config/*.json` plus the project's
+`shared/config/*.json`, then reports every `${secret:KEY}` placeholder it
+finds, grouped by the config file that declares it:
+
+```bash
+$ gina secrets:scan @myproject
+
+@myproject:
+  demo:
+    Required secrets (3):
+      API_KEY          <-  src/demo/config/settings.json
+      DB_PASSWORD      <-  src/demo/config/connectors.json
+      STRIPE_API_KEY   <-  shared/config/app.json
+```
+
+Scope it to one bundle with `gina secrets:scan <bundle> @myproject`, or
+omit the project to scan every registered project. Add `--format=json`
+for tooling. Only **bare** placeholders are reported — a mixed-content
+string like `"https://${secret:API_HOST}/v1"` is not a placeholder
+(see [Mixed-content strings pass through](#mixed-content-strings-pass-through))
+and is not listed, mirroring exactly what the resolver would substitute.
+
+### `secrets:check` — verify the environment before deploy
+
+`check` runs the same enumeration, then cross-references the **current**
+`process.env`, marking each key `SET` or `UNSET`:
+
+```bash
+$ export DB_PASSWORD=... API_KEY=...   # STRIPE_API_KEY left unset on purpose
+$ gina secrets:check @myproject
+
+@myproject:
+  demo:
+      API_KEY          SET
+      DB_PASSWORD      SET
+      STRIPE_API_KEY   UNSET
+    (3 required: 2 set, 1 unset)
+
+$ echo $?
+1
+```
+
+`check` **exits non-zero when any required key is unset**, so it gates a
+CI / pre-deploy step: export the secrets, run `secrets:check`, and fail
+the pipeline before shipping a bundle that would crash at start. A key
+counts as `SET` only when it is a **non-empty string** — the same
+condition under which the resolver succeeds — so an `UNSET` here is
+precisely a key that would throw `Secret resolution failed` at bundle
+start.
+
+:::note What `check` can and cannot see
+`check` validates the environment of the **CLI process you run it in** — a
+CI runner that exported the secrets, or a shell that sourced the same env
+file. It cannot introspect the environment of an already-running, detached
+bundle (a different process, often in a different container). And `scan`
+reports the placeholders **authored on disk**, not a merged runtime
+config. Both are correct for the placeholder model, where every
+`${secret:KEY}` is an authored literal.
+:::
+
+Run `gina secrets:help` for the full command reference.
 
 ---
 
