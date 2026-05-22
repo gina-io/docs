@@ -13,11 +13,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Deploy Worker
+        # Wrangler v4 (unpinned) — infra/cloudflare config validated v4-compatible.
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: infra/cloudflare
-          # Pin the CLI to v3 (wrangler-action@v3's former default) — the @v4 bump is only
-          # for the node24 runtime; dropping this pin opts into the breaking Wrangler v4 CLI.
-          wranglerVersion: "3.90.0"
