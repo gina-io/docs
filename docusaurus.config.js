@@ -136,7 +136,7 @@ const config = {
             // Each exclusion is handled via `displayed_sidebar` frontmatter in the relevant pages,
             // which routes them to their own dedicated sidebars.
             return items.filter(item => {
-              if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
+              if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support' || item.id === 'download-offline')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
               if (item.type === 'category' && item.label === 'Templating') return false;
               return true;
@@ -264,6 +264,10 @@ const config = {
               {
                 label: 'npm',
                 href: 'https://www.npmjs.com/package/gina',
+              },
+              {
+                label: 'Offline docs (ZIP)',
+                to: '/download-offline',
               },
             ],
           },

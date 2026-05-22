@@ -10,6 +10,10 @@ level: beginner
 
 **Gina** is a Node.js MVC and event-driven framework for building web applications and services. It ships with its own HTTP/2 server, a multi-bundle process model, scope-based data isolation, and a CLI that manages the full lifecycle of your projects — from scaffolding to deployment.
 
+:::tip Read the docs offline
+On a slow or metered connection? [Download the full documentation as an offline ZIP](/download-offline) and browse every page from your own machine — no internet required.
+:::
+
 ## Why Gina?
 
 Most Node.js frameworks give you request routing and leave the rest to you. Gina gives you the full picture from day one: project structure, multi-service lifecycle, HTTP/2, and scope-based data isolation — without pulling in Express.

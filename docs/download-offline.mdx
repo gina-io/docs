@@ -1,0 +1,37 @@
+---
+id: download-offline
+title: Offline Documentation
+sidebar_label: Offline docs
+displayed_sidebar: downloadOfflineSidebar
+description: Download the complete Gina documentation as a static-HTML ZIP and read it from your own machine — built for offline and limited-connectivity use.
+---
+
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+# Offline Documentation
+
+The entire Gina documentation site is available as a single ZIP of static HTML. Download it once, unzip it, and read every page from your own machine — no internet connection required.
+
+It is built for readers on slow, metered, or intermittent connections: grab the docs over a good link, then browse them anywhere.
+
+<a className="button button--primary button--lg" href={useBaseUrl('/downloads/gina-docs-offline.zip')} download>
+  ⬇&nbsp;&nbsp;Download the offline docs (ZIP)
+</a>
+
+<br /><br />
+
+The archive is rebuilt on every documentation release, so a fresh download always matches the current site.
+
+## How to use it
+
+1. **Download** the ZIP with the button above.
+2. **Unzip** it — you will get a single `gina-docs/` folder.
+3. **Open `gina-docs/index.html`** in any modern browser (double-click it, or drag it onto a browser window).
+
+Navigation, the sidebar, code samples, and the architecture diagrams all work directly from the local files.
+
+:::info Browse-only — search needs a connection
+The offline copy is for **reading**. Full-text search is the one feature that depends on a live server, so it is turned off in the offline build (the search box does not appear). Use your browser's **Find on page** (`Ctrl` / `Cmd` + `F`) within a page, and the sidebar to move between sections.
+:::
+
+Everything else — every guide, the CLI reference, the concepts, the API reference, and all diagrams — is bundled and fully navigable offline.
