@@ -35,7 +35,7 @@ in order:
 Safe methods (GET / HEAD / OPTIONS) issue a fresh token cookie and pass
 through without either check.
 
-The plugin builds on top of [`gina.plugins.Session`](/guides/sessions#hardened-cookie-defaults--ginapluginssession)
+The plugin builds on top of [`gina.plugins.Session`](/guides/sessions#hardened-cookie-defaults)
 (the `#CSRF1` cookie hardening baseline) — Session must be registered first.
 
 ---
