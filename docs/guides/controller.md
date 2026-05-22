@@ -639,6 +639,20 @@ var Controller = function() {
 module.exports = Controller;
 ```
 
+### Long-running work — start an async job instead of awaiting
+
+`await` holds the request open until the work finishes. For work too slow to block a request — an LLM `.infer()` taking 1–30s, a heavy report — start an **async job** instead: `self.startJob(fn)` returns a job id immediately and runs `fn` out-of-band on a concurrency-limited worker. Poll the built-in `GET /_gina/jobs/:id` for state, or opt into a completion webhook. See the [Async jobs guide](./async-jobs).
+
+```js
+this.summarise = function(req, res, next) {
+    var jobId = self.inferAsync(
+        [{ role: 'user', content: req.post.text }],
+        { connector: 'myModel' }
+    );
+    self.renderJSON({ jobId: jobId }); // returns immediately
+};
+```
+
 ### `await` with entity methods
 
 Entity methods return a native Promise — use `await` directly:
@@ -839,3 +853,4 @@ back to per-request eviction transparently.
 - [Views and templates](./views) — Template rendering and the Swig template engine
 - [Swig reference](/templating/swig) — Swig syntax, tags, filters, and API
 - [Middleware guide](./middleware) — Code that runs between route matching and the controller
+- [Async jobs](./async-jobs) — Run slow work (LLM calls, heavy reports) out-of-band with `self.startJob` / `self.inferAsync`

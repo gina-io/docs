@@ -49,6 +49,23 @@ self.renderStream(myAsyncIterable, 'application/grpc+proto');
 
 Opt-in and best-effort: a no-op on HTTP/1.1 and when no trailers are registered, so existing responses are unchanged. Pseudo-header keys (`:`-prefixed) are stripped. Useful for gRPC-style streaming (a final `grpc-status`) and content-integrity (`Digest` after a chunked body).
 
+### What's new — Async jobs (`self.startJob` / `self.inferAsync`)
+
+Slow work — an LLM `.infer()` taking 1–30s, a heavy report — can now run out-of-band instead of holding the request open. `self.startJob(fn)` returns a job id immediately and runs `fn` on a concurrency-limited worker; clients poll the built-in `GET /_gina/jobs/:id` for state or opt into a completion webhook. `self.inferAsync(messages, options)` wires the AI connector through a job in one call.
+
+```js
+// Return a job id immediately; the inference runs out-of-band:
+this.summarise = function(req, res, next) {
+    var jobId = self.inferAsync(
+        [{ role: 'user', content: req.post.text }],
+        { connector: 'myModel' }
+    );
+    self.renderJSON({ jobId: jobId });
+};
+```
+
+Purely additive and opt-in — existing controllers are unchanged. See the [Async jobs guide](/guides/async-jobs) for polling, result retrieval, and webhook configuration.
+
 ### No action required (security headers)
 
 The security-headers additions are purely additive — bundles that don't adopt the new `Csp` plugin continue to work unchanged, and existing Phase 1 plugins (HDR1-7) are unaffected. (The one migration action this release requires is the Couchbase SDK v2 driver bump above.)
