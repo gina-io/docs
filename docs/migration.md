@@ -25,9 +25,33 @@ upward to the target version.
 
 `#HDR5 Csp` ships as the first Phase 2 plugin. The remaining Phase 2 plugins (Coep / Coop / Corp = #HDR6 / #HDR13 / #HDR14) follow in subsequent alphas; the combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) — mirrors helmet's `helmet()` for one-mount + one-config-block convenience — closes Phase 2.
 
-### No action required
+### Breaking — Couchbase SDK v2 connector removed
 
-This is a purely additive release. Bundles that don't adopt the new `Csp` plugin continue to work unchanged. Existing Phase 1 plugins (HDR1-7) are unaffected.
+The Couchbase SDK v2 connector (`connector.v2.js`) and its session store (`session-store.v2.js`) are removed in `0.4.0`. Only Couchbase Node SDK **v3 and v4** are supported, and the connector now defaults to v3.
+
+**The migration is a driver bump, not a config change.** Gina selects the connector version from the `couchbase` major installed in your project's `package.json` — not from a `connectors.json` field (the `sdk.version` upgrade note in the 0.2.0 deprecation was inaccurate; that value is derived from the installed driver, never set in config). To migrate:
+
+```bash
+npm install couchbase@^4   # or ^3
+```
+
+If a project still resolves to `couchbase@2`, the connector now throws a clear error at load (`SDK v2 is no longer supported — upgrade couchbase@^3/^4`) instead of failing later with an opaque module-not-found.
+
+### What's new — HTTP/2 response trailers (`self.sendTrailers()`)
+
+Controllers can now emit HTTP/2 response trailers (trailing headers sent after the body). Call `self.sendTrailers(fields)` before rendering; the render pipeline sets `waitForTrailers` on the HTTP/2 stream and sends the trailers in the `wantTrailers` event after the final data frame:
+
+```js
+// In a controller action, before rendering a streamed response:
+self.sendTrailers({ 'grpc-status': '0', 'grpc-message': 'OK' });
+self.renderStream(myAsyncIterable, 'application/grpc+proto');
+```
+
+Opt-in and best-effort: a no-op on HTTP/1.1 and when no trailers are registered, so existing responses are unchanged. Pseudo-header keys (`:`-prefixed) are stripped. Useful for gRPC-style streaming (a final `grpc-status`) and content-integrity (`Digest` after a chunked body).
+
+### No action required (security headers)
+
+The security-headers additions are purely additive — bundles that don't adopt the new `Csp` plugin continue to work unchanged, and existing Phase 1 plugins (HDR1-7) are unaffected. (The one migration action this release requires is the Couchbase SDK v2 driver bump above.)
 
 ### What's new — `gina.plugins.Csp({ directives, reportOnly })` (#HDR5)
 
