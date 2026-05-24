@@ -254,7 +254,46 @@ The Inspector only activates when `NODE_ENV_IS_DEV` is `true`. In production:
   guard
 
 No code changes are needed to disable the Inspector — it is fully gated on the
-environment variable.
+environment variable, with one opt-in exception described below.
+
+### Authenticated agent endpoint outside dev mode (`inspector.agent`)
+
+The single exception to the dev-only gating is the `/_gina/agent` SSE stream,
+which can be opted into **outside dev mode** for authenticated remote server-log
+streaming (e.g. tailing a staging bundle's logs from the standalone Inspector).
+It is disabled by default. Enable it in `settings.json`:
+
+```json
+"inspector": {
+  "agent": {
+    "enabled": true,
+    "key": "${secret:INSPECTOR_AGENT_KEY}"
+  }
+}
+```
+
+- `enabled` (default `false`) exposes the endpoint outside dev mode; `key` is the
+  shared secret. It supports `${secret:KEY}` placeholders, resolved from the
+  environment at config-load — so the value never lives in the config file.
+- Clients authenticate with the key via the `x-gina-inspector-key` request header
+  **or** a `?key=` query parameter. Browsers using `EventSource` cannot send
+  headers, so the Inspector's "Connect" form has an optional key field that
+  travels as `?key=`. The key is compared in constant time; a missing or invalid
+  key returns `401`. With `enabled: true` but no key configured, the endpoint
+  stays closed (fail-closed).
+- In dev mode the endpoint stays open and requires no key (unchanged).
+- **Scope:** this authenticates server-log streaming and connection identity
+  only. Per-request data, query, and flow instrumentation remain dev-gated and do
+  not flow in production.
+
+```mermaid
+flowchart LR
+  C["Inspector / client<br/>GET /_gina/agent?key=…"] --> G{dev mode?}
+  G -->|yes| OK["Open SSE stream<br/>(no key required)"]
+  G -->|no| E{"agent.enabled<br/>and key valid?"}
+  E -->|yes| OK
+  E -->|no| D["401"]
+```
 
 ---
 
@@ -272,6 +311,14 @@ Server logs are streamed via SSE from `/_gina/logs`. Check that:
 - The bundle is running with `NODE_ENV_IS_DEV=true`
 - The source filter is set to "All" or "Server"
 - The level filter includes the severity you expect
+
+**`/_gina/agent` returns 401 outside dev mode**
+Outside dev mode the agent endpoint is auth-gated (`inspector.agent`). A `401`
+means the key is missing or wrong. Check that `inspector.agent.enabled` is `true`,
+a non-empty `key` is configured (and, if you used a `${secret:KEY}` placeholder,
+that the environment variable is set), and the client sends the matching key via
+the `x-gina-inspector-key` header or a `?key=` query parameter. With no key
+configured the endpoint stays closed even when `enabled` is `true`.
 
 **Query tab is empty**
 Query instrumentation is active for Couchbase, MySQL, PostgreSQL, and SQLite
