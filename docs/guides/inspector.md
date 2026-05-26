@@ -352,9 +352,10 @@ returns `401`.
 - **Redaction caveat.** Inspector redaction masks secret-*named* fields, but a query's
   statement text and positional parameters reach the key holder **as-is**. Treat the
   instrumentation key as privileged and keep windows short.
-- Currently JSON/XHR responses and cross-bundle queries stream over the SSE; a
-  server-rendered HTML page's *own* controller queries are captured but not yet
-  streamed during a window.
+- A server-rendered HTML page's *own* controller queries and flow now also stream
+  over the SSE during a window — alongside JSON/XHR responses and cross-bundle
+  queries. The page HTML itself is never modified; the capture leaves only over the
+  authenticated channel.
 
 ```mermaid
 flowchart LR
