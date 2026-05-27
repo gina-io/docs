@@ -2,7 +2,7 @@
 title: Content-Security-Policy
 sidebar_label: Content-Security-Policy
 sidebar_position: 4.62
-description: Opt-in middleware plugin that emits the Content-Security-Policy response header — the modern defense against cross-site scripting (XSS), clickjacking, mixed-content downgrade, and base-tag manipulation. Strict whitelist of 27 CSP Level 3 standard directives. Static directives only at v0 (per-response nonce wiring defers to a future CSP-aware view-layer plugin). Opens Phase 2 of the security-headers track in 0.4.0-alpha.
+description: Opt-in middleware plugin that emits the Content-Security-Policy response header — the modern defense against cross-site scripting (XSS), clickjacking, mixed-content downgrade, and base-tag manipulation. Strict whitelist of 27 CSP Level 3 standard directives. Opt-in per-response nonce (useNonce) lets you drop 'unsafe-inline' from script-src. Opens Phase 2 of the security-headers track in 0.4.0-alpha.
 level: intermediate
 prereqs:
   - '[Security Headers guide](/guides/security-headers)'
@@ -217,11 +217,11 @@ Browsers report violations to `/csp/report` (or to the configured `report-to` en
 
 `'unsafe-eval'` allows `eval(...)`, `new Function(...)`, and `setTimeout(string, ...)` — which is a similar weakening for code-evaluation primitives. Avoid unless you have a specific dependency that requires it.
 
-### Use `nonce-*` for inline scripts (when nonce wiring lands)
+### Use `nonce-*` for inline scripts
 
 The modern pattern for legitimate inline scripts: emit `script-src 'nonce-<random>'` in the CSP header and add `<script nonce="<random>">...</script>` to each inline tag. The browser only executes inline scripts whose nonce matches the per-response value, defeating XSS injection.
 
-**This is the per-response nonce wiring that v0 does NOT yet support** — see "v0 limitation" below.
+Gina supports this directly — set `useNonce: true` and the framework's own injected inline scripts carry the nonce automatically, so you can drop `'unsafe-inline'` from `script-src`. See [Per-response nonce (`useNonce`)](#per-response-nonce-usenonce) below.
 
 ### Lock down `frame-ancestors` and `object-src`
 
@@ -232,16 +232,39 @@ The modern pattern for legitimate inline scripts: emit `script-src 'nonce-<rando
 
 `upgrade-insecure-requests: true` tells the browser to silently upgrade any `http://` sub-resource URL in your page to `https://` before fetching. Catches mixed-content errors from third-party libraries that hardcode `http://` URLs.
 
-## v0 limitation — static directives only
+## Per-response nonce (`useNonce`)
 
-v0 ships **static directives only**. Per-response nonce wiring (emitting `script-src 'nonce-<random>'` with a fresh nonce per render that the template engine then writes onto inline `<script>` tags) requires template-render integration and defers to a separate CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering.
+Set `useNonce: true` to drop `'unsafe-inline'` from `script-src` without breaking the framework's own injected inline scripts:
 
-For now, inline scripts and styles must either:
+```js
+var csp = require('gina').plugins.Csp({
+    directives: { 'script-src': ["'self'"] },
+    useNonce: true
+});
+// → Content-Security-Policy: script-src 'self' 'nonce-<base64>'
+```
 
-- Use `'unsafe-inline'` — loosens the policy substantially (see "Avoid `'unsafe-inline'`" above), or
-- Be moved to external files served from a `script-src`-allowed origin.
+When enabled, the `Csp` middleware generates a fresh cryptographically-random nonce per response (`crypto.randomBytes(16).toString('base64')` — 128 bits, the W3C CSP Level 3 entropy floor), appends `'nonce-<value>'` to the `script-src` directive (falling back to `default-src` when `script-src` is absent), and stamps the value on the request so the renderer can mirror it onto every framework-injected inline `<script>`. No application template changes are required — the framework injection sites (the `onGinaLoaded` runtime bootstrap, plus the dev-only Inspector blocks) carry the matching `nonce="<value>"` attribute automatically.
 
-The CSP-aware view-layer plugin is on the roadmap (no target version yet — depends on coordinated design across swig + nunjucks engines).
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Csp as Csp middleware
+    participant Renderer
+    Browser->>Csp: request
+    Csp->>Csp: generate per-response nonce
+    Csp->>Renderer: set CSP header with the nonce, stamp it on the request
+    Renderer->>Browser: HTML with the matching nonce on each framework inline script
+    Note over Browser: runs only scripts whose nonce matches the header
+```
+
+`useNonce` defaults to `false` — the header is then computed once and reused per response (zero per-request cost), and the framework emits no `nonce` attribute, so bundles that do not opt in are completely unaffected.
+
+The nonce is generated **only when Gina is the one setting the CSP header** (the idempotent first-writer-wins guard). If an upstream proxy or ingress already set the header, Gina generates no nonce and emits none on the tags — so the header and the tags stay consistent. (If you set CSP at a proxy AND want nonces, generate them at that layer instead.)
+
+**Factory requirement:** `useNonce: true` needs a `script-src` (or `default-src`) directive for the nonce to attach to — the factory throws at call time if neither is present.
+
+**Application-side inline scripts:** marking your *own* inline `<script>` tags with the nonce (via a template helper) is a separate, planned change. `useNonce` currently covers the framework-injected scripts so you can drop `'unsafe-inline'` for those; if your bundle also has its own inline scripts, either extract them to external files or keep `'unsafe-inline'` until the template-helper change lands.
 
 ## `reportOnly` — non-enforcing migration testing
 

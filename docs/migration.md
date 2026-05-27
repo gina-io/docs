@@ -68,7 +68,7 @@ Purely additive and opt-in — existing controllers are unchanged. See the [Asyn
 
 ### No action required (security headers)
 
-The security-headers additions are purely additive — bundles that don't adopt the new `Csp` plugin continue to work unchanged, and existing Phase 1 plugins (HDR1-7) are unaffected. (The one migration action this release requires is the Couchbase SDK v2 driver bump above.)
+The security-headers additions are purely additive — bundles that don't adopt the new `Csp` plugin continue to work unchanged, and existing Phase 1 plugins (HDR1-7) are unaffected. `Csp`'s opt-in `useNonce: true` (#HDR16) — which generates a per-response nonce and stamps it on the framework's injected inline scripts so you can drop `'unsafe-inline'` from `script-src` — is likewise additive and defaults to `false`; see the [Per-response nonce section](/guides/csp#per-response-nonce-usenonce) of the CSP guide. (The one migration action this release requires is the Couchbase SDK v2 driver bump above.)
 
 ### What's new — `gina.plugins.Csp({ directives, reportOnly })` (#HDR5)
 
