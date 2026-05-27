@@ -264,7 +264,27 @@ The nonce is generated **only when Gina is the one setting the CSP header** (the
 
 **Factory requirement:** `useNonce: true` needs a `script-src` (or `default-src`) directive for the nonce to attach to — the factory throws at call time if neither is present.
 
-**Application-side inline scripts:** marking your *own* inline `<script>` tags with the nonce (via a template helper) is a separate, planned change. `useNonce` currently covers the framework-injected scripts so you can drop `'unsafe-inline'` for those; if your bundle also has its own inline scripts, either extract them to external files or keep `'unsafe-inline'` until the template-helper change lands.
+### Marking your own inline scripts
+
+`useNonce` also exposes the per-response nonce to your templates, so your *own* inline `<script>` tags can carry it — the framework-injected scripts are handled for you automatically. Add the nonce attribute from the template, wrapped in a presence check so the tag stays a valid bare `<script>` when no nonce was generated:
+
+- **Swig** — `{{ page.cspNonce }}`:
+
+  ```html
+  <script{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>
+    /* your inline script */
+  </script>
+  ```
+
+- **Nunjucks** — `{{ cspNonce }}`:
+
+  ```html
+  <script{% if cspNonce %} nonce="{{ cspNonce }}"{% endif %}>
+    /* your inline script */
+  </script>
+  ```
+
+The variable is set **only** when `useNonce: true` generated a nonce for that response — it is absent when `useNonce` is off, or when an upstream proxy already set the CSP header (the first-writer-wins guard). Keep the `{% if %}` wrapper so the attribute is omitted in those cases rather than rendering an empty `nonce=""`. Once every inline script in your templates is nonced, you can drop `'unsafe-inline'` from `script-src` entirely; any remaining un-nonced inline script will then be blocked by the browser.
 
 ## `reportOnly` — non-enforcing migration testing
 
