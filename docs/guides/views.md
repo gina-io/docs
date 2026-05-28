@@ -116,10 +116,11 @@ Swig supports [layout inheritance](/templating/swig/syntax#template-inheritance)
 
 ## Using a different template engine
 
-Gina does not lock you into Swig. The rendering engine is pluggable per bundle via `config/settings.json > render.engine`, and `self.render(data)` dispatches to whichever engine the bundle is configured for. Three engines are supported out of the box:
+Gina does not lock you into Swig. The rendering engine is pluggable per bundle via `config/settings.json > render.engine`, and `self.render(data)` dispatches to whichever engine the bundle is configured for. Four engines are supported out of the box:
 
 - **[Swig](/templating/swig)** — the default, Jinja2/Django-inspired syntax (`@rhinostone/swig`).
 - **[Twig](/templating/twig)** — drop-in Twig-syntax frontend on the same engine (`@rhinostone/swig-twig`), opted in via `swig.package`.
 - **[Nunjucks](/templating/nunjucks)** — opt-in, project-installed (`nunjucks`). The framework never declares it as a dependency; bundles that don't opt in pay zero cost.
+- **[Jinja2](/templating/jinja2)** — drop-in Python Jinja2-syntax frontend on the same engine (`@rhinostone/swig-jinja2`), opted in via `swig.package`.
 
 See the [Templating overview](/templating) for the full comparison, dispatch flow, and per-engine configuration. If you need something else, you can use any template engine by calling `res.render()` or writing the response directly in your controller action.
