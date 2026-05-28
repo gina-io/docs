@@ -2,16 +2,16 @@
 /**
  * sync-versions.js
  *
- * Reads the current gina, @rhinostone/swig, and @rhinostone/swig-twig
- * package.json versions and patches the `ginaVersion` / `swigVersion` /
- * `twigVersion` constants in docusaurus.config.js so the version badges in
- * the docs header always reflect the active local installations — without
- * needing a publish step.
+ * Reads the current gina, @rhinostone/swig, @rhinostone/swig-twig, and
+ * @rhinostone/swig-jinja2 package.json versions and patches the `ginaVersion` /
+ * `swigVersion` / `twigVersion` / `jinjaVersion` constants in docusaurus.config.js
+ * so the version badges in the docs header always reflect the active local
+ * installations — without needing a publish step.
  *
  * Resolution order for each package (first valid package.json wins):
- *   1. <PKG>_PATH env var   — explicit worktree override (GINA_PATH, SWIG_PATH, SWIG_TWIG_PATH)
+ *   1. <PKG>_PATH env var   — explicit worktree override (GINA_PATH, SWIG_PATH, SWIG_TWIG_PATH, SWIG_JINJA2_PATH)
  *   2. ~/.npm-global install — user-local global install
- *   3. ~/Sites/gina/<name>   — local worktree sibling (swig-twig lives at ~/Sites/gina/swig/packages/swig-twig)
+ *   3. ~/Sites/gina/<name>   — local worktree sibling (swig-twig / swig-jinja2 live under ~/Sites/gina/swig/packages/)
  *   4. require.resolve       — docs repo node_modules devDep (likely stale)
  *
  * Pre-release versions (containing `-`) are skipped — the docs site
@@ -24,6 +24,7 @@
  *   GINA_PATH=~/Sites/gina/gina-dev                     npm start
  *   SWIG_PATH=~/Sites/gina/swig                         npm start
  *   SWIG_TWIG_PATH=~/Sites/gina/swig/packages/swig-twig npm start
+ *   SWIG_JINJA2_PATH=~/Sites/gina/swig/packages/swig-jinja2 npm start
  */
 
 const fs   = require('fs');
@@ -106,5 +107,16 @@ syncVersion({
         path.join(HOME, 'Sites', 'gina', 'swig', 'packages', 'swig-twig'),
         path.join(HOME, '.npm-global', 'lib', 'node_modules', '@rhinostone', 'swig-twig'),
         (function () { try { return path.dirname(require.resolve('@rhinostone/swig-twig/package.json')); } catch (e) { return null; } })()
+    ]
+});
+
+syncVersion({
+    label: 'swig-jinja2',
+    configKey: 'jinjaVersion',
+    candidates: [
+        process.env.SWIG_JINJA2_PATH && path.resolve(process.env.SWIG_JINJA2_PATH),
+        path.join(HOME, 'Sites', 'gina', 'swig', 'packages', 'swig-jinja2'),
+        path.join(HOME, '.npm-global', 'lib', 'node_modules', '@rhinostone', 'swig-jinja2'),
+        (function () { try { return path.dirname(require.resolve('@rhinostone/swig-jinja2/package.json')); } catch (e) { return null; } })()
     ]
 });
