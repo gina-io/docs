@@ -5,8 +5,9 @@ import readingTimePlugin from './src/remark/reading-time.js';
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → node_modules.
 const ginaVersion = '0.3.15';
-const swigVersion = '2.4.0';
-const twigVersion = '2.4.0';
+const swigVersion = '2.5.0';
+const twigVersion = '2.5.0';
+const jinjaVersion = '2.5.0';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -136,7 +137,7 @@ const config = {
             // Each exclusion is handled via `displayed_sidebar` frontmatter in the relevant pages,
             // which routes them to their own dedicated sidebars.
             return items.filter(item => {
-              if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support')) return false;
+              if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support' || item.id === 'download-offline')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
               if (item.type === 'category' && item.label === 'Templating') return false;
               return true;
@@ -164,6 +165,7 @@ const config = {
   customFields: {
     swigVersion,
     twigVersion,
+    jinjaVersion,
   },
 
   themeConfig:
@@ -264,6 +266,10 @@ const config = {
               {
                 label: 'npm',
                 href: 'https://www.npmjs.com/package/gina',
+              },
+              {
+                label: 'Offline docs (ZIP)',
+                to: '/download-offline',
               },
             ],
           },

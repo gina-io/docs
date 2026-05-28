@@ -1,0 +1,137 @@
+---
+displayed_sidebar: templatingSidebar
+title: Jinja2 Non-Goals
+sidebar_label: Non-Goals
+sidebar_position: 3
+description: Python Jinja2 features that @rhinostone/swig-jinja2 throws on at parse time or does not implement — sandboxed rendering, call/do/trans tags, the map/select filter family, macro kwargs, dynamic extends/import/from, bracket-notation set. Explicit rather than silent.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Parity](./parity)'
+  - '[Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)'
+---
+
+# Jinja2 Non-Goals
+
+`@rhinostone/swig-jinja2` is a **near-subset** of Python Jinja2. Syntax outside the subset throws at parse time rather than silently producing a template that behaves differently from the reference. This page enumerates each rejection, the error it produces, and the rationale.
+
+The rejections fall into two buckets:
+
+- **Won't support (security).** A threat-model call; unlikely to change.
+- **Deferred.** Design work awaiting demand — [open an issue](https://github.com/gina-io/swig/issues) if you hit one.
+
+Behaviours that are *supported but differ* from Python Jinja2 (macro output autoescaped, `default` falling back on `""`, `for k, v in mapping` without `.items()`, `is integer`/`is float` absent, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
+
+## Unsupported tags
+
+### Won't support (security)
+
+`@rhinostone/swig-jinja2` does **not** offer a sandboxed-rendering mode — there is no equivalent of Jinja2's `SandboxedEnvironment`.
+
+| Capability | Upstream Jinja2 | Why rejected |
+| --- | --- | --- |
+| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
+
+### Deferred
+
+These tags throw `Unexpected tag "<name>"` at parse time:
+
+| Tag | Upstream purpose | Why not yet |
+| --- | --- | --- |
+| `{% call %}` | Invoke a macro with a `{% call %}…{% endcall %}` body reachable via `caller()`. | Core Jinja2, but needs a `caller()` runtime contract and a dedicated IR node. Most likely of the three to ship later — [open an issue](https://github.com/gina-io/swig/issues) if you need it. |
+| `{% do %}` | Evaluate an expression for its side effects. | A Jinja2 **extension** (`jinja2.ext.do`), not core — opt-in even upstream. Small surface for pure sugar over `{{ foo.method() }}`; autoescape already discards the output. |
+| `{% trans %}` / `{% endtrans %}` | Mark a block for i18n translation. | A Jinja2 **extension** (`jinja2.ext.i18n`), not core. Translation catalogs and pluralization need a runtime swig-core does not provide; do i18n in the controller and pass translated strings in as locals. |
+
+If you need one of these, either express the same intent with supported tags, register a [custom tag](../swig/extending#custom-tags) scoped to your application, or [open an issue](https://github.com/gina-io/swig/issues) with a concrete use case.
+
+## Filters not yet supported
+
+The collection filters that take **another filter or test by name** are not implemented:
+
+| Filter | Upstream purpose |
+| --- | --- |
+| `map` | Apply a filter (or attribute lookup) to every item. |
+| `select` / `reject` | Keep / drop items that pass a test. |
+| `selectattr` / `rejectattr` | Keep / drop items whose attribute passes a test. |
+
+A reference to one of these (e.g. `{{ items|map("upper") }}`) fails at render because the filter is not registered. Filters in swig-core are pure `_filters["name"](input, ...args)` functions with **no access** to the filter or test registry, so a filter cannot resolve `"upper"` or `"odd"` to another filter/test at runtime. Supporting them needs parser-level rewriting of the leading name argument into a `_filters[...]` / `_ext._test_<name>` reference — deferred. [Open an issue](https://github.com/gina-io/swig/issues) with a use case to prioritise.
+
+`map(attribute="x")` is additionally blocked by the macro/filter keyword-argument non-goal below.
+
+Workaround — do the projection in a `{% for %}`:
+
+```jinja2
+{% for item in items %}{{ item.name|upper }}{% endfor %}
+```
+
+## Macro kwargs
+
+Macros accept positional arguments (with defaults); keyword-argument **calls** throw at parse time:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% macro f(a, b="x") %}…{% endmacro %}` | Yes | — |
+| `{{ f("a", "b") }}` | Yes | — |
+| `{{ f(a="a") }}` | No | `Expected comma or closing delimiter` |
+
+Lowering kwargs needs a per-macro parameter map in the IR plus a runtime dispatcher in swig-core. Deferred — [open an issue](https://github.com/gina-io/swig/issues) with a concrete use case to prioritise.
+
+Workarounds:
+
+- Pass an object literal and read fields inside the macro:
+  ```jinja2
+  {% macro field(args) %}{{ args.name }} — {{ args.cls }}{% endmacro %}
+  {{ field({ "name": "email", "cls": "required" }) }}
+  ```
+- Order positional parameters from most- to least-commonly-passed so defaults "fall off the right."
+
+## Dynamic `{% extends %}` / `{% import %}` / `{% from %}`
+
+All three require the path to be a **string literal**. Expressions throw:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% extends "base.jinja2" %}` | Yes | — |
+| `{% extends parent_template %}` | No | `Dynamic "extends" is not supported — parent path must be a string literal` |
+| `{% import "macros.jinja2" as f %}` | Yes | — |
+| `{% import dynamic_path as f %}` | No | `Dynamic "import" is not supported — path must be a string literal` |
+| `{% from "macros.jinja2" import label %}` | Yes | — |
+| `{% from dynamic_path import label %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+
+Rationale: swig walks the inheritance/import chain at parse time so it can cache compiled templates by resolved filename. A dynamic path would either break that caching or require a runtime loader path the built-in loaders do not support. The string-literal requirement keeps compiled output deterministic and lets the shared cache work.
+
+Workaround for `extends`: **dispatch in the caller** and render the selected template directly.
+
+```js
+var template = (flavor === 'admin') ? 'page_admin.jinja2' : 'page_public.jinja2';
+jinja2.renderFile(template, { /* locals */ });
+```
+
+`{% include %}` is not affected — its path can be any expression.
+
+## Bracket-notation `set`
+
+Dot-path LHS is supported; bracket-notation LHS throws:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% set foo = 1 %}` | Yes | — |
+| `{% set foo.bar = 1 %}` | Yes | — |
+| `{% set foo["bar"] = 1 %}` | No | `Bracket-notation assignment is not supported in "set" (use dot-path notation)` |
+
+Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and inherit the [CVE-2023-25345 Phase 2](../swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) perimeter that all frontends share.
+
+## Other known gaps
+
+Tracked, not yet implemented:
+
+- **Global functions.** Jinja2's `range()`, `dict()`, `cycler()`, `joiner()`, `lipsum()`, and `namespace()` are not exposed. To iterate a count, pass an array in locals or write a literal `{% for i in [1, 2, 3] %}`.
+- **`not in` operator.** The compound `x not in seq` does not parse. Use `not (x in seq)`.
+- **`is integer` / `is float`.** Not registered — JavaScript has a single `number` type. Use `is number` (both evaluate to `false`).
+- **`is sameas` bare form.** Use the parenthesized `x is sameas(other)`; the bare `x is sameas other` form does not parse.
+- **Locale-aware `date`.** The shared PHP-style formatter from `@rhinostone/swig-core` does not plumb locale rules (weekday/month names in non-English locales). Pre-format on the controller side.
+- **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
+
+## Reporting a rejection that feels wrong
+
+If the rejection you hit isn't listed here, please [open an issue on `gina-io/swig`](https://github.com/gina-io/swig/issues) with a minimal reproducer — we track rejections against the design-doc subset and may be able to promote a gap to a supported feature.

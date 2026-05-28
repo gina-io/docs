@@ -8,6 +8,7 @@
     "start": "docusaurus start",
     "prebuild": "node scripts/sync-versions.js && node scripts/generate-api-docs.js",
     "build": "docusaurus build",
+    "postbuild": "node scripts/build-offline-zip.js",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.9.2",
     "@docusaurus/types": "3.9.2",
+    "adm-zip": "^0.5.17",
     "gina": "^0.3.15",
     "jsdoc-to-markdown": "^9.1.3"
   },

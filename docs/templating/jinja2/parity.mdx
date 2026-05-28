@@ -1,0 +1,208 @@
+---
+displayed_sidebar: templatingSidebar
+title: Jinja2 Parity
+sidebar_label: Parity
+sidebar_position: 2
+description: Operator, tag, filter, and is-test support in @rhinostone/swig-jinja2 — what matches Python Jinja2, what diverges where the JavaScript runtime differs, and what is shared with the native swig frontend.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Upstream Jinja2 template designer docs](https://jinja.palletsprojects.com/en/stable/templates/)'
+  - '[Upstream Jinja2 builtin filters](https://jinja.palletsprojects.com/en/stable/templates/#builtin-filters)'
+  - '[Native swig tags](../swig/tags)'
+  - '[Native swig filters](../swig/filters)'
+---
+
+# Jinja2 Parity
+
+This page lists exactly what `@rhinostone/swig-jinja2` accepts — operators, tags, filters, and is-tests — cross-referenced against Python Jinja2 3.x and the native `@rhinostone/swig` frontend.
+
+The matrices below are ground truth: each row maps to a symbol actually exported by the shipped source, and every filter and is-test was cross-checked against Jinja2 3.x. Outputs match the reference except where the JavaScript runtime forces a divergence — those are flagged here and detailed under [Behavioural differences](#behavioural-differences). For features that throw at parse time, see [Non-Goals](./non-goals).
+
+## Operators
+
+| Operator | Shape | Semantics | Lowering / notes |
+| --- | --- | --- | --- |
+| `**` | `a ** b` | Power. | `Math.pow(a, b)` |
+| `//` | `a // b` | Floor division. | `Math.floor(a / b)` |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
+| `+` `-` `*` `/` `%` | `a + b` | Arithmetic. `+` also concatenates when either side is a string (JavaScript coercion). | See [Behavioural differences](#behavioural-differences) for `+` on mixed types. |
+| `a if c else b` | inline conditional | Returns `a` when `c` is truthy, else `b`. The `else` arm is optional (`a if c` yields `""` when `c` is falsy). | |
+| `in` | `x in seq` | Membership test. | `not in` does **not** parse — use `not (x in seq)`. |
+| `and` `or` `not` | logic | Short-circuit boolean logic. | |
+| `==` `!=` `<` `>` `<=` `>=` | comparison | Standard comparisons. | |
+| `seq[start:stop:step]` | slicing | Python slice semantics — negative indices count from the end, `step` walks, `[::-1]` reverses. | Strings slice to strings, arrays to arrays. |
+| `is` / `is not` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [is-tests](#is-tests). |
+
+Jinja2's global functions — `range()`, `dict()`, `cycler()`, `joiner()`, `lipsum()`, `namespace()` — are **not** exposed (see [Non-Goals](./non-goals#other-known-gaps)). To iterate a count, pass an array in locals or write a literal `{% for i in [1, 2, 3] %}`.
+
+## Whitespace control
+
+`{{- … -}}` and `{%- … -%}` strip surrounding whitespace at chunk boundaries — same shape as Python Jinja2's `trim_blocks`/`lstrip_blocks`-adjacent minus markers.
+
+| Marker | Effect |
+| --- | --- |
+| `{{- foo }}` | Strip the preceding chunk's trailing whitespace. |
+| `{{ foo -}}` | Strip the following chunk's leading whitespace. |
+| `{{- foo -}}` | Strip both. |
+| `{%- if … %}` / `{%- endif %}` | Same, on tag-statement boundaries. |
+
+The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of the immediately enclosing tag's last child only, not deeper. See [native swig syntax → Whitespace control](../swig/syntax#whitespace-control); both frontends are consistent.
+
+## `is` tests {#is-tests}
+
+`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Jinja2 constructor registers the 16 built-ins below via `setExtension`:
+
+| Test | Shape | Semantics |
+| --- | --- | --- |
+| `defined` | `x is defined` | `true` if `x` is defined and not `null`. |
+| `undefined` | `x is undefined` | `true` if `x` is `undefined`. |
+| `none` | `x is none` | `true` if `x` is `null` or `undefined`. |
+| `even` | `x is even` | `true` if `x` is an even integer. |
+| `odd` | `x is odd` | `true` if `x` is an odd integer. |
+| `divisibleby` | `x is divisibleby(n)` | `true` if `x % n === 0`. |
+| `iterable` | `x is iterable` | `true` if `x` is an array or a plain object. |
+| `mapping` | `x is mapping` | `true` if `x` is a plain object. |
+| `sequence` | `x is sequence` | `true` if `x` is an array or a string. |
+| `string` | `x is string` | `typeof x === 'string'`. |
+| `number` | `x is number` | `typeof x === 'number'`. |
+| `boolean` | `x is boolean` | `typeof x === 'boolean'`. |
+| `callable` | `x is callable` | `typeof x === 'function'`. |
+| `lower` | `x is lower` | `true` if the string is all lowercase. |
+| `upper` | `x is upper` | `true` if the string is all uppercase. |
+| `sameas` | `x is sameas(other)` | Strict identity (`===`). Use the **parenthesized** form. |
+
+`defined`, `undefined`, and `none` on a bare variable are compiled through the `IRVarRefExists` IR node so the defined/undefined signal survives (the default variable lookup coerces missing context slots to empty strings, which would wash out the test).
+
+Jinja2's `integer` and `float` tests are **not** registered — JavaScript has a single `number` type, so `5` and `5.0` are indistinguishable. `x is integer` / `x is float` evaluate to `false`; use `x is number` instead.
+
+Register additional tests by exposing them on `_ext._test_<name>`:
+
+```js
+var jinja2 = require('@rhinostone/swig-jinja2');
+jinja2.setExtension('_test_positive', function (x) { return typeof x === 'number' && x > 0; });
+jinja2.render('{{ "yes" if n is positive else "no" }}', { locals: { n: 3 } });
+// → "yes"
+```
+
+## Tags
+
+`@rhinostone/swig-jinja2` ships 13 built-in tag families (`elif` and `else` are branch markers consumed by `if`/`for`, not standalone tags). Each is registered in `packages/swig-jinja2/lib/tags/index.js`.
+
+| Tag | Ends | Notes |
+| --- | --- | --- |
+| `set` | No¹ | `{% set x = 5 %}`, expression RHS, and body form `{% set x %}…{% endset %}`. Dotted LHS (`set obj.k`) is supported; bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
+| `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains. |
+| `for` / `else` / `endfor` | Yes | `loop.index`/`index0`/`first`/`last`/`length`, empty-fallback `{% else %}`, and `{% for k, v in mapping %}` (no `.items()` needed — see [Behavioural differences](#behavioural-differences)). Loop variables containing `.` are rejected (CVE-2023-25345 guard). |
+| `block` / `endblock` | Yes | Named block for template inheritance. |
+| `extends` | No | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
+| `include` | No | Supports `with context` (default), `without context`, and `ignore missing`. |
+| `macro` / `endmacro` | Yes | Positional parameters with defaults (`{% macro f(a, b="x") %}`); defaults may reference earlier parameters or be full expressions. Keyword-argument **calls** are not supported — see [Non-Goals](./non-goals#macro-kwargs). |
+| `import` | No | `{% import "forms.jinja2" as f %}{{ f.label("x") }}`. Path must be a string literal. |
+| `from` | No | `{% from "forms.jinja2" import label, shout as yell %}`. Path must be a string literal. |
+| `raw` / `endraw` | Yes | Verbatim content; variable, tag, and comment syntax pass through untouched. |
+| `filter` / `endfilter` | Yes | Pipes the block's output through a filter chain (`{% filter upper %}…{% endfilter %}`, `{% filter lower\|upper %}`). |
+| `with` / `endwith` | Yes | Pushes a fresh local scope with named assignments (`{% with x = 5, y = a + 1 %}`). |
+| `autoescape` / `endautoescape` | Yes | Override autoescape for a region. Accepts a literal `true`/`false` only. |
+
+¹ `set` is `endset`-terminated only in body form.
+
+Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do %}`, `{% trans %}`. See [Non-Goals](./non-goals#unsupported-tags) for the rationale and error messages.
+
+## Filters
+
+`@rhinostone/swig-jinja2` ships 39 built-in filters (42 callable names counting the `e`, `count`, and `d` aliases). They live in `packages/swig-jinja2/lib/filters.js`. Every filter below was cross-checked against Python Jinja2 3.x.
+
+### Strings & formatting
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `upper` / `lower` | 0 | Case conversion. Recurse into arrays / objects. |
+| `capitalize` | 0 | First character upper, rest lower. |
+| `title` | 0 | Title-case each word. Word boundaries: whitespace and `- ( [ { <`. |
+| `trim` | 0/1 | Strip surrounding whitespace, or a given character set, from both ends. |
+| `truncate` | 1–4 | Truncate to a length with an ellipsis; word-boundary aware unless `killwords`. |
+| `replace` | 2/3 | Literal substring replace with optional count — **matches Python Jinja2** (`replace(old, new, count)`), not the Twig object-map form. |
+| `striptags` | 0 | Strip tags/comments, collapse whitespace to single spaces, trim. |
+| `format` | N | `printf`-style — `%s %d %i %u %f %e %g %x %X %o %c %%`, with flags (`-` `+` space `0`), width, and `.precision`. |
+| `wordcount` | 0 | Count `\w+` runs. |
+| `wordwrap` | 1–3 | Greedy word-wrap to a width; breaks over-long words by default. |
+| `indent` | 1–3 | Indent each line; first line and blank lines skipped unless `first`/`blank`. |
+| `center` | 1 | Center within a field width (extra space on the right). |
+| `urlencode` | 0 | Percent-encode a string (preserves `/`), or encode a mapping/pair-list as a query string. |
+| `escape` / `e` | 0/1 | HTML-escape (default) or `escape("js")`. |
+| `safe` | 0 | Mark a value safe (bypass autoescape). |
+
+### Sequences & mappings
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `first` / `last` | 0 | First / last item of an array, string, or mapping. |
+| `join` | 0/1 | Join with a glue string (default empty, the Jinja2 default — not a comma). |
+| `length` / `count` | 0 | Length of an array/string, or key count of a mapping. |
+| `reverse` | 0 | Reversed copy (does not mutate). |
+| `sort` | 0/1 | Sorted copy; pass a truthy argument for descending. |
+| `list` | 0 | Coerce to a list — string → characters, mapping → keys. |
+| `unique` | 0/1 | Unique items, first-seen order; case-insensitive for strings by default. |
+| `batch` | 1/2 | Chunk into rows of N; optional pad value for the last row. |
+| `slice` | 1/2 | Distribute across N columns (the inverse of `batch` — distinct from the `seq[::]` subscript). |
+| `dictsort` | 0–3 | Sort a mapping into `[key, value]` pairs by key (or value), case-insensitive by default. |
+| `groupby` | 1 | Group a sequence of objects by a (dotted) attribute into `{ grouper, list }` records. |
+| `min` / `max` | 0/1 | Smallest / largest item; case-insensitive string compare by default. |
+| `sum` | 0–2 | Sum a sequence, with optional dotted `attribute` and `start`. |
+| `random` | 0 | A random item (non-deterministic). |
+
+### Numbers & values
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `abs` | 0 | Absolute value. |
+| `round` | 0–2 | Round to a precision; method `common` (default), `ceil`, or `floor`. |
+| `int` | 0–2 | Parse an integer with a default and optional base. |
+| `float` | 0/1 | Parse a float with a default. |
+| `default` / `d` | 1/2 | Fallback value — see [Behavioural differences](#behavioural-differences) for the empty-string case. |
+| `tojson` | 0/1 | JSON-serialize, HTML-safe. Marked safe. |
+| `date` | 1–3 | PHP-style format tokens via the shared `@rhinostone/swig-core` date formatter. A swig-family extension — Jinja2 core has no `date` filter. |
+
+### Safe filters
+
+These bypass autoescape (the autoescape `e` tail is not appended): **`safe`**, **`tojson`**, and **`escape`** / **`e`** itself (it carries `.safe = true`, so `{{ x|e }}` is escaped once, not twice). Everything else is escaped on output — note that `urlencode` is **not** safe (unlike native swig's `url_encode`), so a mapping rendered to a query string has its `&` escaped to `&amp;` on output. Filters that emit already-safe HTML you register yourself must set `.safe = true` on the function.
+
+### Registering your own
+
+```js
+jinja2.setFilter('exclaim', function (input) { return String(input) + '!'; });
+jinja2.render('{{ msg|exclaim }}', { locals: { msg: 'hi' } });
+// → "hi!"
+```
+
+```js
+function monospace(input) { return '<code>' + input + '</code>'; }
+monospace.safe = true;
+jinja2.setFilter('monospace', monospace);
+```
+
+See [Extending Swig](../swig/extending) for the full filter/tag extension contract — it is identical across frontends.
+
+## Behavioural differences
+
+These behaviours are **supported** but diverge from Python Jinja2 because the JavaScript runtime (or the shared swig-core engine) differs from CPython. None of them throw — they just behave differently:
+
+| Area | Python Jinja2 | `@rhinostone/swig-jinja2` |
+| --- | --- | --- |
+| `default` on `""` | Keeps the empty string (only `undefined` triggers fallback without `boolean=true`). | Falls back, because a missing variable arrives as `""` after engine coercion. Real falsy values `0` / `false` are preserved; pass `true` as the second argument to fall back on any falsy value. |
+| Macro output | Returns a `Markup` object (not re-escaped). | Autoescaped like any other `{{ … }}` output. Wrap in `\|safe` for trusted HTML. |
+| `{% for k, v in mapping %}` | Requires `.items()`. | Iterates the mapping directly (key, value) — `.items()` is not available. |
+| `+` on mixed types | `1 + "x"` raises `TypeError`. | Coerces (`"1x"`), JavaScript-style. Use `~` for explicit, intentional string concatenation. |
+| `is sequence` | A mapping is also a sequence. | An array or string only; a mapping is `is mapping`. |
+| `with x = …` values | Evaluate against the enclosing scope. | Same — evaluated against the outer scope (object-literal merge, not sequential). |
+| Imported macros | `{% import %}` is `without context` by default. | Imported/`from`-imported macros see the caller context (swig macro model — matches swig-twig). |
+| `round` | Float-repr rounding (`42.55\|round(1)` → `42.5`). | Naive decimal rounding (`42.55\|round(1)` → `42.6`). |
+
+See [Migrating from Python Jinja2](./migration) for the porting view of these.
+
+## Autoescape
+
+Autoescape behaves as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. The built-in safe filters (`safe`, `tojson`) are excluded.
+
+See [Security](../swig/security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.

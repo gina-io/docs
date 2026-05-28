@@ -153,7 +153,8 @@ appropriate database index exists for the query's target table:
 |---|---|---|
 | Index name | Green | A secondary index covers the table |
 | `PRIMARY` | Amber | Only a primary key scan is available |
-| `no index` | Red | Index file exists but no index covers this table |
+| `no index` | Red | The query's target table has no index at all |
+| `no index for filter` | Amber-gold | Indexes exist, but none cover the columns this query filters on (SQL connectors) |
 | `N/A` | Grey | Connector does not support index reporting |
 
 **Couchbase** extracts indexes automatically from the query execution plan — no
@@ -167,6 +168,8 @@ your schema:
 CREATE INDEX idx_invoice_date ON invoices (created_at);
 CREATE UNIQUE INDEX idx_user_email ON users (email);
 ```
+
+For MySQL, PostgreSQL, and SQLite the badge also checks **column coverage**: a query counts as covered only when one of the table's declared indexes *leads with* a column the query filters on (the leftmost-prefix rule). If the table has indexes but none match the query's `WHERE` columns, an amber-gold "no index for filter" badge appears. This is a heuristic read of your `indexes.sql` against the query's `WHERE` clause — a design-time hint, not a guarantee of what the database planner does at runtime.
 
 Index badge names are clickable — click to copy the index name to the clipboard.
 
@@ -251,7 +254,118 @@ The Inspector only activates when `NODE_ENV_IS_DEV` is `true`. In production:
   guard
 
 No code changes are needed to disable the Inspector — it is fully gated on the
-environment variable.
+environment variable, with one opt-in exception described below.
+
+### Authenticated agent endpoint outside dev mode (`inspector.agent`)
+
+The single exception to the dev-only gating is the `/_gina/agent` SSE stream,
+which can be opted into **outside dev mode** for authenticated remote server-log
+streaming (e.g. tailing a staging bundle's logs from the standalone Inspector).
+It is disabled by default. Enable it in `settings.json`:
+
+```json
+"inspector": {
+  "agent": {
+    "enabled": true,
+    "key": "${secret:INSPECTOR_AGENT_KEY}"
+  }
+}
+```
+
+- `enabled` (default `false`) exposes the endpoint outside dev mode; `key` is the
+  shared secret. It supports `${secret:KEY}` placeholders, resolved from the
+  environment at config-load — so the value never lives in the config file.
+- Clients authenticate with the key via the `x-gina-inspector-key` request header
+  **or** a `?key=` query parameter. Browsers using `EventSource` cannot send
+  headers, so the Inspector's "Connect" form has an optional key field that
+  travels as `?key=`. The key is compared in constant time; a missing or invalid
+  key returns `401`. With `enabled: true` but no key configured, the endpoint
+  stays closed (fail-closed).
+- In dev mode the endpoint stays open and requires no key (unchanged).
+- **Scope:** this authenticates server-log streaming and connection identity.
+  Per-request data, query, and flow capture stays dev-gated by default — the
+  **instrumentation window** (`inspector.instrumentation`, below) can opt it into
+  a bounded production window.
+
+```mermaid
+flowchart LR
+  C["Inspector / client<br/>GET /_gina/agent?key=…"] --> G{dev mode?}
+  G -->|yes| OK["Open SSE stream<br/>(no key required)"]
+  G -->|no| E{"agent.enabled<br/>and key valid?"}
+  E -->|yes| OK
+  E -->|no| D["401"]
+```
+
+### Instrumentation window — query + flow capture outside dev mode (`inspector.instrumentation`)
+
+By default, query and flow instrumentation run only in dev mode. The **instrumentation
+window** opts that capture into a **time-boxed, key-authenticated** window, so you can
+trace a production issue for a few minutes without running the bundle in full dev mode.
+It is disabled by default. Enable it in `settings.json`:
+
+```json
+"inspector": {
+  "instrumentation": {
+    "enabled": true,
+    "key": "${secret:INSPECTOR_INSTRUMENT_KEY}",
+    "defaultWindowSeconds": 300,
+    "maxWindowSeconds": 3600
+  }
+}
+```
+
+- `enabled` (default `false`) allows a window to be opened at all — fail-closed, so a
+  bundle that never opts in cannot be instrumented remotely even with a key.
+- `key` is a secret **separate** from `inspector.agent.key` (capturing raw queries is
+  more sensitive than streaming logs). It supports `${secret:KEY}` placeholders,
+  resolved from the environment at config-load.
+- `defaultWindowSeconds` (default `300`) applies when a request omits a TTL;
+  `maxWindowSeconds` (default `3600`) caps a single window and is itself clamped to an
+  absolute **3600-second hard ceiling** — a forgotten window always auto-reverts.
+
+Open, query, or close a window with the control endpoint — served by both engines,
+`POST` to toggle and `GET` to read status:
+
+```bash
+# open a 5-minute window
+curl -X POST https://your-host/_gina/instrument \
+  -H 'x-gina-inspector-key: <key>' -H 'content-type: application/json' \
+  -d '{"enable":true,"ttlSeconds":300}'
+
+# check status → { "active": true, "until": ..., "remainingMs": ... }
+curl https://your-host/_gina/instrument -H 'x-gina-inspector-key: <key>'
+
+# close early
+curl -X POST https://your-host/_gina/instrument \
+  -H 'x-gina-inspector-key: <key>' -H 'content-type: application/json' -d '{"enable":false}'
+```
+
+The key is compared in constant time and is **required even in dev**. With
+`enabled: false` (or no key configured) the endpoint is invisible (`404`); a wrong key
+returns `401`.
+
+- **Egress is remote-only.** While a window is open, captured queries and flow are
+  streamed over the **authenticated `/_gina/agent` SSE** — never injected into a
+  response body. To view them, also enable the agent endpoint (`inspector.agent`,
+  above) and connect the standalone Inspector with `?target=<host>&key=<agent-key>`.
+  For a page assembled from multiple bundles, open a window on each participating bundle.
+- **Redaction caveat.** Inspector redaction masks secret-*named* fields, but a query's
+  statement text and positional parameters reach the key holder **as-is**. Treat the
+  instrumentation key as privileged and keep windows short.
+- A server-rendered HTML page's *own* controller queries and flow now also stream
+  over the SSE during a window — alongside JSON/XHR responses and cross-bundle
+  queries. The page HTML itself is never modified; the capture leaves only over the
+  authenticated channel.
+
+```mermaid
+flowchart LR
+  O["POST /_gina/instrument<br/>{enable:true, ttlSeconds}"] --> A{"enabled +<br/>key valid?"}
+  A -->|no| D["401 / 404"]
+  A -->|yes| W["Window open<br/>(up to maxWindowSeconds)"]
+  W --> C["Each request captures<br/>queries + flow"]
+  C --> S["Redacted payload over the<br/>authenticated /_gina/agent SSE"]
+  W -.->|deadline| X["Auto-revert"]
+```
 
 ---
 
@@ -269,6 +383,21 @@ Server logs are streamed via SSE from `/_gina/logs`. Check that:
 - The bundle is running with `NODE_ENV_IS_DEV=true`
 - The source filter is set to "All" or "Server"
 - The level filter includes the severity you expect
+
+**`/_gina/agent` returns 401 outside dev mode**
+Outside dev mode the agent endpoint is auth-gated (`inspector.agent`). A `401`
+means the key is missing or wrong. Check that `inspector.agent.enabled` is `true`,
+a non-empty `key` is configured (and, if you used a `${secret:KEY}` placeholder,
+that the environment variable is set), and the client sends the matching key via
+the `x-gina-inspector-key` header or a `?key=` query parameter. With no key
+configured the endpoint stays closed even when `enabled` is `true`.
+
+**`/_gina/instrument` returns 401 or 404**
+The instrumentation control endpoint is opt-in and key-gated even in dev. A `404` means
+`inspector.instrumentation.enabled` is not `true` (or no key is configured — fail-closed);
+a `401` means the `x-gina-inspector-key` is missing or wrong. To view the captured data
+remotely you must also enable the authenticated agent endpoint (`inspector.agent`),
+because a window streams over `/_gina/agent`.
 
 **Query tab is empty**
 Query instrumentation is active for Couchbase, MySQL, PostgreSQL, and SQLite

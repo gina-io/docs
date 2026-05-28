@@ -175,6 +175,25 @@ Load macros from another template as a namespace object. Does not render the imp
 
 The alias must be a simple identifier. Reserved names (`__proto__`, `constructor`, `prototype`) are rejected at parse time — see [Security](./security).
 
+A macro can also call macros that *its own file* imported — those imports are
+set up when the macro runs, recursively across import depth:
+
+```swig
+{# buttons.html #}
+{% import "icons.html" as icons %}
+{% macro save() %}<button>{{ icons.disk() }} Save</button>{% endmacro %}
+
+{# page.html #}
+{% import "buttons.html" as buttons %}
+{{ buttons.save() }}
+```
+
+:::note
+Import aliases occupy the template's variable namespace. An alias — including a
+file's own transitively-imported aliases — overrides a context variable of the
+same name. Pick alias names that don't collide with your locals.
+:::
+
 ## include
 
 Inline another template. By default the current context is shared:

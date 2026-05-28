@@ -25,19 +25,60 @@ upward to the target version.
 
 `#HDR5 Csp` ships as the first Phase 2 plugin. The remaining Phase 2 plugins (Coep / Coop / Corp = #HDR6 / #HDR13 / #HDR14) follow in subsequent alphas; the combined `gina.plugins.SecurityHeaders({...})` wrapper (#HDR15) — mirrors helmet's `helmet()` for one-mount + one-config-block convenience — closes Phase 2.
 
-### No action required
+### Breaking — Couchbase SDK v2 connector removed
 
-This is a purely additive release. Bundles that don't adopt the new `Csp` plugin continue to work unchanged. Existing Phase 1 plugins (HDR1-7) are unaffected.
+The Couchbase SDK v2 connector (`connector.v2.js`) and its session store (`session-store.v2.js`) are removed in `0.4.0`. Only Couchbase Node SDK **v3 and v4** are supported, and the connector now defaults to v3.
+
+**The migration is a driver bump, not a config change.** Gina selects the connector version from the `couchbase` major installed in your project's `package.json` — not from a `connectors.json` field (the `sdk.version` upgrade note in the 0.2.0 deprecation was inaccurate; that value is derived from the installed driver, never set in config). To migrate:
+
+```bash
+npm install couchbase@^4   # or ^3
+```
+
+If a project still resolves to `couchbase@2`, the connector now throws a clear error at load (`SDK v2 is no longer supported — upgrade couchbase@^3/^4`) instead of failing later with an opaque module-not-found.
+
+### What's new — HTTP/2 response trailers (`self.sendTrailers()`)
+
+Controllers can now emit HTTP/2 response trailers (trailing headers sent after the body). Call `self.sendTrailers(fields)` before rendering; the render pipeline sets `waitForTrailers` on the HTTP/2 stream and sends the trailers in the `wantTrailers` event after the final data frame:
+
+```js
+// In a controller action, before rendering a streamed response:
+self.sendTrailers({ 'grpc-status': '0', 'grpc-message': 'OK' });
+self.renderStream(myAsyncIterable, 'application/grpc+proto');
+```
+
+Opt-in and best-effort: a no-op on HTTP/1.1 and when no trailers are registered, so existing responses are unchanged. Pseudo-header keys (`:`-prefixed) are stripped. Useful for gRPC-style streaming (a final `grpc-status`) and content-integrity (`Digest` after a chunked body).
+
+### What's new — Async jobs (`self.startJob` / `self.inferAsync`)
+
+Slow work — an LLM `.infer()` taking 1–30s, a heavy report — can now run out-of-band instead of holding the request open. `self.startJob(fn)` returns a job id immediately and runs `fn` on a concurrency-limited worker; clients poll the built-in `GET /_gina/jobs/:id` for state or opt into a completion webhook. `self.inferAsync(messages, options)` wires the AI connector through a job in one call.
+
+```js
+// Return a job id immediately; the inference runs out-of-band:
+this.summarise = function(req, res, next) {
+    var jobId = self.inferAsync(
+        [{ role: 'user', content: req.post.text }],
+        { connector: 'myModel' }
+    );
+    self.renderJSON({ jobId: jobId });
+};
+```
+
+Purely additive and opt-in — existing controllers are unchanged. See the [Async jobs guide](/guides/async-jobs) for polling, result retrieval, and webhook configuration.
+
+### No action required (security headers)
+
+The security-headers additions are purely additive — bundles that don't adopt the new `Csp` plugin continue to work unchanged, and existing Phase 1 plugins (HDR1-7) are unaffected. `Csp`'s opt-in `useNonce: true` (#HDR16) — which generates a per-response nonce, stamps it on the framework's injected inline scripts, and exposes it to your own templates as `{{ page.cspNonce }}` (swig) / `{{ cspNonce }}` (nunjucks) so you can drop `'unsafe-inline'` from `script-src` — is likewise additive and defaults to `false`; see the [Per-response nonce section](/guides/csp#per-response-nonce-usenonce) of the CSP guide. (The one migration action this release requires is the Couchbase SDK v2 driver bump above.)
 
 ### What's new — `gina.plugins.Csp({ directives, reportOnly })` (#HDR5)
 
 Opt-in middleware that emits the `Content-Security-Policy` (or `Content-Security-Policy-Report-Only`) response header on every response, limiting which resources the browser is allowed to load and from where — the modern defense against cross-site scripting (XSS), clickjacking via `frame-ancestors`, mixed-content downgrade, and base-tag manipulation.
 
-Adoption is one block in the bundle bootstrap, after the express app is created:
+Adoption is one block in the bundle bootstrap, inside the `onInitialize` callback (Gina builds the Express app and hands it to you as `app` — bundles never call `express()` themselves):
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var csp     = require('gina').plugins.Csp({
+var myapp = require('gina');
+var csp   = require('gina').plugins.Csp({
     directives: {
         'default-src': ["'self'"],
         'script-src':  ["'self'", 'https://cdn.example.com'],
@@ -46,9 +87,11 @@ var csp     = require('gina').plugins.Csp({
         'upgrade-insecure-requests': true
     }
 });
-var app     = express();
 
-app.use(csp);
+myapp.onInitialize(function(event, app) {
+    app.use(csp);
+    event.emit('complete', app);
+});
 ```
 
 **`directives` is REQUIRED.** There is no sensible cross-bundle default; every bundle has its own resource graph. The factory throws at call time if `directives` is missing or empty.
@@ -63,11 +106,33 @@ app.use(csp);
 
 **`reportOnly: true`** switches the response header name to `Content-Security-Policy-Report-Only` — browsers report violations but do not block any resources. Use for non-enforcing migration testing: ship the policy as report-only first, collect violations from real traffic, refine, then flip to enforcing.
 
-**v0 limitation — static directives only.** Per-response nonce wiring requires template-render integration and defers to a future CSP-aware view-layer plugin that can co-operate with swig / nunjucks template rendering. For now, inline scripts and styles must either use `'unsafe-inline'` (loosens the policy substantially) or be moved to external files served from a `script-src`-allowed origin.
+**Per-response nonce (`useNonce`, #HDR16 — same cycle).** Setting `useNonce: true` generates a fresh nonce per response, stamps it on every framework-injected inline `<script>`, and exposes it to your templates as `{{ page.cspNonce }}` (swig) / `{{ cspNonce }}` (nunjucks) — so you can drop `'unsafe-inline'` from `script-src` without breaking the framework's scripts or your own. Defaults to `false`; see the [Per-response nonce section](/guides/csp#per-response-nonce-usenonce). Inline **styles** still need `'unsafe-inline'` or external files — the nonce covers `script-src` only.
 
 **Idempotent.** If an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. Safe to stack with helmet-style upstream gates (first-writer-wins).
 
 See the dedicated [Content-Security-Policy guide](/guides/csp) for the full reference — directive whitelist, value-format details, security guidance (avoid `'unsafe-inline'` and `'unsafe-eval'`, lock down `frame-ancestors` and `object-src`), and the full failure-mode table.
+
+### What's new — `throwError(statusCode, Error|string)` honors the explicit status code
+
+Before this release, the 2-arg shorthand form `self.throwError(404, new Error('not found'))` (or `self.throwError(400, 'Bad input')`) silently fell back to HTTP 500 — the framework's internal status-coercion read the wrapped error's `.status` (missing on a bare `Error`) rather than the explicit number passed as the first argument, and defaulted to 500. The 2-arg shorthand is now correctly handled and the explicit status code reaches the response:
+
+```js
+// In any controller action — these now work as intended:
+self.throwError(404, new Error('Invoice not found'));   // → status 404
+self.throwError(400, 'Bad input');                       // → status 400
+
+// Unchanged — these shapes were already correct:
+self.throwError(412, { status: 412, fields: { name: 'Required' } });
+self.throwError(new Error('boom'));                      // → 500 fallback (no explicit code)
+self.throwError({ status: 403, error: 'Forbidden' });    // → status 403
+self.throwError(res, 500, new Error('upstream'));        // → status 500 (3-arg internal form)
+```
+
+The fix only affects the `(statusCode, Error|string)` shape — the framework's internal Error/string-coercion branch was the one mis-reading the explicit number. The `(statusCode, errorObj)` shape and the 1-arg and 3-arg forms were already handled correctly by other internal branches and are unchanged.
+
+**If you were working around the silent 500 fallback** (typically by hand-constructing an error object with `status` and passing it as a 1-arg, or by switching to the 3-arg `throwError(res, code, msg)` form), the workaround is no longer needed — but it stays valid. No action required to keep existing code working. Bundles whose controllers were relying on the silent-500 fallback as a feature will now receive the intended status code; the fallback was undocumented and the call shape `throwError(404, ...)` always intended status 404.
+
+A new `throwError(code: number, err: Error | string): void` overload is declared in `types/index.d.ts` for IDE autocomplete and type-checking on TypeScript projects.
 
 ### Coming up in 0.4.0-alpha
 
@@ -90,14 +155,16 @@ This is a purely additive release. Bundles that don't adopt the new plugins cont
 
 ### What's new — `gina.plugins.XContentTypeOptions()` (#HDR1)
 
-Opt-in middleware that emits the `X-Content-Type-Options: nosniff` response header on every response. Adoption is two lines in the bundle bootstrap, after the express app is created:
+Opt-in middleware that emits the `X-Content-Type-Options: nosniff` response header on every response. Adoption is one block in the bundle bootstrap, inside the `onInitialize` callback (Gina builds the Express app and hands it to you as `app` — bundles never call `express()` themselves):
 
 ```js title="src/<bundle>/index.js"
-var express             = require('express');
+var myapp               = require('gina');
 var xContentTypeOptions = require('gina').plugins.XContentTypeOptions();
-var app                 = express();
 
-app.use(xContentTypeOptions);
+myapp.onInitialize(function(event, app) {
+    app.use(xContentTypeOptions);
+    event.emit('complete', app);
+});
 ```
 
 The header instructs browsers to honour the declared `Content-Type` strictly, blocking MIME-sniffing attacks. Per RFC 7034 / WHATWG Fetch Standard, `nosniff` is the only valid value — there is no `enabled` flag in the configuration surface; register the plugin to opt in, don't register to opt out.
@@ -110,14 +177,16 @@ See the [Security Headers guide](/guides/security-headers) for the full referenc
 
 ### What's new — `gina.plugins.XFrameOptions({ value })` (#HDR2)
 
-Opt-in middleware that emits the `X-Frame-Options` response header on every response, defending against clickjacking by controlling whether the page may be rendered inside a `<frame>`, `<iframe>`, `<embed>` or `<object>`. Adoption is one line in the bundle bootstrap, after the express app is created:
+Opt-in middleware that emits the `X-Frame-Options` response header on every response, defending against clickjacking by controlling whether the page may be rendered inside a `<frame>`, `<iframe>`, `<embed>` or `<object>`. Adoption is one block in the bundle bootstrap, inside the `onInitialize` callback (Gina builds the Express app and hands it to you as `app`):
 
 ```js title="src/<bundle>/index.js"
-var express       = require('express');
+var myapp         = require('gina');
 var xFrameOptions = require('gina').plugins.XFrameOptions();
-var app           = express();
 
-app.use(xFrameOptions);
+myapp.onInitialize(function(event, app) {
+    app.use(xFrameOptions);
+    event.emit('complete', app);
+});
 ```
 
 Default is `SAMEORIGIN` — the page may be framed only by same-origin pages. Override via settings or caller options:
@@ -140,14 +209,16 @@ Values are normalised to uppercase (so `"deny"` is accepted and emitted as `DENY
 
 ### What's new — `gina.plugins.ReferrerPolicy({ value })` (#HDR3)
 
-Opt-in middleware that emits the `Referrer-Policy` response header on every response, controlling how much referrer information the browser includes when navigating away from the page or fetching sub-resources. Adoption is one line in the bundle bootstrap, after the express app is created:
+Opt-in middleware that emits the `Referrer-Policy` response header on every response, controlling how much referrer information the browser includes when navigating away from the page or fetching sub-resources. Adoption is one block in the bundle bootstrap, inside the `onInitialize` callback (Gina builds the Express app and hands it to you as `app`):
 
 ```js title="src/<bundle>/index.js"
-var express        = require('express');
+var myapp          = require('gina');
 var referrerPolicy = require('gina').plugins.ReferrerPolicy();
-var app            = express();
 
-app.use(referrerPolicy);
+myapp.onInitialize(function(event, app) {
+    app.use(referrerPolicy);
+    event.emit('complete', app);
+});
 ```
 
 Default is `strict-origin-when-cross-origin` — matches the modern browser default since ~2021. Override via settings or caller options to pick one of the other seven W3C tokens:
@@ -172,14 +243,16 @@ Values are normalised to lowercase per the W3C spec's case-insensitive matching 
 
 Opt-in middleware that emits the `Strict-Transport-Security` response header on every response, instructing browsers to access the host exclusively over HTTPS for the next `maxAge` seconds. Defeats SSL-stripping attacks by preventing browsers from making plain HTTP requests to the host once the policy is in effect.
 
-Adoption is one line in the bundle bootstrap, after the express app is created:
+Adoption is one block in the bundle bootstrap, inside the `onInitialize` callback (Gina builds the Express app and hands it to you as `app`):
 
 ```js title="src/<bundle>/index.js"
-var express = require('express');
-var hsts    = require('gina').plugins.Hsts();
-var app     = express();
+var myapp = require('gina');
+var hsts  = require('gina').plugins.Hsts();
 
-app.use(hsts);
+myapp.onInitialize(function(event, app) {
+    app.use(hsts);
+    event.emit('complete', app);
+});
 ```
 
 Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: false`. Override via settings or caller options:
@@ -202,14 +275,16 @@ Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: f
 
 ### What's new — `gina.plugins.OriginAgentCluster()` (#HDR7)
 
-Opt-in middleware that emits `Origin-Agent-Cluster: ?1` on every response, requesting origin-keyed agent clustering. Same-site cross-origin pages get isolated agents (can no longer reach in via `document.domain`), which mitigates one class of Spectre side-channel attack. Adoption is one line:
+Opt-in middleware that emits `Origin-Agent-Cluster: ?1` on every response, requesting origin-keyed agent clustering. Same-site cross-origin pages get isolated agents (can no longer reach in via `document.domain`), which mitigates one class of Spectre side-channel attack. Adoption is one block, inside the `onInitialize` callback:
 
 ```js title="src/<bundle>/index.js"
-var express            = require('express');
+var myapp              = require('gina');
 var originAgentCluster = require('gina').plugins.OriginAgentCluster();
-var app                = express();
 
-app.use(originAgentCluster);
+myapp.onInitialize(function(event, app) {
+    app.use(originAgentCluster);
+    event.emit('complete', app);
+});
 ```
 
 No required configuration — per the [HTML spec](https://html.spec.whatwg.org/multipage/document-sequences.html#origin-keyed-agent-clusters), `?1` (Structured Header boolean true) is the only useful value; `?0` is the browser default and emitting it would be a no-op. There is no `enabled` flag.
