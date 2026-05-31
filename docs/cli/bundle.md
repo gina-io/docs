@@ -230,6 +230,45 @@ gina bundle:remove <bundle> @<project>
 
 ---
 
+## `bundle:copy`
+
+Duplicate a bundle's source files and configuration under a new name **within the same project**. Gina copies the source tree, rewrites the bundle-name footprint in the copied `.js`/`.json` files, allocates a fresh full protocol/scheme/env port matrix for the new name, and registers it in `manifest.json`, `env.json`, and the `~/.gina` ports registry.
+
+```bash
+gina bundle:copy <source> <new_name> @<project>
+```
+
+The alias `bundle:cp` is equivalent:
+
+```bash
+gina bundle:cp <source> <new_name> @<project>
+```
+
+The name rewrite is **word-boundary anchored** and limited to `.js`/`.json` files: it renames the controller class identifiers, the gina require-var, the `app.json` name, and the webroot — but never a name embedded inside a larger token — and it leaves user content in templates, SQL, and CSS untouched. A first-bundle webroot of `/` is repointed to `/<new_name>` so it does not collide with the source.
+
+Preview before writing with `--dry-run`. It lists every file the rewrite would touch (and the planned port and manifest changes) so a coincidental match can be reviewed before anything is written:
+
+```bash
+gina bundle:copy <source> <new_name> @<project> --dry-run
+gina bundle:copy <source> <new_name> @<project> --dry-run --format=json
+```
+
+Overwrite an existing target with `--force`:
+
+```bash
+gina bundle:copy <source> <new_name> @<project> --force
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview every rewrite site and the planned port/manifest changes without writing anything |
+| `--force` | Overwrite an existing destination bundle (removes its source tree and registry entries first) |
+| `--format=json` | Emit a JSON payload instead of the human-readable text |
+
+---
+
 ## `bundle:list`
 
 List the bundles registered in a project, each annotated with src-existence, a preferred-port summary, and host-side running state.
