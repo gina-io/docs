@@ -109,13 +109,59 @@ gina bundle:restart api @myproject
 
 ## `bundle:status`
 
-:::note Not yet implemented
-`bundle:status` is planned but the handler is not yet implemented. It will print the running/stopped state, PID, port, and active environment for a specific bundle.
-:::
+Show the running/stopped state, PID, preferred port, and active environment for a single bundle. Where [`bundle:list`](#bundlelist) answers "what bundles exist" and leads each line with a source-presence marker, `bundle:status` answers "is this one bundle running" and leads with the run-state label.
 
 ```bash
 gina bundle:status <bundle> @<project>
 ```
+
+```bash
+gina bundle:status api @myproject
+```
+
+Both the bundle name and `@<project>` are required.
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--format=json` | Emit a JSON payload instead of the human-readable line |
+
+### Output
+
+A single run-state-led line — the state label, the padded bundle name, the preferred port, and the PID when running:
+
+```text
+[ running ] api              http/2.0 dev https 4208  pid 12345
+```
+
+- **`[ running ]` / `[ stopped ]`** — probed from `~/.gina/run/<bundle>@<project>.pid` with `process.kill(pid, 0)`. A stale pidfile (the process exited) reports `[ stopped ]` without being deleted; pidfile clean-up stays with [`bundle:stop`](#bundlestop).
+- **`http/2.0 dev https 4208`** — preferred port. Read from `~/.gina/ports.reverse.json`. Precedence: `http/2.0 https` → `http/1.1 https` → `http/1.1 http`; `dev` env is preferred when present, otherwise the first environment in the record. A bundle with no allocated port renders as `(no port)`.
+- **`pid 12345`** — process id, appended only when the bundle is running.
+
+With `--format=json`, the command emits a single object:
+
+```json
+{
+  "bundle": "api",
+  "project": "myproject",
+  "running": true,
+  "pid": 12345,
+  "env": "dev",
+  "scheme": "http/2.0",
+  "protocol": "https",
+  "port": 4208,
+  "ports": {
+    "dev": { "http/1.1": { "http": 3000, "https": 3004 }, "http/2.0": { "https": 4208 } }
+  }
+}
+```
+
+When the bundle is not declared in the project's `manifest.json`, the command exits non-zero; with `--format=json` it emits `{"bundle":"api","project":"myproject","status":"not-found"}`. A missing or malformed `ports.reverse.json` is tolerated — the bundle renders as `(no port)` with `env` / `scheme` / `protocol` / `port` null and `ports: null`.
+
+:::caution Docker bundles
+A bundle running inside a Docker container writes its pidfile inside the container, not on the host `~/.gina/run/` directory. Running `bundle:status` from a host shell reports it as `[ stopped ]` even when the container is up — use `docker ps` or `docker exec <container> gina bundle:status <bundle> @<project>` for the container-side view.
+:::
 
 ---
 
