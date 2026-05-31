@@ -350,8 +350,8 @@ tables. Avoid in hot paths.
 
 If your workload is heavily relational, prefer
 [PostgreSQL](/guides/models) or [MySQL](/guides/models). If you need a
-document store, prefer [Couchbase](/guides/couchbase-orm) or MongoDB
-(coming in `0.4.0`).
+document store, prefer [Couchbase](/guides/couchbase-orm) or
+[MongoDB](/guides/connectors-mongodb).
 
 ---
 
