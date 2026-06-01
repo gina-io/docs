@@ -68,13 +68,14 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **`bundle:status`** — Show the running/stopped state, PID, port, and active env for a specific bundle. Handler is comments only. | `0.4.0` | Q4 2026 |
-| 📋 | **`bundle:rename`** — Rename a bundle within a project, updating `manifest.json`, routing config, and the `src/` directory name. | `0.4.0` | Q4 2026 |
-| 📋 | **`protocol:remove`** — Remove a protocol assignment from a bundle. No handler file exists (help.txt also has a typo: "remouve"). | `0.4.0` | Q4 2026 |
-| 📋 | **`minion:kill` / `minion:list`** — Kill all orphaned Node.js child processes for a project, or list active minion PIDs grouped by bundle. No handler files exist. | `0.4.0` | Q4 2026 |
+| ✅ | **`bundle:status`** — Show the running/stopped state, PID, port, and active env for a specific bundle. | `0.4.1-alpha.2` | 2026-05-30 |
+| ✅ | **`bundle:rename`** — Rename a bundle in place within a project: moves the `src/` directory, rewrites the bundle-name footprint, and rekeys `manifest.json` + `env.json` + the ports registry preserving the existing port numbers, with `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-06-01 |
+| ✅ | **`protocol:remove`** — Revert a bundle to the project's default protocol/scheme by removing its `settings.json` override (no shared `ports*.json` mutation), with `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-05-31 |
+| ✅ | **`minion:list`** — List the running bundle child-processes ("minions") of a project, or of every project, grouped by project. `--format=json` supported. | `0.4.1-alpha.2` | 2026-05-31 |
+| ✅ | **`minion:kill`** — Reap a project's running bundle child-processes ("minions") — both pidfile-tracked and `ps`-discovered orphans — with a graceful SIGTERM/SIGKILL escalation and a `--dry-run` preview. | `0.4.1-alpha.2` | 2026-05-31 |
 | 📋 | **`gina --status` / `-t`** — Top-level health check: print whether the framework daemon is running, its version, and active bundle count. Requires `aliases.json` entries and a `framework/status.js` handler. | `0.4.0` | Q4 2026 |
-| 📋 | **`bundle:copy` / `bundle:cp`** — Duplicate a bundle (source files + config) under a new name within the same project. Handler is comments only. | `0.4.0` | Q4 2026 |
-| 📋 | **`project:status`** — Show the running/stopped state of each bundle in a project with PID and port info. Handler is comments only. | `0.4.0` | Q4 2026 |
+| ✅ | **`bundle:copy` / `bundle:cp`** — Duplicate a bundle (source files + config) under a new name within the same project, with a word-boundary name rewrite, a fresh full protocol/scheme/env port matrix, and `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-05-31 |
+| ✅ | **`project:status`** — Show the running/stopped state of each bundle in a project with PID and port info. | `0.4.1-alpha.2` | 2026-05-30 |
 
 ### Tier 3 — `0.5.0`
 

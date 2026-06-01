@@ -109,13 +109,59 @@ gina bundle:restart api @myproject
 
 ## `bundle:status`
 
-:::note Not yet implemented
-`bundle:status` is planned but the handler is not yet implemented. It will print the running/stopped state, PID, port, and active environment for a specific bundle.
-:::
+Show the running/stopped state, PID, preferred port, and active environment for a single bundle. Where [`bundle:list`](#bundlelist) answers "what bundles exist" and leads each line with a source-presence marker, `bundle:status` answers "is this one bundle running" and leads with the run-state label.
 
 ```bash
 gina bundle:status <bundle> @<project>
 ```
+
+```bash
+gina bundle:status api @myproject
+```
+
+Both the bundle name and `@<project>` are required.
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--format=json` | Emit a JSON payload instead of the human-readable line |
+
+### Output
+
+A single run-state-led line — the state label, the padded bundle name, the preferred port, and the PID when running:
+
+```text
+[ running ] api              http/2.0 dev https 4208  pid 12345
+```
+
+- **`[ running ]` / `[ stopped ]`** — probed from `~/.gina/run/<bundle>@<project>.pid` with `process.kill(pid, 0)`. A stale pidfile (the process exited) reports `[ stopped ]` without being deleted; pidfile clean-up stays with [`bundle:stop`](#bundlestop).
+- **`http/2.0 dev https 4208`** — preferred port. Read from `~/.gina/ports.reverse.json`. Precedence: `http/2.0 https` → `http/1.1 https` → `http/1.1 http`; `dev` env is preferred when present, otherwise the first environment in the record. A bundle with no allocated port renders as `(no port)`.
+- **`pid 12345`** — process id, appended only when the bundle is running.
+
+With `--format=json`, the command emits a single object:
+
+```json
+{
+  "bundle": "api",
+  "project": "myproject",
+  "running": true,
+  "pid": 12345,
+  "env": "dev",
+  "scheme": "http/2.0",
+  "protocol": "https",
+  "port": 4208,
+  "ports": {
+    "dev": { "http/1.1": { "http": 3000, "https": 3004 }, "http/2.0": { "https": 4208 } }
+  }
+}
+```
+
+When the bundle is not declared in the project's `manifest.json`, the command exits non-zero; with `--format=json` it emits `{"bundle":"api","project":"myproject","status":"not-found"}`. A missing or malformed `ports.reverse.json` is tolerated — the bundle renders as `(no port)` with `env` / `scheme` / `protocol` / `port` null and `ports: null`.
+
+:::caution Docker bundles
+A bundle running inside a Docker container writes its pidfile inside the container, not on the host `~/.gina/run/` directory. Running `bundle:status` from a host shell reports it as `[ stopped ]` even when the container is up — use `docker ps` or `docker exec <container> gina bundle:status <bundle> @<project>` for the container-side view.
+:::
 
 ---
 
@@ -181,6 +227,80 @@ Remove a bundle from a project. Unregisters it from `manifest.json`.
 ```bash
 gina bundle:remove <bundle> @<project>
 ```
+
+---
+
+## `bundle:copy`
+
+Duplicate a bundle's source files and configuration under a new name **within the same project**. Gina copies the source tree, rewrites the bundle-name footprint in the copied `.js`/`.json` files, allocates a fresh full protocol/scheme/env port matrix for the new name, and registers it in `manifest.json`, `env.json`, and the `~/.gina` ports registry.
+
+```bash
+gina bundle:copy <source> <new_name> @<project>
+```
+
+The alias `bundle:cp` is equivalent:
+
+```bash
+gina bundle:cp <source> <new_name> @<project>
+```
+
+The name rewrite is **word-boundary anchored** and limited to `.js`/`.json` files: it renames the controller class identifiers, the gina require-var, the `app.json` name, and the webroot — but never a name embedded inside a larger token — and it leaves user content in templates, SQL, and CSS untouched. A first-bundle webroot of `/` is repointed to `/<new_name>` so it does not collide with the source.
+
+Preview before writing with `--dry-run`. It lists every file the rewrite would touch (and the planned port and manifest changes) so a coincidental match can be reviewed before anything is written:
+
+```bash
+gina bundle:copy <source> <new_name> @<project> --dry-run
+gina bundle:copy <source> <new_name> @<project> --dry-run --format=json
+```
+
+Overwrite an existing target with `--force`:
+
+```bash
+gina bundle:copy <source> <new_name> @<project> --force
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview every rewrite site and the planned port/manifest changes without writing anything |
+| `--force` | Overwrite an existing destination bundle (removes its source tree and registry entries first) |
+| `--format=json` | Emit a JSON payload instead of the human-readable text |
+
+---
+
+## `bundle:rename`
+
+Rename a bundle **in place within the same project**. Gina moves the source tree to the new name, rewrites the bundle-name footprint in the moved `.js`/`.json` files, and rekeys `manifest.json`, `env.json`, and the `~/.gina` ports registry to the new name — **preserving the existing port numbers** (they are rekeyed, not reallocated).
+
+```bash
+gina bundle:rename <old> <new_name> @<project>
+```
+
+The name rewrite uses the same **word-boundary anchored** engine as `bundle:copy`, limited to `.js`/`.json` files: it renames the controller class identifiers, the gina require-var, the `app.json` name, and a name-derived webroot, but never a name embedded inside a larger token, and it leaves user content in templates, SQL, and CSS untouched.
+
+The bundle **must be stopped first** — gina refuses to rename a running bundle (its pidfile and process title would still carry the old name). This guard is **not** lifted by `--force`.
+
+Preview before writing with `--dry-run`. It lists every file the rewrite would touch so a coincidental match can be reviewed before anything is written:
+
+```bash
+gina bundle:rename <old> <new_name> @<project> --dry-run
+gina bundle:rename <old> <new_name> @<project> --dry-run --format=json
+```
+
+Overwrite an already-existing bundle of the new name with `--force` (this only overwrites a *different* bundle that already holds the new name — it does **not** bypass the running-bundle guard):
+
+```bash
+gina bundle:rename <old> <new_name> @<project> --force
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview every rewrite site and the planned port/manifest rekey without writing anything |
+| `--force` | Overwrite an existing destination bundle that already holds the new name (removes its source tree and registry entries first); does not bypass the running-bundle guard |
+| `--format=json` | Emit a JSON payload instead of the human-readable text |
 
 ---
 

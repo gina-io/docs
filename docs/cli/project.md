@@ -120,14 +120,95 @@ gina project:stop @<project>
 
 ## `project:status`
 
-Print the status of every bundle in a project.
+Show the running/stopped state, PID, and preferred port of each bundle in a project. The `@<project>` argument is optional — with no project given, `project:status` reports every registered project, mirroring [`project:list`](#projectlist).
 
 ```bash
 gina project:status @<project>
 ```
 
-:::caution Not yet implemented
-The `project:status` handler is a placeholder.
+Report a single project's bundles:
+
+```bash
+gina project:status @myproject
+```
+
+Report every registered project at once (no argument):
+
+```bash
+gina project:status
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--format=json` | Emit a JSON payload instead of the human-readable text table |
+
+### Output
+
+Each bundle is one run-state-led line — the state label, the padded bundle name, the preferred port, and the PID when running:
+
+```text
+[ running ] api              http/2.0 dev https 4208  pid 12345
+[ stopped ] web              http/1.1 dev http 3000
+```
+
+With no project argument, each project's bundles are grouped under a banner:
+
+```text
+------------------------------------
+myproject
+------------------------------------
+[ running ] api              http/2.0 dev https 4208  pid 12345
+[ stopped ] web              http/1.1 dev http 3000
+```
+
+- **`[ running ]` / `[ stopped ]`** — probed from `~/.gina/run/<bundle>@<project>.pid` with `process.kill(pid, 0)`. A stale pidfile reports `[ stopped ]` without being deleted; pidfile clean-up stays with [`bundle:stop`](/cli/cli-bundle#bundlestop).
+- **`http/2.0 dev https 4208`** — preferred port. Read from `~/.gina/ports.reverse.json`. Precedence: `http/2.0 https` → `http/1.1 https` → `http/1.1 http`; `dev` env is preferred when present, otherwise the first environment in the record. A bundle with no allocated port renders as `(no port)`.
+
+An unregistered project name exits non-zero with an error.
+
+With `--format=json`, a named project emits a flat array of per-bundle objects:
+
+```json
+[
+  {
+    "bundle": "api",
+    "project": "myproject",
+    "running": true,
+    "pid": 12345,
+    "env": "dev",
+    "scheme": "http/2.0",
+    "protocol": "https",
+    "port": 4208,
+    "ports": { "dev": { "http/2.0": { "https": 4208 } } }
+  },
+  {
+    "bundle": "web",
+    "project": "myproject",
+    "running": false,
+    "pid": null,
+    "env": "dev",
+    "scheme": "http/1.1",
+    "protocol": "http",
+    "port": 3000,
+    "ports": { "dev": { "http/1.1": { "http": 3000 } } }
+  }
+]
+```
+
+The no-argument form (every project) wraps each project's array in a `{ project, bundles }` envelope:
+
+```json
+[
+  { "project": "myproject", "bundles": [ /* per-bundle objects, as above */ ] }
+]
+```
+
+A missing or malformed `ports.reverse.json` is tolerated — each bundle renders as `(no port)` with null port fields.
+
+:::caution Docker bundles
+Bundles running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `project:status` from a host shell reports them as `[ stopped ]` even when the container is up — use `docker ps` or `docker exec <container> gina project:status @<project>` for the container-side view.
 :::
 
 ---

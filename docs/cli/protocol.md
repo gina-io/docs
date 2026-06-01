@@ -3,7 +3,7 @@ id: cli-protocol
 title: protocol
 sidebar_label: protocol
 sidebar_position: 10
-description: CLI reference for gina protocol commands — list and set the HTTP protocol and scheme for Gina projects and bundles.
+description: CLI reference for gina protocol commands — list, set, and remove the HTTP protocol and scheme for Gina projects and bundles.
 level: intermediate
 prereqs:
   - '[settings.json](/reference/settings)'
@@ -45,3 +45,32 @@ gina protocol:set <bundle> @<project>
 gina protocol:set @myproject
 gina protocol:set api @myproject
 ```
+
+---
+
+## `protocol:remove`
+
+Revert a bundle to your project's **default** protocol and scheme by removing the
+bundle's protocol override. Only the bundle's `config/settings.json` is changed —
+the shared `ports.json` / `ports.reverse.json` are left untouched (`project:add`
+pre-allocates every protocol's port, so the default-protocol port already exists).
+
+```bash
+gina protocol:remove <bundle> @<project>
+gina protocol:remove <bundle> @<project> --dry-run
+gina protocol:remove <bundle> @<project> --dry-run --format=json
+```
+
+A `<bundle>` is required (bundle-scoped). At config-load time Gina fills an absent
+`server.protocol` / `server.scheme` from the project default, so removing the
+override is safe. If the bundle has no port allocated for the default protocol,
+the command refuses and points you at `protocol:set` (override with `--force`).
+Restart the bundle afterwards.
+
+:::tip
+Preview first with `--dry-run`:
+
+```text
+[ dry-run ] would revert [ api@myproject ] from http/2.0/https to the project default http/1.1/http (no changes written).
+```
+:::
