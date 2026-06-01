@@ -269,6 +269,41 @@ gina bundle:copy <source> <new_name> @<project> --force
 
 ---
 
+## `bundle:rename`
+
+Rename a bundle **in place within the same project**. Gina moves the source tree to the new name, rewrites the bundle-name footprint in the moved `.js`/`.json` files, and rekeys `manifest.json`, `env.json`, and the `~/.gina` ports registry to the new name — **preserving the existing port numbers** (they are rekeyed, not reallocated).
+
+```bash
+gina bundle:rename <old> <new_name> @<project>
+```
+
+The name rewrite uses the same **word-boundary anchored** engine as `bundle:copy`, limited to `.js`/`.json` files: it renames the controller class identifiers, the gina require-var, the `app.json` name, and a name-derived webroot, but never a name embedded inside a larger token, and it leaves user content in templates, SQL, and CSS untouched.
+
+The bundle **must be stopped first** — gina refuses to rename a running bundle (its pidfile and process title would still carry the old name). This guard is **not** lifted by `--force`.
+
+Preview before writing with `--dry-run`. It lists every file the rewrite would touch so a coincidental match can be reviewed before anything is written:
+
+```bash
+gina bundle:rename <old> <new_name> @<project> --dry-run
+gina bundle:rename <old> <new_name> @<project> --dry-run --format=json
+```
+
+Overwrite an already-existing bundle of the new name with `--force` (this only overwrites a *different* bundle that already holds the new name — it does **not** bypass the running-bundle guard):
+
+```bash
+gina bundle:rename <old> <new_name> @<project> --force
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Preview every rewrite site and the planned port/manifest rekey without writing anything |
+| `--force` | Overwrite an existing destination bundle that already holds the new name (removes its source tree and registry entries first); does not bypass the running-bundle guard |
+| `--format=json` | Emit a JSON payload instead of the human-readable text |
+
+---
+
 ## `bundle:list`
 
 List the bundles registered in a project, each annotated with src-existence, a preferred-port summary, and host-side running state.
