@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Jinja2 Non-Goals
 sidebar_label: Non-Goals
 sidebar_position: 3
-description: Python Jinja2 features that @rhinostone/swig-jinja2 throws on at parse time or does not implement — sandboxed rendering, call/do/trans tags, the map/select filter family, macro kwargs, dynamic extends/import/from, bracket-notation set. Explicit rather than silent.
+description: Python Jinja2 features that @rhinostone/swig-jinja2 throws on at parse time or does not implement — sandboxed rendering, call/do/trans tags, the map/select filter family, macro kwargs, dynamic import/from, bracket-notation set. Explicit rather than silent. (Dynamic extends is supported on the async render path.)
 level: intermediate
 prereqs:
   - '[Overview](./)'
@@ -85,29 +85,37 @@ Workarounds:
   ```
 - Order positional parameters from most- to least-commonly-passed so defaults "fall off the right."
 
-## Dynamic `{% extends %}` / `{% import %}` / `{% from %}`
+## Dynamic `{% extends %}`
 
-All three require the path to be a **string literal**. Expressions throw:
+A dynamic parent — `{% extends parent_template %}` or `{% extends full if cond else partial %}` — **resolves on the async render path**: `renderFile(path, locals, cb)` against a loader that sets `loader.async === true`. The async-codegen path lowers the parent to a deferred expression and resolves it at render time through the loader. See [Async loaders](../swig/loaders#async-loaders).
 
-| Shape | Accepted? | Error |
+| Shape | Sync render path | Async render path (`loader.async === true`) |
 | --- | --- | --- |
-| `{% extends "base.jinja2" %}` | Yes | — |
-| `{% extends parent_template %}` | No | `Dynamic "extends" is not supported — parent path must be a string literal` |
-| `{% import "macros.jinja2" as f %}` | Yes | — |
-| `{% import dynamic_path as f %}` | No | `Dynamic "import" is not supported — path must be a string literal` |
-| `{% from "macros.jinja2" import label %}` | Yes | — |
-| `{% from dynamic_path import label %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+| `{% extends "base.jinja2" %}` | Yes | Yes |
+| `{% extends parent_template %}` | No — resolved at compile time | Yes |
+| `{% extends full if cond else partial %}` | No — resolved at compile time | Yes |
 
-Rationale: swig walks the inheritance/import chain at parse time so it can cache compiled templates by resolved filename. A dynamic path would either break that caching or require a runtime loader path the built-in loaders do not support. The string-literal requirement keeps compiled output deterministic and lets the shared cache work.
+On the **synchronous** render path the parent link is resolved at compile time, before any runtime value exists, so a dynamic parent surfaces a template-not-found / "no filename" error.
 
-Workaround for `extends`: **dispatch in the caller** and render the selected template directly.
+Sync-path workaround: **dispatch in the caller** and render the selected template directly.
 
 ```js
 var template = (flavor === 'admin') ? 'page_admin.jinja2' : 'page_public.jinja2';
 jinja2.renderFile(template, { /* locals */ });
 ```
 
-`{% include %}` is not affected — its path can be any expression.
+## Dynamic `{% import %}` / `{% from %}`
+
+Both require the path to be a **string literal**. Expressions throw:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% import "macros.jinja2" as f %}` | Yes | — |
+| `{% import dynamic_path as f %}` | No | `Dynamic "import" is not supported — path must be a string literal` |
+| `{% from "macros.jinja2" import label %}` | Yes | — |
+| `{% from dynamic_path import label %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+
+`{% include %}` is not affected — its path can be any expression (and resolves dynamically on the async render path too).
 
 ## Bracket-notation `set`
 

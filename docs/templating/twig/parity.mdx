@@ -82,7 +82,7 @@ twig.render('{{ n is positive ? "yes" : "no" }}', { locals: { n: 3 } });
 | `if` / `endif` | Yes | Yes | Yes | `{% else %}` and `{% elseif %}` branches deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
 | `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
 | `block` / `endblock` | Yes | Yes | Yes | Named block for template inheritance. |
-| `extends` | No | Yes | Yes | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
+| `extends` | No | Yes | Yes | Dynamic parent (`{% extends var %}`, `{% extends cond ? "a.twig" : "b.twig" %}`) resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | Yes | Yes | Supports `with { … }` and `only`. |
 | `macro` / `endmacro` | Yes | Yes | Yes | Kwargs deferred — see [Non-Goals](./non-goals#macro-kwargs). |
 | `import` | No | Yes | Yes | `{% import "file.twig" as forms %}`. |

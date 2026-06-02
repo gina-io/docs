@@ -158,19 +158,13 @@ See [Browser Usage](./browser) for the full workflow.
 
 When your templates live behind an asynchronous source — S3, Redis, a CDN, an HTTP endpoint — the sync arm of `load` is unreachable. Without it, neither the core sync `render` / `compile` nor the sync-cb form of `renderFile` / `compileFile` against a dual-mode loader can resolve nested `{% extends %}`, `{% include %}`, or `{% import %}` during compilation.
 
-Available since `v2.2.0`, the cb form of [`renderFile(path, locals, cb)`](./api#renderfile) and [`compileFile(path, { codegenMode: 'async' }, cb)`](./api#async-codegen) closes the gap. Set `loader.async === true` on the loader object and the dispatch automatically routes through the async-codegen path: pre-walk the template's dependency graph asynchronously through the user loader's `load(id, cb)` arm, populate an in-memory map keyed by resolved path, then run the existing sync pipeline against a memory wrapper for the duration of the call.
+Available since `v2.2.0`, the cb form of [`renderFile(path, locals, cb)`](./api#renderfile) and [`compileFile(path, { codegenMode: 'async' }, cb)`](./api#async-codegen) closes the gap. Set `loader.async === true` on the loader object and the dispatch automatically routes through the async-codegen path: the compiled body is an `AsyncFunction`, and each nested template (the `extends` parent, an `include`, an `import` / `from` source) is resolved **at render time** through the user loader's `load(id, cb)` arm via `_swig.getTemplate(path)`, awaiting each as it is reached.
 
 Dispatch is **explicit-flag only** — `load.length` is not consulted. The built-in dual-mode loaders (`swig.loaders.fs()` and `swig.loaders.memory()`) keep their existing sync-cb path. Opt-in is per-loader via the `async: true` flag.
 
-### Static-path requirement
+### Dynamic paths
 
-The pre-walker text-scans each loaded template for static `{% extends "…" %}`, `{% include "…" %}`, and `{% import "…" %}` targets (plus `{% from "…" import … %}` in `@rhinostone/swig-twig`). **String literals only** — dynamic paths surface at render time as:
-
-```text
-Error: Pre-walked map missing path: "/some/template"
-```
-
-Use a string-literal parent (or an `{% if %}` chain that selects one of N literal parents) when targeting an async-only loader. Full async-parse support for dynamic paths is tracked separately.
+Because each nested template is resolved at render time, the cb dispatch handles **dynamic** `{% include path_var %}` and `{% extends layout_var %}` paths — the path expression is evaluated against the locals and the template fetched on demand. `{% import %}` / `{% from %}` still require string-literal paths (a dynamic path throws at parse time — see each flavor's Non-Goals). The legacy pre-walker entry-points (below) are static-only for all of these tags.
 
 ### Example — fetch-backed loader
 
@@ -225,11 +219,11 @@ Do **not** reassign `instance.options.loader` from outside while an async render
 
 ### Twig flavor
 
-`@rhinostone/swig-twig` exposes the same `renderFile` cb dispatch + `compileFile { codegenMode: 'async' }` shapes on both the default singleton and any `new twig.Twig({…})` instance. The Twig pre-walker additionally scans `{% from "macros.twig" import … %}` — the keyword Twig uses to import individual macros — so macro libraries imported via `from` are pre-resolved alongside `extends` / `include` / `import` targets.
+`@rhinostone/swig-twig` exposes the same `renderFile` cb dispatch + `compileFile { codegenMode: 'async' }` shapes on both the default singleton and any `new twig.Twig({…})` instance, including Twig's `{% from "macros.twig" import … %}` — the keyword Twig uses to import individual macros — resolved at render time alongside `extends` / `include` / `import` like the other flavors.
 
 ### Legacy `v2.1.0` entry-points
 
-For users still on `@rhinostone/swig@2.1.0`, the `renderFileAsync(path, locals, cb)` / `compileFileAsync(path, options, cb)` methods cover the same async-loader case. They share the pre-walker mechanism and the static-path requirement above. Both methods are **soft-deprecated in `v2.2.0`** (JSDoc-only — no runtime warning) and will be removed in `v3.0`; new code should target the `renderFile` / `compileFile` cb path described above.
+For users still on `@rhinostone/swig@2.1.0`, the `renderFileAsync(path, locals, cb)` / `compileFileAsync(path, options, cb)` methods cover the same async-loader case via a different mechanism — a static **pre-walker** that text-scans each template for string-literal `{% extends "…" %}` / `{% include "…" %}` / `{% import "…" %}` targets (plus `{% from "…" %}` in `@rhinostone/swig-twig`), builds an in-memory map, then runs the sync pipeline against it. Dynamic paths are **not** supported on this legacy path — they surface as `Error: Pre-walked map missing path: "<id>"`. Both methods are **soft-deprecated in `v2.2.0`** (JSDoc-only — no runtime warning) and will be removed in `v3.0`; new code should target the `renderFile` / `compileFile` cb path described above.
 
 Same loader from the example, called via the legacy entry-point:
 
