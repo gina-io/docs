@@ -31,8 +31,8 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Q2 2026** | `0.3.11` ✅ | Internationalisation (#I18N1 + #I18N2 — per-bundle catalogs, `t()` / `self.t()` / template filter, CLDR plurals, ICU MessageFormat) · Prometheus metrics endpoint `/_gina/metrics` (#OBS1) · ScyllaDB / Cassandra ORM connector + session store (#CN5) · MongoDB ORM connector + session store (#CN6) · `@rhinostone/swig` 1.6 → 2.0.1 major bump · `page.section` auto-promotion · X-Forwarded-Prefix per-request isolation · `def_framework` drift defensive gates |
 | **Q2 2026** | `0.3.12` ✅ | Spec-correct `+` decoding in URL query strings + urlencoded bodies (Isaac engine + body parser; #B17) · Render-pipeline async-race safety (#M1 family — `local.req`/`res`/`next` captures in render-swig/nunjucks/json + atomic temp+rename for dev-mode layout cache) · FormValidator form-reassociated radio serialization scoping · `@rhinostone/swig` floor bumped to `^2.2.0` |
 | **Q2 2026** | `0.3.13` ✅ | `${secret:KEY}` config placeholder resolver (`settings.csrf.secret` + `mcp.json` support) · PWA scaffold for `view:add` · application-level HTTP/2 rapid-reset rate limiter · eval-safety campaign completion (feature-intrinsic design pass + logger circular-require refactor) · `@rhinostone/swig` floor → `^2.3.0` · `refreshCore()` hot-reload fix |
-| **Q4 2026** | `0.4.0` | AI agents (MCP) · ScyllaDB connector · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · Trailer support · Beemaster core · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
-| **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Beemaster admin · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) |
+| **Q4 2026** | `0.4.0` | AI agents (MCP) · ScyllaDB connector · Advanced tutorial · Website redesign · Docs offline ZIP · Bun investigation · Couchbase v2 removal · Trailer support · CLI Tier 2 (bundle/project status, rename, copy, protocol:remove, minions) |
+| **Q1 2027** | `0.5.0` | ESM support · Template engine migration · Structured logging · Alt-Svc · HTTP/2 priorities · WebSocket over HTTP/2 · Inspector Production · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
 ---
@@ -336,45 +336,42 @@ Windows compatibility is a hard requirement for `1.0.0`. The alpha scope covers 
 
 ---
 
-## Beemaster
+## Inspector
 
-Standalone gina dev and admin tool. A dedicated browser-tab app (`services/src/beemaster/`) served on port 4101 alongside the gina dev server. Replaces the in-page toolbar with a thin status bar and brings all tooling and management into an isolated, full-size UI.
+Gina's built-in per-bundle inspector. Phases 1–2 ship as an embedded SPA at `/_gina/inspector/` inside every bundle's own HTTP server (dev mode). Phase 3 evolves it into a standalone web app served by `services/src/inspector/` that can connect to any bundle in any environment — including production. Beemaster (global admin app) is a separate project — also the planned home for content-management surfaces such as the **i18n translation editor** (the visual layer of i18n core).
 
-**Why a standalone app:** The in-page toolbar pollutes the app DOM, causes CSS/JS conflicts, and cannot scale to admin-level operations. Beemaster runs outside the app page — no DOM conflicts, full UI real estate, and works for both local and remote/K8s gina instances. An optional browser extension companion can be built on top later (Phase 4).
+**Why a standalone web app:** Electron is heavy and adds distribution burden. A browser extension is browser-specific and can't inspect from a different machine. The standalone web app works locally and remotely, any browser, zero install. A browser extension companion can be layered on top later.
 
 ### Phase 1 — Decouple in-page toolbar
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| ✅ | **Thin in-page status bar** — Replaces the in-page toolbar bundle. A `<script>` tag included from `statusbar.html` creates a Shadow DOM host (`#__gina-statusbar`, fixed bottom-right) in dev mode. Shows a status dot (green = ok, red = `data.error` set), `bundle@env`, and an "Open Beemaster" link to port 4101. Pure vanilla JS — no RequireJS, no jQuery, no SASS. Shadow DOM provides full CSS isolation. `gina.js` toolbar still loads but silently deactivates (`#gina-toolbar` absent → `!$toolbar.length` guard). | `0.3.0` | 2026-04-01 |
-| ✅ | **`window.__ginaData`** — Replace the `<pre>` tag data embedding with a single `<script>window.__ginaData={...}</script>` tag (dev mode only). Smaller page weight, no DOM nodes to scrape. Beemaster reads it on connect via `window.opener` or a `postMessage` handshake. `gina` and `user` sub-objects built in Node.js (no Swig serialization); `</script>` and `<!--` sequences escaped. Toolbar JS reads `window.__ginaData` directly; mock file-upload writes back to it. | `0.3.0` | 2026-04-01 |
-| ✅ | **Gina infrastructure port range 4100–4199** — Reserved exclusively for Gina's own services; never assigned to bundle HTTP servers. `gina port:scan` skips this range automatically (RFC 6335 user-assigned space). Layout: `4100` = socket server (future migration from 8124), `4101` = Beemaster dev inspector, `4102` = engine.io internal transport, `4103–4199` = future Gina services. `settings.json` `engine.io.port` moved from `8888` (Jupyter Notebook conflict) to `4102`. `statusbar.html` Beemaster link reads `env.beemasterPort` from `window.__ginaData` with fallback to `4101`. | `0.3.0-alpha.1` | 2026-04-01 |
+| ✅ | **Thin in-page status bar** — Shadow DOM host (`#__gina-statusbar`, fixed bottom-right) in dev mode. Status dot, `bundle@env`, "Open Inspector" link to `/_gina/inspector/`. Pure vanilla JS — no RequireJS, no jQuery, no SASS. | `0.3.0` | 2026-04-01 |
+| ✅ | **`window.__ginaData`** — Replace `<pre>` tag data embedding with `<script>window.__ginaData={...}</script>` (dev mode only). Inspector reads via `window.opener` or `postMessage`. | `0.3.0` | 2026-04-01 |
+| ✅ | **Gina infrastructure port range 4100–4199** — Reserved for Gina infrastructure. `4100` = socket server (future), `4101` = Inspector standalone (future), `4102` = engine.io transport. Inspector currently served at `/_gina/inspector/` (same origin, no dedicated port). | `0.3.0-alpha.1` | 2026-04-01 |
 
-### Phase 2 — Beemaster core
-
-| Status | Feature | Version | Target |
-| --- | --- | --- | --- |
-| 📋 | **Bundle scaffold** — `services/src/beemaster/` gina bundle on port 4101. Single-page app with tab navigation. Auto-starts with the gina dev server when `NODE_ENV_IS_DEV=true`. Replaces the empty `services/src/toolbar/` skeleton. | `0.4.0` | Q4 2026 |
-| 📋 | **Toolbar tab** — Full toolbar UI (Data, View, Forms, Configuration, Routing sub-tabs) migrated from in-page injection to Beemaster. Copy-to-clipboard and value inspector features carry over. | `0.4.0` | Q4 2026 |
-| 📋 | **Real-time data via engine.io** — Wire the already-bundled `engine.io-client` to port 8125. Data, log events, and XHR activity stream in real time over a persistent socket. Replaces the current page-snapshot model. | `0.4.0` | Q4 2026 |
-| 📋 | **Logs tab** — Real-time log tail with level filter (debug/info/warn/error), bundle filter, text search, and pause/resume. Replaces the current stub Logs tab (no implementation). | `0.4.0` | Q4 2026 |
-
-### Phase 3 — Admin
+### Phase 2 — Inspector core
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Auth layer** — Token-based auth gate for all write operations. Read-only tabs (Toolbar, Logs, Routing) are unauthenticated in local dev. Write operations always require the token. Required before admin tabs are safe to use. | `0.5.0` | Q1 2027 |
-| 📋 | **Bundles tab** — List running and stopped bundles. Actions: start, stop, restart, build — dispatches the equivalent `gina bundle:*` command. Real-time status updates via engine.io. | `0.5.0` | Q1 2027 |
-| 📋 | **Projects tab** — List registered gina projects. Actions: add, remove, view config (`app.json`, `routing.json`, `connectors.json`) with syntax highlighting. | `0.5.0` | Q1 2027 |
-| 📋 | **DB connectors tab** — View all connectors across registered bundles (Couchbase, SQLite, Redis, MySQL, PostgreSQL, ScyllaDB). Connection status, latency, test connection button. Credentials always masked. | `0.5.0` | Q1 2027 |
-| 📋 | **Query inspector** — Live entity query log: connector type, query text, parameters, duration (ms), row count. Delivered via engine.io. Filters: connector, bundle, slow query threshold. | `0.5.0` | Q1 2027 |
+| ✅ | **Embedded SPA at `/_gina/inspector/`** — Served by the bundle's own HTTP server in dev mode. Engine-agnostic handler in `server.js` `onRequest()`. Same origin — `window.opener.__ginaData` always accessible. | `0.3.0-alpha.1` | 2026-04-02 |
+| ✅ | **Data tab** — Full inspection UI (Data, View, Forms, Configuration, Routing sub-tabs). `renderTree()` for collapsible JSON trees; click-to-copy on leaf values. Routing tab fetches `/_gina/assets/routing.json`. | `0.3.0-alpha.1` | 2026-04-02 |
+| ✅ | **Real-time data via engine.io** — Push-based data updates when engine.io is configured. | `0.3.0-alpha.1` | 2026-04-02 |
+| ✅ | **Logs tab** — Real-time log tail with level filter, source filter (Client/Server), text search, pause/resume. Client logs via `window.__ginaLogs`; server logs via SSE (`/_gina/logs`). | `0.3.0-alpha.1` | 2026-04-02 |
+| ✅ | **Query tab** — Per-request query instrumentation via AsyncLocalStorage in the Couchbase connector. Cross-bundle propagation via `__ginaQueries` JSON sidecar. Split trigger badge (entity\|method), SQL syntax highlighting, params table, free-text search. Tagged with `origin` (bundle) and `connector`. | `0.3.0-alpha.1` | 2026-04-03 |
+| ✅ | **Remove legacy toolbar from `gina.min.js`** — Toolbar AMD module removed from RequireJS bundle. The `statusbar.html` shim is now the sole provider of `window.ginaToolbar` in dev mode. Guard fixes in `events.js` (unguarded call, `typeof == 'object'` null bug). Source directory retained for reference. | `0.3.0-alpha.1` | 2026-04-03 |
+| ✅ | **Reorganize Inspector source to match plugin conventions** — Source moved into `html/`, `css/`, `js/`, `sass/` subdirectories. CSS converted to SCSS with nesting. Build script Phase 2 skips Inspector; Phase 3 compiles SCSS and copies to flat dist. Inspector CSS served separately, not concatenated into `gina.min.css`. | `0.3.0-alpha.1` | 2026-04-04 |
 
-### Phase 4 — Advanced
+### Phase 3 — Production
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Multi-instance support** — Connect Beemaster to remote gina instances (staging, K8s) by entering a host:port. Each instance appears as a named environment tab. | post-1.0.0 | — |
-| 📋 | **Browser extension companion** — Chrome/Firefox DevTools panel that embeds a Beemaster view in F12, connecting to the local instance via WebSocket. Optional enhancement on top of the standalone app — not a replacement. | post-1.0.0 | — |
+| 🔨 | **`services/src/inspector/` standalone bundle** — ~~Rename `services/src/toolbar/` to `services/src/inspector/`~~ (done). **Authenticated WebSocket transport shipped** (`0.4.3-alpha`): the standalone Inspector connects to a bundle's `/_gina/agent` over a WebSocket (`?transport=ws`) as well as SSE — key-authenticated outside dev mode, with an optional `inspector.agent.allowedOrigins` Origin allowlist; it falls back to SSE automatically if the socket can't open. The embedded SPA at `/_gina/inspector/` remains for quick dev-mode access. Remaining: dev auto-start of the standalone bundle (deferred — the bundle is local-only, so it benefits only a maintainer with a scaffolded services project). | `0.5.0` | Q1 2027 |
+| ✅ | **Agent endpoint — dev-mode SSE (`/_gina/agent`)** — Combined data + log SSE stream. CORS, server.js + server.isaac.js (HTTP/2), Inspector SPA `tryAgent()` with `?target=` param. Named events (`event: data`, `event: log`). Manual connect form on "No source" overlay. | `0.3.0` | 2026-04-05 |
+| ✅ | **Agent endpoint — production auth** — **Authenticated `/_gina/agent` + production-safe toggle shipped via the existing SSE transport** (opt-in `inspector.agent.enabled` + key in `settings.json`, constant-time compare, `${secret:KEY}`-capable; key via the `x-gina-inspector-key` header or a `?key=` query param; dev stays open + keyless). Authenticates remote server-log streaming outside dev mode. **WebSocket transport completed** (`0.4.3-alpha`): the standalone Inspector now connects over the #INS8 WebSocket by default (`?transport=sse` forces SSE) with automatic SSE fallback; auth + prod-toggle contract unchanged. | `0.5.0` | 2026-06-02 |
+| ✅ | **Toggleable instrumentation** — Runtime toggle for query + flow instrumentation independent of `NODE_ENV_IS_DEV`: a time-boxed, key-authenticated window (`POST /_gina/instrument`) runs capture in production over the authenticated `/_gina/agent` channel, without full dev mode. Opt-in via `inspector.instrumentation`; 3600s hard cap with auto-revert. **v1 shipped 2026-05-26** (JSON/XHR + cross-bundle egress); the server-rendered HTML-page-render egress follow-up also shipped 2026-05-26 (a separate HTML-free emit path wired per render delegate). | `0.5.0` | 2026-05-26 |
+| 📋 | **Multi-bundle dashboard** — Discover all running bundles via `ports.json`, connect to each agent. Full-stack request tracing across bundle boundaries. | post-1.0.0 | — |
+| 📋 | **Browser extension companion** — Chrome/Firefox DevTools panel. Thin UI shell connecting to the standalone Inspector via WebSocket. Optional — not a replacement. | post-1.0.0 | — |
 
 ---
 
@@ -400,4 +397,4 @@ Standalone gina dev and admin tool. A dedicated browser-tab app (`services/src/b
 
 ---
 
-*Last updated: 2026-04-16 (0.3.6 shipped — Inspector redaction, pre-commit & CI local-tool path guards, Whisper Error fix, CORS preflight fix, syncDocs lockfile regen) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
+*Last updated: 2026-06-02 (0.4.1 shipped; Inspector standalone-app track renamed from Beemaster, authenticated WebSocket agent transport documented) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
