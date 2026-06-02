@@ -3,17 +3,17 @@ id: cli-service
 title: service
 sidebar_label: service
 sidebar_position: 11
-description: CLI reference for gina service commands — list framework-internal services (bundles registered under @gina) with port summary and running state.
+description: CLI reference for gina service commands — start and list framework-internal services (bundles registered under @gina) via the daemon-free gina-container launcher.
 level: intermediate
 prereqs:
   - '[Gina installed globally](/getting-started/installation)'
   - '[CLI bundle reference](/cli/cli-bundle)'
 ---
 
-The `service` command group lists **framework-internal services** — bundles that ship alongside gina and run as companion processes (currently `proxy` and `inspector`). These services are registered under the reserved `@gina` project.
+The `service` command group **starts and lists framework-internal services** — bundles that ship alongside gina and run as companion processes (currently `proxy` and `inspector`). These services are registered under the reserved `@gina` project.
 
 :::info Gina-internal surface
-`service:list` currently rejects any project other than `@gina`. User-defined services are not a surface yet — use [`bundle:list`](/cli/cli-bundle#bundlelist) for bundles in user projects.
+`service:list` and `service:start` currently reject any project other than `@gina`. User-defined services are not a surface yet — use [`bundle:list`](/cli/cli-bundle#bundlelist) for bundles in user projects.
 :::
 
 ---
@@ -69,6 +69,42 @@ A missing or malformed `ports.reverse.json` is tolerated — the command still r
 
 :::caution Docker bundles
 Services running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `service:list` from a host shell will report them as `(stopped)` even when the container is up — use `docker ps` or `docker exec <container> gina service:list` for the container-side view.
+:::
+
+---
+
+## `service:start`
+
+*New in 0.4.3-alpha*
+
+Start a framework-internal service — a bundle registered under the `@gina` project — using the daemon-free `gina-container` launcher (no `gina start` socket server required).
+
+```bash
+gina service:start inspector
+```
+
+The service runs in the `@gina` project's own `dev` / `local` defaults; the calling shell's `NODE_ENV` / `NODE_SCOPE` are not propagated. Use [`bundle:start`](/cli/cli-bundle#bundlestart) when you need explicit env/scope control, and [`bundle:stop`](/cli/cli-bundle#bundlestop) `inspector @gina` to stop a running service.
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Print the launch command that would run, without spawning anything |
+| `--format=json` | Emit a JSON result payload instead of text |
+
+### Behaviour
+
+- **Already running** → no-op (success). A live `~/.gina/run/<service>@gina.pid` short-circuits the spawn, so repeated calls never create duplicate processes.
+- **Source missing** → error. `services/` ships in neither git nor npm, so in a fresh `npm install gina` the service source is absent and the command reports there is nothing to start.
+
+With `--format=json`:
+
+```json
+{ "service": "inspector", "src": "src/inspector", "started": true, "running": false, "pid": 60517 }
+```
+
+:::info Dev auto-start
+In **dev mode** the standalone Inspector auto-starts when one of your bundles boots — there is no need to run `service:start` by hand. The auto-start is a no-op unless the framework `services/` project is scaffolded locally (it ships in neither git nor npm), and it never fires from a `@gina` service itself. The embedded SPA at `/_gina/inspector/` is always available for quick dev access.
 :::
 
 ---
