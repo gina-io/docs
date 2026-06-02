@@ -19,6 +19,38 @@ upward to the target version.
 
 ---
 
+## 0.4.1 → 0.4.2
+
+`0.4.2` is an additive release — **no breaking changes and no settings reset.** Every change is opt-in or a fix; existing bundles run unchanged.
+
+### What's new — Alt-Svc HTTP/3 advertisement (opt-in)
+
+Gina can now advertise HTTP/3 (QUIC) availability so capable browsers upgrade automatically — **without Gina implementing QUIC itself.** A QUIC-capable edge proxy ([Caddy](https://caddyserver.com/), [nginx with QUIC](https://nginx.org/en/docs/http/ngx_http_v3_module.html), or [Cloudflare](https://developers.cloudflare.com/speed/optimization/protocol/http3/)) terminates HTTP/3 on :443; Gina just announces it.
+
+Enable it per bundle in `config/settings.server.json` (or set the framework default in `settings.json`):
+
+```jsonc
+{
+    "webroot": "/",
+    "http3Advertisement": true
+}
+```
+
+Every routed response then carries:
+
+```
+Alt-Svc: h3=":443"; ma=86400
+```
+
+`:443` is the edge's public QUIC port — not the bundle's internal listen port. The header is **off by default** (zero behaviour change when unset) and **idempotent**: if an upstream proxy already set `Alt-Svc`, Gina does not overwrite it. Native QUIC remains out of scope — this is advertisement-only.
+
+### Also fixed
+
+- **`gina-container` 500 on HTML routes** — the Docker/K8s foreground launcher no longer returns HTTP 500 on every view render. The controller read the `GINA_PID` / `GINA_CULTURE` globals directly, which the daemonless launcher does not inject; it now falls back to the bundle process id and the default culture.
+- **Layoutless `page.data` restored** — layoutless (`renderWithoutLayout`) fragment renders again expose controller data under `page.data` as well as at top level, so templates reading `data.X` / `page.data.X` (via `{% set data = page.data %}`) keep working. The 0.4.1 top-level-variable change had populated only the top level; this now matches the nunjucks engine.
+
+---
+
 ## 0.4.0 → 0.4.1
 
 `0.4.1` is a maintenance and developer-experience release — **no breaking changes and no settings reset.** It adds the Tier 2 CLI commands and a runtime template override (`self.setTemplate()`), plus a set of fixes (most notably full nunjucks↔swig render parity). Every change is additive; existing bundles run unchanged.
