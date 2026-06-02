@@ -99,6 +99,8 @@ Tags explicitly **not implemented** (throw at parse time):
 
 See [Non-Goals](./non-goals) for the full list and the error messages they produce.
 
+**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template.
+
 ## Filters
 
 `@rhinostone/swig-twig` ships 24 built-in filters. They live in `packages/swig-twig/lib/filters.js`.
