@@ -26,8 +26,8 @@ flowchart TD
   B -->|Yes| F[Rewrite with extends + include + custom tag]
   B -->|No| C{Uses macro kwargs?}
   C -->|Yes| G[Switch to positional args or object literal]
-  C -->|No| D{Uses dynamic extends or from?}
-  D -->|Yes| H[Wrap with if/else to pick a string-literal parent]
+  C -->|No| D{Uses dynamic from?}
+  D -->|Yes| H[from path must be a string literal - inline or import statically]
   D -->|No| E{Uses filter with different semantics?}
   E -->|Yes| I[Review filter deltas]
   E -->|No| OK[Template ports as-is]
@@ -110,7 +110,7 @@ See [Extending Swig](../swig/extending) for the registration contract.
 
 Two semantic differences from upstream:
 
-- **Parent paths must be string literals.** See [Non-Goals — dynamic extends](./non-goals#dynamic--extends--and--from-). The `{% if %}` / `{% extends %}` workaround covers the common "pick one of N layouts" case.
+- **Dynamic parent paths resolve on the async render path only.** `{% extends layout_var %}` works under `renderFile(path, locals, cb)` with `loader.async === true`; the synchronous path requires a string-literal parent (dispatch the chosen parent in the caller). See [Non-Goals — dynamic extends](./non-goals#dynamic-extends) and [Async loaders](../swig/loaders#async-loaders).
 - **`{% use %}` (horizontal reuse) is not implemented.** See [Non-Goals — unsupported tags](./non-goals#unsupported-tags). Use `{% extends %}` + `{% include %}` composition.
 
 ### Runtime model

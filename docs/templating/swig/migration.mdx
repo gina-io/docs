@@ -49,6 +49,8 @@ Constructs available in every engine. Anything not listed here likely differs �
 
 Template inheritance is single-parent in all four — no mixins, no multiple inheritance. Comments cannot be nested in any of them.
 
+A **dynamic** parent — `{% extends layout_var %}` — resolves in Swig on the async render path (`renderFile(path, locals, cb)` with `loader.async === true`); the synchronous path requires a string-literal parent. See [Loaders — Async loaders](./loaders#async-loaders). (Jinja2 and Twig resolve dynamic parents at render time by default — the async render path is Swig's equivalent.)
+
 ## Engine-specific gaps
 
 Pick your source engine. The shared reference (filter parity, operators, autoescape, checklist) is below.
