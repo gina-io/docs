@@ -53,6 +53,37 @@ swig.setFilter('badge', badge);
 
 If you forget `.safe = true` on a filter that already contains HTML, the output will be double-escaped. If you add it incorrectly, you create an XSS vector — see [Security](./security#autoescape-is-the-only-default-xss-protection).
 
+### Swapping in a faster escape
+
+The built-in `escape` / `e` filter preserves already-escaped entities — `&amp;` stays `&amp;` rather than becoming `&amp;amp;`. That entity-preserving lookahead costs a little throughput. If you are escape-bound in a hot path **and** your data contains no pre-escaped HTML entities, you can swap in a faster one-pass escaper:
+
+```js
+var swig = require('@rhinostone/swig');
+var slowEscape = require('@rhinostone/swig/lib/filters').escape; // default, reused for JS-mode
+
+var MAP = { '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;' };
+function fastEscape(input, type) {
+  if (input === null || input === undefined || typeof input !== 'string') {
+    return input;
+  }
+  if (type === 'js') {
+    return slowEscape(input, 'js'); // keep {{ x|e('js') }} working
+  }
+  return input.replace(/[&"'<>]/g, function (c) { return MAP[c]; });
+}
+fastEscape.safe = true;
+
+swig.setFilter('e', fastEscape);
+swig.setFilter('escape', fastEscape);
+```
+
+Two details are easy to get wrong, and both silently corrupt output:
+
+- **`fastEscape.safe = true` is required.** Autoescape applies `e` to every `{{ ... }}` — *including* outputs you already piped through `|e`, so `{{ x|e }}` runs the escaper twice. The default survives that because it is idempotent; a one-pass escaper is not, and would double-escape an explicit `{{ x|e }}` / `{{ x|escape }}` without `safe`. Marking it `safe` tells the parser to skip the redundant pass (see [Bypassing autoescape](#bypassing-autoescape)).
+- **Override both `e` and `escape`.** Autoescape injects `e`, but `{{ x|escape }}` uses the `escape` name; replacing only one leaves the other double-escaping.
+
+The trade-off: this escaper re-escapes `&amp;` to `&amp;amp;`, so it is only safe for data with **no** pre-escaped HTML entities (no WYSIWYG, sanitized, or migrated HTML; no entity-escaped feed content). It also escapes only scalar strings, not array or object values. If you need either, keep the default. See the [`e` / `escape` filter reference](./filters#e--escape) and [Autoescape](./security#autoescape-is-the-only-default-xss-protection).
+
 ### Recursing into arrays and objects
 
 Most built-ins use `iterateFilter` so that `{{ names|upper }}` works for an array of strings. Your filter can opt in:
