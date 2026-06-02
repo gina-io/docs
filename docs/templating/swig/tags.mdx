@@ -103,6 +103,8 @@ Declares a parent template. Must be the first statement in the child template.
 {% extends "layouts/base.html" %}
 ```
 
+The parent path may be **dynamic** — `{% extends layout_var %}` or any expression — but a dynamic parent resolves only on the [async render path](./loaders#async-loaders) (`renderFile(path, locals, cb)` against a loader with `loader.async === true`). On the synchronous render path the parent is resolved at compile time, so it must be a string literal.
+
 The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
 
 ## filter
