@@ -19,7 +19,7 @@ Filters transform values inside a `{{ … }}` expression using the pipe characte
 {# => Paul, Jim #}
 ```
 
-Filters marked **safe** bypass the autoescape pass — their output is trusted as-is. See [Security](./security#what-the-guards-protect-against) for the model.
+Filters marked ✅ are not re-escaped by the autoescape pass — either flagged `.safe` (output trusted as-is), or, for `escape`/`e`, because the HTML escape is idempotent. See [Security](./security#what-the-guards-protect-against) for the model.
 
 | Filter | Safe | Purpose |
 | --- | --- | --- |
@@ -44,7 +44,9 @@ Filters marked **safe** bypass the autoescape pass — their output is trusted a
 | [`uniq`](#uniq) | — | Remove duplicates. |
 | [`upper`](#upper) | — | Uppercase. |
 | [`url_encode`](#url_encode) | ✅ | `encodeURIComponent`. |
-| [`url_decode`](#url_decode) | ✅ | `decodeURIComponent`. |
+| [`url_decode`](#url_decode) | — | `decodeURIComponent`. |
+
+`escape` / `e` show ✅ because their output isn't double-escaped (the HTML escape is idempotent), not because they're flagged `.safe`. `url_decode` is **not** safe — its output is autoescaped, since decoded content can contain HTML.
 
 ---
 
@@ -102,7 +104,7 @@ Accepts a type: `'html'` (default) or `'js'`.
 var msg = "{{ text|escape('js') }}";
 ```
 
-Marked **safe** — the filter's own output is not re-escaped.
+Not flagged `.safe`, but its output is not double-escaped: the HTML escape is idempotent, so the autoescape pass leaves already-escaped output unchanged.
 
 ## first
 
@@ -141,7 +143,7 @@ Group an array of objects by a property value. Returns a map.
 <pre>{{ data|json(2) }}</pre>
 ```
 
-Marked **safe**.
+Marked **safe** — the output HTML-escapes `<`, `>`, `&`, and `'` (as `\u00xx`), so it is valid JSON that is safe to embed directly inside a `<script>` block.
 
 ## last
 
@@ -271,7 +273,7 @@ Uppercase.
 
 ## url_decode
 
-`decodeURIComponent`. Marked **safe**.
+`decodeURIComponent`. **Not** marked safe — its output is autoescaped, because decoded content can contain HTML-significant characters.
 
 ```swig
 {{ encoded|url_decode }}
