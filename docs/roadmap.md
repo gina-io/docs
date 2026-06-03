@@ -189,6 +189,16 @@ HTTP security response headers as opt-in `gina.plugins.*` middlewares, mirroring
 
 ---
 
+## Accessibility
+
+Client-side form-validation accessibility — keeping `FormValidator`'s ARIA state in sync with field validity so screen-reader users get the same error feedback sighted users already get from native `:user-invalid` styling. No new public API; behaviour applies to fields that opt in through their existing ARIA markup.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| ✅ | **`aria-invalid` validity reflection (#A11Y1)** — `FormValidator` keeps `aria-invalid` in sync with each managed field's validity, so a field's `aria-errormessage` association is actually exposed to assistive technology (per WAI-ARIA those associations are inert unless the field also carries `aria-invalid="true"`). Sets `aria-invalid="true"` on a committed error and `"false"` when valid — mirroring the native `ValidityState` where the field has native HTML constraints so it never disagrees with the `:user-invalid` styling. When a field already references an error element via `aria-errormessage`, the redundant `form-item-error-message` div is suppressed; legacy forms keep the injected div and gain an `aria-errormessage` wire to it. A failed submit moves focus to the first invalid field; blur-time errors are announced through a visually-hidden `aria-live="polite"` region. Blur/input passes apply to forms that opt into `data-gina-form-live-check-enabled`; the always-on submit pass covers `aria-invalid` + focus regardless. No public API change; existing error classes and submit-button toggling unchanged. | `0.4.3-alpha.2` | 2026-06-03 |
+
+---
+
 ## Secrets & Configuration
 
 Secrets handling for bundle JSON configs without baking plaintext values into source. Pluggable-backend design with `process.env` as the default; the reserved API surface allows future Vault / SOPS / K8s Secrets backends to slot in without changing call sites or the placeholder syntax.
