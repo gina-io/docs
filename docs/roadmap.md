@@ -407,4 +407,4 @@ Gina's built-in per-bundle inspector. Phases 1–2 ship as an embedded SPA at `/
 
 ---
 
-*Last updated: 2026-06-02 (0.4.1 shipped; Inspector standalone-app track renamed from Beemaster, authenticated WebSocket agent transport documented) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
+*Last updated: 2026-06-04 (0.4.3 shipped — Inspector authenticated WebSocket agent transport, `gina service:start` + dev Inspector auto-start, `aria-invalid` form-validation reflection (#A11Y1), strict-CSP client plugins, `@rhinostone/swig` 2.6.0 floor) · To suggest a feature, [open an issue](https://github.com/gina-io/gina/issues).*
