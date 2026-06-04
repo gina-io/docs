@@ -6,8 +6,8 @@ sidebar_position: 14
 description: CLI reference for gina minion commands — list and reap the running bundle child-processes ("minions") of a project.
 level: intermediate
 prereqs:
-  - '[bundle:start](/cli/bundle)'
-  - '[project:status](/cli/project)'
+  - '[bundle:start](/cli/cli-bundle)'
+  - '[project:status](/cli/cli-project)'
 ---
 
 # `gina minion`
@@ -50,7 +50,7 @@ groups.
 `minion:list` reads the run directory directly, so it also surfaces processes
 that have been detached from a project's `manifest.json` — the same orphans
 `minion:kill` reaps. To stop a tracked bundle through its normal lifecycle, use
-[`bundle:stop`](/cli/bundle).
+[`bundle:stop`](/cli/cli-bundle).
 :::
 
 ---
@@ -61,7 +61,7 @@ Reap the running minions of a project — both the pidfile-tracked ones and any
 orphaned `gina: <bundle>@<project>` processes still alive without a (or with a
 stale) pidfile, found via a `ps` sweep. This is the process-truth counterpart to
 `minion:list`: it terminates exactly what `minion:list` shows, plus the
-pidfile-less orphans that [`bundle:stop`](/cli/bundle) (manifest-driven) cannot
+pidfile-less orphans that [`bundle:stop`](/cli/cli-bundle) (manifest-driven) cannot
 reach.
 
 ```bash

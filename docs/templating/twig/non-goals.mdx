@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Twig Non-Goals
 sidebar_label: Non-Goals
 sidebar_position: 3
-description: Upstream PHP Twig features that @rhinostone/swig-twig throws on at parse time — sandbox, use, deprecated, macro kwargs, dynamic extends/from, bracket-notation set. Explicit rather than silent.
+description: Upstream PHP Twig features that @rhinostone/swig-twig throws on at parse time — sandbox, use, deprecated, macro kwargs, dynamic from, bracket-notation set. Explicit rather than silent. (Dynamic extends is supported on the async render path.)
 level: intermediate
 prereqs:
   - '[Overview](./)'
@@ -69,30 +69,35 @@ Workarounds:
   ```
 - Order positional parameters from most-commonly-passed to least-commonly-passed so defaults "fall off the right."
 
-## Dynamic `{% extends %}` and `{% from %}`
+## Dynamic `{% extends %}`
 
-Both tags require the path to be a **string literal**. Expressions throw:
+A dynamic parent — `{% extends parent_template %}` or `{% extends cond ? "a.twig" : "b.twig" %}` — **resolves on the async render path**: `renderFile(path, locals, cb)` against a loader that sets `loader.async === true`. The async-codegen path lowers the parent to a deferred expression and resolves it at render time through the loader. See [Async loaders](../swig/loaders#async-loaders).
 
-| Shape | Accepted? | Error |
+| Shape | Sync render path | Async render path (`loader.async === true`) |
 | --- | --- | --- |
-| `{% extends "base.twig" %}` | Yes | — |
-| `{% extends parent_template %}` | No | `Dynamic "extends" is not supported — parent path must be a string literal` |
-| `{% extends cond ? "a.twig" : "b.twig" %}` | No | Same as above. |
-| `{% from "macros.twig" import foo %}` | Yes | — |
-| `{% from dynamic_path import foo %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+| `{% extends "base.twig" %}` | Yes | Yes |
+| `{% extends parent_template %}` | No — resolved at compile time | Yes |
+| `{% extends cond ? "a.twig" : "b.twig" %}` | No — resolved at compile time | Yes |
 
-Rationale: swig's `getParents()` walks the inheritance chain at parse time so it can cache compiled templates by resolved filename. A dynamic parent would either break that caching (recompile on every render) or require a runtime loader path that none of the built-in loaders support today. The string-literal requirement keeps compiled output deterministic and lets the shared cache work.
+On the **synchronous** render path the parent link is resolved at compile time, before any runtime value exists, so a dynamic parent surfaces a template-not-found / "no filename" error. Wrapping `{% extends %}` in `{% if %}` blocks does not rescue the sync path — whichever `extends` the parser sees last wins regardless of the runtime condition.
 
-Workaround: **dispatch in the caller** and render the selected template directly.
+Sync-path workaround: **dispatch in the caller** and render the selected template directly.
 
 ```js
 var template = (flavor === 'admin') ? 'page_admin.twig' : 'page_public.twig';
 twig.renderFile(template, { /* locals */ });
 ```
 
-Wrapping `{% extends %}` in `{% if %}` blocks does not work — the parent link is resolved at parse time, so whichever `extends` the parser sees last wins regardless of the runtime condition. This applies whether you use the (currently [deferred](#conditional-branches-deferred)) `{% if %}…{% else %}…{% endif %}` form or paired `{% if %}` blocks. Dispatch in the caller is the only working path.
+## Dynamic `{% from %}`
 
-`include` is not affected — its path can be any expression.
+`{% from %}` requires the path to be a **string literal** — a dynamic path throws `Dynamic "from" is not supported — path must be a string literal`:
+
+| Shape | Accepted? | Error |
+| --- | --- | --- |
+| `{% from "macros.twig" import foo %}` | Yes | — |
+| `{% from dynamic_path import foo %}` | No | `Dynamic "from" is not supported — path must be a string literal` |
+
+`include` is not affected — its path can be any expression (and resolves dynamically on the async render path too).
 
 ## Bracket-notation `set`
 

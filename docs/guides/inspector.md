@@ -258,7 +258,7 @@ environment variable, with one opt-in exception described below.
 
 ### Authenticated agent endpoint outside dev mode (`inspector.agent`)
 
-The single exception to the dev-only gating is the `/_gina/agent` SSE stream,
+The single exception to the dev-only gating is the `/_gina/agent` stream,
 which can be opted into **outside dev mode** for authenticated remote server-log
 streaming (e.g. tailing a staging bundle's logs from the standalone Inspector).
 It is disabled by default. Enable it in `settings.json`:
@@ -267,7 +267,8 @@ It is disabled by default. Enable it in `settings.json`:
 "inspector": {
   "agent": {
     "enabled": true,
-    "key": "${secret:INSPECTOR_AGENT_KEY}"
+    "key": "${secret:INSPECTOR_AGENT_KEY}",
+    "allowedOrigins": []
   }
 }
 ```
@@ -282,6 +283,15 @@ It is disabled by default. Enable it in `settings.json`:
   key returns `401`. With `enabled: true` but no key configured, the endpoint
   stays closed (fail-closed).
 - In dev mode the endpoint stays open and requires no key (unchanged).
+- **Transport:** the standalone Inspector connects over a **WebSocket by default**
+  (same endpoint, same auth — the key travels as `?key=`, since browsers cannot set
+  WebSocket handshake headers any more than `EventSource` headers). It **falls back to
+  SSE automatically** when the socket cannot open — e.g. an older bundle that only
+  serves the SSE stream, or an HTTP/2-only target that cannot upgrade. Open the
+  Inspector with `?transport=sse` to force the SSE transport.
+- `allowedOrigins` (default `[]`) optionally restricts **WebSocket** upgrades to an
+  allowlist of `Origin` values; when empty, any origin is accepted (parity with the
+  SSE endpoint). Set it to the Inspector's origin(s) for production use.
 - **Scope:** this authenticates server-log streaming and connection identity.
   Per-request data, query, and flow capture stays dev-gated by default — the
   **instrumentation window** (`inspector.instrumentation`, below) can opt it into

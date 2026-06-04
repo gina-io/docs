@@ -175,7 +175,7 @@ swig.renderFile('page.html', { name: 'World' }, function (err, html) {
 
 Dispatch is **explicit-flag only** — `load.length` is not consulted, so the built-in dual-mode `swig.loaders.fs()` and `swig.loaders.memory()` (which accept both sync and cb forms) keep their existing sync-cb path.
 
-Template paths inside `{% extends %}`, `{% include %}`, and `{% import %}` must be string literals — dynamic paths surface as `Pre-walked map missing path: "<id>"`. See [Loaders — Static-path requirement](./loaders#static-path-requirement).
+On this path, `{% include %}` and `{% extends %}` resolve dynamic paths at render time — the path expression is evaluated against the locals and the template fetched through `loader.load`. `{% import %}` / `{% from %}` still require string-literal paths (a dynamic path throws at parse time). See [Loaders — Async loaders](./loaders#async-loaders).
 
 ---
 
@@ -210,7 +210,7 @@ swig.renderFileAsync('page.html', { name: 'World' }, function (err, html) {
 });
 ```
 
-Template paths inside `{% extends %}`, `{% include %}`, and `{% import %}` must be string literals — dynamic paths surface as `Pre-walked map missing path: "<id>"`. See [Loaders — Static-path requirement](./loaders#static-path-requirement).
+Template paths inside `{% extends %}`, `{% include %}`, and `{% import %}` must be string literals — dynamic paths surface as `Pre-walked map missing path: "<id>"`. See [Loaders — Async loaders](./loaders#async-loaders).
 
 ---
 

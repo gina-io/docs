@@ -95,7 +95,7 @@ jinja2.render('{{ "yes" if n is positive else "no" }}', { locals: { n: 3 } });
 | `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains. |
 | `for` / `else` / `endfor` | Yes | `loop.index`/`index0`/`first`/`last`/`length`, empty-fallback `{% else %}`, and `{% for k, v in mapping %}` (no `.items()` needed — see [Behavioural differences](#behavioural-differences)). Loop variables containing `.` are rejected (CVE-2023-25345 guard). |
 | `block` / `endblock` | Yes | Named block for template inheritance. |
-| `extends` | No | Parent path **must be a string literal**. Dynamic `{% extends var %}` throws. |
+| `extends` | No | Dynamic parent (`{% extends var %}`, `{% extends full if cond else partial %}`) resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | Supports `with context` (default), `without context`, and `ignore missing`. |
 | `macro` / `endmacro` | Yes | Positional parameters with defaults (`{% macro f(a, b="x") %}`); defaults may reference earlier parameters or be full expressions. Keyword-argument **calls** are not supported — see [Non-Goals](./non-goals#macro-kwargs). |
 | `import` | No | `{% import "forms.jinja2" as f %}{{ f.label("x") }}`. Path must be a string literal. |

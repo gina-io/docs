@@ -28,8 +28,8 @@ flowchart TD
   C -->|Yes| G[Rewrite with supported tags or handle in the controller]
   C -->|No| D{Uses map / select / selectattr filters?}
   D -->|Yes| H[Project in a for-loop]
-  D -->|No| E{Uses macro kwargs or dynamic extends/import/from?}
-  E -->|Yes| I[Positional args / object literal; dispatch the parent in the caller]
+  D -->|No| E{Uses macro kwargs or dynamic import/from?}
+  E -->|Yes| I[Positional args or object literal; import/from path must be a string literal]
   E -->|No| J{Relies on default-keeps-empty, Markup macro output, or int/float tests?}
   J -->|Yes| K[Review behavioural deltas]
   J -->|No| OK[Template ports as-is]
