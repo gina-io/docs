@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Check token expiry
         run: |
-          EXPIRY="2026-06-02"
+          EXPIRY="2026-09-02"
           TODAY=$(date +%Y-%m-%d)
           DAYS=$(( ($(date -d "$EXPIRY" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
           if [ "$DAYS" -le 14 ]; then
@@ -28,7 +28,7 @@ jobs:
               repo: context.repo.repo,
               title: `Action required: tokens expire in ${process.env.DAYS_LEFT} days`,
               body: [
-                `The following secrets expire on **2026-06-02** (90-day tokens created 2026-03-02):`,
+                `The following secrets expire on **2026-09-02** (90-day tokens created 2026-06-04):`,
                 ``,
                 `| Secret | Where to rotate |`,
                 `|---|---|`,
