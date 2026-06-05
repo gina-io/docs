@@ -80,6 +80,8 @@ src/<bundle>/templates/html/content/<namespace>/<route-name>.html
 
 This convention is controlled by `"routeNameAsFilenameEnabled": true` in `templates.json`. Override for a specific route with `"param": { "file": "custom-name" }` in `routing.json`.
 
+`templates.json` also declares each page's stylesheets, scripts, and layout — you can share one block across several routes with a comma-separated section key (`"a, b": { … }`) and group page-behaviour defaults under an optional `_common.config`. See the [templates.json reference](/reference/templates) for the full shape.
+
 Data passed to `self.render({ key: value })` is exposed as `page.data` in the template:
 
 ```html
