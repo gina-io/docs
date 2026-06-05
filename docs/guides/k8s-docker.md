@@ -332,21 +332,33 @@ spec:
 ## Stdout logging
 
 In containers, coloured multi-line log output is not useful — log collectors
-expect one JSON line per event. Set `GINA_LOG_STDOUT=true` to activate
-stdout-only mode:
+expect one JSON line per event. Two environment variables switch the logger to
+JSON output:
+
+- **`GINA_LOG_FORMAT=json`** — emit JSON lines on stdout. Works in any
+  environment; the default is `text` (the coloured, human-readable format), so
+  `docker logs` is unchanged unless you opt in.
+- **`GINA_LOG_STDOUT=true`** — the container preset: emits JSON **and** skips the
+  MQ transport (there is no MQ listener inside a container). Kept for back-compat;
+  it implies JSON output.
 
 ```yaml
 env:
   - name: GINA_LOG_STDOUT
     value: "true"
+  # or, to emit JSON while keeping the MQ transport:
+  # - name: GINA_LOG_FORMAT
+  #   value: "json"
 ```
 
-Each log line is emitted as:
+Each log line is emitted as one JSON object:
 
 ```json
-{"ts":"2026-03-21T14:23:01.123Z","level":"info","group":"coreapi","msg":"Server started on port 3128"}
+{"ts":"2026-03-21T14:23:01.123Z","level":"info","bundle":"frontend@myproject","message":"Server started on port 3100","group":"frontend@myproject","msg":"Server started on port 3100"}
 ```
 
+`bundle` and `message` are the canonical fields; `group` and `msg` are kept as
+back-compat aliases for collectors configured against earlier Gina versions.
 Compatible with `kubectl logs`, Fluentd, Datadog, and any other log collector
 that reads container stdout.
 
