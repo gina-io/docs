@@ -71,6 +71,26 @@ values always win.
 | `stylesheets` | array | gina default | List of stylesheet objects loaded on every page |
 | `javascripts` | array | gina default | List of script objects loaded on every page |
 
+### `config` block (optional)
+
+The page-behaviour defaults above (`routeNameAsFilenameEnabled`, `javascriptsDeferEnabled`, etc.) may be grouped under an optional `config` key inside `_common`, to keep them visually separate from the shared `stylesheets` / `javascripts`:
+
+```json
+{
+  "_common": {
+    "config": {
+      "routeNameAsFilenameEnabled": true,
+      "javascriptsDeferEnabled": true
+    },
+    "stylesheets": [
+      { "name": "main", "url": "/css/main.css", "isCommon": true }
+    ]
+  }
+}
+```
+
+At load time the framework flattens `_common.config.*` back into `_common`, so the block is purely organisational — every field behaves exactly as if declared directly on `_common`. If a field is declared in **both** places, the direct `_common` value wins. Bundles that don't use a `config` block are unaffected.
+
 ### Stylesheet object
 
 ```json
@@ -154,6 +174,47 @@ either the route's `param.control` value or the route's `param.file` path.
 
 - The `home` page loads `main.css` + `app.js` from `_common`, then appends `home.css` and `home.js`.
 - The `invoice-detail` page uses a different layout and gets `invoice.css` appended.
+
+---
+
+## Sharing a block across several pages
+
+When several pages need the **same** block, declare them in one key by separating
+the section names with commas. The block is replicated under each named section:
+
+```json title="src/frontend/config/templates.json"
+{
+  "invoice-list, invoice-detail": {
+    "stylesheets": [
+      { "name": "invoice", "url": "/css/invoice.css" }
+    ]
+  },
+
+  "invoice-detail": {
+    "layout": "${templatesPath}/html/print-layout.html",
+    "javascripts": [
+      { "name": "print", "url": "/js/print.js" }
+    ]
+  }
+}
+```
+
+```mermaid
+flowchart LR
+  K["invoice-list, invoice-detail (one key)"] --> A["invoice-list"]
+  K --> B["invoice-detail"]
+  O["invoice-detail (own block)"] --> B
+```
+
+- Both `invoice-list` and `invoice-detail` receive the shared `invoice.css`.
+- `invoice-detail` **also** declares its own `layout` and `javascripts`, so it ends
+  up with the shared stylesheet **and** its own layout and script.
+- If a page appears in a comma key **and** declares the same field on its own, the
+  page's own value wins.
+
+Whitespace around each name is trimmed, so `"a, b"` and `"a,b"` are equivalent. This
+is a shorthand for repeating an identical block — it does not create new routes; each
+name must still resolve to a real route.
 
 ---
 
