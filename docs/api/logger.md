@@ -100,6 +100,11 @@ The `mq` container powers [`gina tail`](/guides/logging#following-logs-in-real-t
 Every formatted log line is broadcast to the MQ listener, which forwards it to
 any connected tail clients.
 
+The `default` container writes the coloured, human-readable line by default; set
+`GINA_LOG_FORMAT=json` (or the container preset `GINA_LOG_STDOUT=true`) on the bundle
+process to emit one JSON object per line instead — see
+[Structured (JSON) logging](/guides/logging#structured-json-logging).
+
 ### Adding a custom container
 
 Create a config file at:

@@ -19,6 +19,16 @@ upward to the target version.
 
 ---
 
+## 0.4.4 → 0.4.5
+
+`0.4.5` is an additive release — **no breaking changes and no settings reset.** Every change is opt-in; existing bundles run unchanged.
+
+### Also new — opt-in structured (JSON) logging
+
+The logger can now emit one machine-parseable JSON object per line instead of the default coloured text — set `GINA_LOG_FORMAT=json` (or the container preset `GINA_LOG_STDOUT=true`) on the bundle process. The default stays `text`, so interactive output and `docker logs` are unchanged unless you opt in; **no migration action required.** See [Structured (JSON) logging](/guides/logging#structured-json-logging).
+
+---
+
 ## 0.4.3 → 0.4.4
 
 `0.4.4` is an additive release — **no breaking changes and no settings reset.** Every change is opt-in; existing bundles run unchanged.
