@@ -31,6 +31,10 @@ The logger can now emit one machine-parseable JSON object per line instead of th
 
 Couchbase entities now expose a public `getCluster()` method that returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document ACID transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x); **no migration action required.** See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster).
 
+### Also new — public MongoClient accessor on MongoDB entities
+
+MongoDB entities now expose a public `getClient()` method that returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs; **no migration action required.** See [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+
 ---
 
 ## 0.4.3 → 0.4.4

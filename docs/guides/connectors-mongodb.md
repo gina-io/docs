@@ -381,6 +381,57 @@ type before placeholders are resolved.
 
 ---
 
+## Accessing the underlying MongoClient
+
+The entity layer wraps the operations most applications need — find/insert/update,
+aggregation, lifecycle events. For driver-level features it does **not** wrap —
+most notably **multi-document transactions** — every MongoDB entity exposes a
+public `getClient()` method that returns the underlying driver `MongoClient`. This
+is the supported way to drop down to the driver without reaching into private
+connection internals.
+
+`getConnection()` hands you the `Db`; the `MongoClient` lives one level up, and
+that is where sessions and transactions are started — so `getClient()` is the
+accessor you want for anything beyond a single collection operation.
+
+```javascript
+this.transfer = function transfer(req, res, next) {
+    var self    = this;
+    var Account = self.getModel('account');
+
+    // getClient() returns the underlying MongoDB driver MongoClient.
+    var client  = Account.getClient();
+    var session = client.startSession();
+
+    // Multi-document transactions run through the driver's own session API:
+    session.withTransaction(async function () {
+        var db = client.db();
+        await db.collection('accounts').updateOne({ _id: from }, { $inc: { balance: -amount } }, { session: session });
+        await db.collection('accounts').updateOne({ _id: to },   { $inc: { balance:  amount } }, { session: session });
+    }).then(function () {
+        self.render({ transferred: true });
+    }).catch(function (err) {
+        self.throwError(err);
+    }).finally(function () {
+        session.endSession();
+    });
+};
+```
+
+`getClient()` resolves the client handle from the connection the entity holds, so
+you do not need to know how the connection was produced. If the client cannot be
+resolved it throws an `Error` whose `code` is `GINA_MONGODB_CLIENT_UNRESOLVED`.
+
+**Driver-provided feature.** Gina does not bundle or pin the `mongodb` driver —
+it is resolved from your project's `node_modules`. `getClient()` guarantees only
+the `MongoClient` handle; which driver-level capabilities it exposes depends on
+the version your project installs. Multi-document transactions additionally
+require a **replica-set or sharded deployment** (they are not available on a
+standalone `mongod`) — see the MongoDB [transactions](https://www.mongodb.com/docs/manual/core/transactions/)
+guide.
+
+---
+
 ## Session store via TTL index
 
 MongoDB has built-in support for **TTL indexes** — a special index on a `Date`
