@@ -632,6 +632,31 @@ every model in the bundle.
 
 ---
 
+## Reaching the underlying driver handle
+
+Data-connector entities expose `getConnection()`, which returns the live
+connection the connector holds. What that connection *is* differs by connector —
+and for two of them it sits a level *below* where driver-level features (chiefly
+multi-document / multi-row transactions) actually live, so those two add a
+dedicated accessor:
+
+| Connector | `getConnection()` returns | Driver-level access |
+|---|---|---|
+| MySQL / PostgreSQL / SQLite | the driver pool / database handle | `getConnection()` **is** the driver handle — use it directly |
+| ScyllaDB | the `cassandra-driver` `Client` | `getConnection()` **is** the driver handle — use it directly |
+| Couchbase | the bucket / scope (a *narrower* handle) | `getCluster()` resolves the SDK `Cluster`, one level up |
+| MongoDB | the `Db` (a *narrower* handle) | `getClient()` resolves the `MongoClient`, one level up |
+
+For the SQL connectors and ScyllaDB, `getConnection()` already hands you the
+driver handle, so there is nothing extra to reach — start a transaction (or any
+driver-level operation) on it directly. Couchbase and MongoDB are the only two
+whose `getConnection()` returns a narrower handle than transactions need, so they
+add `getCluster()` / `getClient()` to resolve the level above without reaching
+into private internals. See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster)
+and [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+
+---
+
 ## Driver version pinning
 
 *New in 0.3.7-alpha.3*
