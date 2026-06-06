@@ -318,6 +318,50 @@ subsequent requests).
 
 ---
 
+## Accessing the underlying SDK Cluster
+
+The entity layer wraps the operations most applications need -- N1QL queries,
+bulk insert, lifecycle events. For SDK-level features it does **not** wrap --
+most notably **multi-document ACID transactions** -- every Couchbase entity
+exposes a public `getCluster()` method that returns the underlying Couchbase
+SDK `Cluster` handle. This is the supported way to drop down to the SDK without
+reaching into private connection internals.
+
+```javascript
+this.settle = function settle(req, res, next) {
+    var self    = this;
+    var Invoice = self.getModel('invoice');
+
+    // getCluster() returns the underlying Couchbase SDK Cluster handle.
+    var cluster = Invoice.getCluster();
+
+    // Use any SDK-level feature directly. Multi-document ACID transactions
+    // run through the SDK's own async transaction API:
+    cluster.transactions().run(async function (ctx) {
+        // ... ctx.get / ctx.insert / ctx.replace / ctx.remove across documents ...
+    }).then(function () {
+        self.render({ settled: true });
+    }).catch(function (err) {
+        self.throwError(err);
+    });
+};
+```
+
+`getCluster()` resolves the cluster handle from whichever connection shape the
+entity holds, so you do not need to know how the connection was produced. If the
+cluster cannot be resolved it throws an `Error` whose `code` is
+`GINA_COUCHBASE_CLUSTER_UNRESOLVED`.
+
+**Driver-provided feature.** Gina does not bundle or pin the `couchbase` driver
+-- it is resolved from your project's `node_modules`. `getCluster()` guarantees
+only the `Cluster` handle; which SDK-level capabilities it exposes depends on the
+driver version your project installs. Multi-document transactions require
+Couchbase Node SDK **3.2+ or 4.x** (see [SDK compatibility](#sdk-compatibility)
+above and the Couchbase [distributed ACID transactions](https://docs.couchbase.com/nodejs-sdk/current/howtos/distributed-acid-transactions-from-the-sdk.html)
+guide).
+
+---
+
 ## Dev-mode query instrumentation
 
 In dev mode, every Couchbase query is captured and surfaced in the Inspector:
