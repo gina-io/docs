@@ -2,7 +2,7 @@
 title: Logging
 sidebar_label: Logging
 sidebar_position: 5
-description: How logging works in Gina, the Node.js MVC framework — RFC 5424 severity levels, hierarchy-based filtering, multi-bundle group isolation, the MQ tail transport, and log configuration.
+description: How logging works in Gina, the Node.js MVC framework — RFC 5424 severity levels, hierarchy-based filtering, multi-bundle group isolation, the MQ tail transport, opt-in structured (JSON) output, and log configuration.
 level: intermediate
 prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
@@ -347,6 +347,63 @@ The `mq` container is what powers `gina tail`. Every formatted log line is
 broadcast to the MQ listener, which forwards it to any connected tail clients.
 
 For custom container configuration, see [Logger API reference → Containers](/api/logger#containers).
+
+---
+
+## Structured (JSON) logging
+
+By default the `default` container writes the coloured, human-readable line shown
+[above](#how-it-works) — ideal for a terminal or `docker logs`. For log
+aggregation (Loki, Datadog, CloudWatch, Fluentd) you can opt into **one
+machine-parseable JSON object per line** by setting an environment variable on the
+bundle process:
+
+- **`GINA_LOG_FORMAT=json`** — emit JSON instead of the coloured text. Works in any
+  environment. The default is `text`, so interactive output is unchanged unless you
+  opt in.
+- **`GINA_LOG_STDOUT=true`** — the container preset: implies JSON output **and**
+  skips the MQ transport (there is no MQ listener inside a container). See
+  [Kubernetes &amp; Docker → Stdout logging](/guides/k8s-docker#stdout-logging).
+
+Each line is then a single JSON object:
+
+```json
+{"ts":"2026-03-05T17:54:34.000Z","level":"info","bundle":"frontend@myproject","message":"Server listening on port 3100","group":"frontend@myproject","msg":"Server listening on port 3100"}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `ts` | ISO 8601 timestamp |
+| `level` | RFC 5424 severity (`debug` … `emerg`) |
+| `bundle` | the emitting `bundle@project` |
+| `message` | the log message |
+| `group`, `msg` | back-compat aliases of `bundle` / `message`, for collectors set up against earlier Gina versions |
+
+Resolution precedence is `GINA_LOG_FORMAT` → `GINA_LOG_STDOUT` (back-compat alias)
+→ `text` (default). Both the level methods (`self.info`, `self.debug`, …) and plain
+`console.log` honour the mode, so the stream stays uniformly parseable.
+
+### Per-request `requestId` and `durationMs`
+
+In JSON mode, every line emitted **during a request** also carries two per-request
+fields, so a collector can group all the lines from one request:
+
+| Field | Meaning |
+|-------|---------|
+| `requestId` | a stable id for the request. An inbound `X-Request-Id` header is honoured when present — so an id forwarded by an upstream proxy or a sibling service flows through for distributed tracing — otherwise Gina generates one. |
+| `durationMs` | milliseconds elapsed since the request began, at the moment the line was written |
+
+```json
+{"ts":"2026-03-05T17:54:34.120Z","level":"info","bundle":"api@myproject","message":"order created","group":"api@myproject","msg":"order created","requestId":"7f3c2b18-…","durationMs":42}
+```
+
+Lines emitted **outside** a request — boot, CLI commands, scheduled jobs — simply omit
+both fields. They appear only in JSON mode (the text format has no id column), so they
+cost nothing on the default text path.
+
+To propagate an id from your edge proxy, forward an `X-Request-Id` header; Gina
+sanitises it (length-capped, restricted character set) and falls back to a generated id
+if it is malformed.
 
 ---
 
