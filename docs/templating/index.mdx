@@ -24,7 +24,7 @@ Gina renders HTML through a **pluggable template engine**. Controllers call `sel
 |---|---|---|---|---|
 | **[Swig](./swig)** (default) | `@rhinostone/swig` | Jinja2/Django-inspired (`{{ }}`, `{% %}`) | Framework dependency, ships with every bundle | Default for new bundles; keeps the framework's historical syntax |
 | **[Twig](./twig)** | `@rhinostone/swig-twig` | Twig (`{{ }}`, `{% %}`, stricter) | Drop-in swig replacement via `swig.package` | You have an existing Twig codebase, or your team writes Twig |
-| **[Nunjucks](./nunjucks)** | `nunjucks` (project-side) | Jinja2 (`{{ }}`, `{% %}`, async-friendly) | **Project-only** — never a framework dep | You want native Jinja2, async loaders, or nunjucks-specific extensions |
+| **[Nunjucks](./nunjucks)** | `nunjucks` (project-side) | Jinja2 (`{{ }}`, `{% %}`, async-friendly) | **Project-only** — never a framework dep | You want native Jinja2 syntax or nunjucks-specific extensions |
 | **[Jinja2](./jinja2)** | `@rhinostone/swig-jinja2` | Python Jinja2 (`{{ }}`, `{% %}`) | Drop-in swig replacement via `swig.package` | You have Python Jinja2 templates, or your team writes Python Jinja2 |
 
 Swig is the safe default. Twig swaps the parser on the same underlying engine, so migration is near-zero-cost. Nunjucks is a full parallel engine — opt in only when you need it, because it fails loud if the project hasn't `npm install`ed it.
@@ -179,3 +179,4 @@ The same `data.page` shape is passed in either direction, so controller code is 
 - [Views guide](/guides/views) — bundle-level views directory, layouts, partials
 - [Controllers guide](/guides/controller) — how `self.render(data)` populates the page
 - [connectors.json reference](/reference/connectors) — separate from templating, but often the data source behind it
+- [Async template loaders](/templating/async-loaders) — render from a remote, CDN, object-storage, or in-memory backend (both swig and nunjucks)

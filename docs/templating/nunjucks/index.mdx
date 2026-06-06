@@ -24,7 +24,7 @@ Pick nunjucks over swig if:
 
 - You already have a codebase of nunjucks templates (`.njk`) you want to bring under Gina.
 - Your team is more fluent in Jinja2/nunjucks syntax than swig syntax.
-- You need a nunjucks-specific feature Gina's swig path doesn't provide (custom async loaders, specific nunjucks extensions, etc.).
+- You need a nunjucks-specific feature Gina's swig path doesn't provide (specific nunjucks extensions, the broader tag/filter set, etc.). _Async template loaders — rendering from a remote, CDN, or in-memory backend — now work for [both engines](/templating/async-loaders), so they're no longer nunjucks-only._
 
 Stick with swig if:
 
