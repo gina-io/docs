@@ -383,6 +383,28 @@ Resolution precedence is `GINA_LOG_FORMAT` → `GINA_LOG_STDOUT` (back-compat al
 → `text` (default). Both the level methods (`self.info`, `self.debug`, …) and plain
 `console.log` honour the mode, so the stream stays uniformly parseable.
 
+### Per-request `requestId` and `durationMs`
+
+In JSON mode, every line emitted **during a request** also carries two per-request
+fields, so a collector can group all the lines from one request:
+
+| Field | Meaning |
+|-------|---------|
+| `requestId` | a stable id for the request. An inbound `X-Request-Id` header is honoured when present — so an id forwarded by an upstream proxy or a sibling service flows through for distributed tracing — otherwise Gina generates one. |
+| `durationMs` | milliseconds elapsed since the request began, at the moment the line was written |
+
+```json
+{"ts":"2026-03-05T17:54:34.120Z","level":"info","bundle":"api@myproject","message":"order created","group":"api@myproject","msg":"order created","requestId":"7f3c2b18-…","durationMs":42}
+```
+
+Lines emitted **outside** a request — boot, CLI commands, scheduled jobs — simply omit
+both fields. They appear only in JSON mode (the text format has no id column), so they
+cost nothing on the default text path.
+
+To propagate an id from your edge proxy, forward an `X-Request-Id` header; Gina
+sanitises it (length-capped, restricted character set) and falls back to a generated id
+if it is malformed.
+
 ---
 
 ## Following logs in real time
