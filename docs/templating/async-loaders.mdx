@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Async Template Loaders
 sidebar_label: Async Loaders
 sidebar_position: 1.5
-description: Render templates from a custom async backend (remote, CDN, object storage, or in-memory) instead of the local filesystem via settings.template.<engine>.loader. Covers the built-in memory and http loaders, the CVE-2023-25345 path-traversal guard, http origin containment, and host/TLS trust ownership. Works for both swig and nunjucks.
+description: Render templates from a custom async backend (remote, CDN, object storage, or in-memory) instead of the local filesystem via settings.template.<engine>.loader. Covers the built-in memory and http loaders, opt-in compiled-template reuse (cache), the CVE-2023-25345 path-traversal guard, http origin containment, and host/TLS trust ownership. Works for both swig and nunjucks.
 level: intermediate
 prereqs:
   - '[Templating overview](/templating)'
@@ -159,6 +159,79 @@ collapses repeated fetches.
 `revalidate` is off by default so a cache hit costs no round-trip — ideal for
 immutable, CDN-published templates. Turn it on for a live CMS whose origin emits
 `ETag` headers and whose templates change in place.
+
+## Compiled-template reuse (`cache`)
+
+By default each render rebuilds the engine's view of a template. For a hot path —
+especially one served from a remote origin — you can opt into **compiled-template
+reuse** so the per-bundle engine (swig) or environment (nunjucks) and its compiled
+templates are kept and reused across requests instead of being rebuilt per render:
+
+<Tabs groupId="templating-engine">
+<TabItem value="swig" label="Swig" default>
+
+```json
+{
+  "render": { "engine": "swig" },
+  "template": {
+    "swig": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "cache": true
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="nunjucks" label="Nunjucks">
+
+```json
+{
+  "render": { "engine": "nunjucks" },
+  "template": {
+    "nunjucks": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "cache": true
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+</Tabs>
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cache` | boolean | `false` | Reuse the per-bundle engine/environment and its compiled templates across requests. Automatically disabled in development so template edits are always picked up live. |
+
+`cache` is independent of the `http` loader's source cache: the **source cache**
+avoids re-fetching template *text* from the origin, while `cache` avoids
+re-*compiling* it. Use either or both.
+
+**Per-request data stays per-request.** Sharing the engine across requests does
+*not* share request state — the web root, generated URLs and locale resolved by
+the `getUrl` / `getWebroot` / `t` filters are bound to each request at render
+time, so concurrent requests through a shared engine never see one another's
+context.
+
+**Development always recompiles.** `cache` has no effect in development (dev
+mode): edits to an inline map or a remote template are picked up on the next
+request without a restart. Enable `cache` for staging / production hot paths.
+
+:::note Engine difference
+With nunjucks, a shared environment reuses compiled templates for the whole
+`extends` / `include` chain. With swig, the top-level page template is reused but
+the nested templates in its chain are currently recompiled per render (a swig-core
+constraint); both still skip the default per-request engine rebuild.
+:::
 
 ## Dispatch flow
 
