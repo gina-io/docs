@@ -1,0 +1,211 @@
+---
+displayed_sidebar: templatingSidebar
+title: Django Parity
+sidebar_label: Parity
+sidebar_position: 2
+description: Operator, tag, filter, and variable-resolution support in @rhinostone/swig-django — what matches Django Template Language, what diverges where the JavaScript runtime differs, and what is shared with the native swig frontend.
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Upstream Django template language docs](https://docs.djangoproject.com/en/stable/ref/templates/language/)'
+  - '[Upstream Django built-in tags and filters](https://docs.djangoproject.com/en/stable/ref/templates/builtins/)'
+  - '[Native swig tags](../swig/tags)'
+  - '[Native swig filters](../swig/filters)'
+---
+
+# Django Parity
+
+This page lists exactly what `@rhinostone/swig-django` accepts — operators, variable resolution, tags, and filters — cross-referenced against Django Template Language (DTL) and the native `@rhinostone/swig` frontend.
+
+The matrices below are ground truth: each row maps to a symbol actually exported by the shipped source, and every filter was cross-checked against Django 5.2's `defaultfilters.py`. Outputs match the reference except where the JavaScript runtime forces a divergence — those are flagged here and detailed under [Behavioural differences](#behavioural-differences). For features that throw at parse time, need the framework runtime, or are deferred, see [Non-Goals](./non-goals).
+
+## A lenient superset of DTL
+
+The expression grammar is a **lenient superset** of Django's. It keeps the inherited expression machinery (parentheses, arithmetic, comparisons) and adds the Django pieces (colon-filters, `True`/`False`/`None`, `is`/`is not` identity). Every valid Django template renders; the engine *also* accepts a handful of non-Django expressions — `{{ a + b }}`, `{{ (a or b) and c }}` — that real DTL never contains (Django has no arithmetic operators and no parentheses inside `{% if %}`). That extra acceptance is harmless: a valid Django template never uses those forms, so they cost nothing in fidelity. The tag and filter catalogs, by contrast, are **subsets** — the framework-coupled tags need a Django runtime swig-core does not provide (see [Non-Goals](./non-goals)).
+
+## Operators
+
+| Operator | Shape | Semantics | Lowering / notes |
+| --- | --- | --- | --- |
+| `\|name:arg` | colon-filter | Apply a filter with one positional argument — Django's filter-argument syntax. | The backend emits positional filter args; `\|date:"Y-m-d"` and `\|truncatewords:2` lower the same way. |
+| `==` `!=` `<` `>` `<=` `>=` | comparison | Standard comparisons. | |
+| `and` `or` `not` | logic | Short-circuit boolean logic. | |
+| `in` | `x in seq` | Membership test. | `not in` does **not** parse — use `not (x in seq)`. See [Non-Goals](./non-goals#not-in-operator). |
+| `is` / `is not` | `x is None` | Identity comparison (`===` / `!==`), **not** a Jinja2-style test. | `is None` / `is not None` route through the existence check so a missing value is distinguished from a real one. See [The `is` operator](#the-is-operator). |
+| `True` `False` `None` | literals | Python-style boolean and null literals. | Lower to JavaScript `true` / `false` / `null`. |
+| `( )` | grouping | Parenthesised sub-expressions (lenient — real DTL `{% if %}` has no parens). | |
+| `+` `-` `*` `/` `%` | arithmetic | Accepted (lenient — real DTL has no arithmetic operators). `+` concatenates when either side is a string (JavaScript coercion). | Use the `add` filter for Django-faithful addition. |
+
+Django's auto-calling of callables (no `()` needed — `{{ user.get_full_name }}`, not `{{ user.get_full_name() }}`) is part of [variable resolution](#variable-resolution), not an operator.
+
+## The `is` operator {#the-is-operator}
+
+In Django, `is` is an **identity comparison** — `{% if x is None %}`, `{% if flag is True %}` — not Jinja2's predicate-test mechanism (`x is defined`, `x is odd`, …). `@rhinostone/swig-django` matches Django:
+
+| Shape | Semantics |
+| --- | --- |
+| `x is None` | `true` if `x` is absent or `null` (routed through the existence check, so a missing context slot is distinguished from a real value). |
+| `x is not None` | `true` if `x` is present. |
+| `x is True` / `x is False` | Strict equality against the boolean. |
+| `x is y` | Strict identity (`x === y`). Distinct object references are **not** identical (`{} is {}` → false). |
+
+Jinja2-style tests are **not** registered. `{% if x is defined %}` does **not** test definedness — it compiles to `x === defined`, comparing `x` against an (undefined) variable named `defined`, which is almost never what you want. There is no `is odd` / `is iterable` / `is mapping`. This is faithful to Django, which has no test system; if you are porting from Jinja2, see [Non-Goals → Jinja2-style `is` tests](./non-goals#jinja2-style-is-tests).
+
+## Variable resolution {#variable-resolution}
+
+`{{ a.b.c }}` resolves each segment with Django's lookup algorithm, via the shared `swig-core` resolver (opt-in for this frontend; native/swig-twig/swig-jinja2 keep the plain dot-path):
+
+1. **Dictionary lookup** — `obj["seg"]`.
+2. **Attribute / method lookup** — `obj.seg`; if the result is a **function**, it is **auto-called** with no arguments (bound to its receiver) and the return value is used.
+3. **Numeric index** — `{{ items.0 }}` resolves `items[0]` (JavaScript indexes arrays and strings by numeric string key, so one access covers all four cases).
+
+```django
+{{ user.get_full_name }}   {# calls user.get_full_name() — no parens #}
+{{ items.0 }}              {# first element #}
+{{ matrix.1.2 }}           {# nested index #}
+```
+
+Auto-call opt-outs match Django:
+
+| Function flag | Effect |
+| --- | --- |
+| `fn.alters_data === true` | Not called — resolves to `undefined` (renders `""`). Mirrors Django's `alters_data`. |
+| `fn.do_not_call_in_templates === true` | Returned **uncalled** (the function value itself). Mirrors Django's `do_not_call_in_templates`. |
+
+A call that throws resolves to `undefined` (renders `""`), mirroring Django's `string_if_invalid` default. Every segment is still checked against the CVE-2023-25345 `_dangerousProps` blocklist at parse time, and the resolver re-checks at runtime as defence in depth — `{{ a.__proto__ }}` throws.
+
+## Tags
+
+`@rhinostone/swig-django` ships **12 built-in tag families** (`elif`, `else`, and `empty` are branch markers consumed by `if`/`for`, not standalone tags). Each is registered in `packages/swig-django/lib/tags/index.js`.
+
+| Tag | Ends | Notes |
+| --- | --- | --- |
+| `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains and `and`/`or`/`not`/`in`/`is` conditions. |
+| `for` / `empty` / `endfor` | Yes | `forloop.counter`/`counter0`/`revcounter`/`revcounter0`/`first`/`last`/`parentloop`, empty-fallback `{% empty %}`, two-variable unpack `{% for k, v in mapping %}`, and dict pseudo-methods `{% for k, v in d.items %}` / `d.keys` / `d.values`. The `reversed` modifier is [deferred](./non-goals#deferred-tag-forms). Loop variables containing `.` are rejected (CVE-2023-25345 guard). |
+| `block` / `endblock` | Yes | Named block for template inheritance. `{% endblock name %}` accepted. `{{ block.super }}` is [deferred](./non-goals#deferred-tag-forms). |
+| `extends` | No | Static (`{% extends "base.django" %}`) and dynamic (`{% extends layout_var %}`) — the dynamic form resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
+| `include` | No | `{% include "partial.django" %}` with Django's space-separated `with k=v` context and trailing `only` for isolation. No `ignore missing` (Django raises) — see [Behavioural differences](#behavioural-differences). |
+| `with` / `endwith` | Yes | Both forms: modern `{% with a=1 b=2 %}` (space-separated pairs) and legacy `{% with expr as name %}`. |
+| `autoescape` / `endautoescape` | Yes | `{% autoescape on %}` / `{% autoescape off %}` — Django's `on`/`off` spelling, not boolean literals. |
+| `spaceless` / `endspaceless` | Yes | Collapses whitespace **between** HTML tags (`>\s+<` → `><`) within the block only. Narrower than native swig's `spaceless` — see [Behavioural differences](#behavioural-differences). |
+| `comment` / `endcomment` | Yes | Discards the body unparsed (broken tag syntax inside is safe). Optional `{% comment "note" %}` label accepted and ignored. |
+| `verbatim` / `endverbatim` | Yes | Verbatim content; variable, tag, and comment syntax pass through untouched. |
+| `cycle` | No | `{% cycle "a" "b" "c" %}` — cycles through values across loop iterations, with independent state per occurrence. The `as name` / named-reuse / `silent` forms are [deferred](./non-goals#deferred-tag-forms). |
+| `firstof` | No | `{% firstof a b c %}` — outputs the first truthy argument (or `""`). The `as var` form is [deferred](./non-goals#deferred-tag-forms). |
+
+There are **no** `macro` / `import` / `from` tags — Django has none either. Compose with `{% include %}`, `{% block %}`, and `{% extends %}`. The framework-infrastructure tags (`{% url %}`, `{% load %}`, `{% static %}`, `{% csrf_token %}`, `{% trans %}`, `{% blocktrans %}`) throw `Unexpected tag "<name>"` at parse time — see [Non-Goals → Framework infrastructure](./non-goals#framework-infrastructure).
+
+## Filters
+
+`@rhinostone/swig-django` ships **42 built-in filters** (43 callable names counting the `e` alias of `escape`). They live in `packages/swig-django/lib/filters.js`. Every filter below was cross-checked against Django 5.2.
+
+### Strings & text
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `upper` / `lower` | 0 | Case conversion. Recurse into arrays / objects. |
+| `title` | 0 | Title-case each word. |
+| `capfirst` | 0 | Capitalise the first character only. |
+| `cut` | 1 | Remove all occurrences of the argument. |
+| `slugify` | 0 | Lowercase, ASCII, strip non-word characters, hyphenate whitespace. |
+| `truncatechars` | 1 | Truncate to N characters with an ellipsis (the ellipsis counts toward N). |
+| `truncatewords` | 1 | Truncate to N words, appending ` …`. |
+| `wordcount` | 0 | Count whitespace-separated words. |
+| `wordwrap` | 1 | Greedy word-wrap to a width. |
+| `ljust` / `rjust` | 1 | Pad to a field width, left / right justified. |
+| `center` | 1 | Centre within a field width. |
+| `make_list` | 0 | Split a value into a list of characters (or digits). |
+| `phone2numeric` | 0 | Convert a phone-letter string to digits. |
+| `addslashes` | 0 | Backslash-escape quotes and backslashes. |
+| `striptags` | 0 | Strip HTML tags. |
+| `linebreaks` | 0 | Convert newlines to `<p>` / `<br>` (escapes text first). **Safe.** |
+| `linebreaksbr` | 0 | Convert newlines to `<br>` (escapes text first). **Safe.** |
+| `linenumbers` | 0 | Prefix each line with its number (escapes text first). **Safe.** |
+
+### Escaping & encoding
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `escape` / `e` | 0/1 | HTML-escape. Not `.safe` (idempotent, so the autoescape tail does not double-escape). |
+| `escapejs` | 0 | Escape for a JavaScript string literal (`\uXXXX`). **Safe.** |
+| `force_escape` | 0 | Escape immediately (not deferred). **Safe.** |
+| `safe` | 0 | Mark a value safe — bypass autoescape. **Safe.** |
+| `urlencode` | 0/1 | Percent-encode, preserving an optional safe-character set. |
+| `iriencode` | 0 | Encode an IRI for inclusion in a URL. |
+
+### Numbers
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `add` | 1 | Add the argument (numeric add, or string/array concatenation). |
+| `divisibleby` | 1 | `true` if the value is divisible by the argument (an `{% if %}` filter). |
+| `floatformat` | 0/1 | Format a float: default `-1` drops the decimal for whole numbers; `:N` always shows N places; `:-N` shows N only when fractional. **Not** `.safe` — see [Safe filters](#safe-filters). |
+| `filesizeformat` | 0 | Human-readable bytes (1024-based, 1 decimal, U+00A0 separator). |
+| `get_digit` | 1 | The Nth digit from the right (1-indexed). |
+| `pluralize` | 0/1 | Suffix for plurals — `""`/`"s"` default, or a `"singular,plural"` pair. |
+
+### Sequences
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `first` / `last` | 0 | First / last item of an array or string. |
+| `join` | 1 | Join an array with a glue string. |
+| `length` | 0 | Length of an array / string, or key count of an object. |
+| `slice` | 1 | Python-style `"start:stop:step"` slice via the shared `_utils.slice`. |
+
+### Values & dates
+
+| Filter | Arity | Notes |
+| --- | --- | --- |
+| `default` | 1 | Fallback when the value is falsy — see [Behavioural differences](#behavioural-differences) for the empty-string case. |
+| `default_if_none` | 1 | Fallback only when the value is `null` / `undefined`. |
+| `yesno` | 1 | Map truthy / falsy / `None` onto a `"yes,no,maybe"` argument. |
+| `date` | 1–3 | PHP-style format tokens via the shared `@rhinostone/swig-core` date formatter — **not** Python `strftime` directives. Defaults to `'F j, Y'`. |
+| `time` | 1–3 | PHP-style time tokens. Defaults to `'g:i A'`. |
+
+### Safe filters
+
+These bypass autoescape (the autoescape `e` tail is not appended) — exactly six: **`safe`**, **`escapejs`**, **`force_escape`**, **`linebreaks`**, **`linebreaksbr`**, **`linenumbers`**. The three `linebreak*` / `linenumbers` filters escape their text content *before* wrapping it in markup, so marking them safe is XSS-correct. `escape` / `e` are **not** `.safe` (idempotency, not a flag, prevents double-escaping), and `floatformat` is deliberately **not** `.safe` — its error path returns the raw input, so a blanket safe flag would be an XSS hole (its numeric output carries no HTML, so the redundant escape is a harmless no-op). Filters that emit already-safe HTML you register yourself must set `.safe = true` on the function.
+
+This is **not** the same as Django's `is_safe=True`: in Django, `is_safe` only marks that a filter *preserves* an already-safe input; only filters Django wraps in `mark_safe()` should carry swig's `.safe = true`.
+
+### Registering your own
+
+```js
+django.setFilter('exclaim', function (input) { return String(input) + '!'; });
+django.render('{{ msg|exclaim }}', { locals: { msg: 'hi' } });
+// → "hi!"
+```
+
+```js
+function monospace(input) { return '<code>' + input + '</code>'; }
+monospace.safe = true;
+django.setFilter('monospace', monospace);
+```
+
+See [Extending Swig](../swig/extending) for the full filter/tag extension contract — it is identical across frontends.
+
+## Behavioural differences
+
+These behaviours are **supported** but diverge from Django because the JavaScript runtime (or the shared swig-core engine) differs from CPython. None of them throw — they just behave differently:
+
+| Area | Django | `@rhinostone/swig-django` |
+| --- | --- | --- |
+| `{% for x in mapping %}` (single var) | Iterates the dict's **keys**. | Iterates the dict's **values** (swig object iteration). Use `{% for k in d.keys %}` for keys, `{% for k, v in d.items %}` for pairs. |
+| `forloop.length` | No such field. | Present (swig exposes it) — harmless extra acceptance. |
+| `default` on `""` | Substitutes (the value is falsy). | Same — substitutes. A missing variable also arrives as `""` after engine coercion, so `default` fires on it too. |
+| `{{ True }}` / `{{ False }}` | Render `"True"` / `"False"`. | Render `"true"` / `"false"` (JavaScript booleans). Rarely output directly; in conditions they behave correctly. |
+| `{{ None }}` | Renders `"None"`. | Renders `""` (engine null-coercion). |
+| `{% include %}` `ignore missing` | Not a thing — a missing include raises. | Also raises (no `ignore missing` clause); Django-faithful. |
+| `spaceless` | Strips whitespace between tags across the whole rendered block. | Same intent, region-isolated: only the block's own `>\s+<` runs collapse — narrower than native swig's whole-`_output` mutation. |
+| `floatformat` | `mark_safe`s the success path only. | Not marked safe (the error path returns raw input); numeric output carries no HTML, so output is identical. |
+| Object stringification | Python `str()` / `repr()`. | JavaScript `String(x)` — objects without a custom `toString` render `"[object Object]"`; `null` / `undefined` render `""`. |
+| `date` / `time` | `strftime`-style format codes, locale-aware. | PHP-style codes via the shared `swig-core` formatter; no locale plumbing. Pass an explicit format string. |
+
+See [Migrating from Django](./migration) for the porting view of these.
+
+## Autoescape
+
+Autoescape behaves as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. The built-in safe filters (the six listed above) are excluded. `{% autoescape off %}…{% endautoescape %}` disables it for a region using Django's `on`/`off` spelling.
+
+See [Security — what the guards protect against](../swig/security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.

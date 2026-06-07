@@ -69,7 +69,7 @@ Workarounds:
   ```
 - Order positional parameters from most-commonly-passed to least-commonly-passed so defaults "fall off the right."
 
-## Dynamic `{% extends %}`
+## Dynamic `{% extends %}` {#dynamic-extends}
 
 A dynamic parent — `{% extends parent_template %}` or `{% extends cond ? "a.twig" : "b.twig" %}` — **resolves on the async render path**: `renderFile(path, locals, cb)` against a loader that sets `loader.async === true`. The async-codegen path lowers the parent to a deferred expression and resolves it at render time through the loader. See [Async loaders](../swig/loaders#async-loaders).
 
