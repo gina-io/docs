@@ -8,6 +8,7 @@ const ginaVersion = '0.4.5';
 const swigVersion = '2.6.0';
 const twigVersion = '2.6.0';
 const jinjaVersion = '2.6.0';
+const djangoVersion = '2.6.0';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -166,6 +167,7 @@ const config = {
     swigVersion,
     twigVersion,
     jinjaVersion,
+    djangoVersion,
   },
 
   themeConfig:

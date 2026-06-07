@@ -120,3 +120,14 @@ syncVersion({
         (function () { try { return path.dirname(require.resolve('@rhinostone/swig-jinja2/package.json')); } catch (e) { return null; } })()
     ]
 });
+
+syncVersion({
+    label: 'swig-django',
+    configKey: 'djangoVersion',
+    candidates: [
+        process.env.SWIG_DJANGO_PATH && path.resolve(process.env.SWIG_DJANGO_PATH),
+        path.join(HOME, 'Sites', 'gina', 'swig', 'packages', 'swig-django'),
+        path.join(HOME, '.npm-global', 'lib', 'node_modules', '@rhinostone', 'swig-django'),
+        (function () { try { return path.dirname(require.resolve('@rhinostone/swig-django/package.json')); } catch (e) { return null; } })()
+    ]
+});

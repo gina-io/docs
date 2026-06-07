@@ -28,6 +28,13 @@ const BADGE_CONFIG = {
     repoHref: 'https://github.com/gina-io/swig',
     repoLabel: 'gina-io/swig on GitHub',
   },
+  Django: {
+    pkg: '@rhinostone/swig-django',
+    versionField: 'djangoVersion',
+    npmHref: 'https://www.npmjs.com/package/@rhinostone/swig-django',
+    repoHref: 'https://github.com/gina-io/swig',
+    repoLabel: 'gina-io/swig on GitHub',
+  },
 };
 
 function buildBadgeHtml(cfg, version) {

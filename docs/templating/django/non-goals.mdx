@@ -1,0 +1,171 @@
+---
+displayed_sidebar: templatingSidebar
+title: Django Non-Goals
+sidebar_label: Non-Goals
+sidebar_position: 3
+description: Django template features that @rhinostone/swig-django throws on at parse time, needs the Django framework runtime for, or defers — url/load/static/csrf_token/trans, the filter/now/regroup tags, the map-style filters, whitespace control, Jinja2-style is-tests. Explicit rather than silent. (Dynamic extends is supported on the async render path.)
+level: intermediate
+prereqs:
+  - '[Overview](./)'
+  - '[Parity](./parity)'
+  - '[Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)'
+---
+
+# Django Non-Goals
+
+`@rhinostone/swig-django` renders **real Django templates**, but it is a standalone template engine, not the Django framework. Tags that need the framework runtime, and features outside the implemented subset, throw at parse time rather than silently producing a template that behaves differently from Django.
+
+The rejections fall into four buckets:
+
+- **Won't support (security).** A threat-model call; unlikely to change.
+- **Framework infrastructure.** Tags that need the Django request/response, URL resolver, app registry, or i18n catalogs — a standalone engine cannot provide these.
+- **Deferred.** Design work awaiting demand — [open an issue](https://github.com/gina-io/swig/issues) if you hit one.
+- **Not DTL syntax.** Forms that aren't Django to begin with (or were removed from Django).
+
+Behaviours that are *supported but differ* from Django (single-variable dict iteration yielding values, `{{ True }}` rendering `"true"`, `forloop.length` existing, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
+
+## Won't support (security)
+
+`@rhinostone/swig-django` does **not** offer a sandboxed-rendering mode for partially-trusted template source.
+
+| Capability | Why rejected |
+| --- | --- |
+| Sandboxed rendering | swig-django's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). A partial sandbox requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. Django's own template language is not a sandbox either — it relies on autoescape, not on isolating the source. |
+
+The **runtime bracket-access guard** is the same known gap as every other frontend: `{{ foo[varname] }}` where `varname` resolves to `"__proto__"` at render time is not blocked. The compile-time `_dangerousProps` checks cover dotted access, string-literal bracket access, and every context-writing tag. See [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
+
+## Framework infrastructure
+
+These tags throw `Unexpected tag "<name>"` at parse time. Each needs a piece of the Django framework that a standalone template engine has no access to. They are permanent non-goals — the right place to provide their output is your controller, passing the result in as a local.
+
+| Tag | Upstream purpose | What it needs |
+| --- | --- | --- |
+| `{% url %}` | Reverse-resolve a named URL pattern. | Django's URL resolver and the project's URLconf. |
+| `{% load %}` | Load a custom tag/filter library. | Django's app registry and template-library loading — also a code-loading vector. |
+| `{% static %}` | Build a URL for a static asset. | Django's `staticfiles` app and storage backend. |
+| `{% csrf_token %}` | Emit the CSRF hidden input. | The request's CSRF token from Django's middleware. |
+| `{% trans %}` / `{% blocktrans %}` / `{% blocktranslate %}` | i18n translation of a string / block. | Django's gettext catalogs and the active locale. |
+| `{% querystring %}` | Rewrite the current request's query string. | The request object (`request.GET`). |
+
+**Workaround — resolve in the controller and pass the result in as a local:**
+
+```js
+django.render('<a href="{{ profileUrl }}">{{ label }}</a>', {
+  locals: {
+    profileUrl: reverse('profile', { id: user.id }),  // your router
+    label: t('View profile')                            // your i18n
+  }
+});
+```
+
+This mirrors how Gina renders: the controller owns routing, i18n, and CSRF, and templates receive plain data. The framework that embeds swig-django (e.g. [Gina](/templating)) wires these as locals or as project-registered custom tags.
+
+## Deferred
+
+### Tags
+
+These throw `Unexpected tag "<name>"` but have no framework dependency — they could ship later. [Open an issue](https://github.com/gina-io/swig/issues) with a use case to prioritise.
+
+| Tag | Upstream purpose | Workaround |
+| --- | --- | --- |
+| `{% filter %}` | Pipe a block through a filter chain. | Apply the filter on each `{{ … }}` inside the block, or pre-format in the controller. |
+| `{% now %}` | Render the current date/time. | Pass `new Date()` (or a formatted string) in as a local. |
+| `{% regroup %}` | Group a list by a common attribute. | Group in the controller; pass the grouped structure in. |
+| `{% ifchanged %}` | Render only when a value changed across loop iterations. | Track the previous value with a `{% with %}` / comparison, or pre-compute. |
+| `{% widthratio %}` | Compute a proportional width. | Compute the value in the controller. |
+| `{% templatetag %}` | Emit a literal `{%`, `}}`, etc. | Use `{% verbatim %}…{% endverbatim %}`. |
+| `{% resetcycle %}` | Restart a named `{% cycle %}`. | Tied to the deferred named-cycle form below. |
+| `{% lorem %}` / `{% debug %}` | Placeholder text / debug context dump. | Development conveniences; pass placeholder data in as locals. |
+
+### Deferred tag forms
+
+The core tag is supported; a specific form is not:
+
+| Form | Status | Error |
+| --- | --- | --- |
+| `{% for x in items reversed %}` | Deferred | `The "reversed" modifier in the "for" tag is not yet supported` — reverse the list in the controller, or iterate `items\|slice:"::-1"`. |
+| `{{ block.super }}` | Deferred | No error — block override works; rendering the parent's content inside an override is not yet wired. |
+| `{% firstof a b as var %}` | Deferred | `The "as" (assign-to-variable) form of "firstof" is not yet supported`. |
+| `{% cycle "a" "b" as name %}` / `{% cycle name %}` / `… silent` | Deferred | `Named cycles (the "as name" form of "cycle") are not yet supported`. |
+| `{% for x in d.items %}` (single loop var) | Deferred | `... requires two loop variables` — use `{% for k, v in d.items %}`. |
+
+### Filters
+
+These Django built-in filters are not yet implemented; a reference to one fails at render because the filter is not registered. [Open an issue](https://github.com/gina-io/swig/issues) to prioritise.
+
+| Filter | Upstream purpose | Why not yet |
+| --- | --- | --- |
+| `dictsort` / `dictsortreversed` | Sort a list of mappings by a (possibly dotted) key. | Key resolution ties into the variable resolver's dynamic-key path. |
+| `stringformat` | `printf`-style `%`-formatting. | The `%E` exponent-width handling diverges from Python. |
+| `random` | A random item from a list. | Non-deterministic — out of the pure-filter model. |
+| `urlize` / `urlizetrunc` | Auto-link URLs in text. | URL detection and HTML emission. |
+| `timesince` / `timeuntil` | Human-readable relative time. | Needs a "now" reference. |
+| `unordered_list` | Render a nested list as `<ul>`. | Nested-list HTML emission. |
+| `json_script` | Emit a value inside a `<script type="application/json">`. | Script-wrapper emission. |
+| `truncatechars_html` / `truncatewords_html` | HTML-aware truncation. | Needs an HTML-aware tokenizer. |
+| `safeseq` | Mark each item of a sequence safe. | Sequence-wise safe-marking. |
+| `pprint` | Debug pretty-print. | Development convenience. |
+
+`length_is` is intentionally absent — Django **removed** it in 5.1. Use `{% if value|length == 4 %}` instead.
+
+### The `map` / `select` filter family
+
+Django has no `map`/`select` filters (those are Jinja2's), so there is nothing to port. Project in a `{% for %}` loop:
+
+```django
+{% for item in items %}{{ item.name|upper }}{% endfor %}
+```
+
+## Not DTL syntax
+
+These forms aren't Django to begin with — they're rejected so a template author isn't misled into thinking they work.
+
+### Whitespace control
+
+Django Template Language has **no** whitespace-control markers. `{{- … -}}` / `{%- … -%}` are **not** DTL — they throw at parse time (`Unexpected end of expression` / `Unexpected tag "-"`), rather than silently mis-rendering. Django controls whitespace with `{% spaceless %}` and explicit template structure. (The native swig, Twig, and Jinja2 frontends *do* support `{{- -}}` — Django does not, and neither does this frontend.)
+
+### `not in` operator {#not-in-operator}
+
+The compound `x not in seq` does not parse. Use `not (x in seq)`:
+
+```django
+{% if not (user in blocked) %}…{% endif %}
+```
+
+### Jinja2-style `is` tests
+
+Django's `is` is an **identity comparison**, not Jinja2's predicate-test mechanism. There is no `is defined` / `is odd` / `is iterable` / `is mapping`. `{% if x is defined %}` compiles to `x === defined` (identity against a variable named `defined`) — almost never what you want. Use:
+
+- `{% if x is not None %}` for "is set"
+- `{% if x %}` for truthiness
+- `{% if x|divisibleby:2 %}` for even/odd
+- `{% if forloop.first %}` etc. for loop state
+
+See [Parity → The `is` operator](./parity#the-is-operator).
+
+### `{% ifequal %}` / `{% ifnotequal %}`
+
+Removed from Django in 4.0. Use `{% if x == y %}` / `{% if x != y %}`.
+
+## Dynamic `{% extends %}` {#dynamic-extends}
+
+A dynamic parent — `{% extends parent_template %}` or `{% extends full if cond else partial %}` — **resolves on the async render path**: `renderFile(path, locals, cb)` against a loader that sets `loader.async === true`. The async-codegen path lowers the parent to a deferred expression and resolves it at render time through the loader. See [Async loaders](../swig/loaders#async-loaders).
+
+| Shape | Sync render path | Async render path (`loader.async === true`) |
+| --- | --- | --- |
+| `{% extends "base.django" %}` | Yes | Yes |
+| `{% extends parent_template %}` | No — surfaces a "requires the async render path" error | Yes |
+| `{% extends full if cond else partial %}` | No — same | Yes |
+
+On the **synchronous** render path the parent link is resolved at compile time, before any runtime value exists, so a dynamic parent throws rather than silently picking the wrong template.
+
+Sync-path workaround: **dispatch in the caller** and render the selected template directly.
+
+```js
+var template = (flavor === 'admin') ? 'page_admin.django' : 'page_public.django';
+django.renderFile(template, { /* locals */ });
+```
+
+## Reporting a rejection that feels wrong
+
+If the rejection you hit isn't listed here, please [open an issue on `gina-io/swig`](https://github.com/gina-io/swig/issues) with a minimal reproducer — we track rejections against the implemented Django subset and may be able to promote a gap to a supported feature.
