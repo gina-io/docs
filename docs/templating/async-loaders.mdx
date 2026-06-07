@@ -160,6 +160,12 @@ collapses repeated fetches.
 immutable, CDN-published templates. Turn it on for a live CMS whose origin emits
 `ETag` headers and whose templates change in place.
 
+**Resilience.** Each origin fetch has a 10-second socket timeout, so a hung
+origin fails the render rather than hanging it. With `revalidate` on, if the
+conditional `GET` fails against a flaky origin (a network error or timeout),
+Gina serves the cached source instead of erroring the page — a transient origin
+blip degrades to (possibly stale) cache rather than an outage.
+
 ## Compiled-template reuse (`cache`)
 
 By default each render rebuilds the engine's view of a template. For a hot path —
