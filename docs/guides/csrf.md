@@ -430,6 +430,10 @@ mechanism — webhook signature headers (Stripe `Stripe-Signature`, GitHub
 `X-Hub-Signature-256`), HMAC over the body, or mutual TLS. Never use
 `csrfExempt: true` to "fix" a 403 on a browser-driven endpoint.
 
+See [Raw request body — req.rawBody](/guides/controller#raw-request-body) in the
+Controllers guide for a worked example that verifies an HMAC signature over
+`req.rawBody`.
+
 ---
 
 ## Errors and failure modes
