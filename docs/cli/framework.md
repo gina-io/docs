@@ -70,10 +70,29 @@ gina framework:status
 
 ## `framework:version`
 
-Print the currently active framework version.
+Print the active framework version, platform, architecture, bundled middleware, and — when the engine package is resolvable — the bundled template engine name and version.
 
 ```bash
+gina version
+# or the long form
 gina framework:version
+```
+
+Example output:
+
+```text
+Gina I/O v0.4.6-alpha.2 darwin arm64 (MIT)
+Middleware: isaac@0.4.6-alpha.1
+Template engine: @rhinostone/swig@2.7.2
+Copyright (c) 2009-2026 Rhinostone <contact@gina.io>
+```
+
+The `Template engine:` line reports the framework's bundled engine (swig by default) and is omitted when that engine package cannot be read. It reflects the framework default — an individual bundle may select a different engine via `render.engine` in its `settings.json`, which is not shown here.
+
+Print only the version number, with no banner:
+
+```bash
+gina version --short=true
 ```
 
 ---
