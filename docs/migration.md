@@ -1622,7 +1622,7 @@ Route annotations (`description` fields in `routing.json`) become OpenAPI `descr
 ### Swig migration _(internal)_
 
 :::note Additive — no action required
-The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/templating/swig) npm dependency (maintained fork with [CVE-2023-25345](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) patched). Template rendering behaviour is unchanged.
+The vendored `swig-1.4.2` has been replaced with the [`@rhinostone/swig`](/templating/swig) npm dependency (maintained fork with [CVE-2023-25345](/templating/swig/security#cve-2023-25345) patched). Template rendering behaviour is unchanged.
 :::
 
 ### Live database index introspection _(additive)_
@@ -2272,10 +2272,7 @@ Default is `false` (disabled).
 
 ### Security — swig CVE-2023-25345
 
-Patched in-place in the vendored swig 1.4.2. **No user action required.** See the [Swig security reference](/templating/swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__) for the full advisory.
-
-Template paths in `{% extends %}` tags and relative/absolute `file` paths are
-now validated against the template root before being read.
+CVE-2023-25345 is a directory-traversal / arbitrary-file-read flaw in swig's filesystem loader: an `{% include %}` / `{% extends %}` path that traverses upward — or arrives through an untrusted variable — could escape the template root and read an arbitrary file into the render. Patched in-place in the vendored swig 1.4.2: template paths in `{% extends %}` tags and relative/absolute `file` paths are now validated against the template root before being read. **No user action required.** See the [Swig security reference](/templating/swig/security#cve-2023-25345) for the full advisory.
 
 ---
 
