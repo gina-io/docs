@@ -123,7 +123,7 @@ When a tag calls `parser.on(types.VAR, fn)` and the callback returns falsy, the 
 
 With `autoescape: true` (the default), every `{{ … }}` is piped through the `e` filter automatically. A filter **wrongly** marked `.safe = true` bypasses this — double-check any new `.safe` annotation.
 
-Shipping `.safe`: `safe`, `raw`, `escape` / `e`, `json` / `json_encode`, `url_encode`, `url_decode`.
+Shipping `.safe`: `safe`, `raw`, `json` / `json_encode` (which self-escape `<`, `>`, `&`, `'` before bypassing autoescape), and `url_encode`. `escape` / `e` are **not** flagged — an explicit `{{ x|e }}` avoids double-escaping because the HTML escape is idempotent, not because the autoescape pass is suppressed. `url_decode` is deliberately **not** `.safe` — decoded content can be arbitrary HTML, so its output stays autoescaped. Per-filter table: [Filters](./filters).
 
 `autoescape: false` disables escaping globally. Any consumer setting this is asserting they control template source entirely.
 
