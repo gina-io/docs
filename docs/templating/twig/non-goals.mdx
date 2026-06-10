@@ -33,7 +33,7 @@ All of the following throw a generic `Unexpected tag "<name>"` error at parse ti
 | Tag | Upstream purpose | Why rejected |
 | --- | --- | --- |
 | `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where varname resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
-| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [CVE-2023-25345 Phase 2](../swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
+| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [prototype-chain hardening](../swig/security#prototype-chain-hardening)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
 
 ### Deferred
 
@@ -110,7 +110,7 @@ Dot-path LHS is supported; bracket-notation LHS throws:
 | `{% set foo["bar"] = 1 %}` | No | `Bracket-notation assignment is not supported in "set" (use dot-path notation)` |
 | `{% set foo[dynamic_key] = 1 %}` | No | Same as above. |
 
-Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [CVE-2023-25345 Phase 2](../swig/security#cve-2023-25345--arbitrary-code-execution-via-__proto__). swig-twig inherits the same perimeter.
+Rationale: bracket-notation writes at runtime can reach through the prototype chain (`foo["__proto__"]["x"] = …`) in ways that the parse-time `_dangerousProps` check cannot fully enclose. Dot-path writes are statically analysable — each segment is a lexer-validated identifier — and the native swig frontend already went through this audit during [prototype-chain hardening](../swig/security#prototype-chain-hardening). swig-twig inherits the same perimeter.
 
 ## Conditional branches (deferred)
 

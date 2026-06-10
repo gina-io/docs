@@ -43,15 +43,16 @@ Passing a loader object without both methods throws at `setDefaults` / construct
 ## swig.loaders.fs
 
 ```js
-swig.loaders.fs(basepath, encoding)
+swig.loaders.fs(basepath, encoding, allowOutsideRoot)
 ```
 
 Filesystem loader. Wraps `fs.readFile` (or `fs.readFileSync` in sync mode).
 
 | Arg | Type | Default | Description |
 | --- | --- | --- | --- |
-| `basepath` | string | — | Root directory. When set, every `resolve(to, from)` uses `basepath` instead of `path.dirname(from)`. |
+| `basepath` | string | — | Root directory. When set, every `resolve(to, from)` uses `basepath` instead of `path.dirname(from)`, and paths resolving outside the root are rejected (see the security note below). |
 | `encoding` | string | `'utf8'` | File encoding. |
+| `allowOutsideRoot` | boolean | `false` | Opt out of the `basepath` confinement for templates that intentionally read files from outside the root. |
 
 ```js
 // Default — resolves relative to the including template
@@ -60,6 +61,10 @@ swig.setDefaults({ loader: swig.loaders.fs() });
 // Fixed root
 swig.setDefaults({ loader: swig.loaders.fs(__dirname + '/views') });
 ```
+
+:::warning Path confinement (CVE-2023-25345)
+When `basepath` is set, `resolve()` rejects any `include` / `extends` / `import` path that resolves outside the root — including one supplied by an untrusted runtime variable (`{% include userVar %}`). An escaping path throws. Pass `allowOutsideRoot` (third argument) for templates that intentionally read outside the root. No-`basepath` mode is unconfined, so the secure posture is to set a `basepath`. Fixed in `2.7.1`; `2.7.2` made it work with relative basepaths. See [Security › CVE-2023-25345](./security#cve-2023-25345).
+:::
 
 The filesystem loader is unavailable in the browser build — it throws on load if `fs` is missing.
 
