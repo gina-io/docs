@@ -1,0 +1,297 @@
+---
+displayed_sidebar: templatingSidebar
+title: Async Template Loaders
+sidebar_label: Async Loaders
+sidebar_position: 1.5
+description: Render templates from a custom async backend (remote, CDN, object storage, or in-memory) instead of the local filesystem via settings.template.<engine>.loader. Covers the built-in memory and http loaders, opt-in compiled-template reuse (cache), the CVE-2023-25345 path-traversal guard, http origin containment, and host/TLS trust ownership. Works for both swig and nunjucks.
+level: intermediate
+prereqs:
+  - '[Templating overview](/templating)'
+  - '[Views guide](/guides/views)'
+  - '[Swig loaders](/templating/swig/loaders)'
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Async Template Loaders
+
+New in `0.4.6`. By default a Gina bundle renders templates from its
+`templates/html` directory on disk. An **async template loader** lets a bundle
+resolve templates from a custom backend instead — a remote HTTP(S) origin, a
+CDN, object storage, or an in-memory map — fetched at render time. You configure
+it per bundle via `settings.template.<engine>.loader`, and it works for **both**
+the swig and nunjucks render paths.
+
+Bundles that don't configure a loader render from the filesystem exactly as
+before — the feature is fully opt-in, and the default path is byte-for-byte
+unchanged.
+
+## When to use
+
+- Templates are published to a **CDN or object store** and shared across bundles or environments.
+- A **headless CMS** returns template source over HTTP.
+- You want a **self-contained** bundle with a small inline template set (tests, examples, a single-file demo).
+
+If your templates live on disk next to the bundle, you don't need a loader — the
+default filesystem path is simpler and faster.
+
+## Configuration
+
+The loader config follows the same convention as `connectors.json`: a named
+built-in `type` plus type-specific flat keys. It lives under the engine you've
+selected with [`render.engine`](/templating) — `template.swig.loader` for swig
+(the default), `template.nunjucks.loader` for nunjucks. The shape is identical
+for both engines; only the engine key differs.
+
+Two built-ins ship in `0.4.6`: **`memory`** (inline templates, no I/O) and
+**`http`** (fetch over HTTP/HTTPS).
+
+### memory — inline templates
+
+A flat `identifier → source` map. No network, no filesystem. The page template
+**and** its transitive `{% extends %}` / `{% include %}` chain all resolve from
+the map.
+
+<Tabs groupId="templating-engine">
+<TabItem value="swig" label="Swig" default>
+
+```json
+{
+  "render": { "engine": "swig" },
+  "template": {
+    "swig": {
+      "loader": {
+        "type": "memory",
+        "templates": {
+          "layout.html": "<!doctype html><html><head><title>{{ page.data.title }}</title></head><body>{% block body %}{% endblock %}</body></html>",
+          "home.html": "{% extends \"layout.html\" %}{% block body %}<h1>{{ page.data.title }}</h1>{% endblock %}"
+        }
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="nunjucks" label="Nunjucks">
+
+```json
+{
+  "render": { "engine": "nunjucks" },
+  "template": {
+    "nunjucks": {
+      "loader": {
+        "type": "memory",
+        "templates": {
+          "layout.njk": "<!doctype html><html><head><title>{{ page.data.title }}</title></head><body>{% block body %}{% endblock %}</body></html>",
+          "home.njk": "{% extends \"layout.njk\" %}{% block body %}<h1>{{ page.data.title }}</h1>{% endblock %}"
+        }
+      }
+    }
+  }
+}
+```
+
+The nunjucks loader additionally requires nunjucks to be installed in the project
+(`npm install nunjucks`) — see the [Nunjucks](/templating/nunjucks) page for the
+opt-in contract.
+
+</TabItem>
+</Tabs>
+
+### http — fetch over HTTP(S)
+
+Fetches each template (and its transitive `extends` / `include` chain) from
+`origin + basePath + <identifier>`. A **source cache** keyed by resolved URL
+collapses repeated fetches.
+
+<Tabs groupId="templating-engine">
+<TabItem value="swig" label="Swig" default>
+
+```json
+{
+  "render": { "engine": "swig" },
+  "template": {
+    "swig": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "ttl": 60,
+        "revalidate": false
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="nunjucks" label="Nunjucks">
+
+```json
+{
+  "render": { "engine": "nunjucks" },
+  "template": {
+    "nunjucks": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "ttl": 60,
+        "revalidate": false
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+</Tabs>
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `origin` | string | **required** | `scheme://host[:port]` of the template origin — `http` or `https`, no path. |
+| `basePath` | string | `""` | Path prefix that template identifiers resolve under, root-relative. |
+| `ttl` | number | `60` | Source-cache TTL in seconds (absolute from fetch). `0` caches until evicted. |
+| `revalidate` | boolean | `false` | When `true`, a cache hit issues a conditional `GET` (`If-None-Match`) and serves cached source on a `304`, refreshing the TTL. |
+
+`revalidate` is off by default so a cache hit costs no round-trip — ideal for
+immutable, CDN-published templates. Turn it on for a live CMS whose origin emits
+`ETag` headers and whose templates change in place.
+
+**Resilience.** Each origin fetch has a 10-second socket timeout, so a hung
+origin fails the render rather than hanging it. With `revalidate` on, if the
+conditional `GET` fails against a flaky origin (a network error or timeout),
+Gina serves the cached source instead of erroring the page — a transient origin
+blip degrades to (possibly stale) cache rather than an outage.
+
+## Compiled-template reuse (`cache`)
+
+By default each render rebuilds the engine's view of a template. For a hot path —
+especially one served from a remote origin — you can opt into **compiled-template
+reuse** so the per-bundle engine (swig) or environment (nunjucks) and its compiled
+templates are kept and reused across requests instead of being rebuilt per render:
+
+<Tabs groupId="templating-engine">
+<TabItem value="swig" label="Swig" default>
+
+```json
+{
+  "render": { "engine": "swig" },
+  "template": {
+    "swig": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "cache": true
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="nunjucks" label="Nunjucks">
+
+```json
+{
+  "render": { "engine": "nunjucks" },
+  "template": {
+    "nunjucks": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "cache": true
+      }
+    }
+  }
+}
+```
+
+</TabItem>
+</Tabs>
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `cache` | boolean | `false` | Reuse the per-bundle engine/environment and its compiled templates across requests. Automatically disabled in development so template edits are always picked up live. |
+
+`cache` is independent of the `http` loader's source cache: the **source cache**
+avoids re-fetching template *text* from the origin, while `cache` avoids
+re-*compiling* it. Use either or both.
+
+**Per-request data stays per-request.** Sharing the engine across requests does
+*not* share request state — the web root, generated URLs and locale resolved by
+the `getUrl` / `getWebroot` / `t` filters are bound to each request at render
+time, so concurrent requests through a shared engine never see one another's
+context.
+
+**Development always recompiles.** `cache` has no effect in development (dev
+mode): edits to an inline map or a remote template are picked up on the next
+request without a restart. Enable `cache` for staging / production hot paths.
+
+:::note Engine difference
+With nunjucks, a shared environment reuses compiled templates for the whole
+`extends` / `include` chain. With swig, the top-level page template is reused but
+the nested templates in its chain are currently recompiled per render (a swig-core
+constraint); both still skip the default per-request engine rebuild.
+:::
+
+## Dispatch flow
+
+```mermaid
+flowchart TD
+  A[bundle startup] --> B{settings.template.&lt;engine&gt;.loader configured?}
+  B -->|no| C[filesystem render<br/>render-swig.js / render-nunjucks.js]
+  B -->|yes| D[build + validate loader<br/>shape only, no network probe]
+  D -->|bad config| E[fail bundle startup<br/>clear error]
+  D -->|ok, async| F[stash on process.gina<br/>per bundle, by template root]
+  F --> G[first HTTP request]
+  G --> H[controller dispatch<br/>routes to the async delegate]
+  H --> I[resolve identifier<br/>CVE-2023-25345 path guard + http containment]
+  I --> J[load source<br/>memory map / http fetch + cache]
+  J --> K[engine renders<br/>page + transitive extends/include]
+  K --> L[HTTP/1.1 or HTTP/2 response]
+```
+
+The engine resolves the page template and every nested `extends` / `include` /
+`import` through the loader, so an entire template tree can live off-disk.
+
+## Security
+
+A loader sits between your bundle and a backend you may not fully control, so
+Gina applies guards on every resolve:
+
+- **Path-traversal guard (CVE-2023-25345).** Every identifier the engine resolves
+  — the page, and each transitive `extends` / `include` / `import` — is checked:
+  an identifier containing a `..` segment or an absolute path is **rejected
+  before the loader fetches anything**. The guard runs on the whole dependency
+  chain, not just the first hop.
+- **HTTP origin containment.** The `http` loader additionally verifies each
+  resolved URL stays under the configured `origin + basePath`. A template that
+  resolves to a different origin (for example an absolute `http://elsewhere/x`)
+  is rejected.
+- **Host allowlist and TLS are your responsibility.** Gina fetches from whatever
+  `origin` you configure and trusts the transport. Point `origin` only at hosts
+  you control or trust, prefer `https://`, and treat template source from a
+  remote backend as you would any remote code — a compromised origin can serve a
+  template that runs in your render context. For the engine-level
+  template-injection guards (the `{{ __proto__ }}` / `constructor` class), see
+  the swig [security model](/templating/swig/security).
+
+## Fail-fast on bad config
+
+A misconfigured loader **fails bundle startup** rather than silently falling back
+to the filesystem — the fallback can't serve off-disk templates, which is the
+whole point of the feature. "Validate" means config **shape** only: an unknown
+`type`, a missing required key, or a malformed `origin` aborts startup with a
+clear message. The loader never reaches the backend at boot, so a flaky or
+unreachable origin is a **render-time** concern, not a startup failure.
+
+## Defaults and compatibility
+
+A bundle with no `template.<engine>.loader` renders from `templates/html` on disk
+exactly as before. Existing bundles are unaffected — there is no migration step
+and no behaviour change unless you opt in.

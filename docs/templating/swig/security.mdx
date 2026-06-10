@@ -47,20 +47,28 @@ flowchart LR
 
 **Fixed in:** `@rhinostone/swig@1.4.5` — `optimist` was replaced with `yargs@3`, which has no `minimist` dependency. The vulnerable transitive edge no longer exists.
 
-### CVE-2023-25345 — arbitrary code execution via `__proto__`
+### CVE-2023-25345 — directory traversal / arbitrary file read {#cve-2023-25345}
 
-**Affected:** `swig@1.4.2` and earlier.
+**Affected:** `@rhinostone/swig` through `2.7.0` — and the shared `@rhinostone/swig-core` loader, so every flavor (Twig, Jinja2, Django). Inherited from upstream `swig ≤ 1.4.2`. CWE-22, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N`).
 
-**Root cause:** Template source that reaches the prototype chain through `_ctx` access (`__proto__`, `constructor`, `prototype`) can escape into the surrounding JavaScript runtime. The canonical exploit is `{{ constructor.constructor("return process")() }}` — the lexer emits a single VAR token, the parser generates `_ctx.constructor.constructor` (which is `Function`), and the template then calls it with arbitrary code.
+**Root cause:** the filesystem loader's `resolve(to, from)` joined the requested path to the root without confining the result to it. An `{% include %}` / `{% extends %}` / `{% import %}` path that traversed upward (`../../../etc/passwd`) escaped the configured `basepath` and read an arbitrary file into the render. The genuinely dangerous form needs only untrusted **data**, not untrusted template source — `{% include userVar %}` where `userVar` comes from `locals`.
 
-**Fixed in two phases:**
+**Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
+
+## Prototype-chain hardening (`__proto__` / `constructor` / `prototype`) {#prototype-chain-hardening}
+
+Independently of the CVE above, Swig blocks template expressions from reaching the prototype chain through `_ctx` access. *(Earlier releases of this fork tracked this hardening under the CVE-2023-25345 label; that was a mislabel — the authoritative CVE-2023-25345 is the file-read traversal documented above. The guards below are real defense-in-depth, not that CVE.)*
+
+**Root cause it addresses:** template source that reaches the prototype chain through `_ctx` access (`__proto__`, `constructor`, `prototype`) can escape into the surrounding JavaScript runtime. The canonical exploit is `{{ constructor.constructor("return process")() }}` — the lexer emits a single VAR token, the parser generates `_ctx.constructor.constructor` (which is `Function`), and the template then calls it with arbitrary code.
+
+**Added in two phases:**
 
 | Phase | Version | Coverage |
 | --- | --- | --- |
 | Phase 1 | `1.4.4` | Dot-notation and direct-name access in `parseVar` + DOTKEY handler + `set` tag. |
 | Phase 2 | `1.5.0` | Bracket-notation in variable output and `set`; reserved names blocked in `for` loop variables, `macro` names, and `import` aliases. |
 
-## What the guards protect against
+### What the guards protect against
 
 | Vector | Guard | Severity if unpatched |
 | --- | --- | --- |
@@ -73,7 +81,7 @@ flowchart LR
 | `{% macro __proto__() %}` | `macro.js` FUNCTION handler | Medium — overwrites `_ctx.__proto__` with a function |
 | `{% import "f" as __proto__ %}` | `import.js` VAR handler | Medium — overwrites `_ctx.__proto__` with a namespace |
 
-## What the guards do NOT protect against
+### What the guards do NOT protect against
 
 | Vector | Why not | Risk |
 | --- | --- | --- |
@@ -115,7 +123,7 @@ When a tag calls `parser.on(types.VAR, fn)` and the callback returns falsy, the 
 
 With `autoescape: true` (the default), every `{{ … }}` is piped through the `e` filter automatically. A filter **wrongly** marked `.safe = true` bypasses this — double-check any new `.safe` annotation.
 
-Shipping `.safe`: `safe`, `raw`, `escape` / `e`, `json` / `json_encode`, `url_encode`, `url_decode`.
+Shipping `.safe`: `safe`, `raw`, `json` / `json_encode` (which self-escape `<`, `>`, `&`, `'` before bypassing autoescape), and `url_encode`. `escape` / `e` are **not** flagged — an explicit `{{ x|e }}` avoids double-escaping because the HTML escape is idempotent, not because the autoescape pass is suppressed. `url_decode` is deliberately **not** `.safe` — decoded content can be arbitrary HTML, so its output stays autoescaped. Per-filter table: [Filters](./filters).
 
 `autoescape: false` disables escaping globally. Any consumer setting this is asserting they control template source entirely.
 

@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Templating
 sidebar_label: Overview
 sidebar_position: 1
-description: Gina renders HTML via a pluggable template engine. Swig is the default, Twig is a drop-in Twig-syntax variant, Nunjucks is an opt-in alternative loaded from the project, and Jinja2 renders Python Jinja2 syntax on the same swig engine. This page explains how the render.engine setting works and which engine to pick.
+description: Gina renders HTML via a pluggable template engine. Swig is the default, Twig is a drop-in Twig-syntax variant, Nunjucks is an opt-in alternative loaded from the project, and Jinja2 and Django render Python Jinja2 and Django Template Language syntax on the same swig engine. This page explains how the render.engine setting works and which engine to pick.
 level: beginner
 prereqs:
   - '[Views guide](/guides/views)'
@@ -24,14 +24,15 @@ Gina renders HTML through a **pluggable template engine**. Controllers call `sel
 |---|---|---|---|---|
 | **[Swig](./swig)** (default) | `@rhinostone/swig` | Jinja2/Django-inspired (`{{ }}`, `{% %}`) | Framework dependency, ships with every bundle | Default for new bundles; keeps the framework's historical syntax |
 | **[Twig](./twig)** | `@rhinostone/swig-twig` | Twig (`{{ }}`, `{% %}`, stricter) | Drop-in swig replacement via `swig.package` | You have an existing Twig codebase, or your team writes Twig |
-| **[Nunjucks](./nunjucks)** | `nunjucks` (project-side) | Jinja2 (`{{ }}`, `{% %}`, async-friendly) | **Project-only** — never a framework dep | You want native Jinja2, async loaders, or nunjucks-specific extensions |
+| **[Nunjucks](./nunjucks)** | `nunjucks` (project-side) | Jinja2 (`{{ }}`, `{% %}`, async-friendly) | **Project-only** — never a framework dep | You want native Jinja2 syntax or nunjucks-specific extensions |
 | **[Jinja2](./jinja2)** | `@rhinostone/swig-jinja2` | Python Jinja2 (`{{ }}`, `{% %}`) | Drop-in swig replacement via `swig.package` | You have Python Jinja2 templates, or your team writes Python Jinja2 |
+| **[Django](./django)** | `@rhinostone/swig-django` | Django Template Language (`{{ }}`, `{% %}`, colon-filters) | Drop-in swig replacement via `swig.package` | You have Django templates, or your team writes Django Template Language |
 
 Swig is the safe default. Twig swaps the parser on the same underlying engine, so migration is near-zero-cost. Nunjucks is a full parallel engine — opt in only when you need it, because it fails loud if the project hasn't `npm install`ed it.
 
-A fourth option, **[Jinja2](./jinja2)** (`@rhinostone/swig-jinja2`), is a swig-core frontend like Twig — Python Jinja2 syntax on the same engine, security model, and extension contract. Because it's swig-compatible at the engine level, the same `swig.package` swap that loads Twig loads Jinja2 too. It also runs standalone or via its Express adapter (see the [Jinja2 section](./jinja2)).
+Two further options — **[Jinja2](./jinja2)** (`@rhinostone/swig-jinja2`) and **[Django](./django)** (`@rhinostone/swig-django`) — are swig-core frontends like Twig: Python Jinja2 and Django Template Language syntax on the same engine, security model, and extension contract. Because they're swig-compatible at the engine level, the same `swig.package` swap that loads Twig loads them too. Both also run standalone or via their Express adapters (see the [Jinja2](./jinja2) and [Django](./django) sections).
 
-## Same template, four engines
+## Same template, five engines
 
 Below is a minimal `layout.html` that prints a page title and loops over a list of products. The data passed from the controller is:
 
@@ -104,6 +105,20 @@ Nunjucks is a separate engine loaded from the project's `node_modules/nunjucks/`
 [Jinja2](./jinja2) renders **Python Jinja2** syntax via `@rhinostone/swig-jinja2`, another swig-core frontend. The surface matches Swig here — the same `{{ }}` / `{% %}` / `|currency` — because both lower to the same engine. See the [Jinja2 section](./jinja2) for standalone and Express setup.
 
 </TabItem>
+<TabItem value="django" label="Django">
+
+```jinja2
+<h1>{{ page.data.title }}</h1>
+<ul>
+  {% for item in page.data.items %}
+    <li>{{ item.name }} — {{ item.price|currency }}</li>
+  {% endfor %}
+</ul>
+```
+
+[Django](./django) renders **Django Template Language** syntax via `@rhinostone/swig-django`, another swig-core frontend. The surface matches Swig here — the same `{{ }}` / `{% %}` / `|currency` — because both lower to the same engine. Django adds colon-filter arguments (`{{ price|floatformat:2 }}`), the `forloop.*` loop context, and auto-called attributes (`{{ user.get_label }}`). See the [Django section](./django) for standalone and Express setup.
+
+</TabItem>
 </Tabs>
 
 ## Picking an engine
@@ -165,6 +180,21 @@ Swap the package via `config/settings.json`, exactly like Twig:
 
 The framework loads your project's `@rhinostone/swig-jinja2` from `node_modules/` at bundle start. Templates use Python Jinja2 syntax — see the [Jinja2 section](./jinja2) for the parity table and migration notes.
 
+### Django
+
+Swap the package via `config/settings.json`, exactly like Twig:
+
+```json
+{
+  "swig": {
+    "useProject": true,
+    "package": "@rhinostone/swig-django"
+  }
+}
+```
+
+The framework loads your project's `@rhinostone/swig-django` from `node_modules/` at bundle start. Templates use Django Template Language syntax — see the [Django section](./django) for the parity table and migration notes.
+
 ## Where the dispatch happens
 
 `core/controller/controller.js :: this.render()` reads `conf.render.engine` from the bundle's resolved settings and routes the call to one of:
@@ -179,3 +209,4 @@ The same `data.page` shape is passed in either direction, so controller code is 
 - [Views guide](/guides/views) — bundle-level views directory, layouts, partials
 - [Controllers guide](/guides/controller) — how `self.render(data)` populates the page
 - [connectors.json reference](/reference/connectors) — separate from templating, but often the data source behind it
+- [Async template loaders](/templating/async-loaders) — render from a remote, CDN, object-storage, or in-memory backend (both swig and nunjucks)

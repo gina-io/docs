@@ -365,6 +365,7 @@ object that matches the incoming method; the others are set to `undefined`.
 | `req.delete` | `DELETE` | Query-string parameters |
 | `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response |
 | `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
+| `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
 **`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
 need to distinguish between POST, PUT, and PATCH:
@@ -394,6 +395,77 @@ this.replace = function(req, res, next) {
 this.update = function(req, res, next) {
     var data = req.patch;
 };
+```
+
+### Raw request body — req.rawBody {#raw-request-body}
+
+`req.rawBody` is the exact, **unparsed** request body — the raw bytes as received,
+captured *before* the framework parses them into `req.post` / `req.put` / `req.patch`.
+You need it to verify an **inbound webhook signature**: providers (Stripe, GitHub, …)
+sign a digest of the literal request bytes, so an HMAC recomputed over a parsed and
+re-serialized object would differ (whitespace, key order) and never match — only
+`req.rawBody` reproduces the bytes that were signed.
+
+- Populated for non-multipart request bodies (POST/PUT/PATCH). It is the empty
+  string `''` for an empty body.
+- `multipart/form-data` uploads stream to `req.files` and do **not** set
+  `req.rawBody`.
+- It is a reference to the already-buffered body — always available, no opt-in,
+  no extra copy.
+
+```mermaid
+sequenceDiagram
+    participant P as Webhook provider
+    participant G as Gina runtime
+    participant A as Controller action
+    P->>G: POST /webhooks/x<br/>X-Hub-Signature-256 header + raw body
+    G->>G: capture req.rawBody (before parsing)
+    G->>G: parse body into req.post
+    G->>A: receive(req, res, next)
+    A->>A: HMAC-SHA256 over req.rawBody
+    alt computed digest === header (timingSafeEqual)
+        A-->>P: 200 OK
+    else mismatch
+        A-->>P: 401 Unauthorized
+    end
+```
+
+Mark the route `csrfExempt: true` — a webhook can't present a CSRF token (see
+[CSRF · Per-route opt-out](/guides/csrf#per-route-opt-out)) — then verify the
+signature over `req.rawBody` in the action:
+
+```js title="src/api/controllers/controller.webhook.js"
+var crypto = require('crypto');
+
+var WebhookController = function() {
+    var self = this;
+
+    // POST /webhooks/x  — the route is marked csrfExempt: true in routing.json
+    this.receive = function(req, res, next) {
+        var secret    = getEnvVar('WEBHOOK_SECRET');
+        var signature = req.headers['x-hub-signature-256'] || '';
+
+        // Recompute the HMAC over the EXACT bytes received. Signing a parsed and
+        // re-serialized object would differ (whitespace, key order) and never match.
+        var expected = 'sha256=' + crypto
+            .createHmac('sha256', secret)
+            .update(req.rawBody || '')
+            .digest('hex');
+
+        // Constant-time compare. timingSafeEqual throws on a length mismatch,
+        // so guard the lengths first.
+        var a = Buffer.from(signature);
+        var b = Buffer.from(expected);
+        if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+            return self.throwError(res, 401, 'invalid webhook signature');
+        }
+
+        // Verified — req.post holds the parsed JSON payload as usual.
+        self.renderJSON({ status: 200, received: req.post.type });
+    };
+};
+
+module.exports = WebhookController;
 ```
 
 ### PUT vs PATCH — when to use which
