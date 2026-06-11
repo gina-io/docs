@@ -24,6 +24,21 @@ const { getContext, _, onCompleteCall, uuid }    = require('gina/gna');
 const { setContext, requireJSON, merge, ApiError } = require('gina');
 ```
 
+Since `0.5.0`, both entry points are also importable from ESM projects and
+modern bundlers via the package `exports` map. The ESM entries expose a
+**default export only** — the `gina/gna` properties are getters that resolve
+at access time (after framework boot), so static named ESM exports would
+freeze `undefined` pre-boot; destructure from the default instead:
+
+```javascript
+// ESM — default imports only
+import gina from 'gina';
+import gna from 'gina/gna';
+
+// destructure AFTER framework boot
+const { getContext, _, onCompleteCall, uuid } = gna;
+```
+
 Every export carries JSDoc (description, `@param`, `@returns`, `@example`), so
 editors can jump to definitions and AI assistants can generate accurate Gina
 code. The globals continue to work exactly as before — this is an additive
