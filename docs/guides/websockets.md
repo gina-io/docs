@@ -40,8 +40,8 @@ sequenceDiagram
 
 ## Requirements
 
-- An **`https` bundle running the `http/2.0` protocol** (the feature rides
-  the TLS HTTP/2 server).
+- A bundle running the **`http/2.0` protocol** — `https` or cleartext h2c
+  (`"scheme": "http"`, e.g. behind a TLS-terminating reverse proxy) alike.
 - The opt-in flag in `settings.json` — strictly the boolean `true`:
 
 ```json title="src/<bundle>/config/settings.json"

@@ -165,6 +165,9 @@ Isaac includes built-in protection against known HTTP/2 attack vectors:
 | Settings flood | Settings ACK timeout | 10 s |
 | Stream exhaustion | Concurrent stream limit | 256 (`maxConcurrentStreams`) |
 
+These protections apply to any `http/2.0` bundle — `https` and cleartext h2c
+(`"scheme": "http"`, e.g. behind a TLS-terminating reverse proxy) alike.
+
 The stream and window settings are configurable in `settings.json` under `http2Options`.
 Security limits (`headerTableSize`, `maxHeaderListSize`) remain hardcoded:
 
