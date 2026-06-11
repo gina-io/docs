@@ -3,9 +3,65 @@ name: Deploy and update alias
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Badge drift check — see the `drift` job. Minute offset avoids top-of-hour load.
+    - cron: '17 */6 * * *'
 
 jobs:
+  drift:
+    # Scheduled runs only: compare every live version badge against the npm
+    # registry's latest stable. The deploy job below redeploys only when a badge
+    # drifted, so a package release published without a docs push still reaches
+    # production within ~6h. Check ALL badges — partial drift is the failure
+    # mode (the flavor badges once froze for four releases while swig's stayed
+    # fresh).
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      drifted: ${{ steps.check.outputs.drifted }}
+    steps:
+      - name: Compare live badges against npm latest
+        id: check
+        run: |
+          drifted=false
+
+          check_badge () {
+            pkg="$1"; live="$2"
+            latest=$(npm view "$pkg" dist-tags.latest 2>/dev/null || echo unknown)
+            echo "$pkg: live=${live:-unknown} latest=$latest"
+            case "$latest" in
+              *-*) echo "  (latest is a pre-release — not advertised on the site, skipping)"; return 0 ;;
+            esac
+            # Unreadable values count as drift: a redeploy is cheap and converges.
+            if [ -z "$live" ] || [ "$latest" = "unknown" ] || [ "$live" != "$latest" ]; then
+              drifted=true
+            fi
+          }
+
+          flavor_badge () {
+            curl -sL "https://gina.io/docs/templating/$1/" \
+              | grep -oE 'swigPkgVersion[^"]*">v[0-9][^<]*' \
+              | sed 's/.*>v//' | head -1 || true
+          }
+
+          check_badge @rhinostone/swig        "$(flavor_badge swig)"
+          check_badge @rhinostone/swig-twig   "$(flavor_badge twig)"
+          check_badge @rhinostone/swig-jinja2 "$(flavor_badge jinja2)"
+          check_badge @rhinostone/swig-django "$(flavor_badge django)"
+
+          gina_badge=$(curl -sL "https://gina.io/docs/" \
+            | grep -oE 'navbar-dual-badge__version[^>]*>v[0-9][^<]*' \
+            | sed 's/.*>v//' | head -1 || true)
+          check_badge gina "$gina_badge"
+
+          echo "drifted=$drifted" >> "$GITHUB_OUTPUT"
+
   deploy:
+    needs: [drift]
+    # always() lets this run when drift is skipped (push / manual dispatch);
+    # on scheduled runs it deploys only when the drift check saw a stale badge.
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || needs.drift.outputs.drifted == 'true')
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
