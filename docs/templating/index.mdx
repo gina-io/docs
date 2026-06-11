@@ -32,6 +32,27 @@ Swig is the safe default. Twig swaps the parser on the same underlying engine, s
 
 Two further options — **[Jinja2](./jinja2)** (`@rhinostone/swig-jinja2`) and **[Django](./django)** (`@rhinostone/swig-django`) — are swig-core frontends like Twig: Python Jinja2 and Django Template Language syntax on the same engine, security model, and extension contract. Because they're swig-compatible at the engine level, the same `swig.package` swap that loads Twig loads them too. Both also run standalone or via their Express adapters (see the [Jinja2](./jinja2) and [Django](./django) sections).
 
+## Mixing engines in one bundle
+
+Since `0.5.0`, an explicit template extension overrides `render.engine` per render, so a single bundle can serve swig and nunjucks sections side by side. A templates.json section declaring `"ext": "njk"` renders through nunjucks; `"ext": "swig"` renders through swig; `.html` (the default) and any other extension keep following the bundle-level `render.engine`:
+
+```json
+// config/templates.json — only the "reports" section uses nunjucks
+{
+  "_common": { "html": "templates/html" },
+  "reports": { "ext": "njk" }
+}
+```
+
+A controller can switch a single render the same way with `self.setTemplate(file, ext)` (see the [Controllers guide](/guides/controller)):
+
+```javascript
+self.setTemplate('reports/summary', '.njk');
+self.render(data);
+```
+
+The dispatch precedence mirrors the template-file resolution itself — the `setTemplate` override extension first, then the section's `ext`, then the `.html` default — so the engine choice always matches the file that gets rendered. Bundles whose templates.json declares a `.njk` section get the same fail-fast `NUNJUCKS_NOT_INSTALLED` startup check as `render.engine: "nunjucks"` bundles: `npm install nunjucks` in the project root before declaring `.njk` sections.
+
 ## Same template, five engines
 
 Below is a minimal `layout.html` that prints a page title and loops over a list of products. The data passed from the controller is:

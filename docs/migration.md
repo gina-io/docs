@@ -19,6 +19,51 @@ upward to the target version.
 
 ---
 
+## 0.4.7 → 0.5.0
+
+`0.5.0` is the next release in development. Changes documented so far are additive for every measured usage pattern; one packaging change is noted below for projects that deep-require into the gina package by path.
+
+### What's new — native ESM entry points
+
+`package.json` now declares an `"exports"` map with dual CJS/ESM entry points, so ESM projects and modern bundlers can import Gina natively:
+
+```javascript
+// ESM
+import gina from 'gina';        // the framework entry — same object require('gina') returns
+import gna from 'gina/gna';     // the explicit-exports helper module
+
+// destructure helpers AFTER framework boot — the gna properties are
+// getters that resolve at access time
+const { getContext, getConfig } = gna;
+```
+
+Both ESM entries expose a **default export only**: the framework object is assembled at runtime by the CJS core, and the `gina/gna` helpers are getter properties that resolve after framework boot — static named ESM exports would freeze `undefined` pre-boot. CJS `require()` resolution is byte-identical to previous releases, and TypeScript declarations keep resolving through per-entry `types` conditions. **No migration action required** for `require()`-based projects.
+
+### Packaging change — undeclared deep subpaths are no longer resolvable
+
+With the `"exports"` map in place, the package's Node-resolvable surface is exactly the bare specifier (`gina`), `gina/gna`, and `gina/package.json`. A project that deep-requires into the package by an undeclared path (e.g. `require('gina/framework/v<version>/lib/...')`) will get `ERR_PACKAGE_PATH_NOT_EXPORTED`. No supported usage pattern does this — client-side RequireJS IDs such as `gina/validator` are unaffected (they are resolved by the browser loader, not Node) — but if your project does, switch to the documented entry points or the runtime `lib` registry. **No action required** otherwise.
+
+### What's new — mixed template engines per bundle (extension-keyed dispatch)
+
+A single bundle can now mix swig and nunjucks. An explicit template extension routes the render to its engine, regardless of the bundle-level `render.engine` setting:
+
+```json
+// templates.json — the "reports" section renders through nunjucks,
+// every other section keeps the bundle's engine (swig by default)
+{
+  "_common": { "html": "templates/html" },
+  "reports": { "ext": "njk" }
+}
+```
+
+`self.setTemplate(file, '.njk')` switches a single render the same way. The precedence is the setTemplate override extension, then the section's `ext`, then the `.html` default — `.njk` renders through nunjucks, `.swig` through swig, and `.html` (or any other extension) keeps following `render.engine`, so existing bundles behave identically. Bundles whose templates.json declares a `.njk` section get the same fail-fast `NUNJUCKS_NOT_INSTALLED` startup check as `render.engine: "nunjucks"` bundles — install nunjucks in the project before declaring `.njk` sections. See the [Templating overview](/templating). **No migration action required.**
+
+### Also new — nunjucks Inspector parity (dev mode)
+
+Dev-mode nunjucks pages now render the Inspector statusbar and expose the query log (`data.page.queries`) alongside the flow timeline, matching the swig render path — the Inspector Queries tab no longer renders empty for nunjucks bundles. Dev-mode only; **no migration action required.**
+
+---
+
 ## 0.4.6 → 0.4.7
 
 `0.4.7` is an additive release — **no breaking changes**; one hardening-defaults change for cleartext h2c bundles is noted below.
