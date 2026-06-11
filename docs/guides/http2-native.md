@@ -178,7 +178,8 @@ Security limits (`headerTableSize`, `maxHeaderListSize`) remain hardcoded:
       "initialWindowSize": 655350,
       "maxSessionRejectedStreams": 100,
       "maxSessionInvalidFrames": 1000,
-      "maxStreamsPerSecond": 200
+      "maxStreamsPerSecond": 200,
+      "enableConnectProtocol": false
     }
   }
 }
@@ -190,6 +191,10 @@ it, Isaac sends a `GOAWAY` and closes that session — a targeted,
 application-level defense against rapid-reset floods (CVE-2023-44487) on top
 of the OS-level mitigation in modern Node.js. The `/_gina/info` endpoint
 reports a `rapidResetBlocked` counter for breach events.
+
+`enableConnectProtocol` (default `false`) advertises the RFC 8441 extended
+CONNECT capability, enabling WebSocket endpoints over the same HTTP/2
+connection — see [WebSocket over HTTP/2](/guides/websockets).
 
 :::tip
 The defaults are tuned for general-purpose web applications. Increase
