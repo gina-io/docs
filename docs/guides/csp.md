@@ -93,6 +93,7 @@ Settings.json shape — caller-supplied options always win over settings:
 |--------------|---------|---------|----------------------------------------------------------------------|
 | `directives` | object  | —       | **Required.** Throws if missing or empty. See "Directives" below.   |
 | `reportOnly` | boolean | `false` | When `true`, emits `Content-Security-Policy-Report-Only` instead.   |
+| `reportOnlyOmit` | string[] | `[]` | Directives to *also* omit while `reportOnly` is `true`; emitted again automatically in enforce mode. See "reportOnlyOmit" below. |
 
 There is no sensible cross-bundle default for `directives`. Every bundle has its own resource graph; a default policy would either be too restrictive (breaks every bundle that loads external resources) or too permissive (gives no real protection). **The factory throws at call time if `directives` is missing or empty.**
 
@@ -303,7 +304,36 @@ Without report-only mode, a too-strict policy in enforcing mode breaks the appli
 
 The `sandbox` directive has **no effect** in a `Content-Security-Policy-Report-Only` header — it applies a document-level restriction rather than a load decision, so every engine ignores it there (the CSP Level 2 spec says it outright: *"The sandbox directive will be ignored when monitoring a policy"*) and logs *"Ignoring sandbox directive when delivered in a report-only policy"*. When `reportOnly: true`, the plugin therefore **omits** `sandbox` from the emitted header (and logs one line at startup naming what was dropped). The omission is functionally identical — `sandbox` does nothing in report-only — and it keeps the browser console clean. Because `sandbox` stays in your configured `directives`, an enforcing factory (`reportOnly: false`) built from the same config still emits it, so you can keep **one directive set across both modes** without remove-then-re-add churn.
 
-`frame-ancestors` is **not** omitted — its report-only behaviour is **engine-divergent**: the CSP3 spec, Firefox (Gecko) and Chrome (Blink) evaluate it and send violation reports without enforcing, while Safari (WebKit) ignores it, logs *"The Content Security Policy directive 'frame-ancestors' is ignored when delivered in a report-only policy"* and sends no report (WebKit retains the CSP Level 2 rule — *"The frame-ancestors directive MUST be ignored when monitoring a policy"* — which CSP Level 3 dropped; CSP3 only restricts `<meta>` delivery, which a report-only policy never uses). The plugin keeps it so the observation phase still reports on Chrome and Firefox. If you serve a WebKit-heavy audience and want a clean Safari console, simply leave `frame-ancestors` out of your report-only directive set — clickjacking protection stays enforced by `X-Frame-Options` and/or an enforcing-mode `frame-ancestors`. (Chrome caveat: frame-ancestors violation reports are delivered via `report-uri`; known Chromium bugs leave them undelivered via `report-to`.) A report-only policy whose every directive is report-only-inert (e.g. only `sandbox`) throws at factory call time, since it would report nothing.
+`frame-ancestors` is **not** omitted — its report-only behaviour is **engine-divergent**: the CSP3 spec, Firefox (Gecko) and Chrome (Blink) evaluate it and send violation reports without enforcing, while Safari (WebKit) ignores it, logs *"The Content Security Policy directive 'frame-ancestors' is ignored when delivered in a report-only policy"* and sends no report (WebKit retains the CSP Level 2 rule — *"The frame-ancestors directive MUST be ignored when monitoring a policy"* — which CSP Level 3 dropped; CSP3 only restricts `<meta>` delivery, which a report-only policy never uses). The plugin keeps it so the observation phase still reports on Chrome and Firefox. If you serve a WebKit-heavy audience and want a clean Safari console, opt it out with `reportOnlyOmit: ['frame-ancestors']` (next section) — clickjacking protection stays enforced by `X-Frame-Options` and/or an enforcing-mode `frame-ancestors`. (Chrome caveat: frame-ancestors violation reports are delivered via `report-uri`; known Chromium bugs leave them undelivered via `report-to`.) A report-only policy whose every directive is report-only-inert (e.g. only `sandbox`) throws at factory call time, since it would report nothing.
+
+### `reportOnlyOmit` — opt out engine-divergent directives in report-only
+
+For the engine-divergent case above, `reportOnlyOmit` packages the hand-managed omission: every directive named in it is omitted from the report-only header and emitted again **automatically** when `reportOnly` flips to `false` — one directive set across both modes, no remove-then-re-add churn.
+
+```js
+var csp = require('gina').plugins.Csp({
+    reportOnly: true,
+    directives: {
+        'script-src':      ["'self'"],
+        'frame-ancestors': ["'self'"],
+        'report-uri':      ['/csp/report']
+    },
+    reportOnlyOmit: ['frame-ancestors']
+});
+// report-only header:  script-src 'self'; report-uri /csp/report
+// after the enforce flip (reportOnly: false): frame-ancestors 'self' returns
+```
+
+**The honest trade — the option packages the engine divergence, it does not eliminate it.** Listing `frame-ancestors` in `reportOnlyOmit` forgoes its Chrome + Firefox (Gecko + Blink) report-only monitoring signal in exchange for a clean WebKit console. The header is engine-blind, so gina cannot do better — the option just turns the hand-managed omission into an explicit, per-bundle, lifecycle-managed choice. Clickjacking stays enforced by `X-Frame-Options` and/or an enforcing-mode `frame-ancestors` regardless.
+
+Mechanics:
+
+- Entries are validated against the same CSP Level 3 whitelist as `directives` keys — unknown names throw at factory call time.
+- A factory-time warning names what was dropped, with wording distinct from the browser-inert `sandbox` omission — these directives are *not* ignored by browsers; you are choosing to forgo their report signal.
+- An entry not present in `directives` warns in report-only mode (likely a config mistake) and no-ops.
+- With `reportOnly: false` the option is inert **and silent** — keeping it in an enforce-mode config is the expected lifecycle state, not a mistake.
+- If the omissions empty the report-only directive set, the factory throws (same as the all-inert case).
+- `useNonce: true` with the nonce-target directive (`script-src` / `default-src`) in `reportOnlyOmit` throws at factory call time — the nonce would be stamped on the request and the tags but never referenced by the emitted policy.
 
 ## Strict whitelist rationale
 
@@ -329,6 +359,10 @@ Gina favours fail-fast. If you need a directive that's not yet on the whitelist,
 | All directives resolve to `false` (omitted)              | Factory throws — empty CSP is invalid                |
 | `reportOnly` is non-boolean                              | Factory throws                                       |
 | `reportOnly:true` with only report-only-inert directives | Factory throws — a report-only policy would report nothing |
+| `reportOnlyOmit` is non-array / has non-string entries   | Factory throws                                       |
+| `reportOnlyOmit` contains an unknown directive name      | Factory throws with full whitelist in message        |
+| `reportOnlyOmit` empties the report-only directive set   | Factory throws — the policy would report nothing     |
+| `reportOnlyOmit` omits the nonce target while `useNonce:true` | Factory throws — the header would never reference the nonce |
 | Plugin not registered                                    | Header not emitted; browser applies no CSP           |
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |

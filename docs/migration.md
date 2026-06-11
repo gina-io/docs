@@ -19,6 +19,16 @@ upward to the target version.
 
 ---
 
+## 0.4.6 → 0.4.7
+
+`0.4.7` is the next release in development. Changes documented so far are additive — **no breaking changes**; existing bundles run unchanged.
+
+### What's new — CSP `reportOnlyOmit` (opt-in report-only directive omission)
+
+The `Csp` plugin accepts a new `reportOnlyOmit` option: an array of directive names to omit from a `Content-Security-Policy-Report-Only` header, emitted again automatically when `reportOnly` flips to `false` — one directive set across both modes, with no remove-then-re-add churn at the enforce flip. It is built for engine-divergent directives such as `frame-ancestors`, which Chrome and Firefox evaluate and report in report-only mode while Safari/WebKit ignores it with a console warning and no report: a bundle serving a WebKit-heavy audience can trade the Chrome + Firefox report signal for a clean Safari console as an explicit, lifecycle-managed choice. Entries are validated against the CSP Level 3 whitelist and a factory-time warning names what was dropped. With no `reportOnlyOmit`, emitted headers are byte-identical to before; **no migration action required.** See the [Content Security Policy guide](/guides/csp).
+
+---
+
 ## 0.4.5 → 0.4.6
 
 `0.4.6` is an additive release — **no breaking changes and no settings reset.** Every change is opt-in; existing bundles run unchanged.
