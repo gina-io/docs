@@ -216,6 +216,76 @@ Set the resulting value in `env.json` (`{ "dev": { "GINA_CSRF_SECRET": "<paste>"
 or pass it directly via the deployment platform's secret-injection mechanism.
 :::
 
+### `render`
+
+Selects the template engine `self.render(data)` dispatches to for this bundle.
+See the [Templating overview](/templating) for the engine comparison and the
+[Views guide](/guides/views) for the rendering workflow.
+
+```json
+{
+  "render": {
+    "engine": "nunjucks"
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `engine` | string | `"swig"` | Render-delegate selection. `"nunjucks"` dispatches to the Nunjucks delegate — a project-side opt-in: the bundle fails loud at startup with `NUNJUCKS_NOT_INSTALLED` when the project hasn't `npm install`ed nunjucks. Any other value (including the default `"swig"`) renders through the Swig-family delegate |
+
+:::note Twig, Jinja2, and Django are not `render.engine` values
+Those syntaxes are swig-core frontends selected through `settings.swig.package`
+(e.g. `"@rhinostone/swig-twig"`) with `render.engine` left at its `"swig"`
+default — see the [Templating overview](/templating) for the per-engine
+configuration.
+:::
+
+### `template`
+
+Configures the optional per-engine **async template loader** (shipped in
+`0.4.6`). The loader block lives at `template.<engine>.loader`, with
+`<engine>` one of `swig` / `nunjucks` (matching the bundle's `render.engine`).
+When the block is absent the bundle keeps the default filesystem template
+path. The [Async Template Loaders guide](/templating/async-loaders) is the
+authoritative reference for loader behaviour — caching, http resilience, and
+the security model.
+
+```json
+{
+  "template": {
+    "swig": {
+      "loader": {
+        "type": "http",
+        "origin": "https://cdn.example.com",
+        "basePath": "/templates",
+        "ttl": 60,
+        "revalidate": false,
+        "cache": false
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `loader.type` | string | — | Required when a `loader` block is present. One of `"memory"` (inline `identifier → source` map) or `"http"` (templates fetched from an HTTP(S) origin). Any other value fails the bundle at startup |
+| `loader.cache` | boolean | `false` | Opt-in compiled-template reuse across requests (set exactly `true`). Always disabled in development so template edits are picked up live |
+| `loader.templates` | object | — | `memory` only, required — flat map of template identifier to source string |
+| `loader.origin` | string | — | `http` only, required — `scheme://host[:port]` of the template origin. Must be `http` or `https`, with no path component |
+| `loader.basePath` | string | `""` | `http` only — path prefix that template identifiers resolve under, root-relative |
+| `loader.ttl` | number | `60` | `http` only — source-cache TTL in seconds (absolute from fetch). `0` caches until evicted |
+| `loader.revalidate` | boolean | `false` | `http` only — when `true`, a cache hit issues a conditional `GET` (`If-None-Match`) and serves the cached source on `304`, refreshing the TTL |
+
+:::note Fail-fast validation
+The loader config is validated at bundle startup — a bad shape (unknown
+`type`, missing `templates` / `origin`) terminates the boot rather than
+failing on the first render. No network probe is made at startup; http fetch
+failures at render time follow the resilience rules described in the
+[guide](/templating/async-loaders).
+:::
+
 ---
 
 ## settings.server.json {#settingsserverjson}
