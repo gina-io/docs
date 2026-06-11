@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.4.6 → 0.4.7
 
-`0.4.7` is the next release in development. Changes documented so far are additive — **no breaking changes**; one hardening-defaults change for cleartext h2c bundles is noted below.
+`0.4.7` is an additive release — **no breaking changes**; one hardening-defaults change for cleartext h2c bundles is noted below.
 
 ### What's new — CSP `reportOnlyOmit` (opt-in report-only directive omission)
 
