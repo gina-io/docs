@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.4.7 → 0.5.0
 
-`0.5.0` is the next release in development. Changes documented so far are additive for every measured usage pattern; one packaging change is noted below for projects that deep-require into the gina package by path.
+`0.5.0` is an additive release — **no breaking changes** for documented usage patterns; one packaging change is noted below for projects that deep-require into the gina package by path.
 
 ### What's new — native ESM entry points
 
