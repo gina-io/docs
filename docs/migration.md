@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.5.0 → 0.5.1
+
+`0.5.1` is a patch release — **no breaking changes** and no migration action required.
+
+### Fixed — released-response crash family (bundle-killing)
+
+A late `throwError()` after the response was already sent — e.g. an entity or query callback resuming after a `redirect()` had already issued its 301 and released the per-request response — dereferenced the released response and escalated to an `uncaughtException` → SIGTERM bundle shutdown that dropped every in-flight request. Late `throwError()` calls now log the swallowed error and no-op, and `headersSent()` treats a released response as already-sent so second render calls no-op too. The same guard family covers the HTTP/2 inter-bundle `query()` paths: retry re-entries, late upstream responses, and both 3xx redirect intercepts no longer crash when the originating request has already terminated. **No action required.**
+
+### Fixed — dev-mode hot-reload memory leak (OOM under sustained load)
+
+The dev-mode per-request hot-reload eviction cycles retained ~1.8 MB of live heap per request through dead `module.children` references, killing heavily-loaded dev bundles with a heap-limit OOM. Both eviction cycles now prune stale module references; production mode was never affected. **No action required.**
+
+### Fixed — inter-bundle proxy Content-Type
+
+`query()` over HTTP/2 no longer re-labels the raw-JSON body it serializes itself with the incoming request's Content-Type, so a urlencoded browser POST proxied between bundles no longer corrupts `+`/`%XX` sequences inside JSON string values. **No action required.**
+
+### Also new — ROADMAP consistency release gate (maintainer tooling)
+
+Stable publishes of the framework now abort when a ROADMAP.md row is stale relative to the version being released, alongside the existing README freshness gate. Maintainer-side only; **no action required.**
+
+---
+
 ## 0.4.7 → 0.5.0
 
 `0.5.0` is an additive release — **no breaking changes** for documented usage patterns; one packaging change is noted below for projects that deep-require into the gina package by path.
