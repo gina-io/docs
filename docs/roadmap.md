@@ -74,18 +74,18 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 | ✅ | **`protocol:remove`** — Revert a bundle to the project's default protocol/scheme by removing its `settings.json` override (no shared `ports*.json` mutation), with `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-05-31 |
 | ✅ | **`minion:list`** — List the running bundle child-processes ("minions") of a project, or of every project, grouped by project. `--format=json` supported. | `0.4.1-alpha.2` | 2026-05-31 |
 | ✅ | **`minion:kill`** — Reap a project's running bundle child-processes ("minions") — both pidfile-tracked and `ps`-discovered orphans — with a graceful SIGTERM/SIGKILL escalation and a `--dry-run` preview. | `0.4.1-alpha.2` | 2026-05-31 |
-| 📋 | **`gina --status` / `-t`** — Top-level health check: print whether the framework daemon is running, its version, and active bundle count. Requires `aliases.json` entries and a `framework/status.js` handler. | `0.4.0` | Q4 2026 |
+| 📋 | **`gina --status` / `-t`** — Top-level health check: print whether the framework daemon is running, its version, and active bundle count. Requires `aliases.json` entries and a `framework/status.js` handler. | `0.5.x` | Q4 2026 |
 | ✅ | **`bundle:copy` / `bundle:cp`** — Duplicate a bundle (source files + config) under a new name within the same project, with a word-boundary name rewrite, a fresh full protocol/scheme/env port matrix, and `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-05-31 |
 | ✅ | **`project:status`** — Show the running/stopped state of each bundle in a project with PID and port info. | `0.4.1-alpha.2` | 2026-05-30 |
 
-### Tier 3 — `0.5.0`
+### Tier 3 — `0.5.x`
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **`project:move`** — Relocate a project's source directory and update all `~/.gina/` registry entries to the new path. | `0.5.0` | Q1 2027 |
-| 📋 | **`framework:update`** — Self-update the installed Gina framework to the latest (or a specified) version without reinstalling via npm. | `0.5.0` | Q1 2027 |
-| 📋 | **`project:backup` / `project:restore`** — Archive a project's source, config, and data to a tarball, and restore from it. Documented as a support-only feature. | `0.5.0` | Q1 2027 |
-| 📋 | **`framework:man` / `project:man` / `bundle:man`** — Inline CLI manual pages accessible without opening a browser. | `0.5.0` | Q1 2027 |
+| 📋 | **`project:move`** — Relocate a project's source directory and update all `~/.gina/` registry entries to the new path. | `0.5.x` | Q1 2027 |
+| 📋 | **`framework:update`** — Self-update the installed Gina framework to the latest (or a specified) version without reinstalling via npm. | `0.5.x` | Q1 2027 |
+| 📋 | **`project:backup` / `project:restore`** — Archive a project's source, config, and data to a tarball, and restore from it. Documented as a support-only feature. | `0.5.x` | Q1 2027 |
+| 📋 | **`framework:man` / `project:man` / `bundle:man`** — Inline CLI manual pages accessible without opening a browser. | `0.5.x` | Q1 2027 |
 
 ---
 
@@ -119,7 +119,7 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 | --- | --- | --- | --- |
 | ✅ | **Explicit exports for global helpers** — `getContext`, `setContext`, `_`, `requireJSON` etc. available as explicit `require('gina/gna').getContext` imports alongside the existing global injection. Enables IDE navigation and static analysis. | `0.3.3-alpha.3` | 2026-04-09 |
 | ✅ | **TypeScript declaration files** — `.d.ts` declarations for the public surface: `SuperController`, `EntitySuper`, connector config shapes, `routing.json` schema, `PathObject`, `uuid`, all config file interfaces, `GinaRequest`/`GinaResponse`. No TS migration of internals — just declarations for consumer projects. | `0.3.3-alpha.3` | 2026-04-09 |
-| 📋 | **`gina connector:audit [@project]`** — reads `connectors.json`, maps each declared connector to its npm peer package (`mysql2`, `pg`, `ioredis`, `couchbase`, `openai`, `@anthropic-ai/sdk`, etc.), and runs `npm audit --json` scoped to those packages in the project's `node_modules`. Reports CVEs with severity and fix availability. If `socket` is installed in the project, delegates to it for supply-chain analysis (malware, typosquatting, protestware) instead of `npm audit`. Exit code 1 on any high/critical finding — CI-friendly. Only audits packages actually declared in `connectors.json`, not the full dependency tree. | `0.4.0` | Q4 2026 |
+| 📋 | **`gina connector:audit [@project]`** — reads `connectors.json`, maps each declared connector to its npm peer package (`mysql2`, `pg`, `ioredis`, `couchbase`, `openai`, `@anthropic-ai/sdk`, etc.), and runs `npm audit --json` scoped to those packages in the project's `node_modules`. Reports CVEs with severity and fix availability. If `socket` is installed in the project, delegates to it for supply-chain analysis (malware, typosquatting, protestware) instead of `npm audit`. Exit code 1 on any high/critical finding — CI-friendly. Only audits packages actually declared in `connectors.json`, not the full dependency tree. | `0.5.x` | Q4 2026 |
 
 ### Phase 5 — Future
 
@@ -294,7 +294,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 | ✅ | **Application-level rapid reset rate limiter** (CVE-2023-44487) — per-session stream creation counter | `0.3.13` | 2026-05-14 | The Isaac HTTP/2 session handler counts new streams in a rolling 1s window per session; over `maxStreamsPerSecond` (default 200) it sends a GOAWAY and closes the session. More targeted than `maxSessionRejectedStreams` (which counts refused streams, not created ones). Configurable via `settings.json` `http2Options.maxStreamsPerSecond`; `/_gina/info` exposes a `rapidResetBlocked` counter. |
 | ✅ | **Trailer support** — `stream.sendTrailers()` + `waitForTrailers: true` | `0.4.0` | 2026-05-22 | Opt-in HTTP/2 response trailers via `self.sendTrailers(fields)`. The render pipeline sets `waitForTrailers` and emits the trailing headers after the body (in the `wantTrailers` event), across all render delegates. Activated only when a controller calls `self.sendTrailers(fields)`; HTTP/1.1 and the no-trailers path are unchanged. For gRPC-style streaming (`grpc-status`) and content-integrity (`Digest`) use cases. |
 | ✅ | **Alt-Svc header** — advertise HTTP/3 availability | `0.4.2` | 2026-06-02 | Set `Alt-Svc: h3=":443"; ma=86400` response header to advertise HTTP/3 (QUIC) availability via a QUIC-capable reverse proxy (nginx, Caddy, Cloudflare). Gina does not need to implement QUIC — just announce it. Opt-in via `settings.server.json`. Native HTTP/3 is out of scope: Node.js has no stable QUIC API, and the standard deployment topology (Gina → proxy → client) already delivers HTTP/3 at the edge. |
-| 📋 | **RFC 9218 Extensible Priorities** — read `Priority: u=N, i` request header | `0.5.0` | Q1 2027 | Use the RFC 9218 priority header to order response writes for multiplexed API clients. Low value for typical HTML page loads; high value for parallel API requests with declared urgency. |
+| 📋 | **RFC 9218 Extensible Priorities** — read `Priority: u=N, i` request header | `0.5.x` | Q1 2027 | Use the RFC 9218 priority header to order response writes for multiplexed API clients. Low value for typical HTML page loads; high value for parallel API requests with declared urgency. |
 | ✅ | **WebSocket over HTTP/2** (RFC 8441 extended CONNECT) — opt-in via `http2Options.enableConnectProtocol` (default off; https and cleartext h2c HTTP/2 bundles). From `onInitialize`, `app.onWebSocket(path, handler)` registers per-path WebSocket handlers; accepted streams arrive as full sessions backed by a built-in dependency-free RFC 6455 codec (auto-pong, timed close handshake, UTF-8 + close-code validation, payload/fragment DoS caps, backpressure passthrough, graceful shutdown drain). Unknown paths are refused with 404, plain CONNECT keeps its 405, and default-off deployments are byte-identical. | `0.4.7` | 2026-06-11 |
 
 ---
@@ -332,7 +332,7 @@ A systematic audit of the Couchbase connector identified two critical security v
 | --- | --- | --- | --- | --- |
 | ✅ | **`NODE_COMPILE_CACHE` — V8 bytecode startup cache** | `0.2.0` | Q2 2026 | Node.js 22.8+ caches compiled V8 bytecode to disk. Set once at startup — 30–60% faster cold start on subsequent runs with zero code changes to user bundles. No-op on Node < 22.8, so safe to ship unconditionally. |
 | ✅ | **Route radix trie — compile `routing.json` at startup** | `0.3.0-alpha.1` | 2026-04-01 | `lib/routing/src/radix.js` builds a segment-level trie once at startup. O(m) candidate lookup per request (m = segment count). `Set.has()` check skips non-candidates in the `for…in` loop. Internal change — no user-facing API change. |
-| 📋 | **Bun runtime compatibility investigation** | `0.4.0` | Q4 2026 | Prototype Gina under Bun. Two blockers to verify: `require.cache` deletion (dev hot-reload) and `node:http2` completeness. If both pass, Bun gives 3–10x faster startup and meaningful throughput gains. Deliverable: a compatibility report. |
+| 📋 | **Bun runtime compatibility investigation** | `0.5.x` | Q4 2026 | Prototype Gina under Bun. Two blockers to verify: `require.cache` deletion (dev hot-reload) and `node:http2` completeness. If both pass, Bun gives 3–10x faster startup and meaningful throughput gains. Deliverable: a compatibility report. |
 | ✅ | **V8 pointer compression support** | `0.2.0` | Q2 2026 | Node.js built with `--experimental-enable-pointer-compression` (e.g. [node-caged](https://github.com/platformatic/node-caged) or a custom build) delivers ~50% heap memory reduction across all pointer-heavy structures. Gina is pure JS — compatible out of the box. Adds: startup detection + `GINA_V8_POINTER_COMPRESSED` env var, Dockerfile guide with custom build recipe, 4 GB ceiling documentation, N-API-only connector policy. |
 
 ---
@@ -394,7 +394,7 @@ Gina's built-in per-bundle inspector. Phases 1–2 ship as an embedded SPA at `/
 | ✅ | **Beginner — Notes API** — Your first REST API: scaffold a project, define 3 routes in `routing.json`, write synchronous controller actions, read `req.post` / `req.params`, return JSON with `renderJSON()`, handle errors with `throwError()`. In-memory store — no database needed. | ~15 min | `0.3.0` | 2026-04-01 |
 | 📋 | **Tutorial locale detection** — Detect the reader's locale and timezone via `navigator.language` + `Intl` and pre-fill the `settings.json` scaffold example with their actual `region`, `preferedLanguages`, and `24HourTimeFormat` values. Falls back to `en_CM`. Implemented as a client-side Docusaurus component. | — | `0.3.0` | Q3 2026 |
 | ✅ | **Intermediate — Link Shortener** — SQLite ORM connector, async controller actions, `render()` + `renderJSON()` in same bundle, HTTP 302 redirect, route `requirements` guard. Includes downloadable project ZIP. | ~30 min | `0.3.0` | 2026-04-01 |
-| 📋 | **Advanced** — Full production project: authentication, scoped data isolation, async/await, HTTP/2, structured logging, Docker/K8s deployment. Starts from the intermediate tutorial's finished state. | ~60 min | `0.4.0` | Q4 2026 |
+| 📋 | **Advanced** — Full production project: authentication, scoped data isolation, async/await, HTTP/2, structured logging, Docker/K8s deployment. Starts from the intermediate tutorial's finished state. | ~60 min | `0.5.x` | Q4 2026 |
 
 ---
 
@@ -402,7 +402,7 @@ Gina's built-in per-bundle inspector. Phases 1–2 ship as an embedded SPA at `/
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Official website redesign + docs integration** — Refactor gina.io as a proper project homepage (landing page, feature highlights, showcase) with the documentation fully integrated. Single coherent web presence. Prerequisite: tutorials complete. | `0.4.0` | Q4 2026 |
+| 📋 | **Official website redesign + docs integration** — Refactor gina.io as a proper project homepage (landing page, feature highlights, showcase) with the documentation fully integrated. Single coherent web presence. Prerequisite: tutorials complete. | `0.5.x` | Q4 2026 |
 | ✅ | **Docs offline ZIP** — One-click download of the complete gina.io documentation as a static HTML ZIP archive. Generated at deploy time by the Docusaurus build pipeline — no server-side logic required. Targeted at users in regions with limited or expensive internet access (offline-first for the African market). | `0.4.0` | 2026-05-22 |
 | ✅ | **Security & CVE compliance page** — Dedicated docs page listing the HTTP/2 CVEs addressed by Gina and the Node.js version required for each mitigation. Covers CVE-2023-44487 (Rapid Reset), CVE-2024-27316 / CVE-2024-27983 (CONTINUATION flood), CVE-2019-9514 (RST flood), HPACK bomb, and server push abuse. Docs only — no code changes. | `0.3.0-alpha.1` | 2026-04-01 |
 
