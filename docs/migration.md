@@ -19,6 +19,20 @@ upward to the target version.
 
 ---
 
+## 0.5.1 → 0.5.2
+
+`0.5.2` is a patch release — **no breaking changes** and no migration action required.
+
+### Fixed — released-response crash family completed (bundle-killing)
+
+Building on the `throwError()` and HTTP/2 query-path guards in `0.5.1`, thirteen more synchronous controller APIs — `renderJSON()`, `redirect()`, `store()`, `push()`, `renderStream()`, `pauseRequest()` / `resumeRequest()`, `downloadFromLocal()`, and the request-method / popin / form-rule helpers — no longer crash the bundle when a controller action keeps running after a terminal exit (typically a `redirect()` that lets the middleware chain continue) and then dereferences the already-released request or response. Each now no-ops or notifies through its existing callback / event channel instead of escalating to an `uncaughtException` → SIGTERM bundle shutdown; live requests are byte-for-byte unaffected. **No action required.**
+
+### Fixed — exhausted HTTP/2 502 retries now surface a typed error
+
+An inter-bundle `self.query()` over HTTP/2 that exhausted its retries against an upstream returning 502 used to hand the Bad Gateway response body to the caller as if it were valid data (a JSON-shaped body was even relabelled `status: 200`). Exhausted 502s now surface `status: 502`, `code: BAD_GATEWAY` to the caller, matching how timeout, stream-error, and premature-close exhaustion are already reported; non-critical queries still swallow it. **No action required.**
+
+---
+
 ## 0.5.0 → 0.5.1
 
 `0.5.1` is a patch release — **no breaking changes** and no migration action required.
