@@ -16,7 +16,7 @@ import TabItem from '@theme/TabItem';
 
 # Async Template Loaders
 
-New in `0.4.6`. By default a Gina bundle renders templates from its
+Since Gina `v0.4.6`. By default a Gina bundle renders templates from its
 `templates/html` directory on disk. An **async template loader** lets a bundle
 resolve templates from a custom backend instead — a remote HTTP(S) origin, a
 CDN, object storage, or an in-memory map — fetched at render time. You configure
@@ -38,14 +38,18 @@ default filesystem path is simpler and faster.
 
 ## Configuration
 
-The loader config follows the same convention as `connectors.json`: a named
-built-in `type` plus type-specific flat keys. It lives under the engine you've
-selected with [`render.engine`](/templating) — `template.swig.loader` for swig
-(the default), `template.nunjucks.loader` for nunjucks. The shape is identical
-for both engines; only the engine key differs.
+You configure the loader per bundle in your bundle's `config/settings.json`,
+under the engine you've selected with [`render.engine`](/templating) —
+`template.swig.loader` for swig (the default), `template.nunjucks.loader` for
+nunjucks. Each loader is a named built-in `type` plus a few type-specific flat
+keys. The shape is identical for both engines; only the engine key differs.
 
-Two built-ins ship in `0.4.6`: **`memory`** (inline templates, no I/O) and
+Two built-ins ship since Gina `v0.4.6`: **`memory`** (inline templates, no I/O) and
 **`http`** (fetch over HTTP/HTTPS).
+
+The JSON examples below are excerpts of `config/settings.json` — drop the
+`render` and `template` keys into your bundle's settings file (the `render.engine`
+shown selects the engine each loader pairs with).
 
 ### memory — inline templates
 
@@ -56,7 +60,7 @@ the map.
 <Tabs groupId="templating-engine">
 <TabItem value="swig" label="Swig" default>
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "swig" },
   "template": {
@@ -76,7 +80,7 @@ the map.
 </TabItem>
 <TabItem value="nunjucks" label="Nunjucks">
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "nunjucks" },
   "template": {
@@ -106,10 +110,14 @@ Fetches each template (and its transitive `extends` / `include` chain) from
 `origin + basePath + <identifier>`. A **source cache** keyed by resolved URL
 collapses repeated fetches.
 
+The fetch happens **on your Gina server**, not in the visitor's browser — so the
+`origin` can be a private or internal host, browser CORS does not apply, and the
+template source never reaches the client.
+
 <Tabs groupId="templating-engine">
 <TabItem value="swig" label="Swig" default>
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "swig" },
   "template": {
@@ -129,7 +137,7 @@ collapses repeated fetches.
 </TabItem>
 <TabItem value="nunjucks" label="Nunjucks">
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "nunjucks" },
   "template": {
@@ -176,7 +184,7 @@ templates are kept and reused across requests instead of being rebuilt per rende
 <Tabs groupId="templating-engine">
 <TabItem value="swig" label="Swig" default>
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "swig" },
   "template": {
@@ -195,7 +203,7 @@ templates are kept and reused across requests instead of being rebuilt per rende
 </TabItem>
 <TabItem value="nunjucks" label="Nunjucks">
 
-```json
+```json title="config/settings.json"
 {
   "render": { "engine": "nunjucks" },
   "template": {
