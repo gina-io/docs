@@ -218,6 +218,30 @@ To run the bundle under a different installed version, edit `gina_version`
 manually or use `--gina-version` at start time. See
 [Per-bundle framework version](#per-bundle-framework-version) below.
 
+### Controlling the port scan
+
+`bundle:add` scans for an available port starting at `3100`, automatically
+skipping ports already assigned to the project's bundles and the reserved
+`4100-4199` range. Two optional flags adjust the scan:
+
+```bash
+# move the start of the scan
+gina bundle:add <bundle> @<project> --start-port-from=4200
+
+# skip specific ports (comma-separated), on top of the automatic exclusions
+gina bundle:add <bundle> @<project> --ignore-ports=3000,3001,8080
+
+# combine both
+gina bundle:add <bundle> @<project> --start-port-from=4200 --ignore-ports=4250,4300
+```
+
+| Flag | Description |
+| --- | --- |
+| `--start-port-from=<port>` | Move the start of the availability scan to `<port>`. |
+| `--ignore-ports=<port[,port...]>` | Comma-separated list of ports to exclude from the scan, on top of the already-assigned and reserved ports. Entries must be integers; out-of-range values are ignored. |
+
+Both flags also apply when re-registering an existing bundle with `--import`.
+
 ---
 
 ## `bundle:remove`
