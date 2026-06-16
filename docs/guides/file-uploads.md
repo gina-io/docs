@@ -163,20 +163,22 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 
 A file is tagged with a group on the client via
 `data-gina-form-upload-group` (see below); on the wire the group travels in each
-multipart part. **The extension and count checks only run for a file whose group
-is named in `groups`** — see the gotchas about the default `untagged` group.
+multipart part. **Every file must map to a configured group:** a file with no
+group falls back to the default `untagged` group, and a group that is not declared
+in `groups` is rejected with **HTTP 400**. Each group's `allowedExtensions` and
+`isMultipleAllowed` are then enforced — `untagged` included.
 
 ```mermaid
 flowchart TD
-    A["File part arrives<br/>(tagged with a group)"] --> B{"Request size ><br/>maxFieldsSize?"}
+    A["File part arrives<br/>(group, or none → untagged)"] --> B{"Request size ><br/>maxFieldsSize?"}
     B -->|yes| C["HTTP 431"]
-    B -->|no| D{"Group named in<br/>settings groups?"}
-    D -->|no| H["Streamed to temp<br/>(no ext / count check)"]
+    B -->|no| D{"Group configured<br/>in settings groups?"}
+    D -->|no| X["HTTP 400<br/>(unconfigured group)"]
     D -->|yes| E{"Extension allowed?"}
     E -->|no| F["HTTP 400"]
     E -->|yes| G{"Multiple ok<br/>for this group?"}
     G -->|no| F
-    G -->|yes| H
+    G -->|yes| H["Streamed to temp"]
 ```
 
 ---
@@ -300,11 +302,14 @@ delete (saved) action URL.
   are **not** honoured by the upload write path — files are written under the
   operating system's temp dir regardless. Move them to a known location promptly
   with `self.store()`; do not rely on `tmpPath` to place them.
-- **The `untagged` group (and any group not named in `groups`) skips the
-  extension and count checks.** Those checks only run for a file whose group is
-  explicitly configured, so a file with no group — or `group="untagged"` — is
-  accepted whatever its extension, subject only to the global `maxFieldsSize`.
-  Always tag uploads with a configured group when you rely on an allow-list.
+- **`untagged` is the permissive default — restrict it if you need to.** A file
+  with no group is treated as `untagged`, which ships with `allowedExtensions: "*"`
+  (any extension) and `isMultipleAllowed: true`. A group that is *not* configured is
+  rejected (HTTP 400), and every configured group's rules — `untagged` included —
+  are enforced. But because untagged accepts any extension by default, a client can
+  still sidestep a restrictive *named* group by tagging its file `untagged`: if you
+  rely on an allow-list, give `untagged` its own `allowedExtensions`, or require an
+  explicit group.
 - **`maxFieldsSize` is read as a number of megabytes; the unit suffix is
   ignored.** `"2MB"` means 2 MB, but `"512K"` is read as `512` — i.e. 512 **MB**,
   not 512 KB. Express the limit as a plain MB number to avoid surprises.
