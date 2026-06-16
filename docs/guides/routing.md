@@ -329,6 +329,13 @@ not strict-equal to any list member are rejected):
 If a requirement value starts with neither `/` nor `validator::`, the bundle fails
 to start with a configuration error.
 
+:::tip Same rules, client and server
+The `is*` names here are the same rules that power client-side form validation.
+See [Forms and Validation](./forms-and-validation) for the browser side, and the
+[Validation rules reference](/reference/validation-rules) for every rule's
+signature, arguments, and default message.
+:::
+
 ---
 
 ## Namespaces
@@ -654,6 +661,8 @@ var route = routing.getRoute('invoice', { id: 'abc-123' });
 
 ## See also
 
+- [Forms and Validation](./forms-and-validation) — client + server form validation with the same `is*` rules
+- [Validation rules reference](/reference/validation-rules) — the full rule, transform, and message catalog
 - [Middleware guide](./middleware) — Writing and configuring middlewares
 - [Views and templates](./views) — Template rendering from controller actions
 - [Routing API reference](/api/routing) — `getRoute()` and `getRouteByUrl()` signatures
