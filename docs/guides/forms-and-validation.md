@@ -420,8 +420,8 @@ anything that must be true before you act on the data.
 ## Not covered here
 
 File uploads use a separate set of `data-gina-form-upload-*` attributes and a
-different submission path (multipart, progress, previews). That subsystem is out
-of scope for this guide and will be documented as its own chapter.
+different submission path (multipart, staged previews). That subsystem is
+documented in its own chapter — see [File uploads](/guides/file-uploads).
 
 ---
 
