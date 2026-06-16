@@ -156,8 +156,11 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 
 | Key | Effect |
 |---|---|
-| `maxFieldsSize` | Maximum size of the **whole request**, in megabytes. A request larger than this is rejected with **HTTP 431** before any file is read. (The value is read as a number of MB — see the gotcha below.) |
+| `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
+| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request larger than this is rejected with **HTTP 431** before any file is read. |
+| `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `groups` | Named upload groups. A file is checked against its group's rules at parse time. |
+| `groups.<name>.path` | Directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. |
 | `groups.<name>.allowedExtensions` | An array of permitted extensions (e.g. `["jpg","png"]`), or `"*"` for any. A disallowed extension is rejected with **HTTP 400**. |
 | `groups.<name>.isMultipleAllowed` | When `false`, a request carrying more than one file for that group is rejected with **HTTP 400**. |
 
@@ -297,11 +300,6 @@ delete (saved) action URL.
   `<input type="text">` in the same multipart form is not parsed. Send metadata
   in a separate request, or use the client layer (which keeps your real form
   submit ordinary). See the [warning above](#receiving-uploads-in-a-controller).
-- **Uploaded temp files always land in the OS temp directory.** The
-  `upload.tmpPath` and per-group `path` keys shown in the default `settings.json`
-  are **not** honoured by the upload write path — files are written under the
-  operating system's temp dir regardless. Move them to a known location promptly
-  with `self.store()`; do not rely on `tmpPath` to place them.
 - **`untagged` is the permissive default — restrict it if you need to.** A file
   with no group is treated as `untagged`, which ships with `allowedExtensions: "*"`
   (any extension) and `isMultipleAllowed: true`. A group that is *not* configured is
@@ -310,11 +308,6 @@ delete (saved) action URL.
   still sidestep a restrictive *named* group by tagging its file `untagged`: if you
   rely on an allow-list, give `untagged` its own `allowedExtensions`, or require an
   explicit group.
-- **`maxFieldsSize` is read as a number of megabytes; the unit suffix is
-  ignored.** `"2MB"` means 2 MB, but `"512K"` is read as `512` — i.e. 512 **MB**,
-  not 512 KB. Express the limit as a plain MB number to avoid surprises.
-- **`maxFields` is not enforced.** The key appears in the default config but has
-  no effect; use per-group `isMultipleAllowed` to cap counts.
 - **No client-side size or type checking.** The client does not pre-validate a
   file's size or extension before staging — enforcement is server-side only (the
   upload-group rules). Do not assume the browser blocked anything.
