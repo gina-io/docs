@@ -249,6 +249,14 @@ field:
       data-gina-form-inherits-data="%7B%22source%22%3A%22landing%22%7D">
 ```
 
+:::caution Treat inherited data as untrusted
+Because it lives in the DOM, the client can read **and edit** this attribute, and
+the merged values reach the server indistinguishable from regular form fields.
+Validate and authorize them exactly as you would any other submitted input — never
+put secrets or authorization scope here, and never trust a value because Gina
+merged it in.
+:::
+
 ---
 
 ## Reacting to the result
