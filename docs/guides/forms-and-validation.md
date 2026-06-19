@@ -173,9 +173,10 @@ A few behaviours worth knowing:
 - **Only the touched field shows its error.** The whole-form pass controls the
   submit button, but error messages appear for fields the user has actually
   interacted with — untouched invalid fields stay quiet until submit.
-- **Warnings vs. errors.** While a field is still being edited, its message is a
-  soft *warning* (`form-item-warning`). Once the field is committed (blur, or
-  submit), it becomes a hard *error* (`form-item-error`). Style these two
+- **Warnings vs. errors.** While a field is still being edited it shows only a
+  soft *warning* border (`form-item-warning`) — the error message itself stays
+  hidden. Once the field is committed (blur, or submit), it becomes a hard
+  *error* (`form-item-error`) and its message is revealed. Style these two
   classes to taste.
 - **Field labels.** `data-gina-form-field-label` provides the human label used
   in messages — the `%l` placeholder in a message resolves to it.
