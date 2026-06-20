@@ -99,11 +99,41 @@ gina version --short=true
 
 ## `framework:update`
 
-Switch to the latest installed framework version.
+Reconcile the `~/.gina/` state stores to the installed framework version. It rewrites `def_framework` in `~/.gina/main.json` and the `version` / `def_framework` fields in `~/.gina/<version>/settings.json` to match the framework version on disk (or a version passed with `--to-version`), and registers that version in the `frameworks` map — automating the post-upgrade state check that otherwise has to be done by hand after a manual framework update.
+
+It is **dry-run by default**: with no flags it reports what is out of sync and writes nothing. Pass `--fix` (or `--apply`) to apply the reconciliation.
 
 ```bash
-gina framework:update
+gina framework:update                     # report what would change (no writes)
+gina framework:update --fix               # reconcile state to the installed version
+gina framework:update --to-version=0.5.4  # reconcile to a specific installed version
+gina framework:update --format=json       # machine-readable report
 ```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--fix` / `--apply` | Apply the reconciliation. Without it, the command only reports. |
+| `--dry-run` | Force report-only mode (the default). |
+| `--to-version=<v>` | Reconcile to a specific installed version instead of the current one. |
+| `--format=json` | Emit a JSON report instead of human-readable text. |
+
+:::note
+This is a state-reconciliation command, not an installer — it does **not** download or switch framework versions over the network, and it never lowers the recorded version below what is installed. To install a different framework version, use npm (`npm install -g gina@<version>`); a future `--self-update` flag is planned to wrap that.
+:::
+
+---
+
+## `framework:man`
+
+Render the `framework` command group's manual page inline in the terminal — no browser needed. When a rendered manual page is not available for a group, it falls back to that group's help text.
+
+```bash
+gina framework:man
+```
+
+The same command exists for the other groups: `project:man`, `bundle:man`, and `service:man`.
 
 ---
 

@@ -37,7 +37,7 @@ Items marked ✅ are shipped. All planned items are open to community contributi
 | **Q2 2026** | `0.5.2` ✅ | Patch: released-response crash family completed across the remaining synchronous controller surface — `renderJSON()` / `redirect()` / `store()` / `push()` / `renderStream()` / request-method + form-rule helpers no longer kill the bundle when called on an already-released response · exhausted HTTP/2 502 retries surface a typed `BAD_GATEWAY` error instead of being consumed as success |
 | **Q2 2026** | `0.5.3` ✅ | Patch: released-response crash family finished — late `throwError(status, error)` (2- and 3-argument forms) and the HTML render delegates (swig / nunjucks + async variants) no longer crash or emit unhandled rejections when invoked on an already-released response · atomic `~/.gina` state-file writes (concurrent multi-bundle / multi-container boot can't read a torn file) · framework command-socket hardened against malformed / fragmented payloads · framework socket port no longer corrupted by a bundle's `--port` · synchronous boot-failure diagnostics under piped stdout/stderr · storage `_id` collision hardening · `gina port:set --force` |
 | **Q2 2026** | `0.5.4` ✅ | Node.js 26 support (engine `>= 22 <27`, CI matrix) · FormValidator fixes (`isFloat` accepts string floats · `isDate` non-ISO masks + rule chaining) · quieter live form validation (error message revealed on blur) · file-upload fixes (honour `tmpPath` / per-group `path` · enforce `maxFields` + `maxFieldsSize` unit suffix · **Security**: reject uploads to an unconfigured group, closing an `allowedExtensions` / `isMultipleAllowed` bypass) · two dev-mode heap fixes (hot-reload lib-eviction leak · HTTP/2 `self.query()` settled-stream retention) · tighter per-request config isolation (narrowed router clone · `getRouteByUrl` shared-config mutation) · dev Inspector reliability (per-tab channel under COOP · Swig render-race isolation · multi-bundle proxy log/index routing · SPA hardening) · Express-engine `/_gina/info` + `/_gina/cache/stats` parity · `bundle:add --ignore-ports` |
-| **Q1 2027** | `0.5.x` | HTTP/2 priorities (blocked on Node scheduler hooks) · CLI Tier 3 (project:move, framework:update, backup/restore, man pages) · Beemaster admin + visual translation editor |
+| **Q1 2027** | `0.5.x` | HTTP/2 priorities (blocked on Node scheduler hooks) · CLI Tier 3 ✅ (project:move, framework:update, backup/restore, man pages — shipped `0.5.5`) · Beemaster admin + visual translation editor |
 | **Q3 2027** | `1.0.0` | First stable release — Windows alpha compatibility is a hard gate |
 
 ---
@@ -86,10 +86,10 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **`project:move`** — Relocate a project's source directory and update all `~/.gina/` registry entries to the new path. | `0.5.x` | Q1 2027 |
-| 📋 | **`framework:update`** — Self-update the installed Gina framework to the latest (or a specified) version without reinstalling via npm. | `0.5.x` | Q1 2027 |
-| 📋 | **`project:backup` / `project:restore`** — Archive a project's source, config, and data to a tarball, and restore from it. Documented as a support-only feature. | `0.5.x` | Q1 2027 |
-| 📋 | **`framework:man` / `project:man` / `bundle:man`** — Inline CLI manual pages accessible without opening a browser. | `0.5.x` | Q1 2027 |
+| ✅ | **`project:move`** — Relocate a project's source directory to a new path (`--to=`) and update its `~/.gina/` registry entry. Atomic, name-preserving move; refuses while a bundle is running or across filesystems. | `0.5.5-alpha.2` | 2026-06-19 |
+| ✅ | **`framework:update`** — Reconcile the `~/.gina/` state stores (`main.json` + `<version>/settings.json`) to the installed framework version, automating the post-upgrade state check. Dry-run by default; `--fix` applies. (The originally-planned npm self-update is deferred behind a future `--self-update`.) | `0.5.5-alpha.2` | 2026-06-20 |
+| ✅ | **`project:backup` / `project:restore`** — Archive a project's source tree to a timestamped `.zip` and restore it (re-registering the project so it is immediately startable). Support-oriented; archives are not encrypted. | `0.5.5-alpha.2` | 2026-06-19 |
+| ✅ | **`framework:man` / `project:man` / `bundle:man` / `service:man`** — Render a command group's manual page inline in the terminal (falling back to the group's help text when no man page exists), no browser needed. | `0.5.5-alpha.2` | 2026-06-20 |
 
 ---
 

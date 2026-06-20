@@ -109,6 +109,18 @@ In **dev mode** the standalone Inspector auto-starts when one of your bundles bo
 
 ---
 
+## `service:man`
+
+*New in 0.5.5-alpha.2*
+
+Render the `service` command group's manual page inline in the terminal — no browser needed. Falls back to the group's help text when no rendered manual page is available.
+
+```bash
+gina service:man
+```
+
+---
+
 ## `service:help`
 
 Print the usage summary for the `service` command group.

@@ -566,3 +566,13 @@ Gina's MCP server ships **static bearer auth only**. For OAuth-protected deploym
 ```
 
 CLI flags always win; use the manifest for project-pinned defaults.
+
+---
+
+## `bundle:man`
+
+Render the `bundle` command group's manual page inline in the terminal — no browser needed. Falls back to the group's help text when no rendered manual page is available.
+
+```bash
+gina bundle:man
+```
