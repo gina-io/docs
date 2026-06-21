@@ -31,6 +31,10 @@ One caveat applies only if you host a bundle on Bun **and** opt into WebSocket-o
 
 **No action required** — additive. See [Installation](/getting-started/installation).
 
+### Added — `gina framework:reset` (factory reset)
+
+`gina framework:reset` (shorthand `gina reset`) clears `~/.gina` (settings, project registry, env config, port allocations) at runtime, so it rebuilds to defaults on the next command. It is the package-manager-agnostic counterpart to `npm install -g gina@latest --reset` and the only factory reset available under Bun, which skips the npm install lifecycle the `--reset` flag relies on. It refuses while the daemon or bundles are running unless `--force`. **No action required** — additive. See [Factory reset](/getting-started/installation#factory-reset).
+
 ---
 
 ## 0.5.3 → 0.5.4

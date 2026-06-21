@@ -125,6 +125,32 @@ This is a state-reconciliation command, not an installer — it does **not** dow
 
 ---
 
+## `framework:reset`
+
+Factory reset — clears `~/.gina` (settings, project registry, env config, port allocations) so it is rebuilt from defaults on the next command. It is the runtime, package-manager-agnostic equivalent of `npm install -g gina@latest --reset`, and the only factory reset available on the [Bun](https://bun.sh) runtime — Bun skips the npm install lifecycle, so the `--reset` flag never runs. Your project source files are never touched.
+
+The shorthand `gina reset` is equivalent to `gina framework:reset`.
+
+```bash
+gina reset                    # clear ~/.gina (rebuilt on the next command)
+gina framework:reset          # same thing, long form
+gina framework:reset --force  # reset even while the daemon/bundles are running
+```
+
+By default it **refuses while the framework daemon or any bundle is running** — wiping `~/.gina` would orphan them. Stop them first with `gina stop`, or pass `--force`.
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Reset even while the daemon or bundles are running. They keep running but become untracked. |
+
+:::note
+`~/.gina` is left removed when the command returns; the next `gina` command re-creates it from defaults. A reset cannot repair a broken **installation** (you can't run a broken program to fix itself) — for that, reinstall the package and clear preferences manually. See [Factory reset](/getting-started/installation#factory-reset) for the full recovery steps.
+:::
+
+---
+
 ## `framework:man`
 
 Render the `framework` command group's manual page inline in the terminal — no browser needed. When a rendered manual page is not available for a group, it falls back to that group's help text.

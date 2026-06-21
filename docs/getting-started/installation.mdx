@@ -138,26 +138,88 @@ With this method, run the CLI using `./gina` from your project root instead of `
 
 ## Factory reset
 
-If your preferences are broken or you want a clean slate:
+If your preferences are broken or you want a clean slate, **`gina framework:reset`** (shorthand `gina reset`) clears `~/.gina` — your settings, project registry, env config, and port allocations — so it is rebuilt from defaults on the next command. Your project source files are never touched.
+
+```bash
+gina reset
+```
+
+It refuses while the framework daemon or any bundle is still running (so a reset can't orphan them) — stop them first with `gina stop`, or pass `--force`.
+
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
+
+`gina reset` works on npm. You can also reset as part of a reinstall — this repairs the installed package **and** clears the preferences in one step:
 
 ```bash
 npm install -g gina@latest --reset
 ```
 
-This resets `~/.gina` preferences (settings, project registry, env config). Your project source files are not touched.
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+`gina reset` is the way to factory-reset on Bun. The npm-style `bun add -g gina --reset` does **not** reset anything — Bun skips install scripts, so the `--reset` flag never runs:
+
+```bash
+gina reset
+```
+
+</TabItem>
+</Tabs>
+
+### When the `gina` command itself won't run
+
+A reset command can't repair a broken **installation** — you can't run a broken program to fix itself. Recover in two steps: reinstall the package, then clear the preferences.
+
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
+
+```bash
+npm install -g gina@latest --reset
+```
+
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+```bash
+bun add -g gina      # reinstall the package
+rm -rf ~/.gina       # clear preferences — rebuilt on the next command
+```
+
+</TabItem>
+</Tabs>
+
+`rm -rf ~/.gina` is the runtime-independent fallback that always works, no matter how broken things are — the next `gina` command re-creates `~/.gina` from defaults.
 
 ---
 
 ## Uninstalling
 
-**Without prefix:**
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
 
 ```bash
 npm uninstall -g gina
 ```
 
-**With prefix (if installed with `--prefix=~/.npm-global`):**
+If you installed with a custom prefix (`--prefix=~/.npm-global`):
 
 ```bash
 npm uninstall -g gina --prefix=~/.npm-global
+```
+
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+```bash
+bun remove -g gina
+```
+
+</TabItem>
+</Tabs>
+
+Uninstalling removes the CLI but leaves your preferences in `~/.gina`. To remove those too:
+
+```bash
+rm -rf ~/.gina
 ```
