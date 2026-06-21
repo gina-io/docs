@@ -2,20 +2,26 @@
 title: Installation
 sidebar_label: Installation
 sidebar_position: 1
-description: Install the Gina Node.js MVC framework globally via npm — with a custom prefix, a classical global install, or a local per-project setup.
+description: Install the Gina Node.js MVC framework globally with npm or Bun — with a custom prefix, a classical global install, or a local per-project setup.
 level: beginner
 prereqs:
   - '[Node.js 22 or later](https://nodejs.org/en/learn/getting-started/introduction-to-nodejs)'
   - '[npm or yarn](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)'
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Installation
 
-Gina is distributed via npm. Because it acts as both a framework and a deployment environment, it is recommended to install it **globally**. A global install gives you the `gina` CLI, which manages projects, bundles, ports, and the framework socket server from any directory on your machine.
+Gina is distributed on npm and installs on either **Node.js** (with `npm`) or the **[Bun](https://bun.sh)** runtime (with `bun`). Because it acts as both a framework and a deployment environment, it is recommended to install it **globally**. A global install gives you the `gina` CLI, which manages projects, bundles, ports, and the framework socket server from any directory on your machine.
 
 ## Method 1 — Custom prefix (recommended)
 
 This installs Gina in your home directory, avoiding the need for `sudo` or root access.
+
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
 
 ```bash
 npm install -g gina@latest --prefix=~/.npm-global
@@ -29,6 +35,26 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 
 Add that line to your shell profile (`.zshrc`, `.bashrc`, etc.) to make it permanent.
 
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+On the [Bun](https://bun.sh) runtime (Bun `>= 1.2`):
+
+```bash
+bun add -g gina
+```
+
+Bun installs the `gina` CLI to `~/.bun/bin` — no custom prefix or `sudo` needed. If that directory is not already on your `PATH`, add it:
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+```
+
+Bun skips dependency install scripts by default, but Gina needs no extra setup — it self-bootstraps on first run, so there is no `trustedDependencies` entry to add.
+
+</TabItem>
+</Tabs>
+
 ### Verify the installation
 
 ```bash
@@ -40,6 +66,9 @@ gina version
 ---
 
 ## Method 2 — Classical global install
+
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
 
 ```bash
 npm install -g gina@latest
@@ -59,15 +88,40 @@ npm install -g --unsafe-perm gina@latest
 
 > **Linux & macOS**: the use of `sudo npm install` is discouraged. Prefer Method 1 or fix permissions as shown above.
 
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+```bash
+bun add -g gina
+```
+
+Bun's global install goes to `~/.bun/bin` in your home directory, so there are no `EACCES` permission errors and no `sudo` is required.
+
+</TabItem>
+</Tabs>
+
 ---
 
 ## Method 3 — Local install (single-project use)
 
 If you only need Gina for a single project and do not want a global install:
 
+<Tabs groupId="runtime">
+<TabItem value="npm" label="npm" default>
+
 ```bash
 npm install gina@latest
 ```
+
+</TabItem>
+<TabItem value="bun" label="Bun">
+
+```bash
+bun add gina
+```
+
+</TabItem>
+</Tabs>
 
 With this method, run the CLI using `./gina` from your project root instead of `gina`.
 

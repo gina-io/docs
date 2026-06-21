@@ -65,8 +65,8 @@ Windows support is in alpha — Windows users can use Docker or WSL in the meant
 
 ## Requirements
 
-- Node.js **>= 22, < 27** (CI-tested on Node 22, 24, and 26)
-- npm
+- Node.js **>= 22, < 27** (CI-tested on Node 22, 24, and 26), or the **[Bun](https://bun.sh)** runtime (**>= 1.2**)
+- npm (or Bun)
 - Unix-like OS (macOS, Linux) for full feature support
 
 ## Next steps

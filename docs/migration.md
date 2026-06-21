@@ -19,6 +19,20 @@ upward to the target version.
 
 ---
 
+## 0.5.4 → 0.5.5
+
+`0.5.5` is an additive release — **no breaking changes and no settings reset.** Every change is opt-in; existing bundles run unchanged.
+
+### Added — Bun runtime support
+
+Gina now runs on the [Bun](https://bun.sh) runtime as a supported, CI-tested target. Install it globally with `bun add -g gina` (Bun `>= 1.2`), alongside the usual `npm install -g gina`. Bun skips dependency install scripts by default, but Gina needs no extra setup — it self-bootstraps on first run, so there is no `trustedDependencies` entry to add. Node.js (`>= 22, < 27`) is unchanged and remains fully supported.
+
+One caveat applies only if you host a bundle on Bun **and** opt into WebSocket-over-HTTP/2 (off by default): Bun does not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against it. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged.
+
+**No action required** — additive. See [Installation](/getting-started/installation).
+
+---
+
 ## 0.5.3 → 0.5.4
 
 `0.5.4` is a patch release — **no breaking changes**. The only item to review is the upload-group default and `maxFieldsSize` suffix change below, and only if your bundle configures file uploads.
