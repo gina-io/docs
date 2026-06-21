@@ -97,6 +97,81 @@ gina version --short=true
 
 ---
 
+## `framework:add`
+
+Install a published Gina version side-by-side with the active one, so a bundle can pin it via `--gina-version` (or its manifest `gina_version`). It downloads the version from npm (`npm pack gina@<version>`), archives it under `~/.gina/archives/framework`, installs that tree's own dependencies, symlinks it into the active install, and registers it in `~/.gina/main.json` under `frameworks`. It is **additive** — it never changes the default version, and the shipped active install is never clobbered.
+
+```bash
+gina framework:add 0.4.7                # install 0.4.7 alongside the active version
+gina framework:add 0.4.7 --dry-run      # preview the plan; write nothing
+gina framework:add 0.4.7 --format=json  # machine-readable result
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Overwrite an existing archived copy of that version. |
+| `--dry-run` | Print the plan and exit without writing anything. |
+| `--format=json` | Emit a JSON result instead of the human-readable summary. |
+
+Once added, pin a bundle to it at start time:
+
+```bash
+gina bundle:start <bundle> @<project> --gina-version=0.4.7
+```
+
+:::note
+If the requested version is already the real (shipped) install directory, the symlink step is skipped and the active install is left untouched. A published version whose tarball predates the side-by-side `framework/v<version>` layout cannot be added.
+:::
+
+---
+
+## `framework:list`
+
+List the framework versions known to this install: the active version, side-by-side versions added with [`framework:add`](#frameworkadd), and archived copies. The active version is marked with a leading `*`. This command is read-only — it never changes any state.
+
+```bash
+gina framework:list                # versions present on disk
+gina framework:list --all          # also include versions registered but not on disk
+gina framework:list --format=json  # machine-readable listing
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Also include versions registered in `main.json` but not present on disk. |
+| `--format=json` | Emit a JSON listing instead of the table. |
+
+Each row reports a `kind` — `real` (the shipped active version), `symlink` (a side-by-side add), `archived` (in the archive but not linked), or `registered` (recorded in `main.json` only, shown with `--all`) — alongside a status such as `active`, `broken link`, or `not installed`.
+
+---
+
+## `framework:remove`
+
+Remove a side-by-side version added with [`framework:add`](#frameworkadd). It deregisters the version from `~/.gina/main.json`, unlinks its symlink, and deletes its archived copy — the inverse of `framework:add`.
+
+```bash
+gina framework:remove 0.4.7              # remove the side-by-side 0.4.7
+gina framework:remove 0.4.7 --dry-run    # preview what would be removed
+gina framework:remove 0.4.7 --force      # remove even if a bundle still pins it
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Remove the version even when a bundle still pins it. |
+| `--dry-run` | Print the plan and exit without removing anything. |
+| `--format=json` | Emit a JSON result instead of the human-readable summary. |
+
+:::note
+`framework:remove` refuses to remove the active default (`def_framework`) or the real framework directory shipped with the install — neither can be overridden with `--force`. Only side-by-side (added) versions can be removed. When a bundle still pins the version, the command refuses unless you pass `--force`.
+:::
+
+---
+
 ## `framework:update`
 
 Reconcile the `~/.gina/` state stores to the installed framework version. It rewrites `def_framework` in `~/.gina/main.json` and the `version` / `def_framework` fields in `~/.gina/<version>/settings.json` to match the framework version on disk (or a version passed with `--to-version`), and registers that version in the `frameworks` map — automating the post-upgrade state check that otherwise has to be done by hand after a manual framework update.
