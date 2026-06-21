@@ -198,6 +198,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   {
     "bundle": "api",
     "project": "myproject",
+    "framework": "0.5.5-alpha.2",
+    "gina_version": null,
     "running": true,
     "pid": 12345,
     "env": "dev",
@@ -209,6 +211,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   {
     "bundle": "web",
     "project": "myproject",
+    "framework": "0.5.5-alpha.2",
+    "gina_version": null,
     "running": false,
     "pid": null,
     "env": "dev",
@@ -219,6 +223,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   }
 ]
 ```
+
+Each bundle object carries `framework` — the framework version the project resolves to (its `projects.json` pin, or the global default when unpinned) — and `gina_version`, the per-bundle `manifest.json` override (`null` unless the bundle pins a version via `--gina-version`).
 
 The no-argument form (every project) wraps each project's array in a `{ project, bundles }` envelope:
 
