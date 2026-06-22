@@ -145,6 +145,8 @@ With `--format=json`, the command emits a single object:
 {
   "bundle": "api",
   "project": "myproject",
+  "framework": "0.5.5-alpha.2",
+  "gina_version": null,
   "running": true,
   "pid": 12345,
   "env": "dev",
@@ -156,6 +158,8 @@ With `--format=json`, the command emits a single object:
   }
 }
 ```
+
+`framework` is the framework version the project resolves to — its `projects.json` pin, or the global default when the project is unpinned. `gina_version` is the per-bundle `manifest.json` override (`null` unless the bundle pins a version via `--gina-version`); the effective version is `gina_version || framework`.
 
 When the bundle is not declared in the project's `manifest.json`, the command exits non-zero; with `--format=json` it emits `{"bundle":"api","project":"myproject","status":"not-found"}`. A missing or malformed `ports.reverse.json` is tolerated — the bundle renders as `(no port)` with `env` / `scheme` / `protocol` / `port` null and `ports: null`.
 
@@ -566,3 +570,13 @@ Gina's MCP server ships **static bearer auth only**. For OAuth-protected deploym
 ```
 
 CLI flags always win; use the manifest for project-pinned defaults.
+
+---
+
+## `bundle:man`
+
+Render the `bundle` command group's manual page inline in the terminal — no browser needed. Falls back to the group's help text when no rendered manual page is available.
+
+```bash
+gina bundle:man
+```

@@ -19,6 +19,52 @@ upward to the target version.
 
 ---
 
+## 0.5.4 → 0.5.5
+
+`0.5.5` is an additive release — **no breaking changes and no settings reset.** Almost everything is opt-in; the one default-behaviour change — inter-bundle `self.query()` retry safety — is called out below.
+
+### Added — Bun runtime support
+
+Gina now runs on the [Bun](https://bun.sh) runtime as a supported, CI-tested target. Install it globally with `bun add -g gina` (Bun `>= 1.2`), alongside the usual `npm install -g gina`. Bun skips dependency install scripts by default, but Gina needs no extra setup — it self-bootstraps on first run, so there is no `trustedDependencies` entry to add. Node.js (`>= 22, < 27`) is unchanged and remains fully supported.
+
+One caveat applies only if you host a bundle on Bun **and** opt into WebSocket-over-HTTP/2 (off by default): Bun does not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against it. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged.
+
+**No action required** — additive. See [Installation](/getting-started/installation).
+
+### Added — `gina framework:reset` (factory reset)
+
+`gina framework:reset` (shorthand `gina reset`) clears `~/.gina` (settings, project registry, env config, port allocations) at runtime, so it rebuilds to defaults on the next command. It is the package-manager-agnostic counterpart to `npm install -g gina@latest --reset` and the only factory reset available under Bun, which skips the npm install lifecycle the `--reset` flag relies on. It refuses while the daemon or bundles are running unless `--force`. **No action required** — additive. See [Factory reset](/getting-started/installation#factory-reset).
+
+### Added — WebSocket routes in `routing.json`
+
+You can now declare a WebSocket-over-HTTP/2 endpoint directly in `routing.json` with `"method": "ws"` and a `param.wsHandler` pointing at a `channels/<name>.js` handler — no programmatic `app.onWebSocket()` call needed. Declared routes support `:param` path segments, per-route `param.wsOptions` (`maxPayload` / `protocol` / `closeTimeout`), and a new `session.query()` for cross-bundle HTTP calls from inside a handler. Requires the Isaac engine with `http2Options.enableConnectProtocol` set to `true`. **No action required** — additive and opt-in. See the [WebSocket over HTTP/2 guide](/guides/websockets).
+
+### Added — framework version management CLI
+
+`gina framework:add <version>` installs a published framework version side-by-side so a bundle can pin it via `--gina-version` (or a manifest `gina_version`), without changing the default; `framework:list` shows the active, side-by-side, and archived versions; `framework:remove` reverses an add; and `framework:update` reconciles the `~/.gina/` state stores to the installed framework version (dry-run by default, `--fix` to apply). Relatedly, `project:status` and `bundle:status` `--format=json` now report a `framework` field (the version each project/bundle resolves to) and a `gina_version` field (the per-bundle pin, `null` when unset). **No action required** — additive.
+
+### Added — `project:move`, `project:backup`, `project:restore`
+
+`gina project:move --to=<path>` relocates a project's source directory and updates its `~/.gina/` registry entry (refuses while a bundle is running or across filesystems). `project:backup` archives a project's source tree to a `.zip`, and `project:restore` rebuilds and re-registers a project from one so it is immediately startable. **No action required** — additive.
+
+### Added — inline CLI manual pages
+
+`gina framework:man` (and `project:man` / `bundle:man` / `service:man`) renders a command group's manual page inline in the terminal, falling back to the group's help text where no man page exists — no browser needed. **No action required** — additive.
+
+### Changed — inter-bundle `self.query()` retries are gated on HTTP-method safety
+
+A transient transport failure on an inter-bundle `self.query()` is now auto-retried only for the HTTP "safe" methods (`GET` / `HEAD` / `OPTIONS` / `TRACE`), so a `POST` / `PUT` / `PATCH` / `DELETE` the upstream may already have executed is no longer silently replayed when only the response was lost. **Action:** if you depend on a non-safe inter-bundle call being retried, opt that call back in with `retryUnsafe: true` in its query options. GET-style calls are unaffected.
+
+### Fixed — popin/dialog triggers no longer fire a duplicate request
+
+A popin or dialog trigger whose target was warmed by a hover/focus preload (`data-gina-popin-url` or `data-gina-dialog-src`) no longer fires a second identical `GET` on click — the in-flight preload is reused even while it is still loading, and `preOpen` popins keep their instant loading skeleton. **No action required** — transparent fix.
+
+### Security
+
+Two hardening fixes ship with `0.5.5`: a WebSocket denial-of-service fix delivered via an `ws` dependency override (reached transitively through `engine.io`), and hardening of the log-tail restart path. **No action required** — both are internal.
+
+---
+
 ## 0.5.3 → 0.5.4
 
 `0.5.4` is a patch release — **no breaking changes**. The only item to review is the upload-group default and `maxFieldsSize` suffix change below, and only if your bundle configures file uploads.

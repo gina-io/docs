@@ -97,13 +97,144 @@ gina version --short=true
 
 ---
 
-## `framework:update`
+## `framework:add`
 
-Switch to the latest installed framework version.
+Install a published Gina version side-by-side with the active one, so a bundle can pin it via `--gina-version` (or its manifest `gina_version`). It downloads the version from npm (`npm pack gina@<version>`), archives it under `~/.gina/archives/framework`, installs that tree's own dependencies, symlinks it into the active install, and registers it in `~/.gina/main.json` under `frameworks`. It is **additive** — it never changes the default version, and the shipped active install is never clobbered.
 
 ```bash
-gina framework:update
+gina framework:add 0.4.7                # install 0.4.7 alongside the active version
+gina framework:add 0.4.7 --dry-run      # preview the plan; write nothing
+gina framework:add 0.4.7 --format=json  # machine-readable result
 ```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Overwrite an existing archived copy of that version. |
+| `--dry-run` | Print the plan and exit without writing anything. |
+| `--format=json` | Emit a JSON result instead of the human-readable summary. |
+
+Once added, pin a bundle to it at start time:
+
+```bash
+gina bundle:start <bundle> @<project> --gina-version=0.4.7
+```
+
+:::note
+If the requested version is already the real (shipped) install directory, the symlink step is skipped and the active install is left untouched. A published version whose tarball predates the side-by-side `framework/v<version>` layout cannot be added.
+:::
+
+---
+
+## `framework:list`
+
+List the framework versions known to this install: the active version, side-by-side versions added with [`framework:add`](#frameworkadd), and archived copies. The active version is marked with a leading `*`. This command is read-only — it never changes any state.
+
+```bash
+gina framework:list                # versions present on disk
+gina framework:list --all          # also include versions registered but not on disk
+gina framework:list --format=json  # machine-readable listing
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Also include versions registered in `main.json` but not present on disk. |
+| `--format=json` | Emit a JSON listing instead of the table. |
+
+Each row reports a `kind` — `real` (the shipped active version), `symlink` (a side-by-side add), `archived` (in the archive but not linked), or `registered` (recorded in `main.json` only, shown with `--all`) — alongside a status such as `active`, `broken link`, or `not installed`.
+
+---
+
+## `framework:remove`
+
+Remove a side-by-side version added with [`framework:add`](#frameworkadd). It deregisters the version from `~/.gina/main.json`, unlinks its symlink, and deletes its archived copy — the inverse of `framework:add`.
+
+```bash
+gina framework:remove 0.4.7              # remove the side-by-side 0.4.7
+gina framework:remove 0.4.7 --dry-run    # preview what would be removed
+gina framework:remove 0.4.7 --force      # remove even if a bundle still pins it
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Remove the version even when a bundle still pins it. |
+| `--dry-run` | Print the plan and exit without removing anything. |
+| `--format=json` | Emit a JSON result instead of the human-readable summary. |
+
+:::note
+`framework:remove` refuses to remove the active default (`def_framework`) or the real framework directory shipped with the install — neither can be overridden with `--force`. Only side-by-side (added) versions can be removed. When a bundle still pins the version, the command refuses unless you pass `--force`.
+:::
+
+---
+
+## `framework:update`
+
+Reconcile the `~/.gina/` state stores to the installed framework version. It rewrites `def_framework` in `~/.gina/main.json` and the `version` / `def_framework` fields in `~/.gina/<version>/settings.json` to match the framework version on disk (or a version passed with `--to-version`), and registers that version in the `frameworks` map — automating the post-upgrade state check that otherwise has to be done by hand after a manual framework update.
+
+It is **dry-run by default**: with no flags it reports what is out of sync and writes nothing. Pass `--fix` (or `--apply`) to apply the reconciliation.
+
+```bash
+gina framework:update                     # report what would change (no writes)
+gina framework:update --fix               # reconcile state to the installed version
+gina framework:update --to-version=0.5.4  # reconcile to a specific installed version
+gina framework:update --format=json       # machine-readable report
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--fix` / `--apply` | Apply the reconciliation. Without it, the command only reports. |
+| `--dry-run` | Force report-only mode (the default). |
+| `--to-version=<v>` | Reconcile to a specific installed version instead of the current one. |
+| `--format=json` | Emit a JSON report instead of human-readable text. |
+
+:::note
+This is a state-reconciliation command, not an installer — it does **not** download or switch framework versions over the network, and it never lowers the recorded version below what is installed. To install a different framework version, use npm (`npm install -g gina@<version>`); a future `--self-update` flag is planned to wrap that.
+:::
+
+---
+
+## `framework:reset`
+
+Factory reset — clears `~/.gina` (settings, project registry, env config, port allocations) so it is rebuilt from defaults on the next command. It is the runtime, package-manager-agnostic equivalent of `npm install -g gina@latest --reset`, and the only factory reset available on the [Bun](https://bun.sh) runtime — Bun skips the npm install lifecycle, so the `--reset` flag never runs. Your project source files are never touched.
+
+The shorthand `gina reset` is equivalent to `gina framework:reset`.
+
+```bash
+gina reset                    # clear ~/.gina (rebuilt on the next command)
+gina framework:reset          # same thing, long form
+gina framework:reset --force  # reset even while the daemon/bundles are running
+```
+
+By default it **refuses while the framework daemon or any bundle is running** — wiping `~/.gina` would orphan them. Stop them first with `gina stop`, or pass `--force`.
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Reset even while the daemon or bundles are running. They keep running but become untracked. |
+
+:::note
+`~/.gina` is left removed when the command returns; the next `gina` command re-creates it from defaults. A reset cannot repair a broken **installation** (you can't run a broken program to fix itself) — for that, reinstall the package and clear preferences manually. See [Factory reset](/getting-started/installation#factory-reset) for the full recovery steps.
+:::
+
+---
+
+## `framework:man`
+
+Render the `framework` command group's manual page inline in the terminal — no browser needed. When a rendered manual page is not available for a group, it falls back to that group's help text.
+
+```bash
+gina framework:man
+```
+
+The same command exists for the other groups: `project:man`, `bundle:man`, and `service:man`.
 
 ---
 

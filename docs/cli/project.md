@@ -78,6 +78,29 @@ gina project:rename @myproject @myproject-v2
 
 ---
 
+## `project:move`
+
+Relocate a project's source directory to a new path and update its `~/.gina/` registry entry. The move is atomic (the source tree is renamed in place, preserving symlinks) and the project keeps its name — only the recorded source path changes. This is the path-changing counterpart to [`project:rename`](#projectrename).
+
+```bash
+gina project:move @<project> --to=<new-path>
+```
+
+```bash
+gina project:move @myproject --to=~/Sites/relocated/myproject
+```
+
+Use `--to=` for the destination, **not** `--path=`: the framework auto-creates a `--path` directory for every `project:` command, so the destination is passed with `--to` and must not already exist (or must be empty).
+
+`project:move` refuses to run when:
+
+- any bundle in the project is **running** — stop them first (there is no `--force` override);
+- the destination is on a **different filesystem** — a cross-device move can't be atomic, so use [`project:import`](#projectimport) at the new location instead.
+
+Only the project's source `path` changes; its home directory (`~/.<project>`), ports, and bundle registry are name-keyed and are left untouched.
+
+---
+
 ## `project:remove`
 
 Unregister a project. Does not delete source files.
@@ -175,6 +198,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   {
     "bundle": "api",
     "project": "myproject",
+    "framework": "0.5.5-alpha.2",
+    "gina_version": null,
     "running": true,
     "pid": 12345,
     "env": "dev",
@@ -186,6 +211,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   {
     "bundle": "web",
     "project": "myproject",
+    "framework": "0.5.5-alpha.2",
+    "gina_version": null,
     "running": false,
     "pid": null,
     "env": "dev",
@@ -196,6 +223,8 @@ With `--format=json`, a named project emits a flat array of per-bundle objects:
   }
 ]
 ```
+
+Each bundle object carries `framework` — the framework version the project resolves to (its `projects.json` pin, or the global default when unpinned) — and `gina_version`, the per-bundle `manifest.json` override (`null` unless the bundle pins a version via `--gina-version`).
 
 The no-argument form (every project) wraps each project's array in a `{ project, bundles }` envelope:
 
@@ -219,4 +248,51 @@ Build all bundles in a project.
 
 ```bash
 gina project:build @<project> [--env=<env>] [--scope=<scope>]
+```
+
+---
+
+## `project:backup`
+
+Archive a project's source tree to a timestamped `.zip`. A support-oriented command — useful for capturing a project's state before a risky change or for moving it between machines.
+
+```bash
+gina project:backup @<project> [--out=<dir>]
+```
+
+```bash
+gina project:backup @myproject                  # writes ./myproject-<timestamp>.zip
+gina project:backup @myproject --out=~/backups   # choose the output directory
+```
+
+The archive is named `<project>-<YYYYMMDD-HHMMSS>.zip` and written to `--out` (default: the current directory). Only the project **source tree** is archived — `node_modules` and symlinks are skipped, so the archive stays small and portable. The command is read-only with respect to the registry.
+
+:::note
+Archives are **not** encrypted. `--with-password` is rejected rather than silently producing a plaintext archive — handle encryption at the storage layer if you need it.
+:::
+
+---
+
+## `project:restore`
+
+Restore a project from a `project:backup` archive and re-register it so it is immediately startable.
+
+```bash
+gina project:restore @<name> <archive.zip> --to=<path> [--force]
+```
+
+```bash
+gina project:restore @myproject ./myproject-20260619-120000.zip --to=~/Sites/myproject
+```
+
+The archive is extracted to `--to`, then the project is registered under `@<name>` (allocating ports for each bundle in its `manifest.json`). The name may differ from the original, so the same command also handles rename-on-restore. Pass `--force` to overwrite an already-registered name or a non-empty destination. After restoring you can [`gina project:start`](#projectstart) `@<name>` directly.
+
+---
+
+## `project:man`
+
+Render the `project` command group's manual page inline in the terminal — no browser needed. Falls back to the group's help text when no rendered manual page is available.
+
+```bash
+gina project:man
 ```
