@@ -19,11 +19,13 @@ keywords:
 
 # WebSocket over HTTP/2
 
-Since `0.5.0` (in development), Gina's Isaac engine can serve WebSocket
-endpoints over **HTTP/2 extended CONNECT** (RFC 8441). The WebSocket rides an
-HTTP/2 stream on the connection the browser already holds — no second TCP
-connection, no HTTP/1.1 `Upgrade` dance, no external WebSocket library: the
-RFC 6455 framing codec is built into the framework.
+Since `0.4.7`, Gina's Isaac engine can serve WebSocket endpoints over
+**HTTP/2 extended CONNECT** (RFC 8441). The WebSocket rides an HTTP/2 stream on
+the connection the browser already holds — no second TCP connection, no
+HTTP/1.1 `Upgrade` dance, no external WebSocket library: the RFC 6455 framing
+codec is built into the framework. Since `0.5.5` you can also declare endpoints
+straight in `routing.json` and call other bundles from a handler with
+`session.query()`.
 
 ```mermaid
 sequenceDiagram
@@ -86,9 +88,12 @@ demo.onInitialize(function(event, app, express) {
 });
 ```
 
-- Paths match the request's `:path` **exactly** (query string stripped) — no
-  prefixes or patterns. An extended-CONNECT request for an unregistered path
-  is refused with `404`.
+- Paths match the request's `:path` with the query string stripped. A plain
+  path matches **exactly**; a path with a `:name` segment — e.g. `/live/:room`,
+  since `0.5.5` — matches any non-empty segment and exposes the captured value
+  on `request.params.room`. An exact path always wins over a `:param` pattern,
+  and among overlapping patterns the first registered wins. An extended-CONNECT
+  request for an unregistered path is refused with `404`.
 - The handler receives the live `session` plus the original `request`, whose
   headers carry everything sent with the handshake (`cookie`,
   `sec-websocket-protocol`, your own headers).
@@ -96,6 +101,50 @@ demo.onInitialize(function(event, app, express) {
   and does nothing — safe across differently-configured environments.
 - Like all `onInitialize` wiring, registrations are load-once: **restart the
   bundle to apply changes.**
+
+## Declarative routes in `routing.json`
+
+Since `0.5.5`, you can declare a WebSocket endpoint in `routing.json` instead of
+calling `app.onWebSocket()` by hand. Give the route `"method": "ws"` and point
+`param.wsHandler` at a handler module in your bundle's `channels/` directory —
+the framework registers it automatically at bundle start:
+
+```json title="src/<bundle>/config/routing.json"
+{
+  "live-feed": {
+    "url":    "/live/:room",
+    "method": "ws",
+    "param":  {
+      "wsHandler": "feed",
+      "wsOptions": { "protocol": "chat", "maxPayload": 65536 }
+    }
+  }
+}
+```
+
+```js title="src/<bundle>/channels/feed.js"
+module.exports = function(session, request) {
+    var room = request.params.room;          // the ":room" capture
+    session.onMessage(function(data) {
+        session.send('[' + room + '] ' + data);
+    });
+};
+```
+
+- The handler module is a plain `module.exports = function(session, request) {}`
+  — **not** a controller. It has no render lifecycle and lives for the whole
+  connection. It can use the framework lib registry (`require('lib/<name>')`),
+  the ORM (`getModel('<bundle>', '<Model>')`), and `session.query()` (below).
+- `param.wsOptions` is optional and accepts any subset of `maxPayload`,
+  `protocol`, and `closeTimeout`, applied when the connection is accepted.
+- `:param` segments, exact-over-param precedence, and first-registered-wins
+  ordering work exactly as for the programmatic API above.
+- A missing or unloadable `channels/<name>.js`, or a `ws` route without
+  `param.wsHandler`, fails the bundle boot loudly — the error surfaces at deploy
+  time, not at first connect.
+- A programmatic `app.onWebSocket()` for the same path overrides a declared one
+  (last write wins). Declared routes need the same Isaac + `enableConnectProtocol`
+  prerequisites; on any other engine the registration warns and is skipped.
 
 ## The session API
 
@@ -110,6 +159,7 @@ demo.onInitialize(function(event, app, express) {
 | `onError(fn)` | Diagnostic, with `err.closeCode`; always followed by `onClose`. |
 | `onDrain(fn)` | Backpressure relief, forwarded from the underlying stream. |
 | `isClosed()` | Whether the terminal close has been delivered. |
+| `query(options[, data])` | _(since `0.5.5`)_ Calls another bundle over HTTP and returns a Promise (with an optional trailing callback) — see [Cross-bundle calls](#cross-bundle-calls). |
 
 Protocol violations (bad framing, an unmasked client frame, invalid UTF-8,
 oversized messages) are answered with the RFC 6455 status code (`1002`,
@@ -117,6 +167,25 @@ oversized messages) are answered with the RFC 6455 status code (`1002`,
 clean messages. A **throwing handler** is contained too: the session closes
 with `1011` instead of crashing the bundle. Reassembled messages are capped
 at 1 MiB and 100 fragments.
+
+## Cross-bundle calls
+
+Since `0.5.5`, a channel handler can call another bundle over HTTP with
+`session.query()` — the same cross-bundle call a controller makes with
+`self.query()`, reusing the running server's warm HTTP/2 session cache:
+
+```js
+app.onWebSocket('/live', async function(session, request) {
+    var res = await session.query({ hostname: 'api@myproject/dev', path: '/rooms/42' });
+    session.send(JSON.stringify(res));
+});
+```
+
+It returns a Promise (with an optional trailing `(err, data)` callback) and
+resolves the target bundle by hostname. Same-bundle data access still goes
+through `getModel()` directly; `session.query()` adds the inter-bundle HTTP leg
+`getModel()` cannot do. Requires the Isaac engine with
+`http2Options.enableConnectProtocol` set to `true`.
 
 ## Authentication
 
@@ -152,8 +221,6 @@ app.onWebSocket('/live', function(session, request) {
   connection is HTTP/2 and the server advertises the capability; for
   server-to-server use, pick a client that supports RFC 8441.
 - **Isaac engine only** — the Express engine has no HTTP/2 stream seam.
-- Declarative `routing.json` WebSocket routes are not supported; handlers are
-  registered programmatically from `onInitialize`.
 
 ## Observability
 
