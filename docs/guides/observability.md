@@ -51,7 +51,7 @@ sequenceDiagram
     M-->>G: true
     G->>M: lib.metrics.getMetrics()
     M-->>G: # HELP ... # TYPE ... <text>
-    G-->>P: 200 text/plain; version=0.0.4; charset=utf-8
+    G-->>P: 200 text/plain (Prometheus exposition, version=0.0.4)
 ```
 
 ---
