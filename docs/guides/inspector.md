@@ -214,6 +214,35 @@ the last clear (`debug` < `info` < `warn` < `error`).
 
 ---
 
+### AI stream
+
+Surfaces the AI token streams a request made — every call to `getModel('name').stream(...)`
+(see the [AI connector guide](/guides/ai#streaming-responses)).
+
+While a stream is in flight the tab tails it live: a header line (model, role), a running
+meta line (chunk count, output tokens, status), and — when text capture is enabled — the
+generated text as it arrives. When the request finishes, the tab shows an end-of-request
+snapshot of **every** stream the request made, each with its model, provider, role, token
+counts (in / out), and duration.
+
+**Capturing prompt + generated text.** By default only stream *metadata* (model, role,
+token counts, latency) is captured — never the prompt or the generated text. To include
+them, set `inspector.ai.captureText` to `true` in `settings.json`:
+
+```json title="settings.json"
+{
+  "inspector": {
+    "ai": { "captureText": true }
+  }
+}
+```
+
+Capturing raw prompts and completions can expose sensitive content, so it is off by
+default — treat it as a local development aid. The live token frames travel over the same
+authenticated agent channel as the other tabs.
+
+---
+
 ## Settings
 
 Click the gear icon in the Inspector toolbar to open the settings panel:
