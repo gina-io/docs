@@ -73,6 +73,9 @@
     "launch-editor": "^2.14.1",
     "sirv": "^3.0.2",
     "@babel/core": "^7.29.6",
+    "gray-matter": {
+      "js-yaml": "^3.15.0"
+    },
     "express": {
       "path-to-regexp": "0.1.13"
     }
