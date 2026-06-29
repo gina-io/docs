@@ -19,6 +19,20 @@ upward to the target version.
 
 ---
 
+## 0.5.5 → 0.5.6
+
+`0.5.6` is an additive release — **no breaking changes and no settings reset.** The one new feature below is an opt-in dev-mode observability aid.
+
+### Added — application-event Inspector signal
+
+The dev Inspector gains an **Event** tab that surfaces the named application events a request emitted. Raise an event from a controller with `self.emitEvent(name, metadata)`, or from model / service code with `require('lib/inspector-events').emit(name, metadata)`; the tab tails them live over the authenticated agent channel while the request runs and shows an end-of-request snapshot when it finishes.
+
+Events are captured only in dev mode (or while an instrumentation window is open). The event *name* always rides the wire, but the `metadata` values you attach are captured only when `inspector.events.captureArgs` is `true` (default `false`). A separate `inspector.events.topics` allow-list (default `[]`) can mirror selected entity-trigger emits onto the same signal, matched by exact name or a single leading or trailing `*` wildcard; bridged entity events carry only a safe `{ ok, error }` summary, never raw entity-record data.
+
+**No action required** — additive. See the [Inspector guide](/guides/inspector#event).
+
+---
+
 ## 0.5.4 → 0.5.5
 
 `0.5.5` is an additive release — **no breaking changes and no settings reset.** Almost everything is opt-in; the one default-behaviour change — inter-bundle `self.query()` retry safety — is called out below.

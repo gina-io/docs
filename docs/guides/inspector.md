@@ -241,6 +241,63 @@ Capturing raw prompts and completions can expose sensitive content, so it is off
 default — treat it as a local development aid. The live token frames travel over the same
 authenticated agent channel as the other tabs.
 
+### Event
+
+Surfaces the named application events a request emitted — domain signals such as
+`order.created` or `cache.miss` that your own code raises. Emit one from anywhere in a
+request's call path:
+
+```js
+// from a controller (self is the controller instance)
+self.emitEvent('order.created', { orderId: order.id });
+
+// from model / service code (resolve the lib by bare name)
+require('lib/inspector-events').emit('cache.miss', { key: k });
+```
+
+While the request runs the tab tails events live over the same authenticated agent
+channel (`/_gina/agent`, SSE + WebSocket) as the other tabs. When the request finishes,
+the tab shows an end-of-request snapshot of every event it emitted, each with its name, a
+sequence id, and — when metadata capture is enabled — the metadata you attached.
+
+**Capturing event metadata.** The event *name* and framework stamps always ride the wire,
+but the `metadata` values you attach are captured only when `inspector.events.captureArgs`
+is `true` (default `false`). A separate `inspector.events.topics` allow-list (default `[]`,
+so nothing is bridged) mirrors selected *entity-trigger* emits — the `entity#method`
+signals behind the Query tab — onto the same Event signal; entries match by exact name or a
+single leading or trailing `*` wildcard (e.g. `account#*`, `*#insert`):
+
+```json title="settings.json"
+{
+  "inspector": {
+    "events": {
+      "captureArgs": false,
+      "topics": []
+    }
+  }
+}
+```
+
+Bridged entity events are tagged `source: "framework"` (your own `self.emitEvent` calls are
+`source: "app"`) and carry only a safe `{ ok, error }` summary — never raw entity-record
+data.
+
+Capturing metadata values can expose sensitive content, so it is off by default — treat it
+as a local development aid. Events are captured only in dev mode (or while an
+instrumentation window is open), and the live frames travel over the same authenticated
+agent channel as the other tabs; the gate, the opt-in, and the authenticated channel are
+the protection.
+
+```mermaid
+flowchart LR
+    A["self.emitEvent(name, meta)"] --> C["_devEventLog<br/>(per-request ALS)"]
+    B["bridged entity#topic"] --> C
+    C --> D["/_gina/agent<br/>SSE + WS (live)"]
+    C --> E["user.events<br/>(end-of-request snapshot)"]
+    D --> F[Inspector Event tab]
+    E --> F
+```
+
 ---
 
 ## Settings
