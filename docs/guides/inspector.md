@@ -263,9 +263,11 @@ sequence id, and — when metadata capture is enabled — the metadata you attac
 **Capturing event metadata.** The event *name* and framework stamps always ride the wire,
 but the `metadata` values you attach are captured only when `inspector.events.captureArgs`
 is `true` (default `false`). A separate `inspector.events.topics` allow-list (default `[]`,
-so nothing is bridged) mirrors selected *entity-trigger* emits — the `entity#method`
-signals behind the Query tab — onto the same Event signal; entries match by exact name or a
-single leading or trailing `*` wildcard (e.g. `account#*`, `*#insert`):
+so nothing is bridged) mirrors selected *framework* events onto the same Event signal — both
+**entity-trigger** emits (`entity#method`, raised by a custom entity method) and **connector
+lifecycle** events (a connector's `ready` emit, re-fired on every reconnect — e.g.
+`couchbase#ready` — so database connection churn surfaces here too). Entries match by exact
+name or a single leading or trailing `*` wildcard (e.g. `account#*`, `*#insert`, `*#ready`):
 
 ```json title="settings.json"
 {
@@ -278,9 +280,16 @@ single leading or trailing `*` wildcard (e.g. `account#*`, `*#insert`):
 }
 ```
 
-Bridged entity events are tagged `source: "framework"` (your own `self.emitEvent` calls are
-`source: "app"`) and carry only a safe `{ ok, error }` summary — never raw entity-record
-data.
+Bridged events are tagged `source: "framework"` (your own `self.emitEvent` calls are
+`source: "app"`) and carry only a safe `{ ok, error }` summary — never raw entity-record data
+or connection internals. That summary is itself metadata, so it rides the wire only when
+`captureArgs` is on; with it off (the default) a bridged event shows just its name and
+`source`.
+
+**What to whitelist.** Custom entity methods (e.g. `account#save`) and connector lifecycle
+(`couchbase#ready`, or `*#ready` for any connector) are the useful picks. Leave a connector's
+CRUD signals (`N1QL:*` on Couchbase) out unless you specifically want them — they overlap the
+[Query tab](#query), which already shows every query.
 
 Capturing metadata values can expose sensitive content, so it is off by default — treat it
 as a local development aid. Events are captured only in dev mode (or while an
@@ -291,7 +300,8 @@ the protection.
 ```mermaid
 flowchart LR
     A["self.emitEvent(name, meta)"] --> C["_devEventLog<br/>(per-request ALS)"]
-    B["bridged entity#topic"] --> C
+    B["bridged entity#method<br/>(within a request)"] --> C
+    G["bridged connector#ready<br/>(lifecycle — no request)"] --> D
     C --> D["/_gina/agent<br/>SSE + WS (live)"]
     C --> E["user.events<br/>(end-of-request snapshot)"]
     D --> F[Inspector Event tab]
