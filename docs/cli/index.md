@@ -35,7 +35,7 @@ to identify which project the command targets.
 | [`cache`](./cache.md) | Inspect in-memory cache stats for running bundles |
 | [`protocol`](./protocol.md) | HTTP protocol and scheme configuration |
 | [`service`](./service.md) | List framework-internal services (@gina-only) |
-| [`connector`](./connector.md) | List connectors (shared + bundle overlay) with driver install status |
+| [`connector`](./connector.md) | List, add, remove, and lint `connectors.json`; run a one-off AI inference (`connector:infer`) |
 
 ## Online vs offline commands
 
