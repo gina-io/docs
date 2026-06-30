@@ -724,6 +724,12 @@ With `--raw`, the object gains a `raw` field carrying the provider's verbatim re
 
 Token counters are **passed through verbatim and never fabricated**: OpenAI-family deltas carry `outputTokens: null` until the final chunk, and some providers (e.g. `ollama`) omit the usage chunk entirely — those stay `null`. `finishReason` is OpenAI-family-only (absent on Anthropic's `done`). This mirrors the in-bundle [token-streaming API](/guides/ai#token-streaming-with-renderstream).
 
+The example above is Anthropic, whose `done` omits `finishReason`. An OpenAI-family provider's `done` carries it (the provider's `finish_reason` passed through verbatim — `stop` on a normal completion, `length` when truncated, etc.):
+
+```text
+{"type":"done","content":"Hello!","model":"gpt-4o-mini","usage":{"inputTokens":12,"outputTokens":3},"latencyMs":389,"finishReason":"stop"}
+```
+
 ### Error paths
 
 | Input | Behaviour |
