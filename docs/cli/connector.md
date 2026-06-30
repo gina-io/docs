@@ -11,13 +11,14 @@ prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
-The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, lints / auto-fixes common schema drift, and runs a one-off inference against a configured AI connector. The config subcommands (`list` / `add` / `rm` / `migrate`) are **offline** — no framework socket or network call; only `connector:infer` reaches out, contacting the configured AI provider.
+The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, lints / auto-fixes common schema drift, runs a one-off inference against a configured AI connector, and probes connectors for readiness. The config subcommands (`list` / `add` / `rm` / `migrate`) and `connector:test`'s default validate-only mode are **offline** — no framework socket or network call; only `connector:infer` (and `connector:test --connect`) reach out, contacting the configured AI provider.
 
 - **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.
 - **`connector:add`** — write a connector entry to shared or bundle scope, with driver install hint.
 - **`connector:rm`** (alias `connector:remove`) — remove a connector entry; prints retention hints, never touches `node_modules/`.
 - **`connector:migrate`** — lint every `connectors.json` for schema drift, optionally fix in place with `--fix`.
 - **`connector:infer`** — run a one-off inference against a configured AI connector outside a request; `--stream` for token-by-token NDJSON.
+- **`connector:test`** — probe configured connectors for readiness (config / driver / secrets) and exit non-zero on any failure; `--connect` adds a live AI `models.list` probe (zero generation tokens).
 
 ```mermaid
 flowchart LR
@@ -728,6 +729,104 @@ Token counters are **passed through verbatim and never fabricated**: OpenAI-fami
 
 :::note AI connectors only
 `connector:infer` only works with `ai` connectors — it errors cleanly on any other type. The provider SDK (`@anthropic-ai/sdk` for `anthropic://`, `openai` for OpenAI-compatible schemes) must be installed in the project's `node_modules`. Database connectors have no inference equivalent; use `connector:list` to inspect their configuration.
+:::
+
+---
+
+## `connector:test` {#connectortest}
+
+*New in 0.5.6-alpha.3*
+
+Probe a project's configured connectors for **readiness** and exit non-zero when any one fails — a CI gate that complements `connector:list` (which reports driver-install status) and [`secrets:check`](./secrets.md) (which reports env presence), answering the single question *"is this connector ready to use?"*. By default it is **validate-only and offline**: for each connector it checks that the `connector` type / `ai` protocol is recognised, the npm driver is installed at `<project>/node_modules`, and every `${secret:KEY}` placeholder resolves from the current environment — no network, and no connector is instantiated.
+
+:::tip Validate-only is offline and CI-safe
+The default mode makes no network call and instantiates no connector, so it is safe to run in CI on every push. The opt-in `--connect` flag adds a live connectivity probe — see [The `--connect` live probe](#connect).
+:::
+
+```mermaid
+flowchart LR
+    A["shared + &lt;bundle&gt;<br/>connectors.json"] --> B["overlay merge<br/>(bundle wins)"]
+    B --> C{"per connector"}
+    C --> D["config<br/>type recognised"]
+    C --> E["driver<br/>installed"]
+    C --> F["secrets<br/>resolve from env"]
+    D --> G{"all pass?"}
+    E --> G
+    F --> G
+    G -->|yes| H["PASS"]
+    G -->|no| I["FAIL (exit 1)"]
+```
+
+```bash
+gina connector:test                                  # every connector in every registered project
+gina connector:test @<project>                       # every connector in one project (shared + bundles)
+gina connector:test <connector> @<project>           # one connector (shared / merged view)
+gina connector:test <connector> <bundle> @<project>  # one connector as <bundle> sees it
+gina connector:test @<project> --format=json         # machine-readable readiness report
+gina connector:test <connector> @<project> --connect # add the live probe (ai: models.list)
+```
+
+The positional grammar mirrors [`connector:infer`](#connectorinfer) — a leading `<connector>` selects one connector, an optional `<bundle>` narrows to that bundle's merged view — and the all-modes mirror `secrets:check`: omit the connector to test every connector in a project, and omit `@<project>` to test every registered project.
+
+### Checks
+
+Every connector is evaluated against three checks (a fourth, `connect`, only with `--connect`). A connector **passes** only when all of its non-skipped checks pass; a single failing connector flips the overall exit code to `1`:
+
+| Check | Passes when |
+|-------|-------------|
+| `config` | The `connector` type (or `ai` `protocol`) is one the framework recognises. |
+| `driver` | The npm driver is installed at `<project>/node_modules/<driver>` (or is built-in, e.g. `sqlite`). |
+| `secrets` | Every `${secret:KEY}` placeholder the connector declares resolves to a non-empty value in the environment. |
+| `connect` | *(only with `--connect`)* The live connectivity probe succeeded — see below. |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--connect` | Add a live connectivity probe on top of the validate-only checks. AI connectors only this release (see below); DB/cache connectors report it as **skipped**. |
+| `--format=json` | Emit a machine-readable readiness report instead of the human-readable text. |
+
+### The `--connect` live probe {#connect}
+
+`--connect` adds a real connectivity check. For an `ai` connector it instantiates the connector the same way [`connector:infer`](#connectorinfer) does (resolving `${secret:KEY}` from the environment — the value is never printed) and calls the provider's `models.list` — a **credentialed request that authenticates with zero generation tokens** (for an `ollama://` connector it simply confirms the local server is reachable). `connector:test --connect` **never spends generation tokens**: if a provider client exposes no `models.list`, the probe is reported as *inconclusive* rather than falling back to a paid completion — use [`connector:infer`](#connectorinfer) for a generation probe.
+
+For **DB / cache connectors** the live `--connect` probe is reported as **skipped** for now — config / driver / secrets are still validated. A live DB/cache probe is a planned follow-up; those connector classes load framework internals that are only available inside a booted bundle, so they cannot be instantiated from the CLI the way the AI connector can.
+
+### Output
+
+In text mode, each connector prints its per-check breakdown and a `PASS` / `FAIL` line, followed by a per-project summary:
+
+```text
+@myproject:
+  localdb (sqlite) [shared]
+      config    OK    sqlite connector
+      driver    OK    Node.js >= 22.5.0 built-in (node:sqlite)
+      secrets   OK    no secrets required
+    PASS
+  cache (redis) [shared]
+      config    OK    redis connector
+      driver    FAIL  ioredis not installed — run `npm install ioredis`
+      secrets   OK    no secrets required
+    FAIL
+
+(2 connectors: 1 passed, 1 failed)
+```
+
+With `--format=json`, the report is a structured object — `{ project, connectors: [ { name, connector, source, bundle, ok, checks: [ { name, ok, detail } ] } ] }` for one project (a top-level `projects` array when no `@<project>` is given):
+
+```json
+{"project":"myproject","connectors":[{"name":"localdb","connector":"sqlite","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"sqlite connector"},{"name":"driver","ok":true,"detail":"Node.js >= 22.5.0 built-in (node:sqlite)"},{"name":"secrets","ok":true,"detail":"no secrets required"}]}]}
+```
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | Every probed connector passed every check. |
+| `1` | Any connector failed a check (unknown type / driver not installed / required secret unset / `--connect` probe failed), or a usage error (unregistered project / bundle, bad `--format`, connector not found). |
+
+:::note Secrets are never printed
+Like `connector:infer`, `connector:test` reports only the **name** and SET / UNSET status of each `${secret:KEY}` it requires — never the resolved value. See the [Secrets guide](/guides/secrets) for the `${secret:KEY}` resolver.
 :::
 
 ---
