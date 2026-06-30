@@ -822,10 +822,10 @@ In text mode, each connector prints its per-check breakdown and a `PASS` / `FAIL
 (2 connectors: 1 passed, 1 failed)
 ```
 
-With `--format=json`, the report is a structured object — `{ project, connectors: [ { name, connector, source, bundle, ok, checks: [ { name, ok, detail } ] } ] }` for one project (a top-level `projects` array when no `@<project>` is given):
+With `--format=json`, the report is a structured object — `{ project, connectors: [ { name, connector, source, bundle, ok, checks: [ { name, ok, detail } ] } ] }` for one project (a top-level `projects` array when no `@<project>` is given). Two checks carry one extra field beyond `{ name, ok, detail }`: the **`secrets`** check adds a `keys` array of `{ key, set }` objects — one per required `${secret:KEY}`, naming the key and whether it resolved (`[]` when the connector needs none; the resolved value is never included) — and, with `--connect`, the **`connect`** check adds a `skipped` boolean (its `ok` is `null` when the probe was inconclusive). The example below shows both an empty `keys` (a no-secrets connector) and a populated one:
 
 ```json
-{"project":"myproject","connectors":[{"name":"localdb","connector":"sqlite","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"sqlite connector"},{"name":"driver","ok":true,"detail":"Node.js >= 22.5.0 built-in (node:sqlite)"},{"name":"secrets","ok":true,"detail":"no secrets required"}]}]}
+{"project":"myproject","connectors":[{"name":"localdb","connector":"sqlite","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"sqlite connector"},{"name":"driver","ok":true,"detail":"Node.js >= 22.5.0 built-in (node:sqlite)"},{"name":"secrets","ok":true,"detail":"no secrets required","keys":[]}]},{"name":"claude","connector":"ai","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"ai connector (anthropic://)"},{"name":"driver","ok":true,"detail":"@anthropic-ai/sdk 0.65.0 installed"},{"name":"secrets","ok":true,"detail":"1 required: 1 set, 0 unset","keys":[{"key":"ANTHROPIC_API_KEY","set":true}]}]}]}
 ```
 
 ### Exit codes
