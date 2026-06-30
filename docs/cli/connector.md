@@ -640,13 +640,14 @@ echo '[{"role":"user","content":"hi"}]' | gina connector:infer <connector> @<pro
 
 | Flag | Description |
 |------|-------------|
-| `--message=<text>` | The user prompt. Required unless a messages JSON array is piped on stdin. |
+| `--message=<text>` | The user prompt. Takes precedence over a messages JSON array piped on stdin; required unless such an array is piped. |
 | `--system=<text>` | Optional system prompt. |
 | `--model=<id>` | Override the connector's default model for this call. |
 | `--max-tokens=<n>` | Maximum tokens in the response (default `1024`). Non-numeric values are ignored. |
 | `--temperature=<n>` | Sampling temperature. Non-numeric values are ignored. |
-| `--format=json` | Emit `{ content, model, usage }` as JSON instead of the text content + usage footer. The heavy provider `raw` payload is omitted. Ignored under `--stream` (which is always NDJSON). |
+| `--format=json` | Emit `{ content, model, usage }` as JSON instead of the text content + usage footer. The heavy provider `raw` payload is omitted unless `--raw` is given. Matched strictly — `jsonl` / `json5` fall back to the text output. Ignored under `--stream` (which is always NDJSON). |
 | `--stream` | Stream the inference as newline-delimited JSON (NDJSON) — one frame per line on stdout. Always NDJSON, regardless of `--format`. See [Streaming with `--stream`](#streaming). |
+| `--raw` | Include the heavy provider `raw` payload (omitted by default). With `--format=json`, adds a `raw` field carrying the full provider response. With `--stream`, adds `raw` to the `done` frame — the provider's final message object, or `null` for OpenAI-family streams (which expose no single final object). No effect in text mode. |
 | `--api-key=<value>` | Override the connector's `apiKey` with a literal value, bypassing `${secret:...}` resolution. |
 | `--base-url=<url>` | Override the provider base URL (OpenAI-compatible providers). |
 | `--protocol=<uri>` | Override the connector protocol scheme (e.g. `anthropic://`, `openai://`, `ollama://`). |
@@ -672,10 +673,13 @@ gina connector:infer claude api @myproject --message="..." --system="You are ter
 # Machine-readable { content, model, usage }
 gina connector:infer claude @myproject --message="ping" --format=json
 
+# Same, plus the full provider response under the raw field
+gina connector:infer claude @myproject --message="ping" --format=json --raw
+
 # Override the model (e.g. an ollama:// connector)
 gina connector:infer local-llm @myproject --message="hi" --model=llama3.2
 
-# Multi-turn messages piped as JSON on stdin (takes precedence over --message)
+# Multi-turn messages piped as JSON on stdin (used only when --message is absent)
 echo '[{"role":"user","content":"hi"}]' | gina connector:infer claude @myproject
 ```
 
@@ -688,10 +692,16 @@ Hello!
 — claude-sonnet-4-6  (tokens in: 12, out: 3)
 ```
 
-With `--format=json`, a single `{ content, model, usage }` object is written to stdout (the heavy provider `raw` payload is omitted):
+With `--format=json`, a single `{ content, model, usage }` object is written to stdout (the heavy provider `raw` payload is omitted unless `--raw` is given):
 
 ```json
 {"content":"Hello!","model":"claude-sonnet-4-6","usage":{"inputTokens":12,"outputTokens":3}}
+```
+
+With `--raw`, the object gains a `raw` field carrying the provider's verbatim response (its exact shape is provider-specific — an Anthropic message object, an OpenAI completion object, etc.):
+
+```json
+{"content":"Hello!","model":"claude-sonnet-4-6","usage":{"inputTokens":12,"outputTokens":3},"raw":{"id":"msg_01…","type":"message","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Hello!"}]}}
 ```
 
 ### Streaming with `--stream` {#streaming}
@@ -709,7 +719,7 @@ With `--format=json`, a single `{ content, model, usage }` object is written to 
 |-------|--------|
 | `start` | `model`, `role` |
 | `delta` | `index`, `text`, `outputTokens` (per-token count when the provider reports it, else `null`) |
-| `done` | `content`, `model`, `usage` `{ inputTokens, outputTokens }`, `latencyMs`, and `finishReason` (OpenAI-family providers only) |
+| `done` | `content`, `model`, `usage` `{ inputTokens, outputTokens }`, `latencyMs`, `finishReason` (OpenAI-family providers only), and `raw` when `--raw` is given (the provider's final message object, or `null` for OpenAI-family streams) |
 | `error` | `error` `{ message }` — emitted on any failure (connector build or mid-stream), followed by exit `1` |
 
 Token counters are **passed through verbatim and never fabricated**: OpenAI-family deltas carry `outputTokens: null` until the final chunk, and some providers (e.g. `ollama`) omit the usage chunk entirely — those stay `null`. `finishReason` is OpenAI-family-only (absent on Anthropic's `done`). This mirrors the in-bundle [token-streaming API](/guides/ai#token-streaming-with-renderstream).
