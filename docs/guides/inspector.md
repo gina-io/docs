@@ -214,6 +214,102 @@ the last clear (`debug` < `info` < `warn` < `error`).
 
 ---
 
+### AI stream
+
+Surfaces the AI token streams a request made — every call to `getModel('name').stream(...)`
+(see the [AI connector guide](/guides/ai#streaming-responses)).
+
+While a stream is in flight the tab tails it live: a header line (model, role), a running
+meta line (chunk count, output tokens, status), and — when text capture is enabled — the
+generated text as it arrives. When the request finishes, the tab shows an end-of-request
+snapshot of **every** stream the request made, each with its model, provider, role, token
+counts (in / out), and duration.
+
+**Capturing prompt + generated text.** By default only stream *metadata* (model, role,
+token counts, latency) is captured — never the prompt or the generated text. To include
+them, set `inspector.ai.captureText` to `true` in `settings.json`:
+
+```json title="settings.json"
+{
+  "inspector": {
+    "ai": { "captureText": true }
+  }
+}
+```
+
+Capturing raw prompts and completions can expose sensitive content, so it is off by
+default — treat it as a local development aid. The live token frames travel over the same
+authenticated agent channel as the other tabs.
+
+### Event
+
+Surfaces the named application events a request emitted — domain signals such as
+`order.created` or `cache.miss` that your own code raises. Emit one from anywhere in a
+request's call path:
+
+```js
+// from a controller (self is the controller instance)
+self.emitEvent('order.created', { orderId: order.id });
+
+// from model / service code (resolve the lib by bare name)
+require('lib/inspector-events').emit('cache.miss', { key: k });
+```
+
+While the request runs the tab tails events live over the same authenticated agent
+channel (`/_gina/agent`, SSE + WebSocket) as the other tabs. When the request finishes,
+the tab shows an end-of-request snapshot of every event it emitted, each with its name, a
+sequence id, and — when metadata capture is enabled — the metadata you attached.
+
+**Capturing event metadata.** The event *name* and framework stamps always ride the wire,
+but the `metadata` values you attach are captured only when `inspector.events.captureArgs`
+is `true` (default `false`). A separate `inspector.events.topics` allow-list (default `[]`,
+so nothing is bridged) mirrors selected *framework* events onto the same Event signal — both
+**entity-trigger** emits (`entity#method`, raised by a custom entity method) and **connector
+lifecycle** events (a connector's `ready` emit, re-fired on every reconnect — e.g.
+`couchbase#ready` — so database connection churn surfaces here too). Entries match by exact
+name or a single leading or trailing `*` wildcard (e.g. `account#*`, `*#insert`, `*#ready`):
+
+```json title="settings.json"
+{
+  "inspector": {
+    "events": {
+      "captureArgs": false,
+      "topics": []
+    }
+  }
+}
+```
+
+Bridged events are tagged `source: "framework"` (your own `self.emitEvent` calls are
+`source: "app"`) and carry only a safe `{ ok, error }` summary — never raw entity-record data
+or connection internals. That summary is itself metadata, so it rides the wire only when
+`captureArgs` is on; with it off (the default) a bridged event shows just its name and
+`source`.
+
+**What to whitelist.** Custom entity methods (e.g. `account#save`) and connector lifecycle
+(`couchbase#ready`, or `*#ready` for any connector) are the useful picks. Leave a connector's
+CRUD signals (`N1QL:*` on Couchbase) out unless you specifically want them — they overlap the
+[Query tab](#query), which already shows every query.
+
+Capturing metadata values can expose sensitive content, so it is off by default — treat it
+as a local development aid. Events are captured only in dev mode (or while an
+instrumentation window is open), and the live frames travel over the same authenticated
+agent channel as the other tabs; the gate, the opt-in, and the authenticated channel are
+the protection.
+
+```mermaid
+flowchart LR
+    A["self.emitEvent(name, meta)"] --> C["_devEventLog<br/>(per-request ALS)"]
+    B["bridged entity#method<br/>(within a request)"] --> C
+    G["bridged connector#ready<br/>(lifecycle — no request)"] --> D
+    C --> D["/_gina/agent<br/>SSE + WS (live)"]
+    C --> E["user.events<br/>(end-of-request snapshot)"]
+    D --> F[Inspector Event tab]
+    E --> F
+```
+
+---
+
 ## Settings
 
 Click the gear icon in the Inspector toolbar to open the settings panel:

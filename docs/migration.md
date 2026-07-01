@@ -19,6 +19,46 @@ upward to the target version.
 
 ---
 
+## 0.5.5 → 0.5.6
+
+`0.5.6` is an additive release — **no breaking changes and no settings reset.** Everything below is additive; the new Inspector observability aids are opt-in and dev-mode-only.
+
+### Added — application-event Inspector signal
+
+The dev Inspector gains an **Event** tab that surfaces the named application events a request emitted. Raise an event from a controller with `self.emitEvent(name, metadata)`, or from model / service code with `require('lib/inspector-events').emit(name, metadata)`; the tab tails them live over the authenticated agent channel while the request runs and shows an end-of-request snapshot when it finishes.
+
+Events are captured only in dev mode (or while an instrumentation window is open). The event *name* always rides the wire, but the `metadata` values you attach are captured only when `inspector.events.captureArgs` is `true` (default `false`). A separate `inspector.events.topics` allow-list (default `[]`) can mirror selected entity-trigger emits onto the same signal, matched by exact name or a single leading or trailing `*` wildcard; bridged entity events carry only a safe `{ ok, error }` summary, never raw entity-record data.
+
+**No action required** — additive. See the [Inspector guide](/guides/inspector#event).
+
+### Added — AI connector streaming + Inspector "AI stream" tab
+
+The AI connector gains a streaming API: `getModel('<name>').stream(messages, options)` returns an `EventEmitter` emitting `start` / `delta` / `done` / `error` events for token-by-token inference (plus an `.onComplete(cb)` shim mirroring `infer()`), across Anthropic and every OpenAI-compatible provider. The buffered `getModel('<name>').infer(...)` is unchanged.
+
+The dev Inspector gains an **AI stream** tab showing the token streams a request made — live token frames (model, role, running token counts, latency) while the request runs, plus an end-of-request snapshot. Stream *metadata* is always captured in dev mode; the prompt and generated text ride the wire only when the opt-in `inspector.ai.captureText` setting is `true` (default `false`).
+
+**No action required** — additive. See the [AI connector guide](/guides/ai) and the [Inspector guide](/guides/inspector).
+
+### Added — `connector:infer` one-off inference CLI
+
+A new `connector:infer` CLI command runs a single inference against a configured `ai` connector **without booting the bundle**. It resolves the project's `connectors.json` (shared, or the shared+bundle merged view when a `<bundle>` is named), resolves `${secret:KEY}` credentials from the CLI's own environment (never echoed), instantiates the connector directly, and prints the normalised result. `--format=json` emits `{ content, model, usage }` (add `--raw` to include the full provider response); `--stream` emits the inference as newline-delimited JSON (NDJSON) token frames for token-by-token consumption. Useful for smoke-testing connectivity and credentials from CI, or scripting a one-off inference from a shell. It only works with `ai` connectors (it errors cleanly on any other type), and a detached CLI sees only its own shell environment — export the key or pass `--api-key=<literal>`.
+
+**No action required** — additive. See the [connector CLI reference](./cli/connector.md#connectorinfer) and the [AI connector guide](/guides/ai).
+
+### Added — `connector:test` connector readiness probe CLI
+
+A new `connector:test` CLI command probes a project's configured connectors for readiness and exits non-zero on any failure — a CI gate that complements `connector:list` (driver-install status) and `secrets:check` (env presence). By default it is **validate-only and offline**: for each connector it checks that the `connector` type / `ai` protocol is recognised, the npm driver is installed at `<project>/node_modules`, and every `${secret:KEY}` placeholder resolves from the environment — no network, no connector instantiated. `gina connector:test [<connector> [<bundle>]] @<project>` tests one connector or every connector in a project (bare → every registered project); `--format=json` emits a machine-readable report. The opt-in `--connect` flag adds a live connectivity probe: for `ai` connectors it calls the provider's `models.list` (a credentialed request that authenticates with **zero generation tokens**), while DB/cache connectors report the live probe as skipped for now (config / driver / secrets are still validated).
+
+**No action required** — additive. See the [connector CLI reference](./cli/connector.md#connectortest) and the [Secrets guide](/guides/secrets).
+
+### Fixed / behaviour notes
+
+- **`getModel()` now exposes the AI inference API.** `getModel(name).infer(...)` and `getModel(name).stream(...)` work as documented. Previously an `ai` connector returned only a bare connection wrapper (so `self.inferAsync` and AI token-stream capture were unreachable). If you worked around this, you can now call `getModel()` directly.
+- **`gina project:import` is now additive across release targets.** Re-importing a project for a new scope/env no longer rebuilds the per-bundle `manifest.json` release map from scratch — which previously dropped targets registered under other scopes/envs and reset custom target paths/versions. No action needed; existing targets are preserved.
+- **`gina stop` reports bundles still running.** `gina stop` (alias of `framework:stop`) stops the framework socket server only; it now lists any detached bundle processes still running and points to `gina bundle:stop` / `gina project:stop`.
+
+---
+
 ## 0.5.4 → 0.5.5
 
 `0.5.5` is an additive release — **no breaking changes and no settings reset.** Almost everything is opt-in; the one default-behaviour change — inter-bundle `self.query()` retry safety — is called out below.

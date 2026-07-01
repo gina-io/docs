@@ -342,6 +342,56 @@ var claude   = getModel('claude');
 
 ---
 
+## Streaming responses
+
+Every connector also has a streaming variant. Where `.infer()` resolves once with the
+full completion, `getModel('name').stream(messages, options)` returns a fresh
+**EventEmitter** that fires as tokens arrive — ideal for typing-indicator UIs or for
+forwarding tokens to the browser as they are generated.
+
+The emitter fires these events, in order:
+
+| Event | Payload | When |
+|---|---|---|
+| `start` | `{ model, role }` | The provider accepted the request |
+| `delta` | `{ index, text, outputTokens }` | Each token chunk — `index` is a 0-based counter, `outputTokens` the running count where the provider reports it |
+| `done`  | `{ content, model, usage, latencyMs, raw }` | The stream completed — `content` is the full concatenated text, `usage` is `{ inputTokens, outputTokens }` |
+| `error` | `Error` | The provider or transport failed |
+
+It also exposes an `.onComplete(cb)` shim mirroring `.infer()` — `cb(err, result)` is
+called once with the same payload as the `done` event — so you can opt into the
+buffered shape without attaching listeners.
+
+```js
+// controllers/controller.chat.js
+var Controller = function() {
+    var self = this;
+
+    this.stream = function(req, res, next) {
+        var ai = getModel('claude');
+
+        var tokens = ai.stream([
+            { role: 'user', content: req.body.message }
+        ], { maxTokens: 1024 });
+
+        tokens.on('start', function(s) { /* s.model, s.role */ });
+        tokens.on('delta', function(d) { /* d.text — the next chunk */ });
+        tokens.on('done',  function(r) { self.renderJSON({ text: r.content, usage: r.usage }); });
+        tokens.on('error', function(err) { self.throwError(502, err); });
+    };
+};
+```
+
+Streaming works across every provider — Anthropic streams natively; OpenAI-compatible
+providers stream via the shared client. `.infer()` is unchanged; pick `.stream()` only
+when you want tokens as they arrive.
+
+In dev mode every `.stream()` call also surfaces in the Inspector's
+[**AI stream** tab](/guides/inspector#ai-stream) — live token frames plus an
+end-of-request snapshot of every stream the request made.
+
+---
+
 ## Application examples
 
 Below are concrete controller patterns showing what you can build with the AI connector.
@@ -639,7 +689,8 @@ normaliser (e.g. Anthropic stop reason, OpenAI finish reason, tool calls).
 ## Raw client access
 
 `getModel()` also exposes the underlying SDK instance via `.client` for advanced use
-cases (function calling, embeddings, streaming, fine-tuning):
+cases (function calling, embeddings, fine-tuning, or provider-specific streaming
+controls beyond the normalised [`.stream()`](#streaming-responses) API):
 
 ```js
 var ai = getModel('claude');
@@ -658,9 +709,12 @@ var embedding = await ai.client.embeddings.create({
 
 ## Token streaming with `renderStream`
 
-`ai.infer()` returns a single buffered response. For real-time token delivery —
-chatbots, copilots, long-generation tasks — use `ai.client` directly with `stream: true`
-and pipe the result through [`self.renderStream()`](/guides/controller#selfrenderstreamasynciterable-contenttype).
+The native [`.stream()`](#streaming-responses) API above hands your controller an
+`EventEmitter`. To forward tokens on to the browser as Server-Sent Events, pipe an
+**async-iterable** through [`self.renderStream()`](/guides/controller#selfrenderstreamasynciterable-contenttype).
+Since `renderStream()` consumes an async-iterable (not an emitter) and each provider
+SDK's stream is already async-iterable, the raw `ai.client` stream pipes straight
+through for the SSE leg:
 
 ### Anthropic
 

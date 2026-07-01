@@ -11,12 +11,14 @@ prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
-The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, and lints / auto-fixes common schema drift. Every subcommand is **offline** — no framework socket or network call.
+The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, lints / auto-fixes common schema drift, runs a one-off inference against a configured AI connector, and probes connectors for readiness. The config subcommands (`list` / `add` / `rm` / `migrate`) and `connector:test`'s default validate-only mode are **offline** — no framework socket or network call; only `connector:infer` (and `connector:test --connect`) reach out, contacting the configured AI provider.
 
 - **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.
 - **`connector:add`** — write a connector entry to shared or bundle scope, with driver install hint.
 - **`connector:rm`** (alias `connector:remove`) — remove a connector entry; prints retention hints, never touches `node_modules/`.
 - **`connector:migrate`** — lint every `connectors.json` for schema drift, optionally fix in place with `--fix`.
+- **`connector:infer`** — run a one-off inference against a configured AI connector outside a request; `--stream` for token-by-token NDJSON.
+- **`connector:test`** — probe configured connectors for readiness (config / driver / secrets) and exit non-zero on any failure; `--connect` adds a live AI `models.list` probe (zero generation tokens).
 
 ```mermaid
 flowchart LR
@@ -603,6 +605,245 @@ The leading `//` or `/* */` comment header above the first `{` is preserved byte
 | `connector:migrate bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
 | `connector:migrate @<project> --format=xml` | "Unknown --format value `xml`. Supported: json." (exit 1) |
 | Target `connectors.json` missing | Reported as "missing (skipped)" — not an error (exit 0) |
+
+---
+
+## `connector:infer` {#connectorinfer}
+
+*New in 0.5.6-alpha.3*
+
+Run a single inference against a configured `ai` connector **without booting the bundle** — the runtime sibling of the config-only `connector:list` / `add` / `rm` / `migrate` commands. It resolves the project's connector config the same way `connector:list` does (shared, or the shared+bundle merged view when a `<bundle>` is named), resolves `${secret:KEY}` credentials from the CLI's own environment, instantiates the AI connector directly, runs one inference, and writes the normalised result to stdout. Useful for smoke-testing connectivity and credentials from CI/automation, or scripting a one-off inference from a shell.
+
+:::caution Makes a network call
+Unlike the other `connector:*` subcommands, `connector:infer` is **not** offline — it instantiates the connector and contacts the configured AI provider. Offline providers such as `ollama://` on `localhost` need no paid-API key, but the local server still has to be reachable.
+:::
+
+```mermaid
+flowchart LR
+    A["shared + &lt;bundle&gt;<br/>connectors.json"] --> B["overlay merge<br/>(bundle wins)"]
+    B --> C["resolve secret credentials<br/>from process.env"]
+    C --> D["instantiate AI connector<br/>(no bundle boot / socket)"]
+    D --> E{"--stream?"}
+    E -->|no| F["infer()<br/>content / model / usage"]
+    E -->|yes| G["stream() → NDJSON<br/>start / delta / done / error"]
+```
+
+```bash
+gina connector:infer <connector> @<project> --message="..."            # Shared connector config
+gina connector:infer <connector> <bundle> @<project> --message="..."   # Merged shared+bundle view
+gina connector:infer <connector> @<project> --message="..." --format=json
+gina connector:infer <connector> @<project> --message="..." --stream   # NDJSON token frames
+echo '[{"role":"user","content":"hi"}]' | gina connector:infer <connector> @<project>  # Messages on stdin
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--message=<text>` | The user prompt. Takes precedence over a messages JSON array piped on stdin; required unless such an array is piped. |
+| `--system=<text>` | Optional system prompt. |
+| `--model=<id>` | Override the connector's default model for this call. |
+| `--max-tokens=<n>` | Maximum tokens in the response (default `1024`). Non-numeric values are ignored. |
+| `--temperature=<n>` | Sampling temperature. Non-numeric values are ignored. |
+| `--format=json` | Emit `{ content, model, usage }` as JSON instead of the text content + usage footer. The heavy provider `raw` payload is omitted unless `--raw` is given. Matched strictly — `jsonl` / `json5` fall back to the text output. Ignored under `--stream` (which is always NDJSON). |
+| `--stream` | Stream the inference as newline-delimited JSON (NDJSON) — one frame per line on stdout. Always NDJSON, regardless of `--format`. See [Streaming with `--stream`](#streaming). |
+| `--raw` | Include the heavy provider `raw` payload (omitted by default). With `--format=json`, adds a `raw` field carrying the full provider response. With `--stream`, adds `raw` to the `done` frame — the provider's final message object, or `null` for OpenAI-family streams (which expose no single final object). No effect in text mode. |
+| `--api-key=<value>` | Override the connector's `apiKey` with a literal value, bypassing `${secret:...}` resolution. |
+| `--base-url=<url>` | Override the provider base URL (OpenAI-compatible providers). |
+| `--protocol=<uri>` | Override the connector protocol scheme (e.g. `anthropic://`, `openai://`, `ollama://`). |
+
+### Credentials and secrets
+
+`connector:infer` resolves a `${secret:KEY}` placeholder (typically the `apiKey`) from the **CLI's own environment** via the secrets resolver — the resolved value is never printed. A detached CLI sees only its own shell environment, not secrets a supervisor or orchestrator injects at bundle start, so either:
+
+- export the key in the shell you run the command from (`export ANTHROPIC_API_KEY=…`), or
+- pass `--api-key=<literal>` to bypass `${secret:...}` resolution for that one call.
+
+A bare `${ENV_VAR}` (without the `secret:` prefix) is **not** substituted — only the `${secret:KEY}` form, or a literal value. See the [Secrets guide](/guides/secrets) for the `${secret:KEY}` resolver and the [AI connector field reference](/reference/connectors#ai).
+
+### Examples
+
+```bash
+# One-off inference against a shared AI connector
+gina connector:infer claude @myproject --message="Say hi in one word"
+
+# Bundle-scoped connector, with a system prompt
+gina connector:infer claude api @myproject --message="..." --system="You are terse."
+
+# Machine-readable { content, model, usage }
+gina connector:infer claude @myproject --message="ping" --format=json
+
+# Same, plus the full provider response under the raw field
+gina connector:infer claude @myproject --message="ping" --format=json --raw
+
+# Override the model (e.g. an ollama:// connector)
+gina connector:infer local-llm @myproject --message="hi" --model=llama3.2
+
+# Multi-turn messages piped as JSON on stdin (used only when --message is absent)
+echo '[{"role":"user","content":"hi"}]' | gina connector:infer claude @myproject
+```
+
+### Output
+
+In text mode, the generated content is written to **stdout** and a one-line model / usage footer to **stderr** — so `> file` captures only the content:
+
+```text
+Hello!
+— claude-sonnet-4-6  (tokens in: 12, out: 3)
+```
+
+With `--format=json`, a single `{ content, model, usage }` object is written to stdout (the heavy provider `raw` payload is omitted unless `--raw` is given):
+
+```json
+{"content":"Hello!","model":"claude-sonnet-4-6","usage":{"inputTokens":12,"outputTokens":3}}
+```
+
+With `--raw`, the object gains a `raw` field carrying the provider's verbatim response (its exact shape is provider-specific — an Anthropic message object, an OpenAI completion object, etc.):
+
+```json
+{"content":"Hello!","model":"claude-sonnet-4-6","usage":{"inputTokens":12,"outputTokens":3},"raw":{"id":"msg_01…","type":"message","role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"Hello!"}]}}
+```
+
+### Streaming with `--stream` {#streaming}
+
+`--stream` emits the inference as **newline-delimited JSON (NDJSON)** — one JSON object per line on stdout, for token-by-token consumption from a shell or CI. It always emits NDJSON, regardless of `--format`. The sequence is a `start` frame, a `delta` frame per token, then a terminal `done` (or `error`) frame:
+
+```text
+{"type":"start","model":"claude-sonnet-4-6","role":"assistant"}
+{"type":"delta","index":0,"text":"Hel","outputTokens":null}
+{"type":"delta","index":1,"text":"lo!","outputTokens":null}
+{"type":"done","content":"Hello!","model":"claude-sonnet-4-6","usage":{"inputTokens":12,"outputTokens":3},"latencyMs":412}
+```
+
+| Frame | Fields |
+|-------|--------|
+| `start` | `model`, `role` |
+| `delta` | `index`, `text`, `outputTokens` (per-token count when the provider reports it, else `null`) |
+| `done` | `content`, `model`, `usage` `{ inputTokens, outputTokens }`, `latencyMs`, `finishReason` (OpenAI-family providers only), and `raw` when `--raw` is given (the provider's final message object, or `null` for OpenAI-family streams) |
+| `error` | `error` `{ message }` — emitted on any failure (connector build or mid-stream), followed by exit `1` |
+
+Token counters are **passed through verbatim and never fabricated**: OpenAI-family deltas carry `outputTokens: null` until the final chunk, and some providers (e.g. `ollama`) omit the usage chunk entirely — those stay `null`. `finishReason` is OpenAI-family-only (absent on Anthropic's `done`). This mirrors the in-bundle [token-streaming API](/guides/ai#token-streaming-with-renderstream).
+
+The example above is Anthropic, whose `done` omits `finishReason`. An OpenAI-family provider's `done` carries it (the provider's `finish_reason` passed through verbatim — `stop` on a normal completion, `length` when truncated, etc.):
+
+```text
+{"type":"done","content":"Hello!","model":"gpt-4o-mini","usage":{"inputTokens":12,"outputTokens":3},"latencyMs":389,"finishReason":"stop"}
+```
+
+### Error paths
+
+| Input | Behaviour |
+|-------|-----------|
+| `connector:infer` with no `<connector>` | Usage error (exit 1) |
+| `connector:infer <connector>` (no `@<project>`) | "`connector:infer` requires `@<project>`" (exit 1) |
+| `connector:infer <connector> bogus @<project>` | "Bundle \[ bogus \] is not registered inside `@<project>`" (exit 1) |
+| Connector not declared in the shared (or merged) config | "Connector \`<connector>\` not found in ..." (exit 1) |
+| Connector is not an `ai` connector | "Connector \`<connector>\` is a \`<type>\` connector, not \`ai\`. ..." (exit 1) |
+| `${secret:KEY}` unset and no `--api-key` | Secret-resolution error naming the missing `KEY` (never the value) (exit 1) |
+| No `--message` and no stdin messages array | "provide a prompt: --message=…" (exit 1) |
+| Provider SDK missing / credential / transport error | The provider error, surfaced with a non-zero exit (under `--stream`, as a terminal `error` frame) |
+
+:::note AI connectors only
+`connector:infer` only works with `ai` connectors — it errors cleanly on any other type. The provider SDK (`@anthropic-ai/sdk` for `anthropic://`, `openai` for OpenAI-compatible schemes) must be installed in the project's `node_modules`. Database connectors have no inference equivalent; use `connector:list` to inspect their configuration.
+:::
+
+---
+
+## `connector:test` {#connectortest}
+
+*New in 0.5.6-alpha.3*
+
+Probe a project's configured connectors for **readiness** and exit non-zero when any one fails — a CI gate that complements `connector:list` (which reports driver-install status) and [`secrets:check`](./secrets.md) (which reports env presence), answering the single question *"is this connector ready to use?"*. By default it is **validate-only and offline**: for each connector it checks that the `connector` type / `ai` protocol is recognised, the npm driver is installed at `<project>/node_modules`, and every `${secret:KEY}` placeholder resolves from the current environment — no network, and no connector is instantiated.
+
+:::tip Validate-only is offline and CI-safe
+The default mode makes no network call and instantiates no connector, so it is safe to run in CI on every push. The opt-in `--connect` flag adds a live connectivity probe — see [The `--connect` live probe](#connect).
+:::
+
+```mermaid
+flowchart LR
+    A["shared + &lt;bundle&gt;<br/>connectors.json"] --> B["overlay merge<br/>(bundle wins)"]
+    B --> C{"per connector"}
+    C --> D["config<br/>type recognised"]
+    C --> E["driver<br/>installed"]
+    C --> F["secrets<br/>resolve from env"]
+    D --> G{"all pass?"}
+    E --> G
+    F --> G
+    G -->|yes| H["PASS"]
+    G -->|no| I["FAIL (exit 1)"]
+```
+
+```bash
+gina connector:test                                  # every connector in every registered project
+gina connector:test @<project>                       # every connector in one project (shared + bundles)
+gina connector:test <connector> @<project>           # one connector (shared / merged view)
+gina connector:test <connector> <bundle> @<project>  # one connector as <bundle> sees it
+gina connector:test @<project> --format=json         # machine-readable readiness report
+gina connector:test <connector> @<project> --connect # add the live probe (ai: models.list)
+```
+
+The positional grammar mirrors [`connector:infer`](#connectorinfer) — a leading `<connector>` selects one connector, an optional `<bundle>` narrows to that bundle's merged view — and the all-modes mirror `secrets:check`: omit the connector to test every connector in a project, and omit `@<project>` to test every registered project.
+
+### Checks
+
+Every connector is evaluated against three checks (a fourth, `connect`, only with `--connect`). A connector **passes** only when all of its non-skipped checks pass; a single failing connector flips the overall exit code to `1`:
+
+| Check | Passes when |
+|-------|-------------|
+| `config` | The `connector` type (or `ai` `protocol`) is one the framework recognises. |
+| `driver` | The npm driver is installed at `<project>/node_modules/<driver>` (or is built-in, e.g. `sqlite`). |
+| `secrets` | Every `${secret:KEY}` placeholder the connector declares resolves to a non-empty value in the environment. |
+| `connect` | *(only with `--connect`)* The live connectivity probe succeeded — see below. |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--connect` | Add a live connectivity probe on top of the validate-only checks. AI connectors only this release (see below); DB/cache connectors report it as **skipped**. |
+| `--format=json` | Emit a machine-readable readiness report instead of the human-readable text. |
+
+### The `--connect` live probe {#connect}
+
+`--connect` adds a real connectivity check. For an `ai` connector it instantiates the connector the same way [`connector:infer`](#connectorinfer) does (resolving `${secret:KEY}` from the environment — the value is never printed) and calls the provider's `models.list` — a **credentialed request that authenticates with zero generation tokens** (for an `ollama://` connector it simply confirms the local server is reachable). `connector:test --connect` **never spends generation tokens**: if a provider client exposes no `models.list`, the probe is reported as *inconclusive* rather than falling back to a paid completion — use [`connector:infer`](#connectorinfer) for a generation probe.
+
+For **DB / cache connectors** the live `--connect` probe is reported as **skipped** for now — config / driver / secrets are still validated. A live DB/cache probe is a planned follow-up; those connector classes load framework internals that are only available inside a booted bundle, so they cannot be instantiated from the CLI the way the AI connector can.
+
+### Output
+
+In text mode, each connector prints its per-check breakdown and a `PASS` / `FAIL` line, followed by a per-project summary:
+
+```text
+@myproject:
+  localdb (sqlite) [shared]
+      config    OK    sqlite connector
+      driver    OK    Node.js >= 22.5.0 built-in (node:sqlite)
+      secrets   OK    no secrets required
+    PASS
+  cache (redis) [shared]
+      config    OK    redis connector
+      driver    FAIL  ioredis not installed — run `npm install ioredis`
+      secrets   OK    no secrets required
+    FAIL
+
+(2 connectors: 1 passed, 1 failed)
+```
+
+With `--format=json`, the report is a structured object — `{ project, connectors: [ { name, connector, source, bundle, ok, checks: [ { name, ok, detail } ] } ] }` for one project (a top-level `projects` array when no `@<project>` is given). Two checks carry one extra field beyond `{ name, ok, detail }`: the **`secrets`** check adds a `keys` array of `{ key, set }` objects — one per required `${secret:KEY}`, naming the key and whether it resolved (`[]` when the connector needs none; the resolved value is never included) — and, with `--connect`, the **`connect`** check adds a `skipped` boolean (its `ok` is `null` when the probe was inconclusive). The example below shows both an empty `keys` (a no-secrets connector) and a populated one:
+
+```json
+{"project":"myproject","connectors":[{"name":"localdb","connector":"sqlite","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"sqlite connector"},{"name":"driver","ok":true,"detail":"Node.js >= 22.5.0 built-in (node:sqlite)"},{"name":"secrets","ok":true,"detail":"no secrets required","keys":[]}]},{"name":"claude","connector":"ai","source":"shared","bundle":null,"ok":true,"checks":[{"name":"config","ok":true,"detail":"ai connector (anthropic://)"},{"name":"driver","ok":true,"detail":"@anthropic-ai/sdk 0.65.0 installed"},{"name":"secrets","ok":true,"detail":"1 required: 1 set, 0 unset","keys":[{"key":"ANTHROPIC_API_KEY","set":true}]}]}]}
+```
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | Every probed connector passed every check. |
+| `1` | Any connector failed a check (unknown type / driver not installed / required secret unset / `--connect` probe failed), or a usage error (unregistered project / bundle, bad `--format`, connector not found). |
+
+:::note Secrets are never printed
+Like `connector:infer`, `connector:test` reports only the **name** and SET / UNSET status of each `${secret:KEY}` it requires — never the resolved value. See the [Secrets guide](/guides/secrets) for the `${secret:KEY}` resolver.
+:::
 
 ---
 

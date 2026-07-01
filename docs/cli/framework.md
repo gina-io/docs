@@ -40,7 +40,7 @@ gina framework:start
 
 ## `framework:stop`
 
-Stop the framework socket server and all running bundles.
+Stop the framework socket server only. Running bundles are detached child processes and keep running — `framework:stop` does **not** stop them. Stop bundles with `gina bundle:stop <bundle> @<project>` or `gina project:stop @<project>`.
 
 ```bash
 gina framework:stop
