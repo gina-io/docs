@@ -3,7 +3,7 @@ title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
 description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-, MongoDB-, or Redis-backed job records. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store]
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store, failed job retry, maxAttempts]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -68,6 +68,22 @@ module.exports = Controller;
 ```
 
 `fn` may be `async`, return a Promise, or return a value synchronously. A thrown error or a rejected Promise transitions the job to `failed` with the error captured as `{ name, message, stack }`.
+
+### Retries (opt-in)
+
+By default a job runs once — a failure is final. Pass `maxAttempts` to retry a failed attempt with exponential backoff:
+
+```js
+var jobId = self.startJob(function() {
+    return callFlakyUpstream(reportId);
+}, { maxAttempts: 3 }); // up to 3 runs, backing off 1s then 2s
+```
+
+Between attempts the job shows as `pending` again, with the last error and a `nextRetryAt` timestamp on the record, and it cannot be swept while retries remain. `failed` is only ever the state after the **last** attempt, and the [completion webhook](#completion-webhooks-opt-in) fires exactly once, after that final outcome. The backoff base is `jobs.retryBackoffMs` (default `1000` ms), doubling on each attempt.
+
+:::note Retries run on the pod that created the job
+The deferred function only exists in the creating process — with a [durable store](#durable-job-records-connector-store), other pods can read the job's state, but only the origin pod re-runs it. If that process dies before the final attempt, the job stays `pending`.
+:::
 
 ---
 
@@ -144,6 +160,7 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
     "ttl": 3600,
     "sweepInterval": 300,
     "idSize": 21,
+    "retryBackoffMs": 1000,
     "webhookMaxAttempts": 3,
     "webhookBackoffMs": 500,
     "webhookTimeoutMs": 5000,
@@ -158,6 +175,7 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
 | `ttl` | `3600` | Seconds a finished job is retained before it is swept. |
 | `sweepInterval` | `300` | Seconds between sweeps of expired finished jobs. |
 | `idSize` | `21` | Job-id length (base-62 characters). |
+| `retryBackoffMs` | `1000` | Base delay (ms) before retrying a failed attempt when a job opts into `maxAttempts` > 1; doubles on each attempt. |
 | `webhookSecret` | — | HMAC-SHA256 signing secret for webhook payloads. Use a [`${secret:KEY}`](/guides/secrets) placeholder rather than hardcoding. |
 | `store` | — | Name of a `connectors.json` entry backing a durable job store (see below). Unset = in-memory. |
 
