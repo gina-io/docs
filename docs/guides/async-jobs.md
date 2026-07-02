@@ -2,8 +2,8 @@
 title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
-description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, and opt-in completion webhooks. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work]
+description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-backed job records. Keep 1-30s LLM calls off the request pipeline.
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -39,7 +39,7 @@ sequenceDiagram
     W->>H: POST { id, state, result } (if callbackUrl set)
 ```
 
-A job moves through `pending → running → completed | failed`. The deferred function lives in the worker process; only the job **record** (state, result, error, timestamps) is stored. The store is in-memory by default, behind a pluggable seam — a connector-backed store for multi-pod deployments is a planned follow-up.
+A job moves through `pending → running → completed | failed`. The deferred function lives in the worker process; only the job **record** (state, result, error, timestamps) is stored. The store is in-memory by default, behind a pluggable seam — or [connector-backed](#durable-job-records-connector-store) so records survive bundle restarts.
 
 :::note
 The deferred function runs **after** the request has completed, so it must not reference `req` / `res` (the controller releases those at response exit). Capture plain values instead — as the examples below do.
@@ -159,8 +159,40 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
 | `sweepInterval` | `300` | Seconds between sweeps of expired finished jobs. |
 | `idSize` | `21` | Job-id length (base-62 characters). |
 | `webhookSecret` | — | HMAC-SHA256 signing secret for webhook payloads. Use a [`${secret:KEY}`](/guides/secrets) placeholder rather than hardcoding. |
+| `store` | — | Name of a `connectors.json` entry backing a durable job store (see below). Unset = in-memory. |
 
 Finished jobs are purged on the TTL by a self-contained sweep — no cron setup required.
+
+---
+
+## Durable job records (connector store)
+
+By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in SQLite instead — they survive restarts and are readable by any process that opens the same file. The deferred **function** still runs only in the process that created the job; the store shares the record (state, result, error), never the closure.
+
+```json title="src/<bundle>/config/app.json"
+{
+  "jobs": {
+    "store": "jobsDb"
+  }
+}
+```
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsDb": {
+    "connector": "sqlite",
+    "file": "/data/jobs.db"
+  }
+}
+```
+
+`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into Node.js (`node:sqlite`), so there is nothing to install.
+
+:::warning Use `file` for the path — not `database`
+Every `connectors.json` entry is also visible to the model layer at boot, which treats `database` as a database *name* (resolved under the gina home directory) — a filesystem path there fails the boot. Keep paths in `file`.
+:::
+
+A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
 
 ---
 
