@@ -2,8 +2,8 @@
 title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
-description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-backed job records. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store]
+description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite- or MongoDB-backed job records. Keep 1-30s LLM calls off the request pipeline.
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -167,7 +167,7 @@ Finished jobs are purged on the TTL by a self-contained sweep — no cron setup 
 
 ## Durable job records (connector store)
 
-By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in SQLite instead — they survive restarts and are readable by any process that opens the same file. The deferred **function** still runs only in the process that created the job; the store shares the record (state, result, error), never the closure.
+By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in a real store instead — SQLite for a single host, MongoDB when several pods must see the same jobs. Records then survive restarts; the deferred **function** still runs only in the process that created the job — the store shares the record (state, result, error), never the closure.
 
 ```json title="src/<bundle>/config/app.json"
 {
@@ -176,6 +176,8 @@ By default job records live in memory: a bundle restart forgets them, and a clie
   }
 }
 ```
+
+### SQLite — single host
 
 ```json title="src/<bundle>/config/connectors.json"
 {
@@ -186,13 +188,34 @@ By default job records live in memory: a bundle restart forgets them, and a clie
 }
 ```
 
-`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into Node.js (`node:sqlite`), so there is nothing to install.
+`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into Node.js (`node:sqlite`), so there is nothing to install. Records are readable by any process that opens the same file.
 
 :::warning Use `file` for the path — not `database`
 Every `connectors.json` entry is also visible to the model layer at boot, which treats `database` as a database *name* (resolved under the gina home directory) — a filesystem path there fails the boot. Keep paths in `file`.
 :::
 
-A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
+### MongoDB — multiple pods
+
+With MongoDB the records live on a `mongod` every pod can reach: a job created on one pod is pollable from another via `/_gina/jobs/:id`, and records survive any single bundle restart. Install the driver in your project first (`npm install mongodb`) — the framework resolves it from your project's `node_modules`, exactly like the [MongoDB session store](/guides/sessions).
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsDb": {
+    "connector": "mongodb",
+    "host": "127.0.0.1",
+    "port": 27017,
+    "database": "gina_jobs"
+  }
+}
+```
+
+The entry takes the same keys as any [MongoDB connector](/guides/connectors-mongodb): a full `uri` when you have one, or `host` / `port` / `username` / `password` / `database` (plus `authSource`, `replicaSet`, `ssl`). `database` is required — for MongoDB it is a database *name*, so the model-layer caveat above does not apply. The collection defaults to `jobs`; override it with `collection`.
+
+:::note Expiry is sweep-driven on every backend
+Finished records are purged by the framework's own TTL sweep — the MongoDB store deliberately configures no server-side TTL index. A finished job stays readable until the sweep runs, exactly like the in-memory and SQLite stores.
+:::
+
+A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file, a missing `mongodb` driver — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
 
 ---
 
