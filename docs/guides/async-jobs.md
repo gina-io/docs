@@ -2,8 +2,8 @@
 title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
-description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite- or MongoDB-backed job records. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store]
+description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-, MongoDB-, or Redis-backed job records. Keep 1-30s LLM calls off the request pipeline.
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -167,7 +167,7 @@ Finished jobs are purged on the TTL by a self-contained sweep — no cron setup 
 
 ## Durable job records (connector store)
 
-By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in a real store instead — SQLite for a single host, MongoDB when several pods must see the same jobs. Records then survive restarts; the deferred **function** still runs only in the process that created the job — the store shares the record (state, result, error), never the closure.
+By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in a real store instead — SQLite for a single host, MongoDB or Redis when several pods must see the same jobs. Records then survive restarts; the deferred **function** still runs only in the process that created the job — the store shares the record (state, result, error), never the closure.
 
 ```json title="src/<bundle>/config/app.json"
 {
@@ -211,11 +211,31 @@ With MongoDB the records live on a `mongod` every pod can reach: a job created o
 
 The entry takes the same keys as any [MongoDB connector](/guides/connectors-mongodb): a full `uri` when you have one, or `host` / `port` / `username` / `password` / `database` (plus `authSource`, `replicaSet`, `ssl`). `database` is required — for MongoDB it is a database *name*, so the model-layer caveat above does not apply. The collection defaults to `jobs`; override it with `collection`.
 
-:::note Expiry is sweep-driven on every backend
-Finished records are purged by the framework's own TTL sweep — the MongoDB store deliberately configures no server-side TTL index. A finished job stays readable until the sweep runs, exactly like the in-memory and SQLite stores.
+### Redis — multiple pods
+
+Same multi-pod story on Redis: a job created on one pod is pollable from another, and records survive any single bundle restart. Install the driver in your project first (`npm install ioredis`) — the framework resolves it the way the [Redis session store](/guides/sessions) does, with a fallback to your project's `node_modules`.
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsRedis": {
+    "connector": "redis",
+    "host": "127.0.0.1",
+    "port": 6379
+  }
+}
+```
+
+The entry takes the same connection keys as the Redis session store: `host` / `port` / `db` / `password` / `tls`, or `cluster` (an array of `{ host, port }` nodes) for Redis Cluster. No database name is needed — job keys are namespaced under a `prefix` (default `jobs:`), and the store maintains its own state and expiry indexes atomically with every write, so listing and sweeping never scan the keyspace. A `ttl` key on the entry (a session-store setting) is ignored here — job retention is governed by `jobs.ttl`.
+
+:::note Redis Cluster needs a hash-tagged prefix
+In cluster mode the prefix defaults to `{jobs}:` — the `{...}` hash tag keeps every job key in one hash slot, which the store's atomic multi-key operations require. A custom cluster prefix must carry a hash tag; the store refuses an untagged one at startup.
 :::
 
-A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file, a missing `mongodb` driver — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
+:::note Expiry is sweep-driven on every backend
+Finished records are purged by the framework's own TTL sweep — the MongoDB store deliberately configures no server-side TTL index, and the Redis store sets no per-key TTL. A finished job stays readable until the sweep runs, exactly like the in-memory and SQLite stores.
+:::
+
+A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file, a missing driver — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
 
 ---
 
