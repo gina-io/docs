@@ -29,6 +29,7 @@ Gina on a public HTTP/2 endpoint.
 | [CVE-2019-9514](https://nvd.nist.gov/vuln/detail/CVE-2019-9514) | RST flood | **High** | `maxSessionRejectedStreams` | any |
 | — | HPACK bomb | Medium | `maxHeaderListSize: 65536` | any |
 | — | Server push abuse | Low | `enablePush: false` | any |
+| — | Static-asset path traversal | **High** | Fixed in `0.5.7` — resolver paths canonicalised and confined to their mapping target | any |
 
 ---
 
@@ -131,6 +132,18 @@ http2Options.settings = {
 
 This eliminates an entire attack surface (push cache poisoning, resource amplification)
 at zero cost to legitimate use cases.
+
+---
+
+## Static-asset path traversal (fixed in 0.5.7)
+
+**Attack:** a request URL containing `../` — or its percent-encoded forms (`%2F`, `%2e%2e`) —
+escaped a `statics.json` mapping's target directory and read sibling files under the shared
+root (configuration, credentials, server-side source).
+
+**Mitigation:** upgrade to `0.5.7` or later. Both static resolvers canonicalise the resolved
+path and confine it to the mapping target (or `publicPath`); any escape returns **404**.
+Legitimate assets are served unchanged and no configuration change is required.
 
 ---
 

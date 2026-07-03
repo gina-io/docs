@@ -35,6 +35,10 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 
 Add that line to your shell profile (`.zshrc`, `.bashrc`, etc.) to make it permanent.
 
+:::note npm 12+
+npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/.gina` and the framework dependencies. Add `--allow-scripts=gina` to the install command, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. Not needed on npm ≤ 11.
+:::
+
 </TabItem>
 <TabItem value="bun" label="Bun">
 
@@ -73,6 +77,8 @@ gina version
 ```bash
 npm install -g gina@latest
 ```
+
+(On npm 12+, add `--allow-scripts=gina` — see the note in the user-local install section above.)
 
 If you encounter a permission error like `EACCES: permission denied, mkdir '/usr/local/lib/node_modules/gina'`, fix permissions first:
 
@@ -149,11 +155,13 @@ It refuses while the framework daemon or any bundle is still running (so a reset
 <Tabs groupId="runtime">
 <TabItem value="npm" label="npm" default>
 
-`gina reset` works on npm. You can also reset as part of a reinstall — this repairs the installed package **and** clears the preferences in one step:
+`gina reset` works on npm. On npm ≤ 11 you can also reset as part of a reinstall — this repairs the installed package **and** clears the preferences in one step:
 
 ```bash
 npm install -g gina@latest --reset
 ```
+
+npm 12 rejects unknown flags like `--reset` outright (`EUNKNOWNCONFIG`) — there, run `gina reset` first, then reinstall with `npm install -g gina@latest --allow-scripts=gina`.
 
 </TabItem>
 <TabItem value="bun" label="Bun">

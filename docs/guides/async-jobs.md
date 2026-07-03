@@ -2,8 +2,8 @@
 title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
-description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, and opt-in completion webhooks. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work]
+description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-, MongoDB-, or Redis-backed job records. Keep 1-30s LLM calls off the request pipeline.
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store, failed job retry, maxAttempts]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -39,7 +39,7 @@ sequenceDiagram
     W->>H: POST { id, state, result } (if callbackUrl set)
 ```
 
-A job moves through `pending → running → completed | failed`. The deferred function lives in the worker process; only the job **record** (state, result, error, timestamps) is stored. The store is in-memory by default, behind a pluggable seam — a connector-backed store for multi-pod deployments is a planned follow-up.
+A job moves through `pending → running → completed | failed`. The deferred function lives in the worker process; only the job **record** (state, result, error, timestamps) is stored. The store is in-memory by default, behind a pluggable seam — or [connector-backed](#durable-job-records-connector-store) so records survive bundle restarts.
 
 :::note
 The deferred function runs **after** the request has completed, so it must not reference `req` / `res` (the controller releases those at response exit). Capture plain values instead — as the examples below do.
@@ -68,6 +68,22 @@ module.exports = Controller;
 ```
 
 `fn` may be `async`, return a Promise, or return a value synchronously. A thrown error or a rejected Promise transitions the job to `failed` with the error captured as `{ name, message, stack }`.
+
+### Retries (opt-in)
+
+By default a job runs once — a failure is final. Pass `maxAttempts` to retry a failed attempt with exponential backoff:
+
+```js
+var jobId = self.startJob(function() {
+    return callFlakyUpstream(reportId);
+}, { maxAttempts: 3 }); // up to 3 runs, backing off 1s then 2s
+```
+
+Between attempts the job shows as `pending` again, with the last error and a `nextRetryAt` timestamp on the record, and it cannot be swept while retries remain. `failed` is only ever the state after the **last** attempt, and the [completion webhook](#completion-webhooks-opt-in) fires exactly once, after that final outcome. The backoff base is `jobs.retryBackoffMs` (default `1000` ms), doubling on each attempt.
+
+:::note Retries run on the pod that created the job
+The deferred function only exists in the creating process — with a [durable store](#durable-job-records-connector-store), other pods can read the job's state, but only the origin pod re-runs it. If that process dies before the final attempt, the job stays `pending`.
+:::
 
 ---
 
@@ -144,6 +160,7 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
     "ttl": 3600,
     "sweepInterval": 300,
     "idSize": 21,
+    "retryBackoffMs": 1000,
     "webhookMaxAttempts": 3,
     "webhookBackoffMs": 500,
     "webhookTimeoutMs": 5000,
@@ -158,9 +175,85 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
 | `ttl` | `3600` | Seconds a finished job is retained before it is swept. |
 | `sweepInterval` | `300` | Seconds between sweeps of expired finished jobs. |
 | `idSize` | `21` | Job-id length (base-62 characters). |
+| `retryBackoffMs` | `1000` | Base delay (ms) before retrying a failed attempt when a job opts into `maxAttempts` > 1; doubles on each attempt. |
 | `webhookSecret` | — | HMAC-SHA256 signing secret for webhook payloads. Use a [`${secret:KEY}`](/guides/secrets) placeholder rather than hardcoding. |
+| `store` | — | Name of a `connectors.json` entry backing a durable job store (see below). Unset = in-memory. |
 
 Finished jobs are purged on the TTL by a self-contained sweep — no cron setup required.
+
+---
+
+## Durable job records (connector store)
+
+By default job records live in memory: a bundle restart forgets them, and a client polling `/_gina/jobs/:id` across a deploy suddenly gets `not_found`. Point `jobs.store` at a [connector](/reference/connectors) entry and the records persist in a real store instead — SQLite for a single host, MongoDB or Redis when several pods must see the same jobs. Records then survive restarts; the deferred **function** still runs only in the process that created the job — the store shares the record (state, result, error), never the closure.
+
+```json title="src/<bundle>/config/app.json"
+{
+  "jobs": {
+    "store": "jobsDb"
+  }
+}
+```
+
+### SQLite — single host
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsDb": {
+    "connector": "sqlite",
+    "file": "/data/jobs.db"
+  }
+}
+```
+
+`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into Node.js (`node:sqlite`), so there is nothing to install. Records are readable by any process that opens the same file.
+
+:::warning Use `file` for the path — not `database`
+Every `connectors.json` entry is also visible to the model layer at boot, which treats `database` as a database *name* (resolved under the gina home directory) — a filesystem path there fails the boot. Keep paths in `file`.
+:::
+
+### MongoDB — multiple pods
+
+With MongoDB the records live on a `mongod` every pod can reach: a job created on one pod is pollable from another via `/_gina/jobs/:id`, and records survive any single bundle restart. Install the driver in your project first (`npm install mongodb`) — the framework resolves it from your project's `node_modules`, exactly like the [MongoDB session store](/guides/sessions).
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsDb": {
+    "connector": "mongodb",
+    "host": "127.0.0.1",
+    "port": 27017,
+    "database": "gina_jobs"
+  }
+}
+```
+
+The entry takes the same keys as any [MongoDB connector](/guides/connectors-mongodb): a full `uri` when you have one, or `host` / `port` / `username` / `password` / `database` (plus `authSource`, `replicaSet`, `ssl`). `database` is required — for MongoDB it is a database *name*, so the model-layer caveat above does not apply. The collection defaults to `jobs`; override it with `collection`.
+
+### Redis — multiple pods
+
+Same multi-pod story on Redis: a job created on one pod is pollable from another, and records survive any single bundle restart. Install the driver in your project first (`npm install ioredis`) — the framework resolves it the way the [Redis session store](/guides/sessions) does, with a fallback to your project's `node_modules`.
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "jobsRedis": {
+    "connector": "redis",
+    "host": "127.0.0.1",
+    "port": 6379
+  }
+}
+```
+
+The entry takes the same connection keys as the Redis session store: `host` / `port` / `db` / `password` / `tls`, or `cluster` (an array of `{ host, port }` nodes) for Redis Cluster. No database name is needed — job keys are namespaced under a `prefix` (default `jobs:`), and the store maintains its own state and expiry indexes atomically with every write, so listing and sweeping never scan the keyspace. A `ttl` key on the entry (a session-store setting) is ignored here — job retention is governed by `jobs.ttl`.
+
+:::note Redis Cluster needs a hash-tagged prefix
+In cluster mode the prefix defaults to `{jobs}:` — the `{...}` hash tag keeps every job key in one hash slot, which the store's atomic multi-key operations require. A custom cluster prefix must carry a hash tag; the store refuses an untagged one at startup.
+:::
+
+:::note Expiry is sweep-driven on every backend
+Finished records are purged by the framework's own TTL sweep — the MongoDB store deliberately configures no server-side TTL index, and the Redis store sets no per-key TTL. A finished job stays readable until the sweep runs, exactly like the in-memory and SQLite stores.
+:::
+
+A configured store that cannot be built — a `jobs.store` name with no matching `connectors.json` entry, a connector without a job-store implementation, an unopenable file, a missing driver — **fails the boot with a clear error** rather than silently degrading to the in-memory store: if the configuration asks for durable records, losing them quietly is worse than failing loudly. Leaving `jobs.store` unset keeps the in-memory store.
 
 ---
 
