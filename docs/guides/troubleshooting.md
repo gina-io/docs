@@ -21,10 +21,12 @@ This page covers the most common issues encountered when developing with Gina, i
 Reset all Gina preferences to defaults without touching your project source files:
 
 ```bash
-npm install -g gina@latest --reset
+gina reset
 ```
 
-This recreates `~/.gina` with factory defaults (settings.json, projects.json, env.json, locals.json).
+This clears `~/.gina`; the next Gina command recreates it with factory defaults (settings.json, projects.json, env.json, locals.json).
+
+On npm ≤ 11 you can also reset as part of a reinstall with `npm install -g gina@latest --reset`. npm 12 rejects the `--reset` flag outright — use `gina reset`, and add `--allow-scripts=gina` to any npm 12 reinstall so the post-install can bootstrap.
 
 ---
 
