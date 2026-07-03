@@ -19,6 +19,42 @@ upward to the target version.
 
 ---
 
+## 0.5.6 → 0.5.7
+
+`0.5.7` is an additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). The new job-store backends and retries are opt-in; the fixes below require no action.
+
+### Added — durable async-job stores (SQLite, MongoDB, Redis)
+
+The async-job primitive ([`self.startJob`](/guides/async-jobs)) can now persist job records in a real backend instead of process memory: point `jobs.store` (app.json) at a `connectors.json` entry and job records survive bundle restarts and are readable cross-process — the deferred function still runs in the creating process.
+
+- **SQLite** (`"connector": "sqlite"`) — single host; `node:sqlite` built-in, zero new dependencies. The database path goes in the entry's `file` key.
+- **MongoDB** (`"connector": "mongodb"`) — shared mongod; durable and visible across processes and pods. Driver resolved from the consuming project's `node_modules` (`npm install mongodb`).
+- **Redis** (`"connector": "redis"`) — shared Redis via `ioredis` (project `node_modules` fallback); per-state and expiry indexes are maintained atomically so list and sweep never scan the keyspace. Redis Cluster is supported via a hash-tagged key prefix (default `{jobs}:`).
+
+A configured store that cannot be built **fails the boot** instead of silently degrading to the in-memory store; leaving `jobs.store` unset keeps the in-memory behaviour, unchanged.
+
+**No action required** — opt-in. See [Durable job records](/guides/async-jobs#durable-job-records-connector-store).
+
+### Added — failed-job retry (opt-in)
+
+Pass `maxAttempts` to `self.startJob` / `lib.job.create` and a failed attempt is retried on the creating process with exponential backoff (`jobs.retryBackoffMs` in app.json, default 1000 ms, doubling per attempt). Between attempts the record returns to `pending` with the last error and a `nextRetryAt` timestamp visible; `failed` and `completed` remain strictly terminal, and the completion webhook fires exactly once, after the final attempt. The default stays a single attempt — behaviour is unchanged unless you opt in.
+
+**No action required** — opt-in. See [Retries](/guides/async-jobs#retries-opt-in).
+
+### Changed — npm 12 readiness
+
+npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/.gina` and the framework dependencies. On npm 12+ hosts, install or upgrade with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. Gina's own release/pack tooling also accepts npm 12's changed `npm pack --json` output shape. Nothing changes on npm ≤ 11.
+
+**Action required only on npm 12+ hosts** — add `--allow-scripts=gina` when installing or upgrading. See [Installation](/getting-started/installation).
+
+### Fixed / behaviour notes
+
+- **Production 500 on cached swig routes.** A route carrying a `cache` setting in `routing.json` and rendered by the swig engine returned HTTP 500 on every request in production mode (a `ReferenceError` in the render cache writer). Fixed — route caching works again with no config change.
+- **Cross-request isolation in the render delegates.** Under production concurrency: a swig render suspended at its template read could resume with a concurrent request's closures and merge that request's page data into its own response; a finishing stream could release a concurrent request's `req`/`res` references instead of its own and report stream errors through the wrong controller; and the JSON delegate's cache writer could report a cache-configuration error through a concurrent request's controller. All per-request state in the render delegates is now function-scoped.
+- **`"connector": "redis"` entries no longer abort the boot.** The model layer treated the Redis connector's missing boot connector as fatal, so even the documented Redis session-store configuration could not boot with its entry declared. The Redis connector now ships a no-op boot connector (no connection opened, no driver required at boot).
+
+---
+
 ## 0.5.5 → 0.5.6
 
 `0.5.6` is an additive release — **no breaking changes and no settings reset.** Everything below is additive; the new Inspector observability aids are opt-in and dev-mode-only.
