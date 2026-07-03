@@ -47,6 +47,12 @@ npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/
 
 **Action required only on npm 12+ hosts** — add `--allow-scripts=gina` when installing or upgrading. See [Installation](/getting-started/installation).
 
+### Security — static-asset path traversal fixed
+
+A request URL containing `../` — or its percent-encoded forms (`%2F`, `%2e%2e`) — could escape a `statics.json` mapping's target directory and read any sibling file under the shared root (configuration, credentials, or server-side source). Both static resolvers now canonicalise the resolved path and confine it to its mapping target (or `publicPath`), returning **404** on any escape. Legitimate assets are served unchanged.
+
+**Action: upgrade.** No configuration change is required — the confinement is automatic. If a deployment serves static assets through `statics.json` mappings on a shared root, treat this upgrade as security-relevant. See [Security](/security).
+
 ### Fixed / behaviour notes
 
 - **Production 500 on cached swig routes.** A route carrying a `cache` setting in `routing.json` and rendered by the swig engine returned HTTP 500 on every request in production mode (a `ReferenceError` in the render cache writer). Fixed — route caching works again with no config change.
