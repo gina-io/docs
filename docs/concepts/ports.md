@@ -53,6 +53,12 @@ The `<protocol>:<port>` prefix accepts `http` or `https`.
 The `<protocol>:<port>` prefix uses full protocol names like `http/1.1` or `http/2.0`.
 You can also use flag syntax: `--protocol=http/1.1 --scheme=http --port=3200 --env=dev`.
 
+If the port you request is already held by another bundle or environment,
+`port:set` rejects it. Pass `--force` to reassign it — the previous holder is
+evicted and re-pins itself the next time its own context runs `port:set`. See
+[`port:set --force`](/cli/cli-port#reassign-a-port-held-by-another-bundle) in the
+CLI reference.
+
 ---
 
 ## Scan window and exhaustion

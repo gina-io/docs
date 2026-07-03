@@ -51,6 +51,25 @@ gina port:set api @myproject --protocol=http/1.1 --scheme=http --port=4200 --env
 
 Ports in the reserved range **4100–4199** are rejected (Gina infrastructure).
 
+### Reassign a port held by another bundle
+
+By default, `port:set` rejects a port that another bundle or environment already
+holds:
+
+```
+Port 8443 is already assigned to api@myproject/dev (use --force to reassign)
+```
+
+Pass `--force` to take the port anyway. The previous holder is evicted from both
+the forward (`ports.json`) and reverse (`ports.reverse.json`) maps; it loses that
+port for the protocol/scheme and re-pins itself the next time its own context
+runs `port:set`. This is the intended shape for one-bundle-per-container
+deployments that pin each bundle to a fixed port.
+
+```bash
+gina port:set frontend @myproject --protocol=http/2.0 --scheme=https --port=8443 --env=dev --force
+```
+
 ---
 
 ## `port:reset`
