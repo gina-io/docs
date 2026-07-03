@@ -28,6 +28,31 @@ gina stop     # stop the framework socket server
 
 ---
 
+## `gina --help` / `gina help`
+
+Print the Gina CLI command reference. `gina --help`, `gina -h`, and `gina help` are equivalent — each prints the top-level reference (usage plus the full command list). This is an offline command: it never needs the framework server.
+
+```bash
+gina --help        # top-level command reference
+gina -h            # same, short form
+gina help          # same, long form
+```
+
+Pass a command group to print just that group's help:
+
+```bash
+gina help bundle   # the bundle commands
+gina help project  # the project commands
+```
+
+`gina help <group>` accepts any group that ships a help page — `bundle`, `project`, `service`, `connector`, `env`, `secrets`, `port`, `protocol`, `scope`, `i18n`, `inspector`, `minion`, and `framework`; an unknown group falls back to the top-level help. The same per-group help is also reachable as `gina <group>:help` (for example `gina bundle:help`).
+
+:::note
+For a manual page rendered inline in the terminal, use [`framework:man`](#frameworkman) (also `project:man`, `bundle:man`, `service:man`), or the system manual page with `man gina`.
+:::
+
+---
+
 ## `framework:start`
 
 Start the framework socket server in the background.
