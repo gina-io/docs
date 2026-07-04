@@ -30,6 +30,7 @@ Gina on a public HTTP/2 endpoint.
 | — | HPACK bomb | Medium | `maxHeaderListSize: 65536` | any |
 | — | Server push abuse | Low | `enablePush: false` | any |
 | — | Static-asset path traversal | **High** | Fixed in `0.5.7` — resolver paths canonicalised and confined to their mapping target | any |
+| — | Internal-host disclosure on reverse proxies | Low | Fixed in `0.5.9` — proxied clients receive a public host-only origin and a host-stripped `routing.json`; the internal `scheme://host:port` is no longer serialized to the browser | any |
 
 ---
 
