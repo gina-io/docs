@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.5.8 → 0.5.9
+
+`0.5.9` is a fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It carries one security fix and three bug fixes; none require a change to your code or config.
+
+### Security — reverse-proxied deployments no longer disclose a bundle's internal host to the browser
+
+On a reverse-proxied deployment, the client `gina.config.hostname` and the fetched `/_gina/assets/routing.json` previously serialized each bundle's internal `scheme://host:port` to the browser. A proxied client now receives a public host-only origin and a host-stripped routing map, while direct `host:port` access (no proxy) stays byte-identical. This also fixes cross-bundle client `getRoute(...).toUrl()`, which previously resolved to the unreachable internal host on such deployments and now resolves same-origin. Follow-on to the `0.5.8` host-context request-scoping fix. **No migration action required** — the browser simply stops receiving internal host addresses it could never reach.
+
+### Fixed — server-side proxy host context is request-scoped
+
+The server-side URL, redirect, and config resolvers (`self.getConfig()`, `self.redirect()`, server-rendered asset host resolution, and the per-request routing clone) now resolve the host of the request in hand rather than the last proxied host the worker served. A worker that serves a mix of proxied and direct traffic — or several public hostnames — no longer inherits a stale proxied host. Requests without a per-request proxy classification (the Express engine, released responses, WebSocket-query callers) fall back to the previous worker-global behaviour, so single-public-host-per-worker deployments are unchanged. **No migration action required.**
+
+### Fixed — `connector:add` / `connector:rm` / `connector:migrate --fix` on a comment-headed `connectors.json`
+
+Rewriting a `connectors.json` that carries a leading comment header (including the scaffolded example block) previously split the file at the first raw `{` — which landed inside the example comment — commenting out the JSON body's opening brace and dropping the rest of the header, so the file no longer parsed. The header/body split is now comment-aware and preserves the full comment header verbatim; a comment-free `connectors.json` still rewrites byte-for-byte as before. **No migration action required.**
+
+### Fixed — latent `ReferenceError` in server-side URL resolution for redirect routes
+
+A leftover debug statement referenced an undefined variable and would throw whenever a redirect-flagged route's `toUrl()` was resolved server-side. The stray statement has been removed. **No migration action required.**
+
+---
+
 ## 0.5.7 → 0.5.8
 
 `0.5.8` is an additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). The new CLI command is additive and the fixes below require no action.
