@@ -21,6 +21,10 @@ gina <namespace>:<action> [arguments] [@<project>]
 Most commands that act on a bundle or project require the `@<project>` suffix
 to identify which project the command targets.
 
+Run `gina --help` (or `gina -h`) for the top-level command reference, and
+`gina help <namespace>` for a single namespace's commands — for example
+`gina help bundle`.
+
 ## Namespaces
 
 | Namespace | What it controls |

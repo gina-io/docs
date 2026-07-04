@@ -19,6 +19,24 @@ upward to the target version.
 
 ---
 
+## 0.5.7 → 0.5.8
+
+`0.5.8` is an additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). The new CLI command is additive and the fixes below require no action.
+
+### Added — `gina connector:models`
+
+List the model catalogue a configured AI connector's provider can serve: `gina connector:models <connector> @<project> [<bundle>]`. It is the read sibling of `connector:test --connect` — the same credentialed `models.list()` call, but it returns the model list instead of only a count. Text mode prints one model id per line; `--format=json` emits `{ project, connector, provider, count, models }` with each entry passed through verbatim from the provider (only `id` is guaranteed across providers). It resolves config only and never prints credentials; offline providers such as `ollama://` work with no internet.
+
+### Added — per-group `gina help [<group>]`
+
+`gina help` now accepts a command group (`gina help framework`, `gina help bundle`, …) to print just that group's commands, and an unknown action prints a clean message instead of a raw stack.
+
+### Fixed — reverse-proxy host context no longer freezes
+
+For bundles behind a reverse proxy, the internal host context derived from a port-less `Host` header or `X-Forwarded-Host` (used when building absolute URLs and forwarding internal cross-bundle calls) was captured once at the first proxied request and reused for the life of the worker. It is now re-derived per request, so single-hop and multi-hop (`X-Forwarded-Host`) reverse-proxy deployments resolve the correct host. A bundle accessed directly on `host:port` (no proxy) is unaffected. **No migration action required.**
+
+---
+
 ## 0.5.6 → 0.5.7
 
 `0.5.7` is an additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). The new job-store backends and retries are opt-in; the fixes below require no action.
