@@ -40,6 +40,7 @@ Run `gina --help` (or `gina -h`) for the top-level command reference, and
 | [`protocol`](./protocol.md) | HTTP protocol and scheme configuration |
 | [`service`](./service.md) | List framework-internal services (@gina-only) |
 | [`connector`](./connector.md) | List, add, remove, and lint `connectors.json`; run a one-off AI inference (`connector:infer`) or probe connector readiness (`connector:test`) |
+| [`image`](./image.md) | Package a bundle as a standard OCI container image (`image:build`) |
 
 ## Online vs offline commands
 

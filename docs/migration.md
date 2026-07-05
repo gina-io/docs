@@ -19,6 +19,20 @@ upward to the target version.
 
 ---
 
+## 0.5.10 → 0.5.11
+
+`0.5.11` is a feature + fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It adds one CLI feature and carries one fix; neither requires a change to your code or config.
+
+### Added — `gina image:build`: package a bundle as an OCI container image
+
+`gina image:build [<bundle>] @<project>` synthesizes a `Containerfile` + build context from the project's registered state (bundles, entry, ports, env model, Node engine floor) and executes the build with buildah — natively on Linux, or on a container host reached over ssh (`GINA_CONTAINER_HOST=ssh://[user@]host[:port]` env override → native buildah → `container.host` in `~/.gina/<shortVersion>/settings.json`). A non-dev `--env` ships the release tree built in-image by `gina bundle:build`, so a production image never runs dev-mode hot-reload; the image boots via `gina-init` + `gina-container` (SIGTERM drain) and the `EXPOSE`d port is computed deterministically from the port allocator. `${secret:KEY}` placeholders ride byte-verbatim and resolve from the container environment at runtime — never baked. `--emit` prints the synthesized artifact without building; `--format=json` emits a one-shot machine-readable result; `--stream` emits NDJSON progress frames. See the [`image` CLI reference](/cli/cli-image). **Additive — no migration action required.**
+
+### Fixed — proxied redirects now carry no-store cache headers
+
+Framework-emitted redirects on requests classified as reverse-proxied now include the no-store cache set (`Cache-Control: no-cache, no-store, must-revalidate` + `Pragma` + `Expires`), so a browser never caches a proxy-context-derived redirect — previously a cacheable `301` emitted with proxy-derived content could keep replaying from the browser cache. The inter-bundle query 3xx forward path inherits the set. Direct (non-proxied) production redirects are byte-identical, and the `301` default and route-declared `param.code` are untouched. **No migration action required.**
+
+---
+
 ## 0.5.9 → 0.5.10
 
 `0.5.10` is a fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It carries one bug fix; it requires no change to your code or config.
