@@ -447,6 +447,11 @@ in the HTTP server. Use `param.ignoreWebRoot: true` to opt out for a specific ro
 Redirect a URL to another path using `param.path`. An optional `param.code` sets
 the status code (default: `301`).
 
+In the `dev` environment and on reverse-proxied requests, redirect responses carry
+`Cache-Control: no-cache, no-store, must-revalidate` so browsers never cache them —
+see the [controller guide](/guides/controller) for details. On direct production
+requests a `301` remains cacheable as usual.
+
 ```json
 "docs-redirect": {
   "url": "/documentation",
