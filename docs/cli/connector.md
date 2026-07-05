@@ -11,7 +11,7 @@ prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
 ---
 
-The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, lints / auto-fixes common schema drift, runs a one-off inference against a configured AI connector, and probes connectors for readiness. The config subcommands (`list` / `add` / `rm` / `migrate`) and `connector:test`'s default validate-only mode are **offline** — no framework socket or network call; only `connector:infer` (and `connector:test --connect`) reach out, contacting the configured AI provider.
+The `connector` command group inspects and maintains `connectors.json` across a project's `shared/config/` and each bundle's `config/` directory. It reports the effective overlay that every bundle sees at runtime, adds or removes entries, lints / auto-fixes common schema drift, runs a one-off inference against a configured AI connector, lists an AI connector's provider models, and probes connectors for readiness. The config subcommands (`list` / `add` / `rm` / `migrate`) and `connector:test`'s default validate-only mode are **offline** — no framework socket or network call; only `connector:infer`, `connector:models`, and `connector:test --connect` reach out, contacting the configured AI provider.
 
 - **`connector:list`** — read-only inventory of every declared connector, with driver install status and version-pin warnings.
 - **`connector:add`** — write a connector entry to shared or bundle scope, with driver install hint.
@@ -19,6 +19,7 @@ The `connector` command group inspects and maintains `connectors.json` across a 
 - **`connector:migrate`** — lint every `connectors.json` for schema drift, optionally fix in place with `--fix`.
 - **`connector:infer`** — run a one-off inference against a configured AI connector outside a request; `--stream` for token-by-token NDJSON.
 - **`connector:test`** — probe configured connectors for readiness (config / driver / secrets) and exit non-zero on any failure; `--connect` adds a live AI `models.list` probe (zero generation tokens).
+- **`connector:models`** — list the models a configured AI connector's provider can serve; the read sibling of `connector:test --connect` (the same credentialed `models.list()` call, zero generation tokens).
 
 ```mermaid
 flowchart LR
@@ -843,6 +844,92 @@ With `--format=json`, the report is a structured object — `{ project, connecto
 
 :::note Secrets are never printed
 Like `connector:infer`, `connector:test` reports only the **name** and SET / UNSET status of each `${secret:KEY}` it requires — never the resolved value. See the [Secrets guide](/guides/secrets) for the `${secret:KEY}` resolver.
+:::
+
+---
+
+## `connector:models` {#connectormodels}
+
+*New in 0.5.8*
+
+List the models a configured `ai` connector's provider can serve — the **read sibling of [`connector:test --connect`](#connect)**: the same credentialed `models.list()` catalogue call, but it returns the model list instead of keeping only a count. Like [`connector:infer`](#connectorinfer), it resolves the project's connector config (shared, or the shared+bundle merged view when a `<bundle>` is named), resolves `${secret:KEY}` credentials from the CLI's own environment, and instantiates the AI connector directly — **no bundle boot, no framework socket**. Useful for discovering valid `--model` values for `connector:infer`, or scripting model inventories from a shell.
+
+:::caution Makes a network call
+`connector:models` contacts the configured AI provider — one credentialed `models.list()` GET with a 15-second deadline, spending **zero generation tokens**. An offline provider such as `ollama://` on `localhost` needs no paid-API key and no internet — it returns the locally pulled models — but the local server still has to be reachable.
+:::
+
+```mermaid
+flowchart LR
+    A["shared + &lt;bundle&gt;<br/>connectors.json"] --> B["overlay merge<br/>(bundle wins)"]
+    B --> C["resolve secret credentials<br/>from process.env"]
+    C --> D["instantiate AI connector<br/>(no bundle boot / socket)"]
+    D --> E["models.list()<br/>zero generation tokens"]
+    E --> F["one id per line, or<br/>{ project, connector, provider, count, models }"]
+```
+
+```bash
+gina connector:models <connector> @<project>            # Shared connector config
+gina connector:models <connector> <bundle> @<project>   # Merged shared+bundle view
+gina connector:models <connector> @<project> --format=json
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--format=json` | Emit `{ project, connector, provider, count, models }` as JSON instead of one model id per line. Validated strictly — anything other than `text` / `json` is a usage error (exit 1). |
+| `--api-key=<value>` | Override the connector's `apiKey` with a literal value, bypassing `${secret:...}` resolution. |
+| `--base-url=<url>` | Override the provider base URL (OpenAI-compatible providers). |
+| `--protocol=<uri>` | Override the connector protocol scheme (e.g. `anthropic://`, `openai://`, `ollama://`). |
+
+### Examples
+
+```bash
+# List the models a shared AI connector's provider can serve
+gina connector:models claude @myproject
+
+# Same, as the api bundle sees it (merged shared+bundle view)
+gina connector:models claude api @myproject
+
+# Machine-readable
+gina connector:models claude @myproject --format=json
+
+# Feed an id straight into connector:infer
+gina connector:infer claude @myproject --message="hi" --model="$(gina connector:models claude @myproject | head -1)"
+```
+
+### Output
+
+In text mode, one model `id` per line is written to **stdout** and a count footer to **stderr** — so `> file` (or a pipe) captures only the ids:
+
+```text
+claude-sonnet-4-6
+claude-opus-4-8
+claude-haiku-4-5
+— 3 models via `claude` (anthropic)
+```
+
+With `--format=json`, a single object is written to stdout (plus a `bundle` field when a `<bundle>` was named). Each `models[]` entry is passed through **verbatim** from the provider SDK — only `id` is guaranteed across providers (an Anthropic entry carries `{ id, type, display_name, created_at }`, an OpenAI-family entry `{ id, object, created, owned_by }`):
+
+```json
+{"project":"myproject","connector":"claude","provider":"anthropic","count":3,"models":[{"id":"claude-sonnet-4-6","type":"model","display_name":"Claude Sonnet 4.6","created_at":"2025-…"}]}
+```
+
+A provider client that exposes no `models.list` is reported as **unsupported** with a non-zero exit — an honest "this provider cannot enumerate models", never a fabricated empty list (a legitimately empty catalogue is the distinct success case: `{ …, "count": 0, "models": [] }` with exit `0`):
+
+```json
+{"project":"myproject","connector":"legacy-llm","provider":null,"supported":false,"models":null,"reason":"provider client exposes no models.list"}
+```
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The model list was retrieved (including a legitimately empty catalogue). |
+| `1` | Usage error (missing `<connector>` / `@<project>`, unregistered project or bundle, bad `--format`), connector not found or not an `ai` connector, a `${secret:KEY}` failed to resolve, the provider client exposes no `models.list`, or the `models.list()` call failed / timed out (15 s). |
+
+:::note AI connectors only — secrets never printed
+Like its siblings, `connector:models` only works with `ai` connectors (any other type errors cleanly), needs the provider SDK (`@anthropic-ai/sdk` for `anthropic://`, `openai` for OpenAI-compatible schemes) installed in the project's `node_modules`, and never prints a resolved credential — a detached CLI sees only its own shell environment, so export the key or pass `--api-key` for a one-off call. See [`connector:infer`](#connectorinfer)'s credentials section for the details.
 :::
 
 ---
