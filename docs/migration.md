@@ -19,6 +19,16 @@ upward to the target version.
 
 ---
 
+## 0.5.9 → 0.5.10
+
+`0.5.10` is a fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It carries one bug fix; it requires no change to your code or config.
+
+### Fixed — server-side cross-bundle `getRoute('route@bundle').toUrl()` resolves the public host on reverse-proxied deployments
+
+On a reverse-proxied deployment, a controller building a cross-bundle URL server-side — e.g. `self.redirect(getRoute('<route>@<otherBundle>').toUrl())` — could emit an unreachable internal host with a doubled web root (`<internal-host>:<port>/<origin-web-root>//<target-web-root>`) on a proxied request. It now resolves the public host for both the Isaac and Express engines. This completes the `0.5.9` browser-side cross-bundle URL fix (#B66) on the server side; single-public-host-per-worker deployments are otherwise unchanged. **No migration action required.**
+
+---
+
 ## 0.5.8 → 0.5.9
 
 `0.5.9` is a fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It carries one security fix and three bug fixes; none require a change to your code or config.
