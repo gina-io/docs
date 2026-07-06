@@ -594,6 +594,98 @@ this.dashboard = function(req, res, next) {
 
 ---
 
+## Pausing and resuming requests {#pausing-resuming-requests}
+
+When an unauthenticated visitor hits a protected route, redirecting them straight to
+`/login` loses *where they were trying to go*. The controller trio `pauseRequest()` /
+`resumeRequest()` / `isHaltedRequest()` implements the "deep-link before login" pattern:
+**snapshot** the intended request, redirect to login, then **replay** the original request
+once the visitor has authenticated. The snapshot — url, method, data and url params — is
+stored on `req.session` under `haltedRequest`, so it survives the redirect round-trip.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant G as Auth gate (middleware)
+  participant L as Login action
+  participant T as Target action
+  B->>G: GET /dashboard (no session)
+  G->>G: self.pauseRequest(req.get)
+  Note over G: snapshot into req.session.haltedRequest
+  G-->>B: 302 to /login
+  B->>L: POST /login (credentials)
+  L->>L: authenticate, then self.resumeRequest()
+  Note over L: reads req.session.haltedRequest
+  L-->>B: 302 to /dashboard (the resolved url)
+  B->>T: GET /dashboard (now authenticated)
+  T-->>B: 200 — the intended page
+```
+
+### The methods
+
+| Method | What it does |
+|---|---|
+| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. `requestStorage` defaults to `req.session`. Returns the storage object. |
+| `self.isHaltedRequest([session])` | `true` when the session (or the passed object) holds a `haltedRequest`. Defaults to `req.session` / `req.session.user`. |
+| `self.resumeRequest([requestStorage])` | Replays the snapshot — restores the original url / method / data / params onto the live request and re-dispatches it, then clears the snapshot. |
+
+### Pausing before the login redirect
+
+Call `pauseRequest()` in your auth gate, right before bouncing the visitor to login:
+
+```js
+// src/frontend/middlewares/auth/index.js
+this.require = function(req, res, next, done) {
+  if (!req.session || !req.session.user) {
+    self.pauseRequest(req.get);            // snapshot into req.session.haltedRequest
+    return self.redirect('/login', true);
+  }
+
+  done(req, res, next);
+};
+```
+
+### Resuming after authentication
+
+After a successful login, replay whatever the visitor was reaching for:
+
+```js
+this.login = function(req, res, next) {
+  // ... validate credentials, set req.session.user ...
+
+  if (self.isHaltedRequest()) {
+    return self.resumeRequest();           // replays req.session.haltedRequest
+  }
+
+  self.redirect('/dashboard', true);       // no paused request — go to a default
+};
+```
+
+### How the replay works
+
+`resumeRequest()` dispatches differently depending on the paused request's method:
+
+- **GET** — replayed by redirecting to the resolved url; the browser re-issues the
+  now-authenticated GET. For an XHR / popin request it returns a JSON redirect instead.
+- **non-GET** (POST / PUT / …) — re-dispatched **in-process**: the original method, data
+  and params are restored onto the live request and the target controller action is invoked
+  directly, crossing namespaces via `requireController()` when the paused route lived in a
+  different namespace.
+
+Either way, the `haltedRequest` snapshot is cleared from storage once it has been consumed.
+
+:::tip Custom storage
+Pass a second argument to `pauseRequest(data, requestStorage)` (and to
+`resumeRequest(requestStorage)`) to snapshot into your own persistent object instead of
+`req.session` — for example a store keyed by a one-time token when you don't want to rely on
+the session cookie.
+:::
+
+See also: the [Middleware guide](./middleware) (auth gates) and [Sessions](./sessions),
+where the `haltedRequest` snapshot lives.
+
+---
+
 ## Configuration
 
 `self.getConfig()` returns a deep clone of the bundle configuration. Pass a key to
