@@ -37,7 +37,7 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 
 | Connector | Type | Primary use | Distributed | Status |
 |---|---|---|---|---|
-| [Couchbase](#couchbase) | Document store (N1QL) | Primary application data | ✅ Yes — multi-node cluster, automatic failover | ✅ Available (v2 · v3 · v4) |
+| [Couchbase](#couchbase) | Document store (N1QL) | Primary application data | ✅ Yes — multi-node cluster, automatic failover | ✅ Available (v3 · v4) |
 | [MongoDB](#mongodb) | Document store | Primary application data | ✅ Yes — replica sets, sharding | ✅ Available |
 | [MySQL / MariaDB](#mysql) | Relational | Primary application data | ⚠️ Partial — single server by default; Galera Cluster or managed service for multi-node | ✅ Available (v0.3.0) |
 | [PostgreSQL](#postgresql) | Relational | Primary application data | ⚠️ Partial — single server by default; Patroni or managed service for multi-node | ✅ Available (v0.3.0) |
@@ -126,13 +126,14 @@ no cost) and switch to a cloud provider by updating `connectors.json`.
 
 Data connectors back the model layer directly — entities read and write through them
 using Gina's ORM. Declare them under any key name; the framework resolves the connector
-type from the `protocol` value.
+type from the entry's `connector` field, falling back to the key name when
+it names a built-in connector type.
 
 ### Couchbase
 
-Gina ships with built-in connectors for Couchbase SDK v2, v3, and v4. The correct
+Gina ships with built-in connectors for Couchbase SDK v3 and v4. The correct
 version is selected automatically based on the `couchbase` npm package installed in your
-project. All SDK versions share the same `connectors.json` schema.
+project. Both SDK versions share the same `connectors.json` schema.
 
 Use Couchbase when your application requires N1QL queries, document-level scope
 isolation across environments, or multi-node cluster failover.
