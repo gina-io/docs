@@ -309,7 +309,9 @@ self.redirect('/admin', true);           // ignoreWebRoot — skips webroot pref
 Default status code is `301`.
 
 :::note Redirects and browser caching
-In the `dev` environment, and on any request the framework classifies as reverse-proxied, redirects are emitted with `Cache-Control: no-cache, no-store, must-revalidate` (plus `Pragma` and `Expires`) so browsers never cache them. A proxied redirect's target host is derived from the proxy context, and a browser-cached `301` would pin that value permanently — a stale copy would keep replaying from the client cache even after the server-side target changes. On direct (non-proxied) production requests, redirects are emitted without cache directives, so a `301` keeps its usual cacheable semantics.
+In the `dev` environment, and on any request the framework classifies as reverse-proxied, redirects are emitted with `Cache-Control: no-cache, no-store, must-revalidate` (plus `Pragma` and `Expires`) so browsers never cache them — this covers both full-page (`30x`) redirects and redirects returned to an AJAX or popin request (the `isXhrRedirect` JSON payload). A proxied redirect's target host is derived from the proxy context, and a browser-cached `301` would pin that value permanently — a stale copy would keep replaying from the client cache even after the server-side target changes. On direct (non-proxied) production requests, redirects are emitted without cache directives, so a `301` keeps its usual cacheable semantics.
+
+Because `self.redirect()` defaults to a cacheable `301`, a client that received a redirect **before** you deployed a change can keep replaying the old one from cache — so verify redirect changes from a fresh profile or a private window, and expect "still broken" reports from clients that cached the previous response.
 :::
 
 ### `self.throwError(res, code, err)`
