@@ -323,6 +323,51 @@ that form — only do it when you mean to take control of submission.
 
 ---
 
+## Localizing built-in error labels
+
+Gina's built-in rule error messages (`Cannot be left empty`, `A valid email is
+required`, …) default to English. You can localize them **per culture** on the
+client without Gina shipping any translations — the same "your app owns the
+catalogs" model as the rest of [i18n](/guides/i18n).
+
+Two pieces work together:
+
+1. **The negotiated request culture is exposed to the browser** as
+   `gina.config.culture` (Gina whispers the request's resolved `req.culture` into
+   the page — no wiring needed).
+2. **Your app registers per-culture overrides** via
+   `gina.validator.setErrorLabels(labels[, culture])`. Call it once (typically in
+   your page bootstrap), keyed off `gina.config.culture`:
+
+```js
+// gina is the global. Register French built-in labels for a fr_FR bundle.
+if (gina.config.culture === 'fr_FR') {
+  gina.validator.setErrorLabels({
+    isRequired: 'Ce champ est requis',
+    isEmail:    'Une adresse e-mail valide est requise'
+    // …only the rules you want to translate; the rest stay English
+  });
+}
+```
+
+- **English fills the gaps.** Any built-in rule you do not translate keeps its
+  English default, so a partial map is fine.
+- **Culture fallback.** Lookup is exact culture (`fr_FR`) → base language (`fr`)
+  → English. Register under `'fr'` to cover every French variant, or `'fr_FR'`
+  for a region-specific override; pass an explicit second argument to target a
+  culture other than the current one: `setErrorLabels(labels, 'de_DE')`.
+- **Your custom rules are already localized.** A rule's own message (the rule
+  set's `error` key, or `setFlash`) always wins over the built-in label, so your
+  app-defined validators render in whatever language you wrote them.
+
+:::note
+This localizes the **client-side** validator. Server-side rendering (the
+route-requirement layer and controller-side body validation below) still emits
+the English built-in labels — localize those in your controller for now.
+:::
+
+---
+
 ## Server-side validation
 
 **Client-side validation is for user experience, not trust.** Anyone can bypass
