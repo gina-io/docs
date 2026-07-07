@@ -321,6 +321,19 @@ A `ready.<formId>` event fires once a form is wired, in case you need to run
 setup after binding. Binding `submit` replaces Gina's default auto-send for
 that form — only do it when you mean to take control of submission.
 
+:::note You don't construct the validator to make it run
+The validator **boots itself at page load**, so a rule-bound form
+(`data-gina-form-rule` + a rule set) validates with no bundle code at all — the
+`window.gina.validator` instance shown above is constructed and published for
+you. Bundle code constructs it explicitly —
+`new (require('gina/validator'))(gina.forms.rules).on('ready', fn)` — only to
+attach a lifecycle handler (`ready` / `submit`) as forms are wired, or to hand
+the instance to another plugin. That explicit construction is **idempotent**
+with the auto-boot: its `ready` handler still fires and forms already bound at
+page load are not re-scanned — so a bundle that constructed the validator before
+auto-boot keeps working unchanged.
+:::
+
 ---
 
 ## Localizing built-in error labels
