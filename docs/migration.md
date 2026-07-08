@@ -19,6 +19,43 @@ upward to the target version.
 
 ---
 
+## 0.5.11 → 0.5.12
+
+`0.5.12` is a feature + fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It rounds out the validator + i18n work and carries a batch of CLI, popin, and request-path fixes. Two items may want your attention: if you style form submit buttons, see the `aria-disabled` note below; and a malformed `@<project>` CLI token now errors instead of being silently ignored.
+
+### Added — FormValidator built-in rule labels localise from the i18n catalog
+
+Built-in validation messages (`isEmail`, `isRequired`, …) now localise per culture from `bundle/locales/<culture>.json` under a new `_validator.<rule>` namespace, on both the server-rendered and client-side paths. English defaults fill untranslated rules (culture → base-language → English fallback). An app can override per key with `gina.validator.setErrorLabels(labels[, culture])`; precedence is `setErrorLabels` > bundle catalog > English, and a per-field / per-rule message still wins over all of it. No action required — bundles without a `_validator` catalog section keep the English defaults.
+
+### Added — per-bundle i18n catalogs now activate at boot
+
+A bundle shipping a `locales/` directory now loads its catalogs at boot, which activates URL-prefix / cookie / `Accept-Language` culture negotiation, the `t()` global, and the `t` template filter. Opt-in (no `locales/` → unaffected) and non-fatal (a malformed catalog warns instead of blocking boot). Two negotiation bugs are fixed alongside: `req.culture` / `gina.config.culture` previously resolved to `en`/empty regardless of the configured culture (#B83), and were dropped on warm/cached page reloads (#B84). If your bundle ships `locales/` and relied on negotiation being inert, note it is now live; precedence is URL prefix → cookie → `Accept-Language` → bundle `settings.region.culture` → `GINA_CULTURE` → `en`.
+
+### Added — `data-gina-form-rule` forms auto-boot the client validator
+
+A form declaring `data-gina-form-rule` with a matching rule set now validates automatically in the browser at page load — no per-page boot code needed. Explicit construction (to attach submit/lifecycle handlers) still works and is idempotent with the auto-boot.
+
+### Fixed — submit-trigger disabled state is now `aria-disabled` (action may be required)
+
+While live-check reports a form invalid, FormValidator no longer natively `disabled`s the submit `<button>` (a natively-disabled button emits no click, so it became a dead no-op). The invalid trigger is now marked `aria-disabled="true"` + class `gina-form-submit-disabled` and stays operable — a click surfaces every field error and focuses the first invalid field, while the real submit stays gated on validity. **Action:** style the `[aria-disabled="true"]` / `.gina-form-submit-disabled` submit-trigger state, since the framework ships no button CSS. A submit button rendered `disabled` in your markup still enables on valid input (or when live-check is off).
+
+### Fixed — an empty required field shows a single message
+
+A required field left empty now shows only "is required" instead of also stacking "is not valid" from `isEmail` / `isFloat` / `isInList` / etc. Optional empty fields still pass; a filled-but-invalid value still reports its own rule error.
+
+### Fixed — a malformed `@<project>` CLI token now errors (behaviour change)
+
+An `@<project>` token starting with a character outside `[a-z0-9_.]` (an uppercase letter, a dash, or a bare `@`) used to be silently ignored — the command ran against the current-directory project or all projects with exit 0, and a mutating command like `bundle:add` could target the wrong project while reporting success. Such tokens are now rejected with `is not a valid project name` and exit 1. If a script relied on the old silent-drop behaviour, pass a valid project name.
+
+### Fixed — other CLI and request-path fixes
+
+- `GINA_HOMEDIR` overrides are honoured by every spawned child command — `project:add` (and its `--scope` / `--env` children) and the auto-link + `project:start` / `stop` / `restart` delegations no longer act on the default home.
+- `project:start @<project>` / `service:start @<project>` delegate to their handlers instead of misparsing the reference as a framework version and hanging; the version-reject paths flush and exit non-zero instead of hanging.
+- Bulk `start` / `stop` / `restart` on a project with no bundles answers cleanly instead of crashing the framework daemon; `bundle:restart <unregistered>` reports "is not registered".
+- The framework-not-installed guard points at the real `gina framework:add <version>` (was a non-existent `framework:install`).
+- The HTTP/1.x static directory-to-index redirect sends an unconditional 301 outside dev (was a blank 200 with a `Location` header).
+- Proxied XHR / popin (`isXhrRedirect`) redirect responses carry the same `no-store` cache directives as plain redirects (#B75).
+
 ## 0.5.10 → 0.5.11
 
 `0.5.11` is a feature + fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It adds one CLI feature and carries one fix; neither requires a change to your code or config.
