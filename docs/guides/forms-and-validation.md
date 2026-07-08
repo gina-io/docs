@@ -339,44 +339,100 @@ auto-boot keeps working unchanged.
 ## Localizing built-in error labels
 
 Gina's built-in rule error messages (`Cannot be left empty`, `A valid email is
-required`, …) default to English. You can localize them **per culture** on the
-client without Gina shipping any translations — the same "your app owns the
-catalogs" model as the rest of [i18n](/guides/i18n).
+required`, …) default to English. They localize **per culture** from the same
+per-bundle catalog as the rest of [i18n](/guides/i18n) — Gina ships no
+translations of its own, and both the server engine and the client validator read
+that one file.
 
-Two pieces work together:
+### Translate them in the catalog
 
-1. **The negotiated request culture is exposed to the browser** as
-   `gina.config.culture` (Gina whispers the request's resolved `req.culture` into
-   the page — no wiring needed).
-2. **Your app registers per-culture overrides** via
-   `gina.validator.setErrorLabels(labels[, culture])`. Call it once (typically in
-   your page bootstrap), keyed off `gina.config.culture`:
+Add a `_validator` block to the bundle's catalog, keyed by rule name:
 
-```js
-// gina is the global. Register French built-in labels for a fr_FR bundle.
-if (gina.config.culture === 'fr_FR') {
-  gina.validator.setErrorLabels({
-    isRequired: 'Ce champ est requis',
-    isEmail:    'Une adresse e-mail valide est requise'
-    // …only the rules you want to translate; the rest stay English
-  });
+```json title="locales/fr.json"
+{
+  "greeting": "Bonjour",
+  "_validator": {
+    "isRequired": "Ce champ est requis",
+    "isEmail": "Une adresse e-mail valide est requise",
+    "isStringMinLength": "Doit contenir au moins %s caractères"
+  }
 }
 ```
 
-- **English fills the gaps.** Any built-in rule you do not translate keeps its
-  English default, so a partial map is fine.
-- **Culture fallback.** Lookup is exact culture (`fr_FR`) → base language (`fr`)
-  → English. Register under `'fr'` to cover every French variant, or `'fr_FR'`
-  for a region-specific override; pass an explicit second argument to target a
-  culture other than the current one: `setErrorLabels(labels, 'de_DE')`.
-- **Your custom rules are already localized.** A rule's own message (the rule
-  set's `error` key, or `setFlash`) always wins over the built-in label, so your
-  app-defined validators render in whatever language you wrote them.
+That is the whole setup — no `setErrorLabels()` call and no page bootstrap. Gina
+resolves the negotiated culture's `_validator` subset server-side and whispers it
+to the browser as `gina.config.validatorLabels`, so the client validator renders
+localized labels too.
 
-:::note
-This localizes the **client-side** validator. Server-side rendering (the
-route-requirement layer and controller-side body validation below) still emits
-the English built-in labels — localize those in your controller for now.
+- **English fills the gaps, per key.** Any built-in rule you do not translate
+  keeps its English default, so a partial block is fine.
+- **Culture fallback.** Lookup is exact culture (`fr_FR`) → base language (`fr`)
+  → English. Ship `fr.json` to cover every French variant, or `fr_FR.json` for a
+  region-specific set.
+- **Your custom rules are already localized.** A rule's own message (the rule
+  set's `error` key, or `setFlash`) always wins over the built-in label.
+
+:::caution Keep the `%` placeholders — and mind a bare `%`
+A label may contain `%l` (the field label), `%n` (the field name) and `%s` (the
+size — a length bound, or the allowed-values list). Gina substitutes them wherever
+they appear, **including in your translations**, so a rule like `isStringMinLength`
+must keep its `%s` or the bound vanishes from the message. This matters more than
+it looks: length bounds are declared as array arguments (`"isString": [5]`), so
+`isStringMinLength` applies to rule sets that never name it.
+
+Those three are the **only** tokens, and the lookup is case-sensitive. Any other
+`%` immediately followed by letters is read as a placeholder and renders as the
+literal text `undefined` — including an innocent `20%sur le prix`, which matches
+`%sur`. Write `20 % sur le prix`, or reword. Gina warns at bundle boot when it
+spots one, naming the offending rule and catalog file.
+:::
+
+### Overriding a label at runtime
+
+`gina.validator.setErrorLabels(labels[, culture])` overlays the catalog **per key**
+— it is not a wholesale replacement:
+
+```js
+// Overrides isEmail only; every other label still comes from the catalog.
+gina.validator.setErrorLabels({ isEmail: 'Adresse e-mail invalide' }, 'fr');
+```
+
+Resolution order, lowest to highest:
+
+```text
+English defaults  <  bundle catalog  <  setErrorLabels()  <  per-field message
+```
+
+Culture lookup for an override is exact culture (`fr_FR`) → base language (`fr`).
+Pass an explicit second argument to target a culture other than the current one:
+`setErrorLabels(labels, 'de_DE')`.
+
+Labels are **late-bound**: the validator re-reads them on every validation pass, so
+a `setErrorLabels()` call made *after* the validator is constructed — inside a
+`ready` handler, say — applies from the next pass onward. It does not retroactively
+change a validation already in flight.
+
+:::note Where the catalog is read from
+Catalogs are eager-loaded once at bundle boot from the bundle's `locales/`
+directory, which is optional — a bundle without one is skipped silently. Two
+consequences worth knowing:
+
+- **Editing a catalog needs a bundle restart.** There is no hot reload.
+- **If your build emits a release tree separate from your sources**, make sure
+  `locales/` lands where the bundle is actually served from, or the block quietly
+  does nothing.
+
+The load-bearing check is the browser: `gina.config.validatorLabels` should hold
+your `_validator` keys. If the server resolves the catalog but the browser still
+shows English, suspect a stale client bundle rather than the catalog.
+:::
+
+:::note Server-side labels
+The same catalog localizes the built-in labels in the server engine when the
+negotiated `req.culture` reaches the validator. Two things stay English by design:
+**route-requirement labels** (`validator::{}` in `routing.json`), because those
+validators run while the route is still being matched — before the culture has
+been negotiated — and any message you write yourself in a controller check.
 :::
 
 ---
