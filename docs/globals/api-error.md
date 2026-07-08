@@ -72,6 +72,15 @@ per field in its `.fields` map.
 | `.fields` | `object` | Field-to-message map — only present on client errors. Shape: `{ fieldName: 'message', ... }` |
 | `.path` | `string` | Source file path where `ApiError` was constructed — only present on client errors |
 
+:::note Field messages must be user-safe
+Each value in `.fields` is rendered directly into the form as that field's error
+message. If a value is a raw server stack trace — which happens when the underlying
+error has no message of its own, or when a stack string is passed as the message — Gina
+replaces it with a neutral **"An error occurred"** outside `local` scope, and keeps the
+full stack in `local` for debugging. Pass a real, user-facing message per field rather
+than relying on the raw error. *Added in 0.5.14.*
+:::
+
 ---
 
 ## Examples

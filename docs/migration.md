@@ -48,6 +48,21 @@ placeholder. Previously a plain string such as `"Already taken"` threw while the
 message was being compiled, taking the validation pass with it. A non-string field
 error is now ignored in favour of the rule's resolved label.
 
+### Fixed — server stack traces no longer leak into form field errors
+
+A validation error tied to a specific form field — an
+[`ApiError`](/globals/api-error) built with a `fieldName` — is no longer allowed to
+carry a raw server stack trace to the browser outside `local` scope. This happens when
+the underlying error has no message of its own (so Gina falls back to its stack), or
+when an application passes a stack string as the message: the field now shows a neutral
+**"An error occurred"** in `beta`, `testing`, and `production`, while the full stack is
+kept in `local` scope for debugging. It mirrors how Gina already strips the stack from
+the JSON error body outside `local` scope, and closes the one channel that strip could
+not reach — the per-field message map, which the form validator renders verbatim.
+
+Nothing to change. To show your own copy for a field, pass a real (non-stack) message
+to `ApiError`; the neutral text only replaces a message that is itself a stack trace.
+
 ---
 
 ## 0.5.12 → 0.5.13

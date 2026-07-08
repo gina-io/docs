@@ -344,7 +344,10 @@ Response placeholders use the `{{path.to.value}}` syntax (distinct from the
 `%`-tokens used by every other message — see
 [Messages and placeholders](#messages-and-placeholders)). A field error containing no
 `{{placeholder}}` is used verbatim; one that is not a string is ignored, and the rule
-keeps its resolved label.
+keeps its resolved label. A field error that is a raw server stack trace — which an
+[`ApiError`](/globals/api-error) produces when the underlying error has no message of
+its own — is replaced with a neutral message outside `local` scope, so backend
+internals never reach the form.
 
 ### getValidationContext
 
