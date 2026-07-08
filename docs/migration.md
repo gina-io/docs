@@ -63,6 +63,22 @@ not reach — the per-field message map, which the form validator renders verbat
 Nothing to change. To show your own copy for a field, pass a real (non-stack) message
 to `ApiError`; the neutral text only replaces a message that is itself a stack trace.
 
+### Fixed — a changed validation message is re-announced to assistive technology
+
+When a form field stays invalid but its error message changes — the value now fails a
+different rule, the message depends on the value, or a
+`gina.validator.setErrorLabels()` override changed the label — the new message is now
+re-announced through the form's ARIA live region. Previously only the *visible* message
+updated while a screen reader kept announcing the **first** message. Nothing to change.
+
+Note on timing: register `gina.validator.setErrorLabels()` overrides **before a form's
+first validation** — for example inside the validator's `ready` handler — and with the
+bundle's culture configured (labels register under `gina.config.culture`, whispered from
+the negotiated request culture). A `setErrorLabels()` call made *after* a field is
+already showing an error, or with no culture set, does not refresh that field's current
+message until it next clears and re-errors; labels registered before first validation
+take effect normally.
+
 ---
 
 ## 0.5.12 → 0.5.13
