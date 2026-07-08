@@ -615,6 +615,12 @@ not as a counter or queue. This applies to every `express-session` store, not
 just gina's.
 :::
 
+:::tip Deep-link before login
+To send an unauthenticated visitor to `/login` and replay their original request
+afterwards, snapshot it into `req.session.haltedRequest` with the controller's
+[pause / resume request](/guides/controller#pausing-resuming-requests) methods.
+:::
+
 ---
 
 ## Cookie options

@@ -193,11 +193,15 @@ Every middleware gets the same methods as a controller action, injected at load 
 | `self.throwError(res, code, err)` | Send an error response |
 | `self.isXMLRequest()` | True when the request has `X-Requested-With: XMLHttpRequest` |
 | `self.isWithCredentials()` | True when the request sends credentials |
-| `self.isHaltedRequest()` | True when a previous request was paused |
-| `self.pauseRequest(data)` | Pause the current request for later resumption |
-| `self.resumeRequest()` | Resume a paused request |
+| `self.isHaltedRequest([session])` | True when a request was paused (see below) |
+| `self.pauseRequest(data[, requestStorage])` | Snapshot the current request for later resumption |
+| `self.resumeRequest([requestStorage])` | Replay a paused request |
 | `self.query(...)` | Run a model query |
 | `self.requireController(ns, opts)` | Load another namespace's controller |
+
+The `pauseRequest` / `resumeRequest` / `isHaltedRequest` trio is covered in full — with the
+login-replay flow and a worked example — in
+[Pausing and resuming requests](/guides/controller#pausing-resuming-requests).
 
 ---
 

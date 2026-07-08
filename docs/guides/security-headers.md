@@ -1247,4 +1247,4 @@ CORS handling is a separate concern from this guide. The framework's CORS infras
 
 - [Sessions guide](/guides/sessions) — `gina.plugins.Session()` hardened cookie defaults (#CSRF1)
 - [CSRF guide](/guides/csrf) — `gina.plugins.Csrf()` signed double-submit token middleware + Origin pre-filter (#CSRF2/#CSRF3)
-- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 1.5 + Phase 2 closed — all 15 #HDR plugins shipped; wrapper extension to include HDR8-12 in safe-set defaults pending)
+- [Roadmap — Web Security Headers](/roadmap) — track status (Phase 1 + Phase 1.5 + Phase 2 closed — all 15 #HDR plugins shipped; wrapper extension to include HDR8-12 in safe-set defaults shipped 2026-05-17)

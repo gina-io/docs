@@ -214,6 +214,18 @@ rejected.
 "passwordConfirm": { "is": "$password === $passwordConfirm" }
 ```
 
+A confirmation field is typically also **required**. Pairing `is` with
+`isRequired` on the same field is safe — while the field is blank, `isRequired`
+reports it and the cross-field comparison does not error. Use the two-argument
+form to set a message (keep `isRequired` first):
+
+```json
+"passwordConfirm": {
+  "isRequired": true,
+  "is": ["$password === $passwordConfirm", "Passwords do not match"]
+}
+```
+
 :::tip Applying a rule twice
 To attach the same rule to one field more than once in a rule file, suffix it
 with a number — `is`, `is1`, `is2`. Each runs independently.
