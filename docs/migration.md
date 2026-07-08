@@ -19,6 +19,37 @@ upward to the target version.
 
 ---
 
+## 0.5.13 → 0.5.14
+
+### Fixed — a non-string error label degrades instead of taking the form down
+
+An error label that is not a string is now **discarded**: the validator warns once in
+the browser console, naming the rule, and renders that rule's English default. This
+applies wherever the label came from — a `_validator` catalog entry, a
+`gina.validator.setErrorLabels()` override, a rule's `errorMessage` argument, or a
+per-field `error`. `0.5.13`'s boot lint only ever saw the first of those.
+
+Previously the engine threw while rendering the message, and nothing on the path
+caught it: the validation pass aborted, so no error message appeared and the form
+never submitted through Gina. Worse, the same check runs when forms are first bound,
+and the binding loop was unguarded — so one bad label left **every form further down
+the page unbound**, silently reverting the page to plain browser submits with no
+client-side validation.
+
+Nothing to change. If a form on `0.5.13` or earlier mysteriously stopped submitting,
+or a page's later forms behaved as if Gina were absent, check the boot log for the
+`_validator` warning.
+
+### Fixed — `query` responses no longer require a `{{placeholder}}`
+
+A field-level error returned by a [`query`](/reference/validation-rules#query)
+validator's endpoint is now rendered verbatim when it contains no `{{path}}`
+placeholder. Previously a plain string such as `"Already taken"` threw while the
+message was being compiled, taking the validation pass with it. A non-string field
+error is now ignored in favour of the rule's resolved label.
+
+---
+
 ## 0.5.12 → 0.5.13
 
 `0.5.13` is a small additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It adds one boot-time diagnostic for locale catalogs. No action is required.

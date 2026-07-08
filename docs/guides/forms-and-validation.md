@@ -412,6 +412,41 @@ a `setErrorLabels()` call made *after* the validator is constructed — inside a
 `ready` handler, say — applies from the next pass onward. It does not retroactively
 change a validation already in flight.
 
+### A label must be a string
+
+Every label — in the catalog, in `setErrorLabels()`, as a rule's `errorMessage`
+argument, or as a per-field `error` — must be a **string**. Anything else (an
+object, a number, an array) is discarded: the validator warns once in the browser
+console, naming the rule, and renders that rule's English default instead.
+
+```js
+// locales/fr.json  ->  { "_validator": { "isRequired": { "message": "Requis" } } }
+//                                                       ^^^^^^^^^^^^^^^^^^^^^^^ object, not a string
+//
+// console: [FormValidator] error label for rule `isRequired` must be a string —
+//          got object. Falling back to `Cannot be left empty`. …
+//
+// The field still fails validation; only the message falls back.
+```
+
+Only the *other* labels degrade — a sibling rule with a valid label keeps it, and a
+bad `errorMessage` still renders the rule's translated catalog label if one exists.
+The bundle also warns at boot for the catalog case, naming the file:
+
+```text
+[i18n] `_validator.isRequired` in …/locales/fr.json must be a string
+       — the validator discards it and renders the English default
+```
+
+:::caution Before 0.5.14 this was fatal, not cosmetic
+A non-string label threw, and nothing on the path caught it. The validation pass
+aborted, so no error message appeared, the form never submitted through gina, and —
+because the check also runs when forms are first bound — **every form further down
+the page was left unbound**, silently reverting to a plain browser submit with no
+client-side validation at all. If you are on an older version, treat the boot
+warning above as a build-breaking error.
+:::
+
 :::note Where the catalog is read from
 Catalogs are eager-loaded once at bundle boot from the bundle's `locales/`
 directory, which is optional — a bundle without one is skipped silently. Two
