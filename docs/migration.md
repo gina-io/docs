@@ -19,6 +19,16 @@ upward to the target version.
 
 ---
 
+## 0.5.12 → 0.5.13
+
+`0.5.13` is a small additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It adds one boot-time diagnostic for locale catalogs. No action is required.
+
+### Added — unrenderable `_validator` catalog labels warn at bundle boot
+
+Gina now warns at bundle boot when a `_validator` label in a locale catalog cannot be rendered. Built-in rule labels accept only the placeholders `%l` (field label), `%n` (field name) and `%s` (size); any other `%`-token — including a literal percent glued to letters, as in `20%sur le prix` — is substituted with the string `undefined` in the message shown to the user, and a non-string label makes the validator throw. A `_validator` section that is not an object warns too. The catalog still loads and boot is never blocked; the warning names the offending rule and the catalog file, so a translation typo surfaces in the boot log instead of in production copy. Nothing to change — a catalog whose labels use only the three supported placeholders behaves exactly as before.
+
+---
+
 ## 0.5.11 → 0.5.12
 
 `0.5.12` is a feature + fix release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It rounds out the validator + i18n work and carries a batch of CLI, popin, and request-path fixes. Two items may want your attention: if you style form submit buttons, see the `aria-disabled` note below; and a malformed `@<project>` CLI token now errors instead of being silently ignored.

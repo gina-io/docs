@@ -392,11 +392,32 @@ placeholder syntaxes exist:
 - **`{{path.to.value}}`** — used only by [`query`](#query) responses, to pull a
   value out of the response body.
 
-Override messages two ways:
+`%`-tokens are substituted in **whatever message the rule resolved** — the English
+default, a translated label from the bundle catalog, or a `setErrorLabels()`
+override alike. A translated `isStringMinLength` must therefore keep its `%s`, or
+the bound disappears from the message.
+
+:::caution `%` is a metacharacter
+`%l`, `%n` and `%s` are the only tokens, and the lookup is case-sensitive. Any other
+`%` immediately followed by letters is read as a placeholder and renders as the
+literal text `undefined` — `%d`, `%L`, and a bare percent glued to a word such as
+`20%sur le prix` (which matches `%sur`). Write `20 % sur le prix`, or reword. Gina
+warns at bundle boot when a catalog label contains an unknown token, and also when a
+label is not a string (the engine throws when it tries to render one).
+
+`%l` reads the DOM attribute `data-gina-form-field-label`, so it is meaningful only
+in the browser; server-side it renders as an empty string.
+:::
+
+Override messages three ways:
 
 - **Per field** — [`setFlash`](#setflash) (declarative: `"setFlash": [null, "…"]`).
-- **Wholesale** — replace the catalog entries via the engine's `setErrorLabels`
-  when writing a custom validator.
+  Wins over everything below.
+- **Per culture, in the catalog** — a `_validator.<rule>` block in
+  `locales/<culture>.json`. See
+  [Localizing built-in error labels](/guides/forms-and-validation#localizing-built-in-error-labels).
+- **Per key, at runtime** — `gina.validator.setErrorLabels(labels[, culture])`,
+  which overlays the catalog one key at a time rather than replacing it.
 
 ### Default message catalog
 
