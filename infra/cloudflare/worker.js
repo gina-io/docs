@@ -228,10 +228,13 @@ export default {
       '/docs/cli/connector': '/docs/cli/cli-connector',
       '/docs/cli/env':       '/docs/cli/cli-env',
       '/docs/cli/framework': '/docs/cli/cli-framework',
+      '/docs/cli/image':     '/docs/cli/cli-image',
+      '/docs/cli/minion':    '/docs/cli/cli-minion',
       '/docs/cli/port':      '/docs/cli/cli-port',
       '/docs/cli/project':   '/docs/cli/cli-project',
       '/docs/cli/protocol':  '/docs/cli/cli-protocol',
       '/docs/cli/scope':     '/docs/cli/cli-scope',
+      '/docs/cli/secrets':   '/docs/cli/cli-secrets',
       '/docs/cli/service':   '/docs/cli/cli-service',
       '/docs/cli/view':      '/docs/cli/cli-view',
     };
