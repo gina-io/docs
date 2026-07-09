@@ -342,7 +342,12 @@ Validates the value against a remote endpoint (e.g. a uniqueness check).
 
 Response placeholders use the `{{path.to.value}}` syntax (distinct from the
 `%`-tokens used by every other message — see
-[Messages and placeholders](#messages-and-placeholders)).
+[Messages and placeholders](#messages-and-placeholders)). A field error containing no
+`{{placeholder}}` is used verbatim; one that is not a string is ignored, and the rule
+keeps its resolved label. A field error that is a raw server stack trace — which an
+[`ApiError`](/globals/api-error) produces when the underlying error has no message of
+its own — is replaced with a neutral message outside `local` scope, so backend
+internals never reach the form.
 
 ### getValidationContext
 
@@ -402,11 +407,23 @@ the bound disappears from the message.
 `%` immediately followed by letters is read as a placeholder and renders as the
 literal text `undefined` — `%d`, `%L`, and a bare percent glued to a word such as
 `20%sur le prix` (which matches `%sur`). Write `20 % sur le prix`, or reword. Gina
-warns at bundle boot when a catalog label contains an unknown token, and also when a
-label is not a string (the engine throws when it tries to render one).
+warns at bundle boot when a catalog label contains an unknown token.
 
 `%l` reads the DOM attribute `data-gina-form-field-label`, so it is meaningful only
 in the browser; server-side it renders as an empty string.
+:::
+
+:::note A label must be a string
+A label that is not a string — an object, a number, an array — is discarded. The
+engine warns once, naming the rule, and renders that rule's **English default**
+instead; the field still fails validation. This holds wherever the label came from:
+the bundle catalog, a `setErrorLabels()` override, a rule's `errorMessage` argument,
+or a per-field `error`. Only the catalog case is also caught at bundle boot, since
+that is the only one Gina can see before a request renders it.
+
+*Changed in 0.5.14.* Before that the engine threw, which aborted the whole validation
+pass — no message rendered, the form did not submit, and forms bound after it on the
+same page were left unbound.
 :::
 
 Override messages three ways:

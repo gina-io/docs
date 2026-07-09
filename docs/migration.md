@@ -19,6 +19,68 @@ upward to the target version.
 
 ---
 
+## 0.5.13 → 0.5.14
+
+### Fixed — a non-string error label degrades instead of taking the form down
+
+An error label that is not a string is now **discarded**: the validator warns once in
+the browser console, naming the rule, and renders that rule's English default. This
+applies wherever the label came from — a `_validator` catalog entry, a
+`gina.validator.setErrorLabels()` override, a rule's `errorMessage` argument, or a
+per-field `error`. `0.5.13`'s boot lint only ever saw the first of those.
+
+Previously the engine threw while rendering the message, and nothing on the path
+caught it: the validation pass aborted, so no error message appeared and the form
+never submitted through Gina. Worse, the same check runs when forms are first bound,
+and the binding loop was unguarded — so one bad label left **every form further down
+the page unbound**, silently reverting the page to plain browser submits with no
+client-side validation.
+
+Nothing to change. If a form on `0.5.13` or earlier mysteriously stopped submitting,
+or a page's later forms behaved as if Gina were absent, check the boot log for the
+`_validator` warning.
+
+### Fixed — `query` responses no longer require a `{{placeholder}}`
+
+A field-level error returned by a [`query`](/reference/validation-rules#query)
+validator's endpoint is now rendered verbatim when it contains no `{{path}}`
+placeholder. Previously a plain string such as `"Already taken"` threw while the
+message was being compiled, taking the validation pass with it. A non-string field
+error is now ignored in favour of the rule's resolved label.
+
+### Fixed — server stack traces no longer leak into form field errors
+
+A validation error tied to a specific form field — an
+[`ApiError`](/globals/api-error) built with a `fieldName` — is no longer allowed to
+carry a raw server stack trace to the browser outside `local` scope. This happens when
+the underlying error has no message of its own (so Gina falls back to its stack), or
+when an application passes a stack string as the message: the field now shows a neutral
+**"An error occurred"** in `beta`, `testing`, and `production`, while the full stack is
+kept in `local` scope for debugging. It mirrors how Gina already strips the stack from
+the JSON error body outside `local` scope, and closes the one channel that strip could
+not reach — the per-field message map, which the form validator renders verbatim.
+
+Nothing to change. To show your own copy for a field, pass a real (non-stack) message
+to `ApiError`; the neutral text only replaces a message that is itself a stack trace.
+
+### Fixed — a changed validation message is re-announced to assistive technology
+
+When a form field stays invalid but its error message changes — the value now fails a
+different rule, the message depends on the value, or a
+`gina.validator.setErrorLabels()` override changed the label — the new message is now
+re-announced through the form's ARIA live region. Previously only the *visible* message
+updated while a screen reader kept announcing the **first** message. Nothing to change.
+
+Note on timing: register `gina.validator.setErrorLabels()` overrides **before a form's
+first validation** — for example inside the validator's `ready` handler — and with the
+bundle's culture configured (labels register under `gina.config.culture`, whispered from
+the negotiated request culture). A `setErrorLabels()` call made *after* a field is
+already showing an error, or with no culture set, does not refresh that field's current
+message until it next clears and re-errors; labels registered before first validation
+take effect normally.
+
+---
+
 ## 0.5.12 → 0.5.13
 
 `0.5.13` is a small additive release — **no breaking changes and no settings reset** (the `shortVersion` stays `0.5`). It adds one boot-time diagnostic for locale catalogs. No action is required.
