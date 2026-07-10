@@ -19,6 +19,53 @@ upward to the target version.
 
 ---
 
+## 0.5.14 → 0.5.15
+
+This release ships three fixes — no breaking changes, and nothing to change. All three
+make previously failing flows work, so the notes below matter mostly if your app worked
+around one of them.
+
+### Fixed — `gina.popin` sees every popin, so a form can redirect into a different one
+
+The popin registry is now shared across every `Popin` instance, and `gina.popin` is
+published once as a live object. Previously the published accessors were bound to the
+registry of the **first** instance: `gina.popin.getPopinByName()` / `getPopinById()`
+resolved only the popins that instance had registered, and `gina.popin.activePopinId`
+did not track the popin actually open. In practice that broke a form submitted from a
+popin whose response redirects into a **different** popin — the target could not be
+resolved, so the submit always failed with a 422 `Popin with name … not found`
+validation error. That flow now works end to end: the original popin closes, the
+target popin opens with its content, and `gina.popin.activePopinId` follows it. Popins
+registered after page load are visible to the accessors too.
+
+Nothing to change. If your app worked around the blind accessors by walking
+`gina.popin.$popins` to find a popin by name, the walk still works — keeping it or
+replacing it with `gina.popin.getPopinByName()` are both fine.
+
+### Fixed — a redirect into a popin opens it content-first
+
+A form submit whose response redirected into a popin could open that popin before its
+content arrived, flashing an empty popin — and a failed load left it open and empty.
+The popin is now opened through the load handle: the response body is injected first,
+and a failed load no longer opens anything. A redirect that targets a different popin
+than the one currently open also closes the original popin, as intended. Nothing to
+change.
+
+### Fixed — server-side validation of a data object against a rules object works
+
+`gina.plugins.Validator(rules, data, formId[, culture])` used to crash on its first
+field with a `TypeError`, so validating a plain data object against a
+[rules object](/reference/validation-rules) had never worked server-side. Plain rules
+now validate and return `{ isValid(), error, data }`, and the optional trailing
+`culture` localises the error labels from the bundle's locale catalog. Conditional
+(`_case_`) rules remain client-only — a rules object relying on them still cannot be
+validated server-side. On the client, the same guard means a rule naming a field that
+is missing from the form now logs the intended console warning instead of throwing.
+
+Nothing to change.
+
+---
+
 ## 0.5.13 → 0.5.14
 
 ### Fixed — a non-string error label degrades instead of taking the form down
