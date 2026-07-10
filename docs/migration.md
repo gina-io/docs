@@ -21,9 +21,20 @@ upward to the target version.
 
 ## 0.5.14 → 0.5.15
 
-This release ships three fixes — no breaking changes, and nothing to change. All three
-make previously failing flows work, so the notes below matter mostly if your app worked
-around one of them.
+This release ships three fixes and one opt-in addition — no breaking changes, and
+nothing to change. The fixes make previously failing flows work, so their notes matter
+mostly if your app worked around one of them.
+
+### Added — a trigger can opt out of the popin hover/focus preload
+
+Popin and dialog triggers with an explicit source URL (`data-gina-dialog-src`, legacy
+`data-gina-popin-url`) are warmed by a preload: the GET fires as soon as the pointer
+hovers the trigger (or it gains focus), so the popin opens instantly on click. That
+assumes the GET is safe to fire early, as HTTP semantics intend. If a trigger's GET has
+server-side effects, declare it with `data-gina-dialog-preload="false"` (honored on
+legacy triggers too; the value is matched case-insensitively): the warm-up GET no longer
+fires on hover or focus, and the click loads normally, at click time. Existing triggers
+are unaffected — the preload default is unchanged.
 
 ### Fixed — `gina.popin` sees every popin, so a form can redirect into a different one
 
