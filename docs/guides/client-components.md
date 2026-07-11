@@ -165,6 +165,10 @@ flowchart LR
 
 A component inside a swapped fragment needs no observer at all — `connectedCallback` / `disconnectedCallback` **are** its fragment-change notifications. `MutationObserver` is sanctioned only over a component's own subtree; observing another component's internals couples you to markup you don't own.
 
+## Form participation
+
+A component can act as a form control. Declare `static formAssociated = true`, attach `ElementInternals` in the constructor (`this.internals_ = this.attachInternals()`), and call `internals.setFormValue(value)` on commit — the element then rides the form's submission and participates in gina's [FormValidator](/guides/forms-and-validation#form-associated-custom-elements) like a native input: collected, validated, serialized, and error-rendered by its field `name`. Give it a `name`, expose a `.value` getter, and dispatch a composed, bubbling `change` on commit; reflect validity through `internals.setValidity(...)` / `internals.ariaInvalid`. A named component rides the submission even without a rule, so validate it server-side like any other field.
+
 ## Components in popins and XHR-injected content
 
 Custom elements inside a popin-injected body **upgrade automatically** — the platform handles it on DOM insertion, whatever template engine rendered the fragment server-side. The reference component's e2e coverage drives this against the real built bundle.
