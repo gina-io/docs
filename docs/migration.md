@@ -115,6 +115,32 @@ handler on the trigger ids, retire that handler when you pick this up, or remova
 be handled twice. Details in the
 [file uploads guide](/guides/file-uploads#previews-and-removal).
 
+### Fixed — `$form.send(FormData)` nests bracket-notation field names
+
+The programmatic `$form.send(FormData)` submit path now nests bracket-notation field
+names (e.g. `item[0][id]`) into objects and arrays before posting, matching the
+declarative submit path — previously they were transmitted as literal JSON keys, so the
+server exposed `item[0][id]` as an un-nested key. File uploads and plain-object `send()`
+payloads are unchanged.
+
+Nothing to change unless your server-side code read the flattened `item[0][id]`-style
+keys from a `send(FormData)` payload; with this fix the same submit arrives nested, as it
+already did from the declarative form path.
+
+### Fixed — a fields-only multipart POST no longer hangs, and a malformed multipart body no longer crashes the bundle
+
+A `multipart/form-data` POST carrying only text fields (no file parts) previously hung
+until a front-proxy timeout — the request-lifecycle continuation resumed only from inside
+the per-file write-stream finish loop, which ran zero times when there were no file parts;
+it now resumes directly. Separately, a malformed, empty, or non-multipart body sent with a
+`multipart/form-data` content-type previously surfaced as an uncaught parser error that
+triggered a SIGTERM worker shutdown — a single unauthenticated request could kill a
+worker; the parser error is now caught and answered with HTTP 400. Both run before
+routing, so any path was affected. Non-file fields remain dropped from `req.post` (the
+documented multipart limitation) — only the hang and the crash are fixed.
+
+Nothing to change.
+
 ---
 
 ## 0.5.13 → 0.5.14
