@@ -472,6 +472,56 @@ been negotiated — and any message you write yourself in a controller check.
 
 ---
 
+## Form-associated custom elements
+
+A [custom element](/guides/client-components) can act as a form control. When it
+opts into form association — `static formAssociated = true` plus
+`this.internals_ = this.attachInternals()` and `internals.setFormValue(value)` on
+commit — it appears in the form's `elements` collection like a native `<input>`.
+FormValidator picks it up automatically: give it a `name`, reference that name in a
+rule set, and the element is collected, validated, serialized into the AJAX
+payload, and error-rendered exactly like a native field. Live checking runs on the
+element's own **composed, bubbling `change`** event, so dispatch one whenever the
+component commits a new value.
+
+```html
+<form id="review" data-gina-form-rule="review" method="POST" action="/reviews">
+  <x-rating name="score" data-gina-form-field-label="Rating"></x-rating>
+  <button type="submit">Submit</button>
+</form>
+```
+
+```json title="src/myapp/forms/rules/review.json"
+{
+  "score": {
+    "isRequired": true
+  }
+}
+```
+
+To participate, a component must:
+
+- declare `static formAssociated = true`;
+- carry a `name` attribute — the key its rule set and the submitted payload use;
+- expose a `.value` getter returning the current value (a string, like every other
+  field);
+- dispatch a **composed, bubbling** `change` (or `input`) event on commit, so the
+  form-level listener sees it;
+- reflect validity through `ElementInternals` — `internals.setValidity(...)` and
+  `internals.ariaInvalid` — so screen readers get the same feedback native controls
+  give (see [Accessibility](#accessibility)).
+
+:::caution A named element rides the payload — validate it server-side
+A form-associated element with a `name` is serialized into the submission **even
+without a rule**, exactly like [inherited data](#inheriting-data-into-the-payload):
+its value lives in the DOM, so the client can read and edit it, and it reaches the
+server indistinguishable from a regular field. A client-side rule is UX, not a trust
+boundary. Validate and authorize every named element on the server — with or without
+a rule — just as you would any other submitted input.
+:::
+
+---
+
 ## Server-side validation
 
 **Client-side validation is for user experience, not trust.** Anyone can bypass
@@ -593,3 +643,5 @@ documented in its own chapter — see [File uploads](/guides/file-uploads).
   `X-Gina-CSRF-Token` header.
 - [Controllers](/guides/controller) — reading `req.post` / `req.put` and
   responding with `self.throwError()`.
+- [Client-side components](/guides/client-components) — the custom-element
+  authoring model that form-associated elements build on.

@@ -274,10 +274,12 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
 | `data-gina-form-upload-on-success` | Bare name of a `window` callback run when staging succeeds. |
 | `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
+| `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
 | `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. |
 | `data-gina-form-upload-reset-trigger` / `-delete-trigger` | Id override for the reset/delete trigger element. |
+| `data-gina-form-upload-hidden-class` | Class name the add-affordance restore removes from the file input *and its parent* after a removal — set it when your markup hides the input with a CSS class instead of an inline style. *New in 0.5.15.* |
 | `data-gina-form-upload-is-locked` | When set on a generated hidden field, that field is kept even if its file is removed. |
 
 ### Previews and removal
@@ -288,9 +290,39 @@ and appends it to the container — wrapped in an `<li>` when the container is a
 `<ul>`. Cap the rendered width with a `data-preview-max-width` attribute on the
 container.
 
-Each preview gets a **Reset** link. Clicking it removes the preview and the
-generated hidden fields and sends a removal request to the reset (staged) or
-delete (saved) action URL.
+Each preview gets a **Reset** link. Clicking it sends a removal request to the
+reset (staged) or delete (saved) action URL, then removes the preview image,
+its reset link, and the generated hidden fields, and restores the file input's
+add-affordance. If your markup hides the input (or its wrapper) with a CSS
+class rather than an inline style, name that class in
+`data-gina-form-upload-hidden-class` — the restore removes it from the input
+and its parent; without the attribute, the inline `display` restore applies.
+
+To run your own logic after a removal, set `data-gina-form-upload-on-reset`
+and/or `data-gina-form-upload-on-delete` to the bare name of a function
+registered on `window` — the same convention as
+`data-gina-form-upload-on-success` (a function-call shape like `"myCb()"` is
+not supported and logs a warning). The callback fires once per removal action,
+after the removal request has gone out and the preview has been cleaned up,
+and receives one argument:
+
+```html
+<input type="file" id="avatar" name="avatar"
+       data-gina-form-upload-hidden-class="is-hidden"
+       data-gina-form-upload-on-reset="onAvatarReset">
+```
+
+```js
+window.onAvatarReset = function (payload) {
+    // payload.$upload      — the file <input> element
+    // payload.bindingType  — 'reset' or 'delete'
+    // payload.files        — the removed files' original filenames
+};
+```
+
+An exception thrown inside your callback is logged and contained — it never
+interrupts the removal. *The removal callbacks and
+`data-gina-form-upload-hidden-class` are new in 0.5.15.*
 
 ---
 

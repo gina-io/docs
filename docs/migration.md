@@ -19,6 +19,130 @@ upward to the target version.
 
 ---
 
+## 0.5.14 → 0.5.15
+
+This release ships fixes and opt-in additions — no breaking changes, and
+nothing to change. The fixes make previously failing flows work, so their notes matter
+mostly if your app worked around one of them.
+
+### Added — a trigger can opt out of the popin hover/focus preload
+
+Popin and dialog triggers with an explicit source URL (`data-gina-dialog-src`, legacy
+`data-gina-popin-url`) are warmed by a preload: the GET fires as soon as the pointer
+hovers the trigger (or it gains focus), so the popin opens instantly on click. That
+assumes the GET is safe to fire early, as HTTP semantics intend. If a trigger's GET has
+server-side effects, declare it with `data-gina-dialog-preload="false"` (honored on
+legacy triggers too; the value is matched case-insensitively): the warm-up GET no longer
+fires on hover or focus, and the click loads normally, at click time. Existing triggers
+are unaffected — the preload default is unchanged.
+
+### Fixed — `gina.popin` sees every popin, so a form can redirect into a different one
+
+The popin registry is now shared across every `Popin` instance, and `gina.popin` is
+published once as a live object. Previously the published accessors were bound to the
+registry of the **first** instance: `gina.popin.getPopinByName()` / `getPopinById()`
+resolved only the popins that instance had registered, and `gina.popin.activePopinId`
+did not track the popin actually open. In practice that broke a form submitted from a
+popin whose response redirects into a **different** popin — the target could not be
+resolved, so the submit always failed with a 422 `Popin with name … not found`
+validation error. That flow now works end to end: the original popin closes, the
+target popin opens with its content, and `gina.popin.activePopinId` follows it. Popins
+registered after page load are visible to the accessors too.
+
+Nothing to change. If your app worked around the blind accessors by walking
+`gina.popin.$popins` to find a popin by name, the walk still works — keeping it or
+replacing it with `gina.popin.getPopinByName()` are both fine.
+
+### Fixed — a redirect into a popin opens it content-first
+
+A form submit whose response redirected into a popin could open that popin before its
+content arrived, flashing an empty popin — and a failed load left it open and empty.
+The popin is now opened through the load handle: the response body is injected first,
+and a failed load no longer opens anything. A redirect that targets a different popin
+than the one currently open also closes the original popin, as intended. Nothing to
+change.
+
+### Fixed — server-side validation of a data object against a rules object works
+
+`gina.plugins.Validator(rules, data, formId[, culture])` used to crash on its first
+field with a `TypeError`, so validating a plain data object against a
+[rules object](/reference/validation-rules) had never worked server-side. Plain rules
+now validate and return `{ isValid(), error, data }`, and the optional trailing
+`culture` localises the error labels from the bundle's locale catalog. Conditional
+(`_case_`) rules remain client-only — a rules object relying on them still cannot be
+validated server-side. On the client, the same guard means a rule naming a field that
+is missing from the form now logs the intended console warning instead of throwing.
+
+Nothing to change.
+
+### Fixed — `X-Powered-By` suppression reaches static and error responses
+
+A request for a missing file under a statics-served prefix returned gina's 404 carrying
+`x-powered-by: Gina/<version>` even when every documented suppression mechanism was
+configured: `server.hidePoweredBy` only gated the Isaac `/_gina/*` endpoints, the
+`HidePoweredBy` middleware never runs for static requests, and an `env.json`
+`server.response.header` override was applied after the HTTP/1.1 error response had
+already flushed its headers. `settings.json > server.hidePoweredBy: true` now
+suppresses the framework's `X-Powered-By` emission on every response it originates —
+routed pages, static-asset serves, static and traversal 404s, and framework error
+pages, on both engines — and an explicit `X-Powered-By` entry in
+`env.json > server.response.header` now replaces the value on HTTP/1.1 error responses
+exactly as it already did on routed ones.
+
+Nothing to change: with no opt-in configured, the header is emitted exactly as before.
+See the [security headers guide](/guides/security-headers) for the mechanism split.
+
+### Fixed — upload reset/delete removes the preview, restores class-hidden inputs, and gains removal callbacks
+
+Clicking an upload preview's **Reset**/**Delete** link now actually removes the preview
+image, its trigger link, and the generated hidden fields. Previously a script error cut
+the cleanup short: the preview was only hidden in place, re-uploading stacked duplicate
+trigger ids, and a second remove in the same page life could throw instead of working.
+The removal request still goes out before any DOM cleanup.
+
+Two opt-in additions ride the fix. If your markup hides the file input (or its wrapper)
+with a CSS class, name it in `data-gina-form-upload-hidden-class` and the add-affordance
+restore removes that class from the input and its parent — the previous restore only
+handled inline styles, so a class-hidden input never came back. And
+`data-gina-form-upload-on-reset` / `data-gina-form-upload-on-delete` name a `window`
+callback (the `data-gina-form-upload-on-success` convention) run once per removal, after
+the removal request, with `{ $upload, bindingType, files }`. The documented
+`data-gina-form-upload-reset-trigger` / `-delete-trigger` id override also works now —
+its attribute name was previously built incorrectly, so it never matched.
+
+Nothing to change — but if your app worked around the dead removal with its own click
+handler on the trigger ids, retire that handler when you pick this up, or removals will
+be handled twice. Details in the
+[file uploads guide](/guides/file-uploads#previews-and-removal).
+
+### Fixed — `$form.send(FormData)` nests bracket-notation field names
+
+The programmatic `$form.send(FormData)` submit path now nests bracket-notation field
+names (e.g. `item[0][id]`) into objects and arrays before posting, matching the
+declarative submit path — previously they were transmitted as literal JSON keys, so the
+server exposed `item[0][id]` as an un-nested key. File uploads and plain-object `send()`
+payloads are unchanged.
+
+Nothing to change unless your server-side code read the flattened `item[0][id]`-style
+keys from a `send(FormData)` payload; with this fix the same submit arrives nested, as it
+already did from the declarative form path.
+
+### Fixed — a fields-only multipart POST no longer hangs, and a malformed multipart body no longer crashes the bundle
+
+A `multipart/form-data` POST carrying only text fields (no file parts) previously hung
+until a front-proxy timeout — the request-lifecycle continuation resumed only from inside
+the per-file write-stream finish loop, which ran zero times when there were no file parts;
+it now resumes directly. Separately, a malformed, empty, or non-multipart body sent with a
+`multipart/form-data` content-type previously surfaced as an uncaught parser error that
+triggered a SIGTERM worker shutdown — a single unauthenticated request could kill a
+worker; the parser error is now caught and answered with HTTP 400. Both run before
+routing, so any path was affected. Non-file fields remain dropped from `req.post` (the
+documented multipart limitation) — only the hang and the crash are fixed.
+
+Nothing to change.
+
+---
+
 ## 0.5.13 → 0.5.14
 
 ### Fixed — a non-string error label degrades instead of taking the form down
