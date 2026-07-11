@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.5.14 → 0.5.15
 
-This release ships three fixes and one opt-in addition — no breaking changes, and
+This release ships four fixes and one opt-in addition — no breaking changes, and
 nothing to change. The fixes make previously failing flows work, so their notes matter
 mostly if your app worked around one of them.
 
@@ -74,6 +74,23 @@ validated server-side. On the client, the same guard means a rule naming a field
 is missing from the form now logs the intended console warning instead of throwing.
 
 Nothing to change.
+
+### Fixed — `X-Powered-By` suppression reaches static and error responses
+
+A request for a missing file under a statics-served prefix returned gina's 404 carrying
+`x-powered-by: Gina/<version>` even when every documented suppression mechanism was
+configured: `server.hidePoweredBy` only gated the Isaac `/_gina/*` endpoints, the
+`HidePoweredBy` middleware never runs for static requests, and an `env.json`
+`server.response.header` override was applied after the HTTP/1.1 error response had
+already flushed its headers. `settings.json > server.hidePoweredBy: true` now
+suppresses the framework's `X-Powered-By` emission on every response it originates —
+routed pages, static-asset serves, static and traversal 404s, and framework error
+pages, on both engines — and an explicit `X-Powered-By` entry in
+`env.json > server.response.header` now replaces the value on HTTP/1.1 error responses
+exactly as it already did on routed ones.
+
+Nothing to change: with no opt-in configured, the header is emitted exactly as before.
+See the [security headers guide](/guides/security-headers) for the mechanism split.
 
 ---
 

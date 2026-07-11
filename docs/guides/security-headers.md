@@ -513,7 +513,7 @@ If your bundle relies on `document.domain` to bridge same-site origins (e.g. `ap
 
 ## Hide X-Powered-By (`#HDR8`)
 
-`gina.plugins.HidePoweredBy()` removes the `X-Powered-By` response header that gina emits by default at `core/server.js:2425` (plus `core/template/conf/env.json > response.header`). Opens **Phase 1.5** (helmet-parity gap-fill) of the gina security-headers track.
+`gina.plugins.HidePoweredBy()` removes the `X-Powered-By` response header that gina emits by default on every response (both engines). Opens **Phase 1.5** (helmet-parity gap-fill) of the gina security-headers track.
 
 The header reveals the framework identity AND the version to anyone inspecting the response — useful intel for attackers scanning for known-vulnerable stacks. Removing it costs zero bytes (the response is smaller) and reduces the attacker's reconnaissance surface by one fact: they no longer know what server software answered the request. They can still fingerprint via behaviour (response timing, error pages, header order, TLS fingerprint, etc.) — this isn't a silver bullet — but it raises the floor a notch.
 
@@ -551,11 +551,11 @@ Registering opts in; not registering opts out. There is no `value` field — the
 
 The plugin's effectiveness depends on which server engine your bundle uses.
 
-**Express engine**: works as expected. The framework's `response.setHeader('X-Powered-By', ...)` at `core/server.js:2425` runs in early framework middleware before any user-mounted plugin, so `HidePoweredBy`'s middleware fires AFTER and `res.removeHeader('x-powered-by')` removes the header cleanly before the response is written to the wire.
+**Express engine**: works as expected **for routed responses**. The framework's per-request `response.setHeader('X-Powered-By', ...)` runs at request entry, before any user-mounted plugin, so `HidePoweredBy`'s middleware fires AFTER and `res.removeHeader('x-powered-by')` removes the header cleanly before the response is written to the wire. Static-asset serves and framework error responses do **not** run the user middleware chain, so the middleware never sees them — use the `server.hidePoweredBy` flag (below) to cover those.
 
-**Isaac engine** (gina's default built-in HTTP/HTTP2 engine) — **use `server.hidePoweredBy: true` instead of (or in addition to) this middleware**. Isaac writes `X-Powered-By` directly via 15 `response.writeHead({ 'X-Powered-By': ... })` sites. `writeHead` bypasses the `setHeader`/`removeHeader` interface entirely — once `writeHead` is called with the headers object, those headers are committed regardless of any prior `removeHeader` call. This middleware still runs and calls `removeHeader` on Isaac (no-op since the header isn't set at middleware time), but `writeHead` then emits the header directly. The middleware therefore does NOT suppress the header on Isaac.
+**Isaac engine** (gina's default built-in HTTP/HTTP2 engine) — **use `server.hidePoweredBy: true` instead of (or in addition to) this middleware**. Isaac's `/_gina/*` built-in endpoints write `X-Powered-By` directly via `response.writeHead({ 'X-Powered-By': ... })` header objects. `writeHead` bypasses the `setHeader`/`removeHeader` interface entirely — once `writeHead` is called with the headers object, those headers are committed regardless of any prior `removeHeader` call. And as on Express, static-asset serves and framework error responses never traverse the middleware chain.
 
-The framework-level `server.hidePoweredBy` settings flag closes that gap (`#HDR8` Phase 2, shipped in `0.3.16-alpha`). Set it in your bundle's `config/settings.json`:
+The framework-level `server.hidePoweredBy` settings flag covers all of that (`#HDR8` Phase 2, shipped in `0.3.16-alpha`; framework-wide since `0.5.15`). Set it in your bundle's `config/settings.json`:
 
 ```jsonc title="src/<bundle>/config/settings.json"
 {
@@ -566,9 +566,17 @@ The framework-level `server.hidePoweredBy` settings flag closes that gap (`#HDR8
 }
 ```
 
-The flag (default `false`) makes the Isaac engine skip the `X-Powered-By` emission at all 15 `writeHead` sites. It is a no-op on the Express engine — use `gina.plugins.HidePoweredBy()` middleware there. Bundles that want belt-and-suspenders coverage across both engines can set the flag AND register the middleware (each is a no-op on the engine the other handles).
+The flag (default `false`) suppresses the framework's `X-Powered-By` emission at its source, on **both engines** and on **every response class**: routed pages, static-asset serves, static and traversal 404s, framework error pages, and the Isaac `/_gina/*` endpoints. (Between `0.3.16-alpha` and `0.5.14` the flag covered only the Isaac `/_gina/*` sites and was a no-op on the Express engine; since `0.5.15` it is framework-wide.) Bundles can still register the middleware alongside it — safe redundancy.
 
 To check which engine your bundle uses, look at `bundles/<name>/config/settings.json > server.engine` (defaults to the Isaac engine when absent on most installs).
+
+### Static assets and error responses
+
+*(Changed in `0.5.15`.)* A request for a missing file under a statics-served prefix — and any framework error response — previously carried `x-powered-by: Gina/<version>` even with every suppression mechanism configured: the middleware chain does not run for static requests, the settings flag covered only `/_gina/*`, and an `env.json` `server.response.header` override was applied after the HTTP/1.1 error headers had already flushed. These paths now honor the same semantics as routed responses:
+
+- `server.hidePoweredBy: true` — the header is not emitted at all.
+- An explicit `X-Powered-By` entry in the bundle's `env.json > server.response.header` — the value is **replaced** (an empty string yields an empty header value), on routed responses and HTTP/1.1 error responses alike.
+- With neither configured, the default `Gina/<version>` emission is unchanged.
 
 ### Failure modes
 
@@ -576,8 +584,9 @@ To check which engine your bundle uses, look at `bundles/<name>/config/settings.
 |----------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | Plugin not registered                                                | `X-Powered-By: Gina/<version>` continues to be emitted                            |
 | Plugin registered on Express engine                                  | Header removed cleanly                                                            |
-| Plugin registered on Isaac engine (no `server.hidePoweredBy` flag)   | Header still emitted via direct `writeHead` — set `settings.json > server.hidePoweredBy: true` |
-| Isaac engine + `server.hidePoweredBy: true`                          | Header suppressed at `writeHead` emission; this middleware is a no-op (safe redundancy)         |
+| Plugin registered on Isaac engine (no `server.hidePoweredBy` flag)   | `/_gina/*` endpoints and static/error responses still carry the header — set `settings.json > server.hidePoweredBy: true` |
+| Plugin registered, static asset or error response                    | Middleware chain does not run there — header present unless the flag (or an `env.json` override) is set |
+| `server.hidePoweredBy: true` (either engine)                         | Header suppressed everywhere — routed, statics, 404s/errors, `/_gina/*`; this middleware becomes safe redundancy |
 | User middleware sets `X-Powered-By` AFTER this plugin runs           | Re-added; mount `HidePoweredBy` LAST in the chain to prevent                      |
 | Response already sent (`res.headersSent === true`)                   | Node's `removeHeader` no-ops; request resumes                                    |
 
