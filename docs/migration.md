@@ -21,7 +21,7 @@ upward to the target version.
 
 ## 0.5.14 → 0.5.15
 
-This release ships four fixes and one opt-in addition — no breaking changes, and
+This release ships fixes and opt-in additions — no breaking changes, and
 nothing to change. The fixes make previously failing flows work, so their notes matter
 mostly if your app worked around one of them.
 
@@ -91,6 +91,29 @@ exactly as it already did on routed ones.
 
 Nothing to change: with no opt-in configured, the header is emitted exactly as before.
 See the [security headers guide](/guides/security-headers) for the mechanism split.
+
+### Fixed — upload reset/delete removes the preview, restores class-hidden inputs, and gains removal callbacks
+
+Clicking an upload preview's **Reset**/**Delete** link now actually removes the preview
+image, its trigger link, and the generated hidden fields. Previously a script error cut
+the cleanup short: the preview was only hidden in place, re-uploading stacked duplicate
+trigger ids, and a second remove in the same page life could throw instead of working.
+The removal request still goes out before any DOM cleanup.
+
+Two opt-in additions ride the fix. If your markup hides the file input (or its wrapper)
+with a CSS class, name it in `data-gina-form-upload-hidden-class` and the add-affordance
+restore removes that class from the input and its parent — the previous restore only
+handled inline styles, so a class-hidden input never came back. And
+`data-gina-form-upload-on-reset` / `data-gina-form-upload-on-delete` name a `window`
+callback (the `data-gina-form-upload-on-success` convention) run once per removal, after
+the removal request, with `{ $upload, bindingType, files }`. The documented
+`data-gina-form-upload-reset-trigger` / `-delete-trigger` id override also works now —
+its attribute name was previously built incorrectly, so it never matched.
+
+Nothing to change — but if your app worked around the dead removal with its own click
+handler on the trigger ids, retire that handler when you pick this up, or removals will
+be handled twice. Details in the
+[file uploads guide](/guides/file-uploads#previews-and-removal).
 
 ---
 
