@@ -175,7 +175,182 @@ One authoring caveat, engine-level not component-level: literal `{{ }}` in marku
 
 ## Live connections
 
-Open live resources in `connectedCallback` and close them in `disconnectedCallback` — popin close and content replacement then tear your sockets down automatically (handler-bound sockets leak on content replacement unless you wire teardown by hand). This pairs naturally with gina's [WebSocket routes](/guides/websockets) (`"method": "ws"` in `routing.json`, over HTTP/2 extended CONNECT where the client supports it); `EventSource`/SSE is the HTTP/1.1-compatible alternative for server-push-only cases. Render incoming data with the same `<template>`-clone idiom — live data is interactivity, not rankable content.
+Open live resources in `connectedCallback` and close them in `disconnectedCallback` — popin close and content replacement then tear your sockets down automatically (handler-bound sockets leak on content replacement unless you wire teardown by hand). Two transports pair naturally with the lifecycle:
+
+- **[WebSocket routes](/guides/websockets)** (`"method": "ws"` in `routing.json`) for bidirectional traffic — carried over HTTP/2 extended CONNECT [where the client negotiates it](/guides/websockets#limitations).
+- **`EventSource` / SSE** for server-push-only cases — the HTTP/1.1-compatible alternative, served by [`self.renderStream()`](/guides/controller#selfrenderstreamasynciterable-contenttype).
+
+Either way, render incoming data with the same `<template>`-clone idiom — and live data is **interactivity, not rankable content** (see the SEO section: what must rank ships in the initial HTML).
+
+### A live-feed component
+
+The partial ships the shell and the entry template, like any other component (`templates/html/includes/x-feed.html`):
+
+```html
+<x-feed data-x-feed='{ "url": "/live/lobby" }'>
+    <h2>Activity</h2>
+    <p data-role="status">Connecting…</p>
+    <ul data-role="entries"></ul>
+    <template data-role="entry">
+        <li><span data-role="entry-label"></span></li>
+    </template>
+</x-feed>
+```
+
+The class opens the connection on insertion and closes it on removal (`public/js/components/x-feed.js`). Do **not** guard the open with a `_bound`-style flag — unlike one-time listener binding, a live connection must re-open on every re-insertion: a component that moves, or comes back in a reopened popin, gets a fresh `connectedCallback` / `disconnectedCallback` pair, and that pair *is* the connection's lifecycle:
+
+```js
+(function () {
+    'use strict';
+
+    class XFeed extends HTMLElement {
+
+        connectedCallback() {
+            var config = {};
+            try {
+                config = JSON.parse(this.getAttribute('data-x-feed') || '{}');
+            } catch (err) {
+                config = {};
+            }
+
+            this._status   = this.querySelector('[data-role="status"]');
+            this._list     = this.querySelector('[data-role="entries"]');
+            this._template = this.querySelector('template[data-role="entry"]');
+
+            var self   = this;
+            var scheme = /^https:$/.test(window.location.protocol) ? 'wss://' : 'ws://';
+            this._socket = new WebSocket(scheme + window.location.host + (config.url || '/live/lobby'));
+            this._socket.addEventListener('open', function () {
+                self._status.textContent = 'Live';
+            });
+            this._socket.addEventListener('message', function (event) {
+                self._append(String(event.data));
+            });
+            this._socket.addEventListener('close', function () {
+                self._status.textContent = 'Disconnected';
+            });
+        }
+
+        disconnectedCallback() {
+            // popin close / content replacement removed the element — the
+            // socket never outlives the markup it feeds
+            if (this._socket) {
+                this._socket.close(1000, 'component removed');
+                this._socket = null;
+            }
+        }
+
+        _append(label) {
+            var fragment = this._template.content.cloneNode(true);
+            fragment.querySelector('[data-role="entry-label"]').textContent = label;
+            this._list.appendChild(fragment);
+        }
+    }
+
+    customElements.define('x-feed', XFeed);
+}());
+```
+
+Server-side this is the [declarative `method:"ws"` route](/guides/websockets#declarative-routes-in-routingjson) and its channel handler, exactly as the WebSocket guide documents them:
+
+```json
+"live-feed": {
+    "url":    "/live/:room",
+    "method": "ws",
+    "param":  { "wsHandler": "feed" }
+}
+```
+
+```js
+// src/<bundle>/channels/feed.js
+module.exports = function (session, request) {
+    session.send('welcome to ' + request.params.room);
+    session.onMessage(function (data) {
+        session.send('[' + request.params.room + '] ' + data);
+    });
+    session.onClose(function (code, reason) {
+        // release anything the connection held (timers, subscriptions)
+    });
+};
+```
+
+The framework's test suite executes this exact pairing — the handler above over a live HTTP/2 extended-CONNECT loopback, driven through two full connect → close(1000) → re-connect cycles — so the lifecycle contract is locked, not aspirational.
+
+### The `EventSource` alternative
+
+When traffic is one-way (server → component), skip WebSocket entirely: an SSE endpoint is a plain controller action streaming through [`self.renderStream()`](/guides/controller#selfrenderstreamasynciterable-contenttype), whose default content type is already `text/event-stream` — and it works over HTTP/1.1 and HTTP/2 alike:
+
+```js
+Controller.prototype.events = function (req, res, next) {
+    var self = this;
+    async function* feed() {
+        for (var i = 0; i < 100; i++) {
+            yield JSON.stringify({ tick: i });   // one SSE `data:` frame each
+            await new Promise(function (r) { setTimeout(r, 1000); });
+        }
+    }
+    self.renderStream(feed()); // default content type: text/event-stream
+};
+```
+
+The component-side lifecycle is identical — only the transport object changes:
+
+```js
+connectedCallback() {
+    var self = this;
+    this._source = new EventSource('/events');
+    this._source.addEventListener('message', function (event) {
+        self._append(event.data);
+    });
+}
+
+disconnectedCallback() {
+    if (this._source) {
+        this._source.close();
+        this._source = null;
+    }
+}
+```
+
+Closing matters even more here: an orphaned `EventSource` **auto-reconnects forever**.
+
+### Batching high-frequency streams
+
+Per-message clone-and-insert is fine at human-scale rates (chat, notifications, activity feeds). At tens to hundreds of messages per second it thrashes layout — one DOM insertion per message. Coalesce instead: queue what arrives, flush **once per animation frame**, and build the batch into a `DocumentFragment` so the live region is touched once per frame, not once per message:
+
+```js
+_append(label) {
+    this._pending = this._pending || [];
+    this._pending.push(label);
+    var self = this;
+    if (!this._rafId) {
+        this._rafId = requestAnimationFrame(function () { self._flush(); });
+    }
+}
+
+_flush() {
+    this._rafId = null;
+    var fragment = document.createDocumentFragment();
+    for (var i = 0; i < this._pending.length; i++) {
+        var entry = this._template.content.cloneNode(true);
+        entry.querySelector('[data-role="entry-label"]').textContent = this._pending[i];
+        fragment.appendChild(entry);
+    }
+    this._pending.length = 0;
+    this._list.appendChild(fragment); // one insertion per frame
+}
+
+disconnectedCallback() {
+    if (this._rafId) {
+        cancelAnimationFrame(this._rafId);
+        this._rafId = null;
+    }
+    this._pending = [];
+    // …then close the socket as above
+}
+```
+
+Cap what you keep, too — trim entries beyond a few hundred, or an unbounded live list becomes a client-side memory leak with a scrollbar.
 
 ## Strict CSP compatibility
 
