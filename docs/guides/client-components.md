@@ -352,6 +352,10 @@ disconnectedCallback() {
 
 Cap what you keep, too — trim entries beyond a few hundred, or an unbounded live list becomes a client-side memory leak with a scrollbar.
 
+## Inspecting components (dev mode)
+
+In development, the [Inspector](/guides/inspector)'s **View tab** carries a component census — instances per custom-element tag, with components **awaiting upgrade counted in red** (the platform's `:not(:defined)` state: a typo'd tag name or a missing/failed definition script is otherwise a perfectly silent failure — the element just sits inert). The **Events tab** additionally lists your components' protocol traffic: composed, bubbling `<tag>:<verb>` CustomEvents with the emitting element and a timestamp. Event `detail` values are captured only when `settings.json > inspector.events.captureArgs` is enabled — the same opt-in that gates server-side event metadata — and pass the Inspector's redaction rules either way. The census and the event feed follow XHR/popin fragment renders automatically.
+
 ## Strict CSP compatibility
 
 The conventions are CSP-clean under a strict, nonce'd policy with no `'unsafe-inline'`:
