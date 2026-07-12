@@ -98,6 +98,7 @@ const config = {
           {from: '/cli/connector', to: '/cli/cli-connector'},
           {from: '/cli/env',       to: '/cli/cli-env'},
           {from: '/cli/framework', to: '/cli/cli-framework'},
+          {from: '/cli/i18n',      to: '/cli/cli-i18n'},
           {from: '/cli/image',     to: '/cli/cli-image'},
           {from: '/cli/minion',    to: '/cli/cli-minion'},
           {from: '/cli/port',      to: '/cli/cli-port'},
