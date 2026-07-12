@@ -21,9 +21,10 @@ upward to the target version.
 
 ## 0.5.15 → 0.5.16
 
-This release ships fixes and additions — no breaking changes. One behaviour
-note is worth reading before you upgrade: multipart request bodies are no
-longer always empty (first section below).
+This release ships fixes and additions — no breaking changes. Behaviour
+notes worth reading before you upgrade: multipart request bodies are no
+longer always empty (first section below), and a declared
+`settings.i18n.cookieName` now takes effect where it was previously ignored.
 
 ### Added — multipart requests now carry their text fields
 
@@ -85,6 +86,32 @@ The `view:add` layout boilerplate now reads `page.view.title` /
 `page.view.lang` (previously the never-populated `page.title` / `page.lang`),
 so freshly scaffolded pages render a real tab title and `lang` attribute —
 existing apps keep their own layouts and are unaffected.
+
+### Fixed — `settings.i18n.cookieName` is now honoured
+
+The documented `i18n.cookieName` setting had no effect: locale negotiation
+always read the fixed cookie name `gina_culture`. The negotiation's cookie
+step (after the URL prefix, before `Accept-Language`) now reads the cookie
+named by `settings.i18n.cookieName`, and an explicit `null` disables
+cookie-based negotiation entirely. An absent, empty, or non-string value keeps
+the historical `gina_culture` default, so bundles that never set the key are
+unaffected.
+
+**Behaviour note:** a bundle that already declares `i18n.cookieName` — or sets
+it to `null` — gets the declared behaviour from this release on; previously
+the setting was silently ignored.
+
+### Fixed — locale-database fallback no longer crashes region-less bundles
+
+When a request's negotiated culture had no entry in the framework's locale
+database, the fallback path dereferenced `settings.region.shortCode` blindly:
+a bundle without a `region` block threw on every affected request (an HTTP
+500), and a fallback language itself missing from the loaded region set threw
+one step later. The fallback is now guarded and deterministic at both
+controller sites: `region.isoShort` (the schema key) wins, the legacy
+`region.shortCode` is still honoured for hand-authored configs, and `en` is
+the final default — with a missing entry resolving to an empty locale set
+instead of crashing.
 
 ---
 

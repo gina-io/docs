@@ -93,8 +93,8 @@ sets `req.culture` on every request.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `culture` | string | resolved at `bundle:add` | Default culture for per-request locale negotiation, as `lang` or `lang_COUNTRY` (e.g. `"fr"`, `"fr_FR"`; hyphenated `"fr-FR"` is accepted and normalised to underscore form). Consulted after the URL prefix, the `gina_culture` cookie, and `Accept-Language`, and before the `GINA_CULTURE` env var |
-| `isoShort` | string | resolved at `bundle:add` | ISO 639-1 language code (2 letters, e.g. `"en"`, `"fr"`) |
+| `culture` | string | resolved at `bundle:add` | Default culture for per-request locale negotiation, as `lang` or `lang_COUNTRY` (e.g. `"fr"`, `"fr_FR"`; hyphenated `"fr-FR"` is accepted and normalised to underscore form). Consulted after the URL prefix, the locale cookie (`i18n.cookieName`, default `gina_culture`), and `Accept-Language`, and before the `GINA_CULTURE` env var |
+| `isoShort` | string | resolved at `bundle:add` | ISO 639-1 language code (2 letters, e.g. `"en"`, `"fr"`). *Since 0.5.16* also the locale-database **fallback language**: when a request's culture has no entry in the loaded region set, locale resolution falls back to this language (the legacy `shortCode` key is still honoured for hand-authored configs; `en` is the final default) |
 | `date` | string | resolved at `bundle:add` | Date display format (e.g. `"mm/dd/yyyy"`, `"dd/mm/yyyy"`, `"yyyy/mm/dd"`) |
 | `timeZone` | string | resolved at `bundle:add` | IANA timezone identifier (e.g. `"Europe/Paris"`). Applied to the bundle process (`process.env.TZ`) at startup |
 
