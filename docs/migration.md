@@ -19,6 +19,53 @@ upward to the target version.
 
 ---
 
+## 0.5.15 → 0.5.16
+
+This release ships fixes and additions — no breaking changes. One behaviour
+note is worth reading before you upgrade: multipart request bodies are no
+longer always empty (first section below).
+
+### Added — multipart requests now carry their text fields
+
+A `multipart/form-data` request's text (non-file) fields used to be dropped:
+only `req.files` was populated, and `req.post` / `req.body` stayed empty. They
+are now captured for every client (a plain HTML form, `curl`, the gina client)
+and exposed on `req.body` — and, on POST, PUT and PATCH, on the method slot
+(`req.post` / `req.put` / `req.patch`) — before your action runs. Values
+arrive **verbatim** (no url-decoding, no `"true"`/`"false"`/`"on"`/`"null"`
+coercion — the same contract as `application/json` bodies), bracket-notation
+names are nested (`item[0][id]` → `{ item: [ { id: "…" } ] }`), and a
+duplicated plain name keeps its last value.
+
+**Behaviour note:** `req.post` / `req.body` are no longer always-empty on
+multipart routes. A controller that spreads them generically (say, merging
+`req.post` into a record on every request) now receives client-supplied fields
+on upload routes too — if an upload handler must ignore text fields, ignore
+them explicitly.
+
+Two new `settings.json` keys under `upload` cap the capture; a request
+breaching either is rejected with **HTTP 400** instead of silently losing
+data:
+
+| Key | Default | Effect |
+|---|---|---|
+| `maxTextFields` | `1000` | Maximum text fields per multipart request. `0` disables the cap. |
+| `maxTextFieldSize` | `"1MB"` | Per-field value size cap (`B`/`KB`/`MB`/`GB`, bare number = MB). `0` disables the cap. |
+
+### Fixed — `send(FormData)` keeps its non-file fields in mixed payloads
+
+A `FormData` payload carrying **both** files and regular fields, sent through
+the client's `send()`, lost the regular fields — the multipart body was
+assembled from the file entries only, so the fields never reached the wire.
+They now travel as standard multipart text parts (original bracket-notation
+names, values verbatim) and arrive nested server-side exactly as they would on
+a file-less submit. Files-only payloads are byte-identical to before.
+
+This fix ships in the browser bundle: after upgrading, rebuild your bundles
+(`gina bundle:build`) so each baked `gina.min.js` picks it up.
+
+---
+
 ## 0.5.14 → 0.5.15
 
 This release ships fixes and opt-in additions — no breaking changes, and
