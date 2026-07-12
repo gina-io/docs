@@ -41,6 +41,9 @@ Run `gina --help` (or `gina -h`) for the top-level command reference, and
 | [`service`](./service.md) | List framework-internal services (@gina-only) |
 | [`connector`](./connector.md) | List, add, remove, and lint `connectors.json`; run a one-off AI inference (`connector:infer`) or probe connector readiness (`connector:test`) |
 | [`image`](./image.md) | Package a bundle as a standard OCI container image (`image:build`) |
+| [`minion`](./minion.md) | List and reap a project's running bundle child-processes |
+| [`secrets`](./secrets.md) | Scan required `${secret:KEY}` placeholders and check they are set — read-only, never resolves a value |
+| [`i18n`](./i18n.md) | Translation-catalog coverage, seeding, and translator round-trip (PO / CSV / JSON) |
 
 ## Online vs offline commands
 

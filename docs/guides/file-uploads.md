@@ -78,18 +78,19 @@ this.upload = function(req, res, next) {
 };
 ```
 
-:::warning Multipart requests drop non-file fields
-In a `multipart/form-data` request, **only files reach your controller.** Text
-inputs in the same form are *not* parsed — `req.post` and `req.body` stay empty,
-and `req.files` is the only thing populated. (The framework's multipart parser
-intentionally ignores non-file parts.)
-
-So a plain multipart form that mixes a `<input type="text">` with a
-`<input type="file">` will give you the file but **silently lose the text
-field.** If you need metadata alongside the file, either send it in a separate
-(non-multipart) request, or use the [client upload layer](#the-client-upload-layer)
-below — it stages the file separately so your real form submit (carrying the
-text fields) is an ordinary request.
+:::note Text fields arrive too
+Text inputs in the same `multipart/form-data` request land on `req.body` —
+and, on POST, PUT and PATCH, on the method slot (`req.post` / `req.put` /
+`req.patch`) — alongside `req.files`, for every client (a plain HTML form,
+`curl`, the gina client). Values are kept **verbatim** (no url-decoding, no
+`"true"`/`"false"`/`"on"`/`"null"` coercion — the same contract as
+`application/json` bodies), bracket-notation names are nested
+(`item[0][id]` → `{ item: [ { id: "…" } ] }`), and a duplicated plain name
+keeps its last value. The capture is capped by two `upload` settings —
+[`maxTextFields` and `maxTextFieldSize`](#configuring-uploads) — and a request
+that breaches either is rejected with **HTTP 400** rather than silently losing
+data. *New in 0.5.16 — earlier versions drop non-file parts entirely, leaving
+`req.post` and `req.body` empty on multipart routes.*
 :::
 
 ---
@@ -159,6 +160,8 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 | `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
 | `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request larger than this is rejected with **HTTP 431** before any file is read. |
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
+| `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
+| `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `groups` | Named upload groups. A file is checked against its group's rules at parse time. |
 | `groups.<name>.path` | Directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. |
 | `groups.<name>.allowedExtensions` | An array of permitted extensions (e.g. `["jpg","png"]`), or `"*"` for any. A disallowed extension is rejected with **HTTP 400**. |
@@ -192,10 +195,11 @@ The `data-gina-form-upload-*` attributes turn a plain `<input type="file">` into
 a staged uploader: the file is sent to a temporary endpoint **as soon as it is
 chosen**, a preview appears, and hidden metadata fields are written into your
 real form so its eventual submit carries only lightweight references — not the
-binary. This is what sidesteps the
-[multipart drops non-file fields](#receiving-uploads-in-a-controller) limitation:
-the file travels in its own request, and your real form submit stays an ordinary
-request that keeps its text fields.
+binary. (Before 0.5.16 this was also the only way to keep text fields alongside
+an upload, because multipart requests dropped non-file parts. Those fields are
+[captured now](#receiving-uploads-in-a-controller), so the staging layer is
+about UX — previews, per-file removal, a lightweight final submit — not field
+survival.)
 
 ```mermaid
 flowchart TD
@@ -328,10 +332,11 @@ interrupts the removal. *The removal callbacks and
 
 ## Limitations and gotchas
 
-- **Multipart requests drop non-file fields.** Only `req.files` is populated; a
-  `<input type="text">` in the same multipart form is not parsed. Send metadata
-  in a separate request, or use the client layer (which keeps your real form
-  submit ordinary). See the [warning above](#receiving-uploads-in-a-controller).
+- **Multipart text fields are capped.** Text (non-file) fields are captured
+  onto `req.body` / `req.post` since 0.5.16, subject to `upload.maxTextFields`
+  (default `1000`) and `upload.maxTextFieldSize` (default `"1MB"`) — a request
+  breaching either is rejected with HTTP 400. On earlier versions those fields
+  are dropped entirely. See the [note above](#receiving-uploads-in-a-controller).
 - **`untagged` is the permissive default — restrict it if you need to.** A file
   with no group is treated as `untagged`, which ships with `allowedExtensions: "*"`
   (any extension) and `isMultipleAllowed: true`. A group that is *not* configured is

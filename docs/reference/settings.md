@@ -41,6 +41,12 @@ The primary server settings file.
     "scheme"   : "https",
     "address"  : "0.0.0.0"
   },
+  "region": {
+    "culture"  : "en_CM",
+    "isoShort" : "en",
+    "date"     : "dd/mm/yyyy",
+    "timeZone" : "Africa/Douala"
+  },
   "locale": {
     "region"              : "en_CM",
     "preferedLanguages"   : ["en-CM", "en"],
@@ -67,9 +73,44 @@ The primary server settings file.
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
 
+### `region`
+
+Per-bundle region block, seeded by `gina bundle:add` from your machine's locale.
+`region.culture` is the bundle's **default request culture** — step 4 of the
+[locale negotiation](../guides/i18n#locale-negotiation--reqculture) chain that
+sets `req.culture` on every request.
+
+```json
+{
+  "region": {
+    "culture"  : "fr_FR",
+    "isoShort" : "fr",
+    "date"     : "dd/mm/yyyy",
+    "timeZone" : "Europe/Paris"
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `culture` | string | resolved at `bundle:add` | Default culture for per-request locale negotiation, as `lang` or `lang_COUNTRY` (e.g. `"fr"`, `"fr_FR"`; hyphenated `"fr-FR"` is accepted and normalised to underscore form). Consulted after the URL prefix, the locale cookie (`i18n.cookieName`, default `gina_culture`), and `Accept-Language`, and before the `GINA_CULTURE` env var |
+| `isoShort` | string | resolved at `bundle:add` | ISO 639-1 language code (2 letters, e.g. `"en"`, `"fr"`). *Since 0.5.16* also the locale-database **fallback language**: when a request's culture has no entry in the loaded region set, locale resolution falls back to this language (the legacy `shortCode` key is still honoured for hand-authored configs; `en` is the final default) |
+| `date` | string | resolved at `bundle:add` | Date display format (e.g. `"mm/dd/yyyy"`, `"dd/mm/yyyy"`, `"yyyy/mm/dd"`) |
+| `timeZone` | string | resolved at `bundle:add` | IANA timezone identifier (e.g. `"Europe/Paris"`). Applied to the bundle process (`process.env.TZ`) at startup |
+
+:::note `region` is not `locale`
+`region.culture` sets the bundle's default **request culture** for locale
+negotiation. The [`locale`](#locale) block below is the **formatting** surface
+(dates, currency, measurement units) enriched from the machine locale at config
+load — setting `locale.region` does **not** change the request culture.
+:::
+
 ### `locale`
 
 Locale settings are used by the i18n layer, date/number formatting, and currency display.
+The bundle's default **request culture** is not set here — that is the top-level
+[`region.culture`](#region) key above; `locale.region` is a region code used for
+formatting defaults.
 
 | Field | Type | Default | Description |
 |---|---|---|---|

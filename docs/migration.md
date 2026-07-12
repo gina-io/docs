@@ -19,6 +19,102 @@ upward to the target version.
 
 ---
 
+## 0.5.15 → 0.5.16
+
+This release ships fixes and additions — no breaking changes. Behaviour
+notes worth reading before you upgrade: multipart request bodies are no
+longer always empty (first section below), and a declared
+`settings.i18n.cookieName` now takes effect where it was previously ignored.
+
+### Added — multipart requests now carry their text fields
+
+A `multipart/form-data` request's text (non-file) fields used to be dropped:
+only `req.files` was populated, and `req.post` / `req.body` stayed empty. They
+are now captured for every client (a plain HTML form, `curl`, the gina client)
+and exposed on `req.body` — and, on POST, PUT and PATCH, on the method slot
+(`req.post` / `req.put` / `req.patch`) — before your action runs. Values
+arrive **verbatim** (no url-decoding, no `"true"`/`"false"`/`"on"`/`"null"`
+coercion — the same contract as `application/json` bodies), bracket-notation
+names are nested (`item[0][id]` → `{ item: [ { id: "…" } ] }`), and a
+duplicated plain name keeps its last value.
+
+**Behaviour note:** `req.post` / `req.body` are no longer always-empty on
+multipart routes. A controller that spreads them generically (say, merging
+`req.post` into a record on every request) now receives client-supplied fields
+on upload routes too — if an upload handler must ignore text fields, ignore
+them explicitly.
+
+Two new `settings.json` keys under `upload` cap the capture; a request
+breaching either is rejected with **HTTP 400** instead of silently losing
+data:
+
+| Key | Default | Effect |
+|---|---|---|
+| `maxTextFields` | `1000` | Maximum text fields per multipart request. `0` disables the cap. |
+| `maxTextFieldSize` | `"1MB"` | Per-field value size cap (`B`/`KB`/`MB`/`GB`, bare number = MB). `0` disables the cap. |
+
+### Fixed — `send(FormData)` keeps its non-file fields in mixed payloads
+
+A `FormData` payload carrying **both** files and regular fields, sent through
+the client's `send()`, lost the regular fields — the multipart body was
+assembled from the file entries only, so the fields never reached the wire.
+They now travel as standard multipart text parts (original bracket-notation
+names, values verbatim) and arrive nested server-side exactly as they would on
+a file-less submit. Files-only payloads are byte-identical to before.
+
+This fix ships in the browser bundle: after upgrading, rebuild your bundles
+(`gina bundle:build`) so each baked `gina.min.js` picks it up.
+
+### Fixed — a rule's `param.title` now sets the page title
+
+The routing-param title promotion had been silently inert since its
+introduction: declaring `"param": { "title": "My Title" }` on a rule had no
+effect, and the browser-tab title always showed the route name. It now works —
+`param.title` lands on `page.view.title`, the stripped route name remains the
+**fallback** for title-less rules, and a title set from the controller
+(`data.page.view.title`) still wins over both.
+
+If a rule in your app declares a `param.title` you never expected to apply
+(because it never did), that title now takes effect — remove the `title` key
+from the rule to keep the route-name behaviour.
+
+The title is applied verbatim (no `:param` substitution inside the string);
+for dynamic titles, set `data.page.view.title` from the controller. All other
+static `param` keys are template-reachable as `page.view.params.<key>`.
+
+The `view:add` layout boilerplate now reads `page.view.title` /
+`page.view.lang` (previously the never-populated `page.title` / `page.lang`),
+so freshly scaffolded pages render a real tab title and `lang` attribute —
+existing apps keep their own layouts and are unaffected.
+
+### Fixed — `settings.i18n.cookieName` is now honoured
+
+The documented `i18n.cookieName` setting had no effect: locale negotiation
+always read the fixed cookie name `gina_culture`. The negotiation's cookie
+step (after the URL prefix, before `Accept-Language`) now reads the cookie
+named by `settings.i18n.cookieName`, and an explicit `null` disables
+cookie-based negotiation entirely. An absent, empty, or non-string value keeps
+the historical `gina_culture` default, so bundles that never set the key are
+unaffected.
+
+**Behaviour note:** a bundle that already declares `i18n.cookieName` — or sets
+it to `null` — gets the declared behaviour from this release on; previously
+the setting was silently ignored.
+
+### Fixed — locale-database fallback no longer crashes region-less bundles
+
+When a request's negotiated culture had no entry in the framework's locale
+database, the fallback path dereferenced `settings.region.shortCode` blindly:
+a bundle without a `region` block threw on every affected request (an HTTP
+500), and a fallback language itself missing from the loaded region set threw
+one step later. The fallback is now guarded and deterministic at both
+controller sites: `region.isoShort` (the schema key) wins, the legacy
+`region.shortCode` is still honoured for hand-authored configs, and `en` is
+the final default — with a missing entry resolving to an empty locale set
+instead of crashing.
+
+---
+
 ## 0.5.14 → 0.5.15
 
 This release ships fixes and opt-in additions — no breaking changes, and

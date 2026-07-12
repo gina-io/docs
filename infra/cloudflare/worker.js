@@ -228,6 +228,7 @@ export default {
       '/docs/cli/connector': '/docs/cli/cli-connector',
       '/docs/cli/env':       '/docs/cli/cli-env',
       '/docs/cli/framework': '/docs/cli/cli-framework',
+      '/docs/cli/i18n':      '/docs/cli/cli-i18n',
       '/docs/cli/image':     '/docs/cli/cli-image',
       '/docs/cli/minion':    '/docs/cli/cli-minion',
       '/docs/cli/port':      '/docs/cli/cli-port',
