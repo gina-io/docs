@@ -113,7 +113,7 @@ unique across the project.
 | `param.control` | ✓ | — | Controller method to invoke |
 | `param.file` | — | rule name | Template path relative to the namespace views dir |
 | `param.section` | — | — | Auto-promoted to `page.section` for sub-section dispatch — a single template fans out to per-section partials based on the matched route |
-| `param.title` | — | — | Page title. Supports `:param` substitution |
+| `param.title` | — | rule name | Page title — lands on `page.view.title` (the browser-tab title). Applied verbatim; the stripped route name is the fallback when omitted, and a controller-set `data.page.view.title` wins |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action |
 | `scopes` | — | `[current scope]` | Scopes where this route is active |
 | `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests made from this route's controller action via `self.query()`. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |

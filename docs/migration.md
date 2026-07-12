@@ -64,6 +64,28 @@ a file-less submit. Files-only payloads are byte-identical to before.
 This fix ships in the browser bundle: after upgrading, rebuild your bundles
 (`gina bundle:build`) so each baked `gina.min.js` picks it up.
 
+### Fixed — a rule's `param.title` now sets the page title
+
+The routing-param title promotion had been silently inert since its
+introduction: declaring `"param": { "title": "My Title" }` on a rule had no
+effect, and the browser-tab title always showed the route name. It now works —
+`param.title` lands on `page.view.title`, the stripped route name remains the
+**fallback** for title-less rules, and a title set from the controller
+(`data.page.view.title`) still wins over both.
+
+If a rule in your app declares a `param.title` you never expected to apply
+(because it never did), that title now takes effect — remove the `title` key
+from the rule to keep the route-name behaviour.
+
+The title is applied verbatim (no `:param` substitution inside the string);
+for dynamic titles, set `data.page.view.title` from the controller. All other
+static `param` keys are template-reachable as `page.view.params.<key>`.
+
+The `view:add` layout boilerplate now reads `page.view.title` /
+`page.view.lang` (previously the never-populated `page.title` / `page.lang`),
+so freshly scaffolded pages render a real tab title and `lang` attribute —
+existing apps keep their own layouts and are unaffected.
+
 ---
 
 ## 0.5.14 → 0.5.15
