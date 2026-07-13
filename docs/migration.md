@@ -47,6 +47,26 @@ The fix ships inside the installed package itself, so it cannot be applied
 retroactively to older versions: to install Gina ≤ 0.5.16, use npm ≤ 11 (or
 Bun).
 
+### Fixed — `project:rm --force` and stale-path removal
+
+`gina project:rm @<project> --force` (the short alias) now removes the
+registration instead of erroring — the alias had failed an internal `--force`
+guard that only the full `project:remove` form passed. And neither
+`project:remove` nor `project:rm --force` crashes with `ENOENT` when a stale
+project's path can no longer be created (a top-level path such as `/app`, or one
+under a read-only parent): it skips the pointless directory re-creation and
+removes the registration directly, cleaning `~/.gina/projects.json`, its
+state-store mirror, and the project's port assignments — without resurrecting an
+empty skeleton directory. No action required; these are cleanup-path fixes.
+
+### Fixed — `bundle:start` honours a bundle's configured default scope
+
+A typo in the scope-resolution expression returned an undefined property, so a
+bundle that declared a default scope in its manifest started with an undefined
+scope instead of the configured one. `gina bundle:start` now reads the correct
+property. Bundles with no configured default scope were unaffected — they
+already fell back to the framework default scope. No action required.
+
 ---
 
 ## 0.5.15 → 0.5.16
