@@ -78,10 +78,10 @@ The `cache` field accepts either a shorthand string or a full object.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `type` | `"memory"` \| `"fs"` | — | Storage backend (see [Storage backends](#storage-backends)). |
+| `type` | `"memory"` \| `"fs"` | server default | Storage backend (see [Storage backends](#storage-backends)). Inherits [`server.cache.type`](#server-level-cache-config) (default `"memory"`) when omitted. |
 | `ttl` | number (seconds, fractional ok) | server default | Expiry duration. Meaning depends on `sliding` — see [Expiration modes](#expiration-modes). |
-| `sliding` | boolean | `false` | Enable sliding-window expiration. |
-| `maxAge` | number (seconds, fractional ok) | — | Absolute lifetime ceiling. Only meaningful when `sliding: true`. |
+| `sliding` | boolean | server default | Enable sliding-window expiration. Inherits [`server.cache.sliding`](#server-level-cache-config) (default `false`) when omitted. |
+| `maxAge` | number (seconds, fractional ok) | server default | Absolute lifetime ceiling. Only meaningful when `sliding: true`. Inherits [`server.cache.maxAge`](#server-level-cache-config) when omitted. |
 | `invalidateOnEvents` | string[] | — | Event names that immediately evict this entry (see [Event-driven invalidation](#event-driven-invalidation)). |
 
 Only `GET` requests are cached. `POST`, `PUT`, `DELETE`, and other methods
@@ -253,9 +253,12 @@ The `cache` block in `settings.json` controls global cache behavior:
 ```json title="src/<bundle>/config/settings.json"
 {
   "cache": {
-    "enable": "true",
-    "path"  : "/path/to/cache/dir",
-    "ttl"   : 3600
+    "type"   : "memory",
+    "enable" : "true",
+    "path"   : "/path/to/cache/dir",
+    "ttl"    : 3600,
+    "sliding": false,
+    "maxAge" : 86400
   }
 }
 ```
@@ -263,8 +266,11 @@ The `cache` block in `settings.json` controls global cache behavior:
 | Field | Description |
 |---|---|
 | `enable` | Master switch. Set to `"true"` to activate caching. Per-route `cache` fields are ignored when this is `"false"`. |
+| `type` | Bundle-wide default storage backend (`"memory"` \| `"fs"`), inherited by routes that set `cache` but omit `type`. Defaults to `"memory"`. A per-route `cache.type` always wins. |
 | `path` | Directory for `fs`-type cached files. |
 | `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. |
+| `sliding` | Bundle-wide [sliding-window](#expiration-modes) default, inherited by routes that omit `sliding`. Boolean; defaults to `false`. |
+| `maxAge` | Bundle-wide [absolute lifetime ceiling](#expiration-modes) in seconds, inherited by routes that omit `maxAge`. Only meaningful when `sliding` is `true`. |
 
 ---
 

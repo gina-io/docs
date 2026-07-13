@@ -130,9 +130,12 @@ Master switch for route-level response caching. Per-route `cache` fields in
 ```json
 {
   "cache": {
-    "enable": true,
-    "path"  : "/var/cache/myproject",
-    "ttl"   : 3600
+    "type"   : "memory",
+    "enable" : true,
+    "path"   : "/var/cache/myproject",
+    "ttl"    : 3600,
+    "sliding": false,
+    "maxAge" : 86400
   }
 }
 ```
@@ -140,8 +143,11 @@ Master switch for route-level response caching. Per-route `cache` fields in
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enable` | boolean | `false` | Master on/off switch |
+| `type` | `"memory"` \| `"fs"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
 | `path` | string | — | Directory for `fs`-type cached files |
 | `ttl` | number (seconds) | — | Default TTL when a route's `cache` config does not set one |
+| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding` |
+| `maxAge` | number (seconds) | — | Bundle-wide absolute lifetime ceiling; routes inherit it when they omit `maxAge`. Only meaningful when `sliding` is `true` |
 
 See the [Caching guide](../guides/caching) for the full per-route field reference.
 
