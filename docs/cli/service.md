@@ -128,7 +128,3 @@ Print the usage summary for the `service` command group.
 ```bash
 gina service:help
 ```
-
-```bash
-gina service
-```

@@ -36,7 +36,9 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 Add that line to your shell profile (`.zshrc`, `.bashrc`, etc.) to make it permanent.
 
 :::note npm 12+
-npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/.gina` and the framework dependencies. Add `--allow-scripts=gina` to the install command, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. Not needed on npm ≤ 11.
+npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/.gina` and the framework dependencies. Add `--allow-scripts=gina` to the install command, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. Requires Gina `0.5.17` or newer — on older versions the nested framework install rejects the inherited allowance (`EALLOWSCRIPTS`) and the whole install fails; to install Gina ≤ 0.5.16, use npm ≤ 11 (or Bun).
+
+On npm ≤ 11 the `allow-scripts` warning is **advisory** — the install scripts still run, so no flag or config is needed. Don't set them there either: late npm 11.x propagates the allowance to the nested install and fails the same way on Gina ≤ 0.5.16.
 :::
 
 </TabItem>
@@ -78,7 +80,7 @@ gina version
 npm install -g gina@latest
 ```
 
-(On npm 12+, add `--allow-scripts=gina` — see the note in the user-local install section above.)
+(On npm 12+, add `--allow-scripts=gina` — requires Gina `0.5.17+`; see the note in the user-local install section above. On npm ≤ 11 no flag is needed.)
 
 If you encounter a permission error like `EACCES: permission denied, mkdir '/usr/local/lib/node_modules/gina'`, fix permissions first:
 
@@ -161,7 +163,7 @@ It refuses while the framework daemon or any bundle is still running (so a reset
 npm install -g gina@latest --reset
 ```
 
-npm 12 rejects unknown flags like `--reset` outright (`EUNKNOWNCONFIG`) — there, run `gina reset` first, then reinstall with `npm install -g gina@latest --allow-scripts=gina`.
+npm 12 rejects unknown flags like `--reset` outright (`EUNKNOWNCONFIG`) — there, run `gina reset` first, then reinstall with `npm install -g gina@latest --allow-scripts=gina` (Gina `0.5.17+` — see the npm 12+ note in the install section).
 
 </TabItem>
 <TabItem value="bun" label="Bun">

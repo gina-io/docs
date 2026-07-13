@@ -941,7 +941,3 @@ Print the usage summary for the `connector` command group.
 ```bash
 gina connector:help
 ```
-
-```bash
-gina connector
-```
