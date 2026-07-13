@@ -19,6 +19,36 @@ upward to the target version.
 
 ---
 
+## 0.5.16 → 0.5.17
+
+This release ships fixes — no breaking changes. If you install with npm 12,
+read the first section: it unblocks the npm 12 install path.
+
+### Fixed — `--allow-scripts=gina` no longer breaks the global install
+
+npm exports every explicitly-set config value to install-script children as
+`npm_config_*` environment variables, and npm rejects `allow-scripts` in
+project-scoped installs (`EALLOWSCRIPTS`). Gina's post-install runs exactly
+such an install — the framework directory's own dependencies — so following
+the documented npm 12 remedy (`--allow-scripts=gina`, or `npm config set
+allow-scripts=gina --location=user`) made the whole `npm install -g gina`
+fail on npm 12 and late npm 11.x. The nested install no longer inherits the
+allowance; nothing is lost, since the framework dependencies carry no install
+scripts of their own.
+
+This makes `0.5.17` the first Gina version installable on npm 12, where
+install scripts are blocked by default and the flag is **required**: without
+it, installing Gina ≤ 0.5.16 completes without running the bootstrap (no
+`~/.gina`, no framework dependencies — a broken install), and with it, the
+install crashed as above. On npm ≤ 11 the `allow-scripts` warning is
+advisory — the scripts run without any flag, and no action is needed.
+
+The fix ships inside the installed package itself, so it cannot be applied
+retroactively to older versions: to install Gina ≤ 0.5.16, use npm ≤ 11 (or
+Bun).
+
+---
+
 ## 0.5.15 → 0.5.16
 
 This release ships fixes and additions — no breaking changes. Behaviour
