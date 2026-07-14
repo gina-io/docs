@@ -126,6 +126,33 @@ automatically.
 **Use for:** large HTML pages, session-aware content where payload size would
 strain the heap.
 
+#### Surviving a restart
+
+Unlike `memory` (which is volatile and cold on every boot), the `fs` backend
+**persists across a server restart**. The in-process index starts empty on
+boot, but on the first request to a cached URL Gina reads the response back
+from disk and repopulates the index — so a restart does not cold-start your
+cache.
+
+The original expiry is preserved: **a restart never extends a TTL**. A
+non-sliding entry still expires at its original creation time plus `ttl`; a
+sliding entry keeps its absolute `maxAge` ceiling. (The idle `ttl` window of a
+sliding entry restarts on the first post-restart access, since last-access time
+is not persisted to disk.)
+
+Each cached file has a small sibling `<file>.meta` JSON file holding the
+entry's expiry metadata (created-at, `ttl`, `sliding`, `maxAge`, visibility,
+response headers). Both files are removed together on eviction. Leave the
+`.meta` files in place — deleting one turns its entry into a cache miss (the
+response is simply re-rendered on the next request).
+
+:::note Cache path
+Restart read-back resolves files under `server.cache.path`, which the framework
+default ties to the top-level `cachePath` (`${projectPath}/cache`). If you
+override either independently, keep both pointing at the same directory so the
+read-back finds the written files.
+:::
+
 ---
 
 ## Expiration modes

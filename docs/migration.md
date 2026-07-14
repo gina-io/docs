@@ -19,6 +19,43 @@ upward to the target version.
 
 ---
 
+## 0.5.17 → 0.5.18
+
+This release ships additive cache improvements — no breaking changes. One
+behavioural change is worth noting if you use the `fs` cache backend.
+
+### Added — a bundle-wide default cache backend (`server.cache.type`)
+
+`settings.json` gains a `server.cache.type` key (`"memory"` | `"fs"`, default
+`"memory"`) that sets the default cache backend for the whole bundle. A route
+with a `cache` block but no `type` now inherits it, mirroring the existing
+`ttl` / `sliding` / `maxAge` fallbacks. A per-route `cache.type` still wins. No
+action required — existing bundles behave exactly as before (a route with no
+effective `type` is not cached). See [Caching → Server-level cache
+config](/guides/caching#server-level-cache-config).
+
+### Changed — the `fs` cache backend now survives a restart
+
+Previously an `fs`-cached response was orphaned on the next boot: the
+in-process index started empty, so the file on disk was never served again (and
+never cleaned up). The server read path now falls back to disk on an index
+miss, so `fs`-cached pages survive a restart as the backend always intended.
+See [Caching → Surviving a restart](/guides/caching#surviving-a-restart).
+
+The original expiry is preserved — a restart never extends a TTL — so entries
+never live longer than configured. **If you previously restarted the server to
+clear the `fs` cache, that no longer works**; evict entries with
+`invalidateOnEvents`, a shorter `ttl`, or by clearing the cache directory
+(`server.cache.path`) instead. The `memory` backend is unchanged (still cleared
+on every restart).
+
+Each `fs` cache file now has a sibling `<file>.meta` JSON file holding its
+expiry metadata; the two are written and removed together. If your deployment
+tooling copies or prunes the cache directory, treat `<file>` and `<file>.meta`
+as a pair.
+
+---
+
 ## 0.5.16 → 0.5.17
 
 This release ships fixes — no breaking changes. If you install with npm 12,
