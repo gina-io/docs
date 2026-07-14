@@ -196,6 +196,60 @@ Error rendering is wired for assistive technology out of the box:
 
 ---
 
+## Checkboxes
+
+*Changed in 0.5.18.*
+
+A checkbox follows the HTML standard: the **`checked` attribute decides its
+initial state**, and the **live checked state decides what is posted**. The
+`value` attribute never drives the rendering.
+
+```html
+<label>
+  <input type="checkbox" name="remember" {% if user.remember %}checked{% endif %}>
+  Remember me
+</label>
+```
+
+### What gets posted
+
+Gina classifies a checkbox as **boolean** when any of these hold:
+
+- it has **no `value` attribute**, or
+- its `value` reads `true` or `false`, or
+- its validation rule declares `isBoolean`.
+
+A boolean checkbox always posts a real JSON boolean — `true` when checked,
+`false` when not — derived from its live checked state. Anything else is a
+**value-carrying** checkbox (ids, emails, any payload): it posts its `value`
+string when checked and is absent from the payload when not, exactly like a
+plain HTML form.
+
+```json
+{ "remember": { "isBoolean": true } }
+```
+
+### Migrating from value-driven state
+
+Before 0.5.18, a checkbox whose `value` read `true` (or a value-less one) was
+ticked at bind time by the framework, `value="false"` un-ticked it, and the
+posted boolean was derived from the `value` string. If your markup relied on
+that — e.g. `value="{{ flag }}"` with no `checked` attribute — it renders
+unticked under the corrected model. Two ways forward:
+
+- **Migrate the markup** (recommended): render the state as the standard
+  attribute — `{% if flag %}checked{% endif %}` — and keep or drop `value` as
+  you wish.
+- **Opt the form into the legacy behavior** while you migrate: set
+  `data-gina-form-checkbox-value-as-state="true"` on the `<form>`. The opt-in
+  is **deprecated** and kept as a transitional aid only.
+
+In the default mode, a console warning flags each checkbox whose `value` reads
+`true`/`on` without a `checked` attribute — the exact markup whose meaning
+changed.
+
+---
+
 ## The submit control
 
 The form's submit control is the element whose `disabled` state Gina toggles to
@@ -608,6 +662,7 @@ anything that must be true before you act on the data.
 | `data-gina-form-inherits-data` | URL-encoded JSON merged into the payload before sending. |
 | `data-gina-form-event-on-submit-success` | Bare name of a `window` callback run when the AJAX submit succeeds. |
 | `data-gina-form-event-on-submit-error` | Bare name of a `window` callback run when the submit errors. |
+| `data-gina-form-checkbox-value-as-state` | **Deprecated, transitional.** Set `"true"` to restore the pre-0.5.18 behavior where a checkbox's `value` decides its checked state. See [Checkboxes](#checkboxes). |
 
 ### Field-level
 

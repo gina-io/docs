@@ -21,8 +21,11 @@ upward to the target version.
 
 ## 0.5.17 → 0.5.18
 
-This release ships additive cache improvements — no breaking changes. One
-behavioural change is worth noting if you use the `fs` cache backend.
+This release ships additive cache improvements and a checkbox state-model
+correction in the form validator. Two behavioural changes are worth noting:
+the `fs` cache backend below, and checkbox markup that relied on `value`
+deciding the checked state (see the FormValidator entry at the end of this
+section).
 
 ### Added — a bundle-wide default cache backend (`server.cache.type`)
 
@@ -80,6 +83,32 @@ left by the release-namespacing change above. `--dry-run` previews without
 removing anything; `--format=json` emits a machine-readable envelope. No action
 required — this is a new capability. See [Caching → Flushing the
 cache](/guides/caching#flushing-the-cache).
+
+### Fixed — a checkbox's `value` attribute no longer decides its `checked` state
+
+FormValidator historically treated a checkbox's `value` as the state carrier:
+`value="true"` (or a value-less checkbox) was ticked at bind time even with no
+`checked` attribute — silently pre-ticking consent-style boxes —
+`value="false"` un-ticked a server-checked box, and the posted boolean was
+derived from the `value` string (so un-ticking a box from your own script
+could still post `true`, and a neutral `value` could never post `true`).
+
+The model is now the HTML standard: the **`checked` attribute decides the
+initial state**, and the **live checked state decides the posted boolean**.
+Boolean-classified checkboxes (no `value` attribute, `value` reading
+`true`/`false`, or an `isBoolean` rule) post real JSON booleans in both states
+— the wire payload is unchanged for every previously-correct form.
+Value-carrying checkboxes (ids, emails + `checked`) are untouched.
+
+**Action needed only if your markup relied on `value` deciding the state**
+(e.g. `value="{{ flag }}"` with no `checked` attribute — such boxes now render
+unticked): either template the standard attribute — `{% if flag %}checked{%
+endif %}` — or set the **deprecated, transitional** opt-in
+`data-gina-form-checkbox-value-as-state="true"` on the form while you migrate.
+A console warning flags each checkbox whose `value` reads `true`/`on` without
+a `checked` attribute. The validator is part of the browser bundle: rebuild
+your bundles after upgrading. See [Forms & validation →
+Checkboxes](/guides/forms-and-validation#checkboxes).
 
 ---
 
