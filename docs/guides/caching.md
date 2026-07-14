@@ -247,14 +247,43 @@ application emits a named event — for example, when a record is saved.
 }
 ```
 
-Then in your controller or model, call:
+Then fire it from your controller:
 
 ```js
-self.cache.invalidateByEvent('invoice#saved');
+self.cache.invalidateByEvent('invoice#saved'); // => 2
 ```
 
 All cache entries registered to `invoice#saved` are evicted immediately,
-regardless of their remaining TTL.
+regardless of their remaining TTL, and the call returns how many were evicted.
+For an `fs`-cached entry the file on disk is removed with it — including after a
+restart, since the registration is stored alongside the cached body.
+
+:::caution Scope is the calling process
+`self.cache` reaches **its own bundle's cache only** — the `memory` store lives in
+that bundle's heap. When a write in one bundle must evict pages cached by
+*another* bundle, use the external trigger below.
+:::
+
+### Invalidating across bundles
+
+```tty
+$ gina cache:clear @<project_name> --event=invoice#saved
+```
+
+or, for a deploy pipeline / a webhook:
+
+```tty
+$ curl -X POST 'http://127.0.0.1:<port>/_gina/cache/clear?event=invoice%23saved'
+```
+
+```json
+{ "ok": true, "event": "invoice#saved", "cleared": 2 }
+```
+
+Both evict only the entries registered to that event — not the whole cache. The
+endpoint is admin-gated exactly like `?bundle=` (see
+[Flushing the cache](#flushing-the-cache)), and `event` takes precedence over
+`bundle` when both are given.
 
 ---
 
