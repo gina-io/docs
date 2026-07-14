@@ -54,6 +54,21 @@ expiry metadata; the two are written and removed together. If your deployment
 tooling copies or prunes the cache directory, treat `<file>` and `<file>.meta`
 as a pair.
 
+### Changed — render/output-cache keys are release-namespaced
+
+Cached entries are now scoped to a release namespace (`GINA_CACHE_NAMESPACE`,
+or the framework version via `GINA_VERSION` when that is unset). **The practical
+effect on this upgrade: your existing render/output cache is invalidated once**
+(the framework version changed), and `fs`-cached files move under a new
+`${cache.path}/${bundle}/${namespace}/…` subdirectory. This is a one-time
+cache-cold — pages re-render and re-cache on first request; the old flat
+`${cache.path}/${bundle}/html…` files are orphaned and can be deleted at your
+convenience.
+
+To invalidate the cache on your *own* deploy cadence rather than only on
+framework upgrades, set `GINA_CACHE_NAMESPACE` to a per-release id (e.g. a git
+SHA). See [Caching → Release namespacing](/guides/caching#release-namespacing).
+
 ---
 
 ## 0.5.16 → 0.5.17

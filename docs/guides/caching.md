@@ -301,6 +301,44 @@ The `cache` block in `settings.json` controls global cache behavior:
 
 ---
 
+## Release namespacing
+
+Cached entries are scoped to a **release namespace** so a new deployment never
+serves a page that was rendered by old code. The namespace is prepended to every
+cache key and (for `fs`) is a directory segment in the cache path:
+
+| Source | When used |
+|---|---|
+| `GINA_CACHE_NAMESPACE` env var | Whenever it is set — an operator-chosen id such as a git commit SHA or a CI build number. Bump it on every deploy for exact per-release invalidation. |
+| `GINA_VERSION` env var | The fallback (set automatically to the framework version). |
+| _(neither set)_ | The flat, un-namespaced layout — rare, since `GINA_VERSION` is normally set at runtime. |
+
+By default the cache is therefore namespaced by **framework version**: upgrading
+Gina automatically invalidates every cached page. To invalidate on your *own*
+release cadence — independent of framework upgrades — set `GINA_CACHE_NAMESPACE`
+to a value that changes on each deploy:
+
+```bash
+export GINA_CACHE_NAMESPACE=$(git rev-parse --short HEAD)
+```
+
+The value is treated as a simple identifier (characters outside
+`A-Z a-z 0-9 . _ -` are replaced with `_`).
+
+For the `fs` backend, each namespace gets its own subdirectory:
+
+```
+${cache.path}/${bundle}/${namespace}/html${url}.html
+${cache.path}/${bundle}/${namespace}/data${url}.json
+```
+
+When the namespace changes, new files are written under the new directory and
+the previous namespace's files are left in place (orphaned) until cleared. Prune
+stale namespace directories under `server.cache.path` as part of your deploy, or
+when disk usage warrants.
+
+---
+
 ## Caching and sessions
 
 Cached responses are served **before** the controller runs, which means
