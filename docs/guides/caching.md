@@ -333,9 +333,51 @@ ${cache.path}/${bundle}/${namespace}/data${url}.json
 ```
 
 When the namespace changes, new files are written under the new directory and
-the previous namespace's files are left in place (orphaned) until cleared. Prune
-stale namespace directories under `server.cache.path` as part of your deploy, or
-when disk usage warrants.
+the previous namespace's files are left in place (orphaned) until cleared.
+Reclaim them with [`gina cache:clear`](#flushing-the-cache) (see below), or prune
+the stale namespace directories under `server.cache.path` as part of your
+deploy.
+
+---
+
+## Flushing the cache
+
+To clear a bundle's render/output cache on demand — the `static:` (HTML) and
+`data:` (JSON) namespaces only, never compiled templates or HTTP/2 sessions —
+use the [`gina cache:clear`](/cli/cli-cache#cacheclear) CLI:
+
+```bash
+gina cache:clear <bundle> @<project>              # flush one bundle
+gina cache:clear @<project>                       # flush every bundle
+gina cache:clear <bundle> @<project> --dry-run    # preview — removes nothing
+```
+
+It runs two passes: an **offline** reclaim of the on-disk cache directories
+(including the orphaned prior-namespace directories described above), and an
+**in-heap** flush of the running bundle. A bundle that is not running still gets
+its on-disk cache reclaimed offline.
+
+### The `POST /_gina/cache/clear` endpoint
+
+The in-heap flush is backed by a built-in admin endpoint the CLI posts to. You
+can also call it directly — for example, from a deploy hook:
+
+```bash
+curl -X POST 'http://127.0.0.1:<port>/_gina/cache/clear?bundle=<name>'
+# → {"ok":true,"bundle":"<name>","cleared":<n>}
+```
+
+- **POST only** — a flush is a mutation, never a safe/idempotent `GET` (which a
+  prefetch or crawler could fire).
+- **Admin-gated** — the same IP allowlist as `/_gina/cache/stats`, read from
+  `app.json` `admin.allowFrom` (default: loopback only). A request from a
+  disallowed address gets `403`.
+- The optional `?bundle=<name>` query restricts the flush to one bundle; omit it
+  to flush every bundle's output entries in the shared cache.
+- It drops the live cache entries and, for `fs` entries, removes the
+  current-namespace body file and its `.meta` sidecar. Orphaned
+  prior-namespace files on disk are reclaimed by the CLI's offline pass, not the
+  endpoint.
 
 ---
 

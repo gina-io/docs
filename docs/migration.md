@@ -69,6 +69,18 @@ To invalidate the cache on your *own* deploy cadence rather than only on
 framework upgrades, set `GINA_CACHE_NAMESPACE` to a per-release id (e.g. a git
 SHA). See [Caching → Release namespacing](/guides/caching#release-namespacing).
 
+### Added — flush the render cache on demand (`gina cache:clear`)
+
+A new `gina cache:clear [<bundle>] @<project>` CLI — and the admin endpoint it
+uses, `POST /_gina/cache/clear` — flushes a bundle's render/output cache (the
+`static:` HTML and `data:` JSON namespaces) without touching compiled templates
+or HTTP/2 sessions. It clears the live in-heap entries **and** reclaims the
+on-disk cache directories, including the orphaned prior-namespace directories
+left by the release-namespacing change above. `--dry-run` previews without
+removing anything; `--format=json` emits a machine-readable envelope. No action
+required — this is a new capability. See [Caching → Flushing the
+cache](/guides/caching#flushing-the-cache).
+
 ---
 
 ## 0.5.16 → 0.5.17
