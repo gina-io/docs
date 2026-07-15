@@ -198,6 +198,31 @@ you carried `// @ts-ignore` or `as any` workarounds for gina imports, they
 can come off. A consumer-compile gate plus a runtime-parity test now keep the
 declarations honest going forward.
 
+### Added — stale built-release watch for local production rehearsals (`server.releaseWatch`)
+
+Opt-in and disabled by default — purely additive, no action required unless you
+want it. When you run a **built release** under `local` scope + a non-dev env (a
+local production rehearsal), the bundle serves the compiled release with no
+hot-reload, so editing source silently keeps serving the stale build. Enable
+`server.releaseWatch` in `settings.json` and the bundle fingerprints its source
+tree, surfaces staleness on `GET /_gina/release/status` (plus a live
+`GET /_gina/release/events` SSE stream and a click-to-rebuild banner), and can
+rebuild + restart on demand — always **idle-gated**, so an in-flight request or
+a busy application job is never interrupted.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "releaseWatch": { "enabled": true }
+  }
+}
+```
+
+Hard-gated on `local` scope + a non-dev env; never active on a real cluster. New
+keys: `mode` (`notify` | `auto`), `restartMode` (`daemon` | `supervisor`),
+`debounceMs`, `reconcileIntervalMs`. See the
+[Release Watch guide](/guides/release-watch) for the full surface.
+
 ---
 
 ## 0.5.16 → 0.5.17
