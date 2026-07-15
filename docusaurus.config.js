@@ -41,6 +41,13 @@ const config = {
 
   plugins: [
     [
+      '@docusaurus/plugin-vercel-analytics',
+      {
+        debug: false,
+        mode: 'auto',
+      },
+    ],
+    [
       '@docusaurus/plugin-client-redirects',
       {
         // Every old URL points directly to its final destination under
