@@ -365,16 +365,32 @@ endpoint is admin-gated exactly like `?bundle=` (see
 
 ## Cache-Status response header
 
-Every `GET` response includes a `Cache-Status` header:
+Responses that interact with the render cache carry an
+[RFC 9211](https://www.rfc-editor.org/rfc/rfc9211.html) `Cache-Status` header:
 
 | Value | Meaning |
 |---|---|
-| `gina-cache; uri-miss` | No cached entry for this URL — response was rendered normally. |
-| `gina-cache; hit; ttl=NNN` | Served from cache. `NNN` seconds of absolute TTL remaining. |
-| `gina-cache; hit; ttl=NNN; max-age=MMM` | Served from cache (sliding). `NNN` seconds until idle eviction; `MMM` seconds until absolute ceiling. |
+| `gina-cache; fwd=uri-miss` | No cached entry for this URL — the response was rendered normally. |
+| `gina-cache; hit; ttl=NNN; detail=memory` | Served from the in-process tier (L1). `NNN` seconds of absolute TTL remaining. |
+| `gina-cache; hit; ttl=NNN; detail=redis` | Served from the shared redis tier (L2) by a replica whose own L1 missed — the **cross-replica warm**. The entry is repopulated into L1, so this replica's next request reports `detail=memory`. |
+| `gina-cache; hit; ttl=NNN; detail=fs` | Served from the on-disk `fs` backend (read back from disk after a restart). |
+| `gina-cache; hit; ttl=NNN; max-age=MMM; detail=memory` | Served from cache in sliding mode. `NNN` seconds until idle eviction; `MMM` seconds until the absolute ceiling. |
 
-Use this header to verify caching behavior during development without
-inspecting server logs.
+`detail` names the physical tier that served the bytes **on this request**
+(RFC 9211 §2.8 — implementation-specific by design). `ttl` is the remaining
+freshness lifetime in seconds, and `fwd=uri-miss` is the RFC miss form — "the
+cache did not contain any responses that matched the request URI".
+
+:::note Which responses carry the header
+With the Isaac engine (the default), every `GET` on a cache-enabled bundle
+carries the header — including the miss form on routes that never opted into
+caching. With the Express engine, the header is emitted on routes served
+through the shared cache read path (`redis`-backed routes today).
+:::
+
+Use this header to verify caching behavior — including that cross-replica
+warms actually happen — without inspecting server logs (the server's
+`[200][…]` log lines carry the same string).
 
 ---
 
@@ -484,6 +500,44 @@ curl -X POST 'http://127.0.0.1:<port>/_gina/cache/clear?bundle=<name>'
   current-namespace body file and its `.meta` sidecar. Orphaned
   prior-namespace files on disk are reclaimed by the CLI's offline pass, not the
   endpoint.
+
+### Inspecting the cache — the `GET /_gina/cache/stats` endpoint
+
+The sibling read endpoint reports the live in-process cache plus — when the
+bundle uses the [`redis` backend](#redis-shared-l2-across-replicas) — the
+health of the shared L2 connection:
+
+```bash
+curl 'http://127.0.0.1:<port>/_gina/cache/stats'
+```
+
+```json
+{
+  "size": 1,
+  "entries": [
+    { "key": "0.5.18:data:demo:/", "type": "memory", "sliding": false,
+      "createdAt": "…", "lastAccessedAt": "…", "ttlRemaining": 569.3, "maxAgeRemaining": null }
+  ],
+  "l2": {
+    "store": "redis", "status": "ready", "mode": "standalone", "prefix": "cache:",
+    "errorCount": 0, "lastError": null, "lastErrorAt": null
+  }
+}
+```
+
+- **Admin-gated** like `/_gina/cache/clear` (`app.json` `admin.allowFrom`,
+  default loopback only).
+- The `l2` block is **additive** — it is absent on `memory`/`fs`-only bundles,
+  so existing consumers of `{ size, entries }` are unaffected.
+- `l2.status` is the redis driver's live connection state (`ready`,
+  `connecting`, `reconnecting`, `close`, `end`). Reading it costs **no network
+  round-trip**, so the endpoint never hangs on a dead redis. During an outage
+  you will see `status` leave `ready` while `errorCount` climbs and
+  `lastError` names the failure (for example `connect ECONNREFUSED …`) —
+  cached routes keep serving via fail-open rendering meanwhile.
+- `errorCount` tallies **connection-level** driver errors only; per-command
+  failures (timeouts on a black-holed socket, rejected reads) fail open into a
+  normal render and are not counted here.
 
 ---
 

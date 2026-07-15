@@ -85,6 +85,30 @@ removing anything; `--format=json` emits a machine-readable envelope. No action
 required — this is a new capability. See [Caching → Flushing the
 cache](/guides/caching#flushing-the-cache).
 
+### Added — Cache-Status names the serving tier; `/_gina/cache/stats` reports L2 health
+
+Every render-cache hit's `Cache-Status` header now carries an RFC 9211 `detail`
+parameter naming the physical tier that served the bytes: `detail=memory` (the
+in-process L1), `detail=redis` (a shared-L2 warm — a replica serving a page a
+peer rendered, visible per request), or `detail=fs` (a disk read-back after a
+restart). The parameter is appended after the existing `hit`/`ttl` tokens, so
+anything matching on `gina-cache; hit` keeps matching. `/_gina/cache/stats`
+gains an additive `l2` block on both engines reporting the redis connection's
+health (`status`, `mode`, key `prefix`, connection-error count and last error);
+the field is absent on `memory`/`fs`-only bundles. No action required. See
+[Caching → Cache-Status response header](/guides/caching#cache-status-response-header).
+
+### Changed — the Cache-Status miss form is now `fwd=uri-miss` (RFC 9211)
+
+A cache miss is now reported as `gina-cache; fwd=uri-miss` — the RFC 9211
+grammar, where `uri-miss` is a value of the `fwd` parameter — instead of the
+bare `gina-cache; uri-miss` shipped in 0.5.17, which read as an unregistered
+parameter to RFC-aware tooling. **If you match the miss header exactly (for
+example `grep '; uri-miss'`), update the pattern**; a plain `uri-miss`
+substring still matches. Express bundles additionally gain their first
+cache-miss signal: routes served through the shared cache read path now emit
+the miss form too (previously the header was Isaac-only on misses).
+
 ### Fixed — a checkbox's `value` attribute no longer decides its `checked` state
 
 FormValidator historically treated a checkbox's `value` as the state carrier:
