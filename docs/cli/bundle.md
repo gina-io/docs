@@ -573,6 +573,30 @@ CLI flags always win; use the manifest for project-pinned defaults.
 
 ---
 
+## `bundle:types`
+
+*New in 0.5.18*
+
+Emit TypeScript declarations from a bundle's [DTOs](/guides/dtos). Walks `<bundle>/dtos/*.js` (the same factories `bundle:openapi` / `bundle:mcp` consume) and writes `<bundle>/dtos/index.d.ts` by default. Output is deterministic — DTOs are sorted, no timestamps — so the file diffs cleanly in version control.
+
+```sh
+gina bundle:types <bundle_name> @<project_name>
+gina bundle:types @<project_name>                          # all bundles in the project
+gina bundle:types <bundle_name> @<project_name> --output=/path/to/dtos.d.ts
+```
+
+**Flags**
+
+| Flag | Description |
+|---|---|
+| `--output=<path>` | Write the declarations to a custom path instead of `<bundle>/dtos/index.d.ts` |
+
+Two types are emitted per DTO: `<Name>` (the declared shape — what a client sends, what OpenAPI documents) and `<Name>Projected` (the declared shape minus `.exclude()`d fields — what the action holds on `req.dto` and what a `param.responseDto` puts on the wire). Value bounds (`.min()` / `.max()`) are carried as `@minimum` / `@maximum` doc comments labelled schema-only, and a `dto.date()` field is typed `string` — the engine coerces dates to ISO strings, not `Date` objects.
+
+A DTO file that fails to load **aborts** the command instead of being skipped: a type surface emitted minus a broken DTO would ship an incomplete contract silently (the bundle would refuse to boot on that DTO anyway).
+
+---
+
 ## `bundle:man`
 
 Render the `bundle` command group's manual page inline in the terminal — no browser needed. Falls back to the group's help text when no rendered manual page is available.

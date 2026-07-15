@@ -21,11 +21,12 @@ upward to the target version.
 
 ## 0.5.17 → 0.5.18
 
-This release ships additive cache improvements and a checkbox state-model
-correction in the form validator. Two behavioural changes are worth noting:
-the `fs` cache backend below, and checkbox markup that relied on `value`
-deciding the checked state (see the FormValidator entry at the end of this
-section).
+This release ships additive cache improvements, the route-DTO layer (typed,
+validated payloads), repaired TypeScript declarations, and a checkbox
+state-model correction in the form validator. Two behavioural changes are
+worth noting: the `fs` cache backend below, and checkbox markup that relied
+on `value` deciding the checked state (see the FormValidator entry at the
+end of this section).
 
 ### Added — a bundle-wide default cache backend (`server.cache.type`)
 
@@ -109,6 +110,40 @@ A console warning flags each checkbox whose `value` reads `true`/`on` without
 a `checked` attribute. The validator is part of the browser bundle: rebuild
 your bundles after upgrading. See [Forms & validation →
 Checkboxes](/guides/forms-and-validation#checkboxes).
+
+### Added — route DTOs: validated, typed request payloads (`param.dto` / `param.responseDto`)
+
+A bundle can now author a data shape once (`<bundle>/dtos/<Name>.js`) and let
+the framework validate and coerce the request payload **before** the
+controller action runs (`param.dto` on the route — clean `422` with a
+field-level error map on failure, coerced payload plus a strict `req.dto`
+projection on success), shape 2xx JSON responses (`param.responseDto` —
+`.exclude()`d fields never reach the wire or the render cache), feed
+`bundle:openapi` / `bundle:mcp` request/response schemas, and emit TypeScript
+declarations via the new `gina bundle:types`. **Fully additive** — a route
+that declares no DTO is byte-identical to before. DTOs are registered at
+bundle boot (like `routing.json`), so adding or editing one requires a bundle
+restart; a missing or broken DTO refuses the boot rather than silently
+skipping validation. Note the honest limits: `.min()`/`.max()` are
+schema-only (documented in OpenAPI, not runtime-enforced), undeclared keys
+are passed through rather than stripped (URL params ride alongside the
+body), and a `dto.date()` value arrives as an ISO **string**, not a `Date`.
+See the new [Route DTOs guide](/guides/dtos).
+
+### Fixed — the published TypeScript declarations now describe the runtime
+
+`types/index.d.ts` previously declared **no value** for the main entry, so
+`import gina from 'gina'; gina.lib` (and every other member access) failed to
+typecheck for all TypeScript consumers; several declared members also did not
+exist at runtime (`gina.on(...)` typechecked, then threw — the module object
+is not an EventEmitter — and `String.prototype.ltrim/rtrim/gtrim` were never
+real). The declarations were rebuilt against the measured runtime surface:
+`import gina = require('gina')` and the ESM default import both typecheck,
+`gina.dto` / `gina.lib.*` / the controller's i18n, jobs, trailers and events
+methods are all typed, and `GinaRequest<TDto>` types route-DTO payloads. If
+you carried `// @ts-ignore` or `as any` workarounds for gina imports, they
+can come off. A consumer-compile gate plus a runtime-parity test now keep the
+declarations honest going forward.
 
 ---
 
