@@ -30,8 +30,9 @@ end of this section).
 
 ### Added — a bundle-wide default cache backend (`server.cache.type`)
 
-`settings.json` gains a `server.cache.type` key (`"memory"` | `"fs"`, default
-`"memory"`) that sets the default cache backend for the whole bundle. A route
+`settings.json` gains a `server.cache.type` key (`"memory"` | `"fs"` |
+`"redis"`, default `"memory"`) that sets the default cache backend for the
+whole bundle. A route
 with a `cache` block but no `type` now inherits it, mirroring the existing
 `ttl` / `sliding` / `maxAge` fallbacks. A per-route `cache.type` still wins. No
 action required — existing bundles behave exactly as before (a route with no
@@ -57,6 +58,34 @@ Each `fs` cache file now has a sibling `<file>.meta` JSON file holding its
 expiry metadata; the two are written and removed together. If your deployment
 tooling copies or prunes the cache directory, treat `<file>` and `<file>.meta`
 as a pair.
+
+### Added — a `redis` cache backend: a shared L2 across replicas
+
+Routes — or the whole bundle, via `server.cache.type` above — can now cache to
+`"type": "redis"`: a **shared second tier (L2)** on top of each replica's
+in-process L1. A rendered response is stored in this replica's heap
+synchronously *and* pushed to a shared redis fire-and-forget (the response
+never waits on redis), so every replica behind a load balancer serves the same
+cached page — and a freshly-started or scaled-up replica serves content a peer
+already rendered, instead of cold-starting its own cache. A request that
+misses L1 warms it back from redis with the authoritative remaining TTL;
+`delete` / `clear` / `invalidateByEvent` remove the matching redis keys as
+well. If redis is down or a command fails, caching degrades transparently to
+per-replica `memory` behaviour (fail-open) — a render is never blocked or
+failed by a redis outage.
+
+The connection is named by `server.cache.store` in `settings.json`, which
+points at a `connectors.json` redis entry (`{ "cacheRedis": { "connector":
+"redis", "host": …, "port": … } }`); the connector uses `ioredis`, resolved
+from your project's `node_modules` (`npm install ioredis`). The resolved cache
+config is validated at boot, and an unsupported shape refuses to start:
+`redis` with `sliding: true`, a `redis` route with neither a `ttl` nor
+`invalidateOnEvents` (a non-expiring key would be orphaned on a
+release-namespace change), or a `redis` route with no `server.cache.store`.
+
+No action required — the backend is opt-in; `memory` and `fs` bundles are
+unchanged. See [Caching → redis (shared L2 across
+replicas)](/guides/caching#redis-shared-l2-across-replicas).
 
 ### Changed — render/output-cache keys are release-namespaced
 
