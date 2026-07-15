@@ -2,7 +2,7 @@
 title: Caching
 sidebar_label: Caching
 sidebar_position: 2
-description: How to cache rendered HTML and JSON responses in Gina, the Node.js MVC framework — memory and file-system backends, TTL modes, sliding windows, and event-driven invalidation.
+description: How to cache rendered HTML and JSON responses in Gina, the Node.js MVC framework — memory, file-system, and redis (shared across replicas) backends, TTL modes, sliding windows, and event-driven invalidation.
 level: intermediate
 prereqs:
   - '[routing.json](/guides/routing)'
@@ -19,7 +19,7 @@ the controller and template engine entirely. Caching is configured per route in 
 flowchart LR
     A(["HTTP GET request"]) --> B{"Cache hit?"}
 
-    B -- "hit" --> C["Cached response\n(memory or disk)"]
+    B -- "hit" --> C["Cached response\n(memory, disk, or redis)"]
     C --> D(["HTTP response"])
 
     B -- "miss" --> E
@@ -78,7 +78,7 @@ The `cache` field accepts either a shorthand string or a full object.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `type` | `"memory"` \| `"fs"` | server default | Storage backend (see [Storage backends](#storage-backends)). Inherits [`server.cache.type`](#server-level-cache-config) (default `"memory"`) when omitted. |
+| `type` | `"memory"` \| `"fs"` \| `"redis"` | server default | Storage backend (see [Storage backends](#storage-backends)). Inherits [`server.cache.type`](#server-level-cache-config) (default `"memory"`) when omitted. `redis` also needs [`server.cache.store`](#server-level-cache-config) and a `ttl` (or `invalidateOnEvents`). |
 | `ttl` | number (seconds, fractional ok) | server default | Expiry duration. Meaning depends on `sliding` — see [Expiration modes](#expiration-modes). |
 | `sliding` | boolean | server default | Enable sliding-window expiration. Inherits [`server.cache.sliding`](#server-level-cache-config) (default `false`) when omitted. |
 | `maxAge` | number (seconds, fractional ok) | server default | Absolute lifetime ceiling. Only meaningful when `sliding: true`. Inherits [`server.cache.maxAge`](#server-level-cache-config) when omitted. |
@@ -152,6 +152,82 @@ default ties to the top-level `cachePath` (`${projectPath}/cache`). If you
 override either independently, keep both pointing at the same directory so the
 read-back finds the written files.
 :::
+
+### `redis` (shared L2 across replicas)
+
+The `redis` backend adds a **shared second tier (L2)** on top of each replica's
+in-process `memory` tier (L1). A rendered response is written to L1 synchronously
+*and* to a shared redis, so every replica behind your load balancer serves the same
+cached page — and a freshly-started or scaled-up replica serves content a peer
+already rendered, instead of cold-starting its own cache.
+
+```json title="src/<bundle>/config/routing.json"
+"cache": { "type": "redis", "ttl": 3600 }
+```
+
+Redis needs a connection, named by `server.cache.store` in `settings.json`, which
+points at a `connectors.json` redis entry:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "cache": { "type": "redis", "store": "cacheRedis" }
+}
+```
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "cacheRedis": { "connector": "redis", "host": "127.0.0.1", "port": 6379 }
+}
+```
+
+The `redis` connector uses `ioredis`, resolved from your project's
+`node_modules` — run `npm install ioredis` in the project.
+
+**How the two tiers cooperate:**
+
+- **Write** — the response is stored in L1 (this replica's heap) synchronously and
+  pushed to redis fire-and-forget with the entry's TTL. The response never waits on
+  redis.
+- **Read** — a request that misses L1 *warms* it from redis, repopulating L1 with
+  the authoritative remaining TTL (an L1 entry can never outlive its L2 key), then
+  serves it. A cold replica's first hit to a cached URL therefore comes straight
+  from the shared L2.
+- **Invalidate** — `delete` / `clear` / `invalidateByEvent` remove the matching
+  redis keys as well as the L1 entries.
+
+**Fail-open** — if redis is down or a command fails, caching transparently degrades
+to per-replica `memory` behaviour (one diagnostic warning per process); a render is
+never blocked or failed by a redis outage.
+
+:::note Cross-replica invalidation reaches only registered keys
+An event invalidation DELs from redis only the keys **this** replica registered via
+`invalidateOnEvents`. A page cached solely on another replica stays in L2 until its
+natural expiry. Give redis routes a `ttl` so nothing lives forever — see the boot
+check below.
+:::
+
+#### Boot-time validation
+
+A mis-configured redis cache fails in ways invisible until the first cache miss, so
+Gina validates the resolved cache config **at boot** and refuses to start
+(fail-fast) on an unsupported shape:
+
+| Condition | Result |
+|---|---|
+| A `redis` route with `sliding: true` | **Boot aborts** — redis TTL is per-key absolute; sliding is not supported. Drop `sliding`, or use `memory` / `fs`. |
+| A `redis` route with no `ttl` **and** no `invalidateOnEvents` | **Boot aborts** — a non-expiring redis key is orphaned permanently on a [release-namespace](#release-namespacing) change. Add a `ttl` (or `invalidateOnEvents`). |
+| Any `redis` route but no `server.cache.store` | **Boot aborts** — the L2 connection cannot be built. |
+| An unknown `cache.type` (per-route or bundle-wide) | **Warning** — that surface is simply not cached. |
+| A `redis` route with `invalidateOnEvents` but no `ttl` | **Warning** — the invalidate-only pattern works, but the key is still orphaned on a namespace change. |
+
+Validation and the redis connection are both gated on
+[`server.cache.enable`](#server-level-cache-config): a bundle with caching disabled
+boots normally and opens no redis connection, even if a route names the redis
+strategy (a would-be-fatal config logs a warning naming the future error instead of
+aborting).
+
+**Use for:** multi-replica / horizontally-scaled deployments where every instance
+should share one cache and a new instance should start warm.
 
 ---
 
@@ -322,7 +398,8 @@ The `cache` block in `settings.json` controls global cache behavior:
 | Field | Description |
 |---|---|
 | `enable` | Master switch. Set to `"true"` to activate caching. Per-route `cache` fields are ignored when this is `"false"`. |
-| `type` | Bundle-wide default storage backend (`"memory"` \| `"fs"`), inherited by routes that set `cache` but omit `type`. Defaults to `"memory"`. A per-route `cache.type` always wins. |
+| `type` | Bundle-wide default storage backend (`"memory"` \| `"fs"` \| `"redis"`), inherited by routes that set `cache` but omit `type`. Defaults to `"memory"`. A per-route `cache.type` always wins. |
+| `store` | **Required for `redis`.** The name of a `connectors.json` redis entry (`{ "<name>": { "connector": "redis", "host": …, "port": … } }`) that provides the shared L2 connection. Ignored by `memory` / `fs`. See [redis](#redis-shared-l2-across-replicas). |
 | `path` | Directory for `fs`-type cached files. |
 | `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. |
 | `sliding` | Bundle-wide [sliding-window](#expiration-modes) default, inherited by routes that omit `sliding`. Boolean; defaults to `false`. |
