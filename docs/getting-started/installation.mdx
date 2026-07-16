@@ -38,6 +38,8 @@ Add that line to your shell profile (`.zshrc`, `.bashrc`, etc.) to make it perma
 :::note npm 12+
 npm 12 blocks install scripts by default, and Gina's post-install bootstraps `~/.gina` and the framework dependencies. Add `--allow-scripts=gina` to the install command, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. Requires Gina `0.5.17` or newer — on older versions the nested framework install rejects the inherited allowance (`EALLOWSCRIPTS`) and the whole install fails; to install Gina ≤ 0.5.16, use npm ≤ 11 (or Bun).
 
+You'll only be on npm 12 if your Node is recent enough for npm 12's own `engines` — on an older Node (e.g. Node 25) npm 12 won't install at all (`EBADENGINE`), so npm ≤ 11 is what you have and Gina ≤ 0.5.16 installs normally. This caveat therefore applies only on Node ≥ 26 (or a recent 22 / 24 LTS).
+
 On npm ≤ 11 the `allow-scripts` warning is **advisory** — the install scripts still run, so no flag or config is needed. Don't set them there either: late npm 11.x propagates the allowance to the nested install and fails the same way on Gina ≤ 0.5.16.
 :::
 

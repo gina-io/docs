@@ -79,6 +79,8 @@ internally, so `"home"` becomes `"home@frontend"` and is unique across the proje
 | `param.file` | — | rule name | Template path relative to the views directory |
 | `param.section` | — | — | Auto-promoted to `page.section` (sub-section dispatch from a single template) |
 | `param.title` | — | rule name | Page title — lands on `page.view.title` (the browser-tab title). Applied verbatim; the stripped route name is the fallback when omitted, and a controller-set `data.page.view.title` wins. For dynamic titles, set the title from the controller |
+| `param.dto` | — | — | Name of a DTO (`<bundle>/dtos/<Name>.js`) validating this route's request payload before the action runs — clean `422` on failure, coerced payload + `req.dto` on success. Registered at bundle boot (a DTO edit needs a restart). See [Route DTOs](../guides/dtos.md) |
+| `param.responseDto` | — | — | Name of a DTO shaping this route's 2xx JSON responses — `.exclude()`d fields never reach the wire or the render cache. See [Route DTOs](../guides/dtos.md) |
 | `middleware` | — | `[]` | Middleware chain to run before the controller action, in order |
 | `scopes` | — | current scope | Scopes where this route is active |
 | `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests (`self.query()`) made within this route's controller action. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |

@@ -19,6 +19,270 @@ upward to the target version.
 
 ---
 
+## 0.5.17 → 0.5.18
+
+This release ships additive cache improvements, the route-DTO layer (typed,
+validated payloads), repaired TypeScript declarations, and a checkbox
+state-model correction in the form validator. Two behavioural changes are
+worth noting: the `fs` cache backend below, and checkbox markup that relied
+on `value` deciding the checked state (see the FormValidator entry at the
+end of this section).
+
+### Added — a bundle-wide default cache backend (`server.cache.type`)
+
+`settings.json` gains a `server.cache.type` key (`"memory"` | `"fs"` |
+`"redis"`, default `"memory"`) that sets the default cache backend for the
+whole bundle. A route
+with a `cache` block but no `type` now inherits it, mirroring the existing
+`ttl` / `sliding` / `maxAge` fallbacks. A per-route `cache.type` still wins. No
+action required — existing bundles behave exactly as before (a route with no
+effective `type` is not cached). See [Caching → Server-level cache
+config](/guides/caching#server-level-cache-config).
+
+### Changed — the `fs` cache backend now survives a restart
+
+Previously an `fs`-cached response was orphaned on the next boot: the
+in-process index started empty, so the file on disk was never served again (and
+never cleaned up). The server read path now falls back to disk on an index
+miss, so `fs`-cached pages survive a restart as the backend always intended.
+See [Caching → Surviving a restart](/guides/caching#surviving-a-restart).
+
+The original expiry is preserved — a restart never extends a TTL — so entries
+never live longer than configured. **If you previously restarted the server to
+clear the `fs` cache, that no longer works**; evict entries with
+`invalidateOnEvents`, a shorter `ttl`, or by clearing the cache directory
+(`server.cache.path`) instead. The `memory` backend is unchanged (still cleared
+on every restart).
+
+Each `fs` cache file now has a sibling `<file>.meta` JSON file holding its
+expiry metadata; the two are written and removed together. If your deployment
+tooling copies or prunes the cache directory, treat `<file>` and `<file>.meta`
+as a pair.
+
+### Added — a `redis` cache backend: a shared L2 across replicas
+
+Routes — or the whole bundle, via `server.cache.type` above — can now cache to
+`"type": "redis"`: a **shared second tier (L2)** on top of each replica's
+in-process L1. A rendered response is stored in this replica's heap
+synchronously *and* pushed to a shared redis fire-and-forget (the response
+never waits on redis), so every replica behind a load balancer serves the same
+cached page — and a freshly-started or scaled-up replica serves content a peer
+already rendered, instead of cold-starting its own cache. A request that
+misses L1 warms it back from redis with the authoritative remaining TTL;
+`delete` / `clear` / `invalidateByEvent` remove the matching redis keys as
+well. If redis is down or a command fails, caching degrades transparently to
+per-replica `memory` behaviour (fail-open) — a render is never blocked or
+failed by a redis outage.
+
+The connection is named by `server.cache.store` in `settings.json`, which
+points at a `connectors.json` redis entry (`{ "cacheRedis": { "connector":
+"redis", "host": …, "port": … } }`); the connector uses `ioredis`, resolved
+from your project's `node_modules` (`npm install ioredis`). The resolved cache
+config is validated at boot, and an unsupported shape refuses to start:
+`redis` with `sliding: true`, a `redis` route with neither a `ttl` nor
+`invalidateOnEvents` (a non-expiring key would be orphaned on a
+release-namespace change), or a `redis` route with no `server.cache.store`.
+
+No action required — the backend is opt-in; `memory` and `fs` bundles are
+unchanged. See [Caching → redis (shared L2 across
+replicas)](/guides/caching#redis-shared-l2-across-replicas).
+
+### Changed — render/output-cache keys are release-namespaced
+
+Cached entries are now scoped to a release namespace (`GINA_CACHE_NAMESPACE`,
+or the framework version via `GINA_VERSION` when that is unset). **The practical
+effect on this upgrade: your existing render/output cache is invalidated once**
+(the framework version changed), and `fs`-cached files move under a new
+`${cache.path}/${bundle}/${namespace}/…` subdirectory. This is a one-time
+cache-cold — pages re-render and re-cache on first request; the old flat
+`${cache.path}/${bundle}/html…` files are orphaned and can be deleted at your
+convenience.
+
+To invalidate the cache on your *own* deploy cadence rather than only on
+framework upgrades, set `GINA_CACHE_NAMESPACE` to a per-release id (e.g. a git
+SHA). See [Caching → Release namespacing](/guides/caching#release-namespacing).
+
+### Added — flush the render cache on demand (`gina cache:clear`)
+
+A new `gina cache:clear [<bundle>] @<project>` CLI — and the admin endpoint it
+uses, `POST /_gina/cache/clear` — flushes a bundle's render/output cache (the
+`static:` HTML and `data:` JSON namespaces) without touching compiled templates
+or HTTP/2 sessions. It clears the live in-heap entries **and** reclaims the
+on-disk cache directories, including the orphaned prior-namespace directories
+left by the release-namespacing change above. `--dry-run` previews without
+removing anything; `--format=json` emits a machine-readable envelope. No action
+required — this is a new capability. See [Caching → Flushing the
+cache](/guides/caching#flushing-the-cache).
+
+### Fixed — event-driven cache invalidation now works (`self.cache`)
+
+**Check this one if any of your routes declare `cache.invalidateOnEvents`.**
+Those registrations were accepted but nothing ever fired them: the documented
+`self.cache.invalidateByEvent()` did not exist, so a route configured to
+invalidate on an event silently served stale content until its TTL expired.
+`self.cache` now exists on the controller — `self.cache.invalidateByEvent(event)`
+evicts the entries registered for that event and returns how many were removed,
+and `self.cache.clear([bundle])` flushes the namespace. No config change is
+needed; routes that already declare `invalidateOnEvents` start behaving as
+documented as soon as you upgrade, so expect those pages to refresh on their
+event rather than on their TTL.
+
+Three further defects in the same path are fixed. Re-registering a key that
+carried a querystring **threw** (the registry ran cache keys through a
+condition evaluator, where `?` and `=` parse as operator tokens) — and under
+the swig engine that throw unwound to the top-level render error handler, which
+answered **500 and discarded a page that had already rendered correctly**.
+Registrations were never reclaimed, so the registry grew a row on every
+cache-miss re-render. And an `fs` entry read back after a restart carried no
+registration at all, so firing its event silently failed to evict it.
+
+Because `self.cache` only reaches its **own** process, cross-bundle eviction now
+has a first-class path: `gina cache:clear @<project> --event=<name>` and
+`POST /_gina/cache/clear?event=<name>` (both engines) evict by event and report
+the count. ⚠️ `?event=` was previously **unread** on the endpoint, so passing it
+flushed *every* bundle's output cache instead of evicting that event's entries —
+if you were calling it that way as a blunt flush, it now does what it says, and
+takes precedence over `?bundle=`. See [Caching → Event-driven
+invalidation](/guides/caching#event-driven-invalidation) and [Invalidating
+across bundles](/guides/caching#invalidating-across-bundles).
+
+### Added — Cache-Status names the serving tier; `/_gina/cache/stats` reports L2 health
+
+Every render-cache hit's `Cache-Status` header now carries an RFC 9211 `detail`
+parameter naming the physical tier that served the bytes: `detail=memory` (the
+in-process L1), `detail=redis` (a shared-L2 warm — a replica serving a page a
+peer rendered, visible per request), or `detail=fs` (a disk read-back after a
+restart). The parameter is appended after the existing `hit`/`ttl` tokens, so
+anything matching on `gina-cache; hit` keeps matching. `/_gina/cache/stats`
+gains an additive `l2` block on both engines reporting the redis connection's
+health (`status`, `mode`, key `prefix`, connection-error count and last error);
+the field is absent on `memory`/`fs`-only bundles. No action required. See
+[Caching → Cache-Status response header](/guides/caching#cache-status-response-header).
+
+### Changed — the Cache-Status miss form is now `fwd=uri-miss` (RFC 9211)
+
+A cache miss is now reported as `gina-cache; fwd=uri-miss` — the RFC 9211
+grammar, where `uri-miss` is a value of the `fwd` parameter — instead of the
+bare `gina-cache; uri-miss` shipped in 0.5.17, which read as an unregistered
+parameter to RFC-aware tooling. **If you match the miss header exactly (for
+example `grep '; uri-miss'`), update the pattern**; a plain `uri-miss`
+substring still matches. Express bundles additionally gain their first
+cache-miss signal: routes served through the shared cache read path now emit
+the miss form too (previously the header was Isaac-only on misses).
+
+### Fixed — a checkbox's `value` attribute no longer decides its `checked` state
+
+FormValidator historically treated a checkbox's `value` as the state carrier:
+`value="true"` was ticked at bind time even with no `checked` attribute —
+silently pre-ticking consent-style boxes — a value-less checkbox was ticked on
+form *reset* through the cached default state, `value="false"` un-ticked a
+server-checked box, and the posted boolean was derived from the `value` string
+(so un-ticking a box from your own script could still post `true`, and a
+neutral `value` could never post `true`).
+
+The model is now the HTML standard: the **`checked` attribute decides the
+initial state**, and the **live checked state decides the posted boolean**.
+Boolean-classified checkboxes (no `value` attribute, `value` reading
+`true`/`false`, or an `isBoolean` rule) post real JSON booleans in both
+states. For a checkbox that already posted booleans the wire is unchanged; a
+value-less checkbox previously posted the string `"on"` when checked and was
+absent when unchecked — it now posts `true`/`false`, so a server reading
+`"on"` or testing the field's mere presence must read the boolean instead
+(this holds even under the legacy opt-in below, which restores ticking only).
+Value-carrying checkboxes (ids, emails + `checked`) are untouched.
+
+**Action needed only if your markup relied on `value` deciding the state**
+(e.g. `value="{{ flag }}"` with no `checked` attribute — such boxes now render
+unticked): either template the standard attribute — `{% if flag %}checked{%
+endif %}` — or set the **deprecated, transitional** opt-in
+`data-gina-form-checkbox-value-as-state="true"` on the form while you migrate.
+A console warning flags each checkbox whose `value` reads `true`/`on` without
+a `checked` attribute. The validator is part of the browser bundle: rebuild
+your bundles after upgrading. See [Forms & validation →
+Checkboxes](/guides/forms-and-validation#checkboxes).
+
+### Added — route DTOs: validated, typed request payloads (`param.dto` / `param.responseDto`)
+
+A bundle can now author a data shape once (`<bundle>/dtos/<Name>.js`) and let
+the framework validate and coerce the request payload **before** the
+controller action runs (`param.dto` on the route — clean `422` with a
+field-level error map on failure, coerced payload plus a strict `req.dto`
+projection on success), shape 2xx JSON responses (`param.responseDto` —
+`.exclude()`d fields never reach the wire or the render cache), feed
+`bundle:openapi` / `bundle:mcp` request/response schemas, and emit TypeScript
+declarations via the new `gina bundle:types`. **Fully additive** — a route
+that declares no DTO is byte-identical to before. DTOs are registered at
+bundle boot (like `routing.json`), so adding or editing one requires a bundle
+restart; a missing or broken DTO refuses the boot rather than silently
+skipping validation. Note the honest limits: `.min()`/`.max()` are
+schema-only (documented in OpenAPI, not runtime-enforced), undeclared keys
+are passed through rather than stripped (URL params ride alongside the
+body), and a `dto.date()` value arrives as an ISO **string**, not a `Date`.
+See the new [Route DTOs guide](/guides/dtos).
+
+### Fixed — the published TypeScript declarations now describe the runtime
+
+`types/index.d.ts` previously declared **no value** for the main entry, so
+`import gina from 'gina'; gina.lib` (and every other member access) failed to
+typecheck for all TypeScript consumers; several declared members also did not
+exist at runtime (`gina.on(...)` typechecked, then threw — the module object
+is not an EventEmitter — and `String.prototype.ltrim/rtrim/gtrim` were never
+real). The declarations were rebuilt against the measured runtime surface:
+`import gina = require('gina')` and the ESM default import both typecheck,
+`gina.dto` / `gina.lib.*` / the controller's i18n, jobs, trailers and events
+methods are all typed, and `GinaRequest<TDto>` types route-DTO payloads. If
+you carried `// @ts-ignore` or `as any` workarounds for gina imports, they
+can come off. A consumer-compile gate plus a runtime-parity test now keep the
+declarations honest going forward.
+
+### Added — stale built-release watch for local production rehearsals (`server.releaseWatch`)
+
+Opt-in and disabled by default — purely additive, no action required unless you
+want it. When you run a **built release** under `local` scope + a non-dev env (a
+local production rehearsal), the bundle serves the compiled release with no
+hot-reload, so editing source silently keeps serving the stale build. Enable
+`server.releaseWatch` in `settings.json` and the bundle fingerprints its source
+tree, surfaces staleness on `GET /_gina/release/status` (plus a live
+`GET /_gina/release/events` SSE stream and a click-to-rebuild banner), and can
+rebuild + restart on demand — always **idle-gated**, so an in-flight request or
+a busy application job is never interrupted.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "releaseWatch": { "enabled": true }
+  }
+}
+```
+
+Hard-gated on `local` scope + a non-dev env; never active on a real cluster. New
+keys: `mode` (`notify` | `auto`), `restartMode` (`daemon` | `supervisor`),
+`debounceMs`, `reconcileIntervalMs`. See the
+[Release Watch guide](/guides/release-watch) for the full surface.
+
+### Fixed — error and log output tells you what actually happened
+
+No action required, but your diagnostics change for the better. At nine sites
+across the HTTP server, the browser client bundle, and three CLI commands, an
+error was composed with a **bitwise** `|` instead of a logical `||` — the
+expression evaluated to the number `0`, so a rendered 500 page body, the
+express-middleware error handler, and the `protocol:set` / `port:reset` /
+`project:add` error output all reported `0` instead of the cause. They now
+surface the real stack or message. Separately, the text log formatter spliced
+its `%`-tokens with a string replacement, which dollar-expands `$`-sequences in
+the message — a `$` followed by a backtick was replaced by the rendered log
+prefix itself, recurring at each occurrence — so a message containing a `$` came
+out mangled. It now renders verbatim, across every level and every sink (stdout,
+mq, file). A framework error raised from a **detached context** (a scheduled
+cron or timer, a worker, or a bootstrap-time `getLib()`) no longer crashes the
+process with `TypeError: next is not a function` while masking the original
+error, and `getLib()` / `getConfig()` no longer crash with an opaque `Cannot
+read properties of undefined (reading 'conf')` when configuration is read while
+the config build is still partway — for example a fail-closed `${secret:KEY}`
+resolution — so the real boot error surfaces instead of a masking crash.
+
+---
+
 ## 0.5.16 → 0.5.17
 
 This release ships fixes — no breaking changes. If you install with npm 12,
