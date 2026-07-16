@@ -99,7 +99,9 @@ Verify with:
 curl http://127.0.0.1:<port>/_gina/metrics
 ```
 
-You should see Prometheus exposition output beginning with `# HELP gina_…`.
+You should see Prometheus exposition output (`# HELP` / `# TYPE` lines). Metric
+names carry the configured `prefix` — `gina_` by default, so out of the box the
+output begins with `# HELP gina_…`.
 
 ---
 
