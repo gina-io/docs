@@ -45,6 +45,34 @@ events, use the controller's
 [`self.emitEvent()`](/guides/inspector#event). No action required — no
 working code could have depended on the old behaviour.
 
+### Fixed — `image:build` for projects that depend on gina themselves
+
+An image built for a project whose own `package.json` declares `gina` among
+its `dependencies` failed at the in-image `gina-init` step with
+`EACCES: permission denied … projects.json`. The project-dependency install
+runs as root and re-runs the framework postinstall, which re-created the
+runtime user's `~/.gina` root-owned *after* the synthesized Containerfile had
+already handed the home directory back; the build then died at the first
+`USER node` step. The dependency-install layer now re-hands the home back
+after that last root-run npm step. Projects without their own `gina`
+dependency were never affected. No action required — re-running
+`gina image:build` with the fixed CLI produces a working image; the
+`--gina-version` in-image pin does not need to change, since the fix lives in
+the synthesis on the machine running the CLI.
+
+### Fixed — `image:build`: the pinned framework now wins `require('gina')`
+
+In the same gina-dependent-project images, the `node_modules/gina` link to
+the pinned global install was silently bypassed: the link step cannot replace
+the real directory npm extracted for the project's own `gina` dependency, so
+it nested a stray symlink inside it and the bundle resolved the *project's*
+gina at runtime while the CLI binaries (`gina-init`, `gina-container`) ran
+from the global pin — a mixed-version container. The link now supersedes the
+project-extracted copy, so the version selected at build time (the project's
+registered framework pin, or `--gina-version`) is the one the bundle actually
+runs. If you relied on the project's own `gina` dependency winning inside the
+image, pass the version you want via `--gina-version` instead.
+
 ---
 
 ## 0.5.17 → 0.5.18
