@@ -114,6 +114,38 @@ removing anything; `--format=json` emits a machine-readable envelope. No action
 required — this is a new capability. See [Caching → Flushing the
 cache](/guides/caching#flushing-the-cache).
 
+### Fixed — event-driven cache invalidation now works (`self.cache`)
+
+**Check this one if any of your routes declare `cache.invalidateOnEvents`.**
+Those registrations were accepted but nothing ever fired them: the documented
+`self.cache.invalidateByEvent()` did not exist, so a route configured to
+invalidate on an event silently served stale content until its TTL expired.
+`self.cache` now exists on the controller — `self.cache.invalidateByEvent(event)`
+evicts the entries registered for that event and returns how many were removed,
+and `self.cache.clear([bundle])` flushes the namespace. No config change is
+needed; routes that already declare `invalidateOnEvents` start behaving as
+documented as soon as you upgrade, so expect those pages to refresh on their
+event rather than on their TTL.
+
+Three further defects in the same path are fixed. Re-registering a key that
+carried a querystring **threw** (the registry ran cache keys through a
+condition evaluator, where `?` and `=` parse as operator tokens) — and under
+the swig engine that throw unwound to the top-level render error handler, which
+answered **500 and discarded a page that had already rendered correctly**.
+Registrations were never reclaimed, so the registry grew a row on every
+cache-miss re-render. And an `fs` entry read back after a restart carried no
+registration at all, so firing its event silently failed to evict it.
+
+Because `self.cache` only reaches its **own** process, cross-bundle eviction now
+has a first-class path: `gina cache:clear @<project> --event=<name>` and
+`POST /_gina/cache/clear?event=<name>` (both engines) evict by event and report
+the count. ⚠️ `?event=` was previously **unread** on the endpoint, so passing it
+flushed *every* bundle's output cache instead of evicting that event's entries —
+if you were calling it that way as a blunt flush, it now does what it says, and
+takes precedence over `?bundle=`. See [Caching → Event-driven
+invalidation](/guides/caching#event-driven-invalidation) and [Invalidating
+across bundles](/guides/caching#invalidating-across-bundles).
+
 ### Added — Cache-Status names the serving tier; `/_gina/cache/stats` reports L2 health
 
 Every render-cache hit's `Cache-Status` header now carries an RFC 9211 `detail`
@@ -227,6 +259,27 @@ Hard-gated on `local` scope + a non-dev env; never active on a real cluster. New
 keys: `mode` (`notify` | `auto`), `restartMode` (`daemon` | `supervisor`),
 `debounceMs`, `reconcileIntervalMs`. See the
 [Release Watch guide](/guides/release-watch) for the full surface.
+
+### Fixed — error and log output tells you what actually happened
+
+No action required, but your diagnostics change for the better. At nine sites
+across the HTTP server, the browser client bundle, and three CLI commands, an
+error was composed with a **bitwise** `|` instead of a logical `||` — the
+expression evaluated to the number `0`, so a rendered 500 page body, the
+express-middleware error handler, and the `protocol:set` / `port:reset` /
+`project:add` error output all reported `0` instead of the cause. They now
+surface the real stack or message. Separately, the text log formatter spliced
+its `%`-tokens with a string replacement, which dollar-expands `$`-sequences in
+the message — a `$` followed by a backtick was replaced by the rendered log
+prefix itself, recurring at each occurrence — so a message containing a `$` came
+out mangled. It now renders verbatim, across every level and every sink (stdout,
+mq, file). A framework error raised from a **detached context** (a scheduled
+cron or timer, a worker, or a bootstrap-time `getLib()`) no longer crashes the
+process with `TypeError: next is not a function` while masking the original
+error, and `getLib()` / `getConfig()` no longer crash with an opaque `Cannot
+read properties of undefined (reading 'conf')` when configuration is read while
+the config build is still partway — for example a fail-closed `${secret:KEY}`
+resolution — so the real boot error surfaces instead of a masking crash.
 
 ---
 
