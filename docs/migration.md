@@ -34,6 +34,17 @@ render unticked, or set `data-gina-form-checkbox-value-as-state="true"` on the
 form while you migrate. No action required for markup that already renders as
 intended — the warning is a migration aid, not a behaviour change.
 
+### Fixed — `gina.emit('error', …)` no longer throws
+
+The module-level `gina.emit` is now an inert stub: it always returns `false`,
+never dispatches, and never throws. It was previously a detached copy of an
+internal emitter's method — it never dispatched to any listener, and calling
+it with the `'error'` event name threw its argument synchronously. The module
+object is not an event surface (it exposes no `on`/`once`); for application
+events, use the controller's
+[`self.emitEvent()`](/guides/inspector#event). No action required — no
+working code could have depended on the old behaviour.
+
 ---
 
 ## 0.5.17 → 0.5.18
