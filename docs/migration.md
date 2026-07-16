@@ -19,6 +19,23 @@ upward to the target version.
 
 ---
 
+## 0.5.18 → 0.5.19
+
+### Added — the checkbox migration warning now covers the un-tick direction
+
+`0.5.18` introduced a console warning for checkbox markup whose `value` used
+to imply the checked state. It covered one direction only: `value="true|on"`
+without a `checked` attribute (markup that used to render ticked). This
+release adds the mirror: a checkbox **carrying the `checked` attribute** whose
+`value` — or `data-value` — reads `false` or empty used to render **unticked**
+(the old init pass cleared it) and now stays ticked; it is flagged once per
+field with the same guidance. Remove the `checked` attribute if the box must
+render unticked, or set `data-gina-form-checkbox-value-as-state="true"` on the
+form while you migrate. No action required for markup that already renders as
+intended — the warning is a migration aid, not a behaviour change.
+
+---
+
 ## 0.5.17 → 0.5.18
 
 This release ships additive cache improvements, the route-DTO layer (typed,
