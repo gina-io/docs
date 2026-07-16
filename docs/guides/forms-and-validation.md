@@ -225,17 +225,26 @@ A boolean checkbox always posts a real JSON boolean — `true` when checked,
 string when checked and is absent from the payload when not, exactly like a
 plain HTML form.
 
+Two consequences worth naming when migrating a server: a value-less checkbox
+used to post the string `"on"` when checked and nothing when unchecked — it
+now posts `true`/`false` in both states, so read the boolean rather than
+testing for `"on"` or for the field's mere presence. And a `FormData` you
+build yourself and hand to `.send()` is posted with native multipart semantics
+(entries verbatim, unchecked boxes omitted) — the classification above applies
+to the fields gina collects from the form.
+
 ```json
 { "remember": { "isBoolean": true } }
 ```
 
 ### Migrating from value-driven state
 
-Before 0.5.18, a checkbox whose `value` read `true` (or a value-less one) was
-ticked at bind time by the framework, `value="false"` un-ticked it, and the
-posted boolean was derived from the `value` string. If your markup relied on
-that — e.g. `value="{{ flag }}"` with no `checked` attribute — it renders
-unticked under the corrected model. Two ways forward:
+Before 0.5.18, a checkbox whose `value` read `true` was ticked at bind time by
+the framework (a value-less one was ticked on form *reset*, through the cached
+default state), `value="false"` un-ticked it, and the posted boolean was
+derived from the `value` string. If your markup relied on that — e.g.
+`value="{{ flag }}"` with no `checked` attribute — it renders unticked under
+the corrected model. Two ways forward:
 
 - **Migrate the markup** (recommended): render the state as the standard
   attribute — `{% if flag %}checked{% endif %}` — and keep or drop `value` as

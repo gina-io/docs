@@ -141,17 +141,22 @@ the miss form too (previously the header was Isaac-only on misses).
 ### Fixed — a checkbox's `value` attribute no longer decides its `checked` state
 
 FormValidator historically treated a checkbox's `value` as the state carrier:
-`value="true"` (or a value-less checkbox) was ticked at bind time even with no
-`checked` attribute — silently pre-ticking consent-style boxes —
-`value="false"` un-ticked a server-checked box, and the posted boolean was
-derived from the `value` string (so un-ticking a box from your own script
-could still post `true`, and a neutral `value` could never post `true`).
+`value="true"` was ticked at bind time even with no `checked` attribute —
+silently pre-ticking consent-style boxes — a value-less checkbox was ticked on
+form *reset* through the cached default state, `value="false"` un-ticked a
+server-checked box, and the posted boolean was derived from the `value` string
+(so un-ticking a box from your own script could still post `true`, and a
+neutral `value` could never post `true`).
 
 The model is now the HTML standard: the **`checked` attribute decides the
 initial state**, and the **live checked state decides the posted boolean**.
 Boolean-classified checkboxes (no `value` attribute, `value` reading
-`true`/`false`, or an `isBoolean` rule) post real JSON booleans in both states
-— the wire payload is unchanged for every previously-correct form.
+`true`/`false`, or an `isBoolean` rule) post real JSON booleans in both
+states. For a checkbox that already posted booleans the wire is unchanged; a
+value-less checkbox previously posted the string `"on"` when checked and was
+absent when unchecked — it now posts `true`/`false`, so a server reading
+`"on"` or testing the field's mere presence must read the boolean instead
+(this holds even under the legacy opt-in below, which restores ticking only).
 Value-carrying checkboxes (ids, emails + `checked`) are untouched.
 
 **Action needed only if your markup relied on `value` deciding the state**
