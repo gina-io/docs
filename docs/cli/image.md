@@ -3,7 +3,7 @@ id: cli-image
 title: image
 sidebar_label: image
 sidebar_position: 15
-description: CLI reference for gina image commands — package a project bundle as a standard OCI container image, synthesized from the project's registered state and built with buildah, natively on Linux or over ssh.
+description: CLI reference for gina image commands — package a project bundle as a standard OCI container image, synthesized from the project's registered state and built with buildah, natively on Linux or over ssh; list and remove the images on the container host.
 level: intermediate
 prereqs:
   - '[Gina installed globally](/getting-started/installation)'
@@ -14,6 +14,10 @@ prereqs:
 The `image` command group packages a project bundle as a standard [OCI](https://opencontainers.org/) container image. `image:build` synthesizes a `Containerfile` + build context from the project's **registered state** — bundles, entry file, port allocations, env model, Node engine floor — and executes the build with [buildah](https://buildah.io/), natively on Linux or on a container host reached over ssh. The command is **offline** (no framework socket needed), and the resulting image is plain OCI — it runs anywhere OCI images run: Docker, Podman, Kubernetes.
 
 - **`image:build`** — synthesize the `Containerfile` + build context and build the image; `--emit` prints the synthesized artifact without building anything.
+- **`image:list`** — list the images on the container host.
+- **`image:rm`** — remove an image from the container host.
+
+All three resolve the container host the same way, so `image:list` always shows what `image:build` would build onto. `image:list` and `image:rm` are **host-level**: they take no `@<project>`.
 
 ```mermaid
 flowchart LR
@@ -183,6 +187,99 @@ gina-entrypoint.sh
 | `1` | Usage / plan error (several bundles but none named, unknown `--env` / `--scope`), no container host resolvable, context staging failed, `buildah` / `ssh` could not be spawned, or the build itself failed. |
 
 On a build failure the reason line carries targeted hints where the log allows it — a cross-arch `exec format error` points at missing qemu/binfmt on the build host, an untrusted ssh host key points at running `ssh <target>` once to accept it — and the staged context directory is **kept** for inspection (its path is printed).
+
+---
+
+## `image:list` {#imagelist}
+
+*New in 0.5.19*
+
+List the images present on the container host. `image:list` resolves the host exactly as [`image:build`](#container-host) does — so it always shows **what `image:build` would build onto**, whether that is your local machine or a box across ssh. It takes no `@<project>`: images live on the host, not in a project.
+
+```bash
+gina image:list
+gina image:list --format=json
+```
+
+Every image on the host is listed, not only the ones gina built. A synthesized image carries no gina-specific label, so there is no reliable way to tell a gina image from any other — rather than guess with a name heuristic that would quietly hide your base images, `image:list` shows you the host as it is, the same as `buildah images` or `docker images`.
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--format=json` | Machine-readable output instead of the table. |
+
+### Output
+
+```
+REPOSITORY:TAG                  IMAGE ID      SIZE    CREATED
+localhost/myproject/demo:prod   dcfe41620f11  293 MB  11 days ago
+docker.io/library/node:22-slim  44b5401ff810  252 MB  3 weeks ago
+<none>:<none>                   f030b57bbc3a  293 MB  11 days ago
+```
+
+An **untagged** image — typically an intermediate layer, or one whose tag has been reused by a newer build — shows as `<none>:<none>`. An image carrying several tags contributes **one row per tag** (the `IMAGE ID` repeats, because it is the same image).
+
+### JSON output
+
+```bash
+gina image:list --format=json
+```
+
+```json
+{
+  "host": "ssh://build@lin",
+  "images": [
+    { "ref": "localhost/myproject/demo:prod", "id": "dcfe41620f11", "size": "293 MB", "created": "11 days ago" }
+  ]
+}
+```
+
+`host` is the resolved container host (`native`, or the ssh descriptor). Piping is safe — the payload is written synchronously:
+
+```bash
+gina image:list --format=json | jq -r '.images[].ref'
+```
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The host was reached and its images listed (an empty host is still `0`). |
+| `1` | Unsupported `--format`, no container host resolvable, or `buildah` / `ssh` failed. |
+
+---
+
+## `image:rm` {#imagerm}
+
+*New in 0.5.19*
+
+Remove an image from the container host, by reference or by id. The image is **required** — there is no bulk delete, and no `--all`:
+
+```bash
+gina image:rm localhost/myproject/demo:prod
+gina image:rm 44b5401ff810
+gina image:rm localhost/myproject/demo:prod --force
+```
+
+Use [`image:list`](#imagelist) to see what is there. Removing a **tag** from an image that carries several only drops that tag; the image itself survives while another tag still points at it.
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--force` | Remove the image even when a container still references it (`buildah rmi -f`). Without it, buildah refuses and the reason says so. |
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The image was removed. |
+| `1` | No image given, the reference is not a valid image reference, no container host resolvable, or the removal failed (e.g. the image is in use — retry with `--force`). |
+
+:::note
+The image reference is validated before it reaches the host: it must begin with an alphanumeric and contain only image-reference characters. This is what keeps a reference from being read as a flag, or from carrying anything else to a remote shell.
+:::
 
 ---
 
