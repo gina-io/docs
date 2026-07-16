@@ -185,8 +185,10 @@ initial state**, and the **live checked state decides the posted boolean**.
 Boolean-classified checkboxes (no `value` attribute, `value` reading
 `true`/`false`, or an `isBoolean` rule) post real JSON booleans in both
 states. For a checkbox that already posted booleans the wire is unchanged; a
-value-less checkbox previously posted the string `"on"` when checked and was
-absent when unchecked — it now posts `true`/`false`, so a server reading
+value-less checkbox previously posted the string `"on"` when checked and —
+when its declared rule lacked `isBoolean` — was absent when unchecked (other
+rule shapes already posted a coerced `false`); it now posts `true`/`false`
+uniformly, so a server reading
 `"on"` or testing the field's mere presence must read the boolean instead
 (this holds even under the legacy opt-in below, which restores ticking only).
 Value-carrying checkboxes (ids, emails + `checked`) are untouched.
