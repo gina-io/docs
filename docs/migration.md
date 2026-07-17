@@ -46,6 +46,25 @@ bundle *with* a session that used to fail with `424` now succeeds.
 See [Controllers → Carrying request data across the
 redirect](/guides/controller#redirect-data-carry).
 
+### Fixed — `self.redirect()` is now async; an unresolvable target answers 404 instead of crashing
+
+Two related redirect fixes. First, the relative-path form
+`self.redirect('/some/path')` — the documented primary form — resolves its
+target again: the route matcher is asynchronous and the historical call was
+never awaited, so a relative redirect silently matched nothing server-side.
+Fixing it makes **`redirect()` itself `async`**. Redirects that pass an absolute
+URL, a `route@bundle` name, or the `ignoreWebRoot` form have no await and settle
+on the same tick, so existing code is unaffected; going forward prefer
+`return self.redirect(...)` from your action, so a resolution error reaches the
+framework's error handler instead of surfacing as an unhandled rejection.
+
+Second, a redirect whose target cannot be resolved now returns a clean `404` for
+that one request. Previously the unresolved sentinel reached the response-header
+composer, which threw from inside the error path and **took the whole bundle
+down** (a SIGTERM restart); the composer now tolerates a falsy routing state, so
+a bad redirect target fails its own request instead of the process. No action
+required.
+
 ### Fixed — `resumeRequest()` no longer drops the paused request's extra data
 
 A GET replay dropped whatever you snapshotted with `pauseRequest(data)` unless
@@ -56,6 +75,88 @@ rest. The replayed action now reads that data from `req.get` in all three
 flavors. Snapshotting into a custom `requestStorage` with no live session
 degrades exactly as before. No action required — a flow that worked around the
 drop by stuffing data into the url or the session by hand keeps working.
+
+### Fixed — `getRoute()` no longer throws for a requirements-less GET route with extra params
+
+Composing a URL for a GET route that declares no `requirements` block, when
+extra params are passed, threw — surfacing as a `500` at the caller. It bit the
+deep-link-before-login replay (`resumeRequest()`) on any halted
+requirements-less GET route that carried data, and the same crash was reachable
+from the `url` template filter and the `getUrl()` family, in the browser bundle
+too. Extra params now compose onto the URL as query parameters, as intended.
+The client half ships in the browser bundle, so **rebuild your bundles after
+upgrading** to pick up the `url` / `getUrl` fix. No code change required.
+
+### Added — route authorization: `requireAuth`, `roles`, and `policy`
+
+A `routing.json` rule's `param` block can now gate access before the controller
+action runs — **fully additive**, so a route that declares none of these keys
+behaves exactly as before:
+
+- `"requireAuth": true` — a request is authenticated when `req.session.user` is
+  set (populating it at login stays your application's job). An unauthenticated
+  request gets a `401`; for a browser navigation, when
+  `settings.json > auth.loginRoute` names a rule or a path, it gets a
+  non-cacheable redirect to the login page with the original request snapshotted
+  for `self.resumeRequest()` to replay. XHR requests always get the `401`, never
+  a redirect.
+- `"roles": ["admin", "editor"]` — the session user must hold one of the listed
+  roles (`req.session.user.roles`, ANY-of; implies `requireAuth`). A caller
+  holding none gets a generic `403` — the required roles are never echoed to the
+  wire.
+- `"policy": "ownsInvoice"` — delegates the decision to
+  `<bundle>/policies/ownsInvoice.js`
+  (`module.exports = function (user, req) { return boolean }`), AND-composed
+  after roles (implies `requireAuth`). Access is granted only on a literal
+  `true`; anything else — including a thrown error — denies with a generic
+  `403`. The controller helper `self.hasRole(role)` is available for actions
+  that authorize mid-logic.
+
+Author mistakes refuse to boot rather than leaving a route silently open: a
+non-boolean `requireAuth`, an `auth.loginRoute` the bundle does not declare, an
+invalid `roles` shape, or a missing / broken / non-function / `async` policy.
+The authorization keys are stripped from the client-served routing maps. No
+action required unless you adopt the feature.
+
+### Added — an audit trail (`settings.json > audit` + `self.audit()`)
+
+A user-attributed, append-only record of "who did what to which record when",
+kept separate from application logging (its own store, never the logger sinks).
+Opt in with `audit.enabled: true` in `settings.json` and call
+`self.audit(action, data[, cb])` from an action —
+`self.audit("invoice.delete", { resource: id })` writes a record carrying the
+actor (a snapshot of `session.user[audit.actorKey]`, default `"id"`, plus a copy
+of `user.roles` — never the whole user object), the action, the request id, the
+socket `ip` (`X-Forwarded-For` is never trusted), and the route metadata.
+
+The default backend is an append-only JSONL file at
+`<project>/logs/audit-<bundle>-<env>.jsonl` (override with `audit.file`, or point
+`audit.store` at a `connectors.json` entry — no connector ships an audit-store
+implementation yet, so that path refuses the boot rather than failing silently).
+When the trail is on, route-authorization denials are recorded automatically as
+`authz.denied` events (opt out with `audit.events.authz: false`), and an audit
+failure can never change an authorization outcome. Malformed `audit` settings
+refuse to boot rather than leaving a compliance control silently off.
+
+Independently of the trail, **every request now carries an always-on request id**
+(previously stamped only when JSON logging was enabled), so audit records and
+JSON log lines correlate by construction; the id honours a sanitized inbound
+`X-Request-Id`, making it a correlation key, not an attribution one. No action
+required unless you adopt the feature.
+
+### Fixed — Prometheus metrics no longer double-count under the isaac engine
+
+**Check this one if you run the built-in metrics endpoint (`app.json`
+`metrics.enabled`) on the isaac engine.** The request-lifecycle hook ran at both
+dispatch layers for any request that reached the router, so every request
+counter was incremented twice and the duration histogram observed twice. The
+hook now records exactly once on either engine (the Express engine was never
+affected). **The visible effect on upgrade: your request-counter rates roughly
+halve** — that is the double-count disappearing, not a drop in traffic, so
+re-check any alert thresholds or dashboards calibrated against the inflated
+series. Request durations are now measured from engine entry, and the dev
+Inspector Flow timeline keeps its accurate request-start time. See the
+[Observability guide](/guides/observability).
 
 ### Added — the checkbox migration warning now covers the un-tick direction
 
@@ -80,6 +181,31 @@ object is not an event surface (it exposes no `on`/`once`); for application
 events, use the controller's
 [`self.emitEvent()`](/guides/inspector#event). No action required — no
 working code could have depended on the old behaviour.
+
+### Added — image and container CLI: `image:list` / `image:rm` / `image:run`, and `container:ps` / `container:stop`
+
+New verbs alongside `image:build`, all resolving the container host through the
+same precedence `image:build` uses (`GINA_CONTAINER_HOST`, then native buildah,
+then the `container.host` setting), so they always act on the host `image:build`
+targets:
+
+- `gina image:list` — inspect the OCI images on the host (aligned table or
+  `--format=json`); `gina image:rm <ref|id>` removes one (`--force` for an image
+  a container still references; no bulk delete).
+- `gina image:run <image>` — run an image (via podman), detached by default and
+  publishing the image's `EXPOSE`d port same-to-same (the port the gina-init
+  allocator computed at build time); `--publish`, `--name`, `--rm`, `--stream`,
+  `--format=json`, and `--env-var` / `--env-file` (runtime env reaches the
+  container without ever entering argv or a shell). A build-only host (buildah
+  present, podman absent) says so honestly instead of failing opaquely.
+- `gina container:ps [--all]` — list containers on the host;
+  `gina container:stop <name|id> [--time=<s>] [--force]` stops one and reports
+  the rung it came down on (a `137` exit means it was SIGKILLed after the grace
+  period).
+
+No action required — these are new capabilities. See the
+[image CLI reference](/cli/cli-image) and the
+[container CLI reference](/cli/cli-container).
 
 ### Fixed — `image:build` for projects that depend on gina themselves
 
