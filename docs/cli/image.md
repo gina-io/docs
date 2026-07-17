@@ -3,7 +3,7 @@ id: cli-image
 title: image
 sidebar_label: image
 sidebar_position: 15
-description: CLI reference for gina image commands — package a project bundle as a standard OCI container image, synthesized from the project's registered state and built with buildah, natively on Linux or over ssh; list and remove the images on the container host.
+description: CLI reference for gina image commands — package a project bundle as a standard OCI container image, synthesized from the project's registered state and built with buildah, natively on Linux or over ssh; list, remove and run the images on the container host.
 level: intermediate
 prereqs:
   - '[Gina installed globally](/getting-started/installation)'
@@ -16,8 +16,9 @@ The `image` command group packages a project bundle as a standard [OCI](https://
 - **`image:build`** — synthesize the `Containerfile` + build context and build the image; `--emit` prints the synthesized artifact without building anything.
 - **`image:list`** — list the images on the container host.
 - **`image:rm`** — remove an image from the container host.
+- **`image:run`** — run an image as a container on the container host.
 
-All three resolve the container host the same way, so `image:list` always shows what `image:build` would build onto. `image:list` and `image:rm` are **host-level**: they take no `@<project>`.
+All four resolve the container host the same way, so `image:list` always shows what `image:build` would build onto — and `image:run` runs it right there. `image:list`, `image:rm` and `image:run` are **host-level**: they take no `@<project>`. Once a container is up, the [`container`](./container.md) group lists and stops it.
 
 ```mermaid
 flowchart LR
@@ -81,6 +82,8 @@ Run the result with any OCI runtime:
 ```bash
 podman run -d -p 3101:3101 myproject/demo:prod    # or docker run …
 ```
+
+— or with [`image:run`](#imagerun), which resolves the same host and publishes the baked `EXPOSE` for you.
 
 ### Container host {#container-host}
 
@@ -282,6 +285,108 @@ Use [`image:list`](#imagelist) to see what is there. Removing a **tag** from an 
 :::note
 The image reference is validated before it reaches the host: it must begin with an alphanumeric and contain only image-reference characters. This is what keeps a reference from being read as a flag, or from carrying anything else to a remote shell.
 :::
+
+---
+
+## `image:run` {#imagerun}
+
+*New in 0.5.19*
+
+Run an image as a container on the container host — the same host [`image:build`](#container-host) builds onto, resolved the same way. Detached by default; the container id is printed on stdout.
+
+```bash
+gina image:run localhost/myproject/demo:prod
+gina image:run localhost/myproject/demo:prod --name=demo
+gina image:run localhost/myproject/demo:prod --publish=8080:3100 --rm
+```
+
+:::caution Runs with podman — buildah cannot run images
+The rest of the group builds with [buildah](https://buildah.io/), but buildah builds images and cannot *run* them, so `image:run` drives [podman](https://podman.io/) (whose OCI runtime is crun). A **build-only host** — buildah present, podman absent — is a supported shape, and it is reported honestly rather than as an opaque exec failure:
+
+```text
+run unavailable on this host: podman not found on ssh://build@lin (buildah 1.44.0 present — build-only host); image:run needs podman + conmon
+```
+:::
+
+Use the [`container`](./container.md) group to see what is running and stop it.
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--name=<name>` | Container name. Default: podman picks one. |
+| `--publish=<h>:<c>[,…]` | Host:container port map(s) to publish. Default: [the port the image `EXPOSE`s](#run-ports), mapped same:same. `--publish=none` publishes nothing. |
+| `--env-var=KEY=VALUE` | Set one environment variable in the container. Repeatable. Overrides `--env-file` on a duplicate key (podman's own `--env` precedence). |
+| `--env-file=<path>` | Read `KEY=VALUE` lines from a **local** file. Blank lines and `#` comments are ignored. |
+| `--rm` | Remove the container when it exits. |
+| `--stream` | Run in the **foreground**, mirroring the container's output as NDJSON frames. |
+| `--format=json` | Machine-readable result (detached): `{ host, id, name, image, ports }`. |
+
+### Ports {#run-ports}
+
+With no `--publish`, `image:run` publishes **the port the image itself `EXPOSE`s**, mapped same:same. That `EXPOSE` is the port [`image:build` computed](#what-the-image-contains) with the `gina-init` allocator — the port the bundle actually binds — so it is read back from the image and never recomputed here:
+
+```bash
+gina image:run localhost/myproject/demo:prod   # publishes 3101:3101 — the baked EXPOSE
+curl http://127.0.0.1:3101/demo/
+```
+
+`--publish` overrides entirely, `--publish=none` disables publishing, and an image with no `EXPOSE` and no flag publishes nothing.
+
+### Environment values {#run-env}
+
+`--env-var` / `--env-file` hand values to the container **without ever placing them in a process argv or a shell**: the lines ride stdin into a `0600` file (over ssh, a remote `mktemp` file a `trap` removes when the command ends), so they never appear in the host's process list. A value may contain any character except a newline, which the `KEY=VALUE` line format cannot represent; a key must match `[A-Za-z_][A-Za-z0-9_]*`.
+
+This is how [`${secret:KEY}` placeholders](/guides/secrets) — which ride byte-verbatim into the image and resolve from the *container's* environment at runtime — are supplied when the container starts, without ever being baked:
+
+```bash
+gina image:run localhost/myproject/demo:prod --env-file=./.env.prod
+gina image:run localhost/myproject/demo:prod --env-var=DB_PASSWORD=… --env-var=API_KEY=…
+```
+
+`--env-var` is repeatable, and an inline value wins over the same key in `--env-file`.
+
+### Output
+
+In text mode stdout carries the **container id alone** — the progress line goes to stderr — so the id is directly capturable:
+
+```bash
+ID=$(gina image:run localhost/myproject/demo:prod)
+```
+
+```text
+[image:run] starting localhost/myproject/demo:prod on ssh://build@lin (publishing 3101:3101)   ← stderr
+42651ca9ea32…                                                                                  ← stdout
+```
+
+### JSON output
+
+```json
+{"host":"ssh://build@lin","id":"42651ca9ea32…","name":"demo","image":"localhost/myproject/demo:prod","ports":["3101:3101"]}
+```
+
+`id` is the **full 64-character** id podman printed — [`container:ps`](./container.md#containerps) and [`container:stop`](./container.md#containerstop) report the 12-character short id, so correlate by prefix, not equality. `name` is `null` when `--name` was not given (podman named it — `container:ps` shows what it picked). `ports` carries the published maps as podman `-p` values.
+
+### Streaming
+
+`--stream` runs the container in the **foreground** and mirrors it as NDJSON frames, one JSON object per line: a `start` frame, a `log` frame per output line (`stream` naming the source), then a terminal `done` frame carrying the **container's own exit code** — or an `error` frame:
+
+```json
+{"type":"start","image":"localhost/myproject/demo:prod","name":"demo","host":"ssh://build@lin","ports":["3101:3101"]}
+{"type":"log","stream":"stdout","line":"[ gina ] bundle demo started"}
+{"type":"done","exitCode":0}
+```
+
+The container's exit code is propagated: a non-zero `exitCode` exits `image:run` with `1`.
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The container started and its id was captured — or, with `--stream`, it ran to completion and exited `0`. |
+| `1` | Usage / validation error (no image, invalid reference, `--name`, `--publish` or env key), no container host resolvable, the host cannot run containers (podman absent), the run itself failed, or — with `--stream` — the container exited non-zero. |
+
+Failures name the fix where the output allows it: a port already in use points at `--publish`, a name already taken points at `container:ps --all`, and an untrusted ssh host key points at running `ssh <target>` once to accept it.
 
 ---
 

@@ -226,6 +226,7 @@ export default {
       '/docs/cli/bundle':    '/docs/cli/cli-bundle',
       '/docs/cli/cache':     '/docs/cli/cli-cache',
       '/docs/cli/connector': '/docs/cli/cli-connector',
+      '/docs/cli/container': '/docs/cli/cli-container',
       '/docs/cli/env':       '/docs/cli/cli-env',
       '/docs/cli/framework': '/docs/cli/cli-framework',
       '/docs/cli/i18n':      '/docs/cli/cli-i18n',
