@@ -21,6 +21,42 @@ upward to the target version.
 
 ## 0.5.18 → 0.5.19
 
+### Changed — `self.redirect()` carries request data through the session by default
+
+**Check this one if any of your routes read `req.get` values that a redirect put
+there.** When a redirect carried the request's params, they used to travel in
+the url as `?inheritedData=<encoded JSON>` — in clear, in the address bar, in
+browser history and in your access logs, capped at 2000 characters. On a bundle
+with a session mounted they now ride the session instead: nothing is appended to
+the url, and the size cap no longer applies. The target action still reads them
+from `req.get` exactly as before, so **no application code changes**.
+
+Two consequences worth knowing. The session carry is **one-shot** — it is
+consumed by the first routed GET that follows and then dropped, so a **page
+refresh no longer replays the data** (the url form did, because it was in the
+url). If a flow depended on that, read what you need on the first request and
+persist it yourself. And because the first routed GET consumes it, a second tab
+loading in parallel can win the race — this was equally true of the session
+channel before, which already carried popin redirects.
+
+**Session-less bundles are byte-identical to before**: no session means the url
+form, the 2000-char cap, and the same `424` over it. Conversely, a redirect on a
+bundle *with* a session that used to fail with `424` now succeeds.
+
+See [Controllers → Carrying request data across the
+redirect](/guides/controller#redirect-data-carry).
+
+### Fixed — `resumeRequest()` no longer drops the paused request's extra data
+
+A GET replay dropped whatever you snapshotted with `pauseRequest(data)` unless
+the request happened to be a popin XHR: the popin flavor routed through
+`redirect()` and picked up its session carry, while the plain-XHR and full-page
+flavors rebuilt the url from the route's params alone and silently lost the
+rest. The replayed action now reads that data from `req.get` in all three
+flavors. Snapshotting into a custom `requestStorage` with no live session
+degrades exactly as before. No action required — a flow that worked around the
+drop by stuffing data into the url or the session by hand keeps working.
+
 ### Added — the checkbox migration warning now covers the un-tick direction
 
 `0.5.18` introduced a console warning for checkbox markup whose `value` used
