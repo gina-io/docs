@@ -230,12 +230,14 @@ gina image:list --format=json
 {
   "host": "ssh://build@lin",
   "images": [
-    { "ref": "localhost/myproject/demo:prod", "id": "dcfe41620f11", "size": "293 MB", "created": "11 days ago" }
+    { "ref": "localhost/myproject/demo:prod", "id": "dcfe41620f11", "size": "293 MB", "created": "11 days ago", "sizeBytes": 293000000, "createdAt": "2026-07-05T16:07:40.478182865Z" }
   ]
 }
 ```
 
-`host` is the resolved container host (`native`, or the ssh descriptor). Piping is safe — the payload is written synchronously:
+`host` is the resolved container host (`native`, or the ssh descriptor). `createdAt` is the exact RFC3339 creation time; `sizeBytes` is an approximate byte count derived from buildah's humanized size (three significant figures — sorting-safe; buildah exposes no raw byte count). `size`/`created` remain the humanized display strings the table shows.
+
+Piping is safe — the payload is written synchronously:
 
 ```bash
 gina image:list --format=json | jq -r '.images[].ref'
@@ -262,7 +264,7 @@ gina image:rm 44b5401ff810
 gina image:rm localhost/myproject/demo:prod --force
 ```
 
-Use [`image:list`](#imagelist) to see what is there. Removing a **tag** from an image that carries several only drops that tag; the image itself survives while another tag still points at it.
+Use [`image:list`](#imagelist) to see what is there. Removing a **tag** from an image that carries several only drops that tag; the image itself survives while another tag still points at it (the in-use refusal applies only to an image's last reference).
 
 ### Flags
 
