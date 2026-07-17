@@ -314,6 +314,45 @@ In the `dev` environment, and on any request the framework classifies as reverse
 Because `self.redirect()` defaults to a cacheable `301`, a client that received a redirect **before** you deployed a change can keep replaying the old one from cache — so verify redirect changes from a fresh profile or a private window, and expect "still broken" reports from clients that cached the previous response.
 :::
 
+#### Carrying request data across the redirect {#redirect-data-carry}
+
+When the redirecting request holds params, they cross the redirect and land in `req.get`
+on the next routed GET — you read them from the target action as if they had been query
+params all along:
+
+```js
+// POST /invoices/create — validation failed, bounce back to the form
+this.create = function(req, res) {
+  if (!req.post.reference) {
+    req.post.error = 'A reference is required';
+    return self.redirect('form');        // req.post rides the redirect
+  }
+  // ...
+};
+
+// GET /invoices/form — the target action
+this.form = function(req, res) {
+  self.render({ error: req.get.error }); // reads what the POST sent
+};
+```
+
+How they travel depends on whether the bundle has a session:
+
+| Bundle | Carrier | Notes |
+|---|---|---|
+| **With a session** (the [Session plugin](./sessions) is mounted) | The session | Nothing is appended to the url. No size limit. |
+| **Without a session** | The url — `?inheritedData=<encoded JSON>` | Visible in the address bar, browser history and access logs. Capped at 2000 characters; over the cap the redirect fails with a `424`. |
+
+The session carry is **one-shot**: the data is consumed by the first routed GET that
+follows and then dropped, so a page refresh does not replay it. Read what you need on the
+first request and put anything durable somewhere you control.
+
+:::caution Treat carried data as untrusted
+Values reach the target action indistinguishable from regular query params, and on a
+session-less bundle they are client-editable in the address bar. Validate them in the
+target action; never trust them for authorization decisions.
+:::
+
 ### `self.throwError(res, code, err)`
 
 Sends an error response. For XHR/API requests the response is JSON. For HTML requests,
@@ -673,6 +712,13 @@ this.login = function(req, res, next) {
   different namespace.
 
 Either way, the `haltedRequest` snapshot is cleared from storage once it has been consumed.
+
+On a **GET** replay the resolved url carries the paused request's url params, and any
+extra data you snapshotted rides the session — the replayed action reads it from
+`req.get`, one-shot, exactly as described under
+[Carrying request data across the redirect](#redirect-data-carry). Snapshotting into a
+custom `requestStorage` with no live session (below) replays the url without that extra
+data.
 
 :::tip Custom storage
 Pass a second argument to `pauseRequest(data, requestStorage)` (and to

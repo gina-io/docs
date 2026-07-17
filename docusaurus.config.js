@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → npm registry → node_modules.
-const ginaVersion = '0.5.18';
+const ginaVersion = '0.5.19';
 const swigVersion = '2.7.3';
 const twigVersion = '2.7.3';
 const jinjaVersion = '2.7.3';
@@ -96,6 +96,7 @@ const config = {
           {from: '/cli/bundle',    to: '/cli/cli-bundle'},
           {from: '/cli/cache',     to: '/cli/cli-cache'},
           {from: '/cli/connector', to: '/cli/cli-connector'},
+          {from: '/cli/container', to: '/cli/cli-container'},
           {from: '/cli/env',       to: '/cli/cli-env'},
           {from: '/cli/framework', to: '/cli/cli-framework'},
           {from: '/cli/i18n',      to: '/cli/cli-i18n'},

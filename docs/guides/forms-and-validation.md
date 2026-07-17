@@ -253,9 +253,11 @@ the corrected model. Two ways forward:
   `data-gina-form-checkbox-value-as-state="true"` on the `<form>`. The opt-in
   is **deprecated** and kept as a transitional aid only.
 
-In the default mode, a console warning flags each checkbox whose `value` reads
-`true`/`on` without a `checked` attribute — the exact markup whose meaning
-changed.
+In the default mode, a console warning flags the markup whose meaning changed,
+in both directions: a checkbox whose `value` reads `true`/`on` without a
+`checked` attribute (it used to render ticked), and a checkbox carrying the
+`checked` attribute whose `value` — or `data-value` — reads `false` or empty
+(it used to render unticked, and now stays ticked). Each field warns once.
 
 ---
 
