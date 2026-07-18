@@ -53,6 +53,10 @@ exactly what they did before. An unknown or non-string field logs a warning and
 is ignored, and a bundle with no locale set now gets an empty list instead of a
 throw.
 
+### Changed — busboy is now an npm dependency
+
+Multipart parsing uses [`@rhinostone/busboy`](https://github.com/gina-io/busboy) installed from npm instead of a patched copy vendored inside the framework tree. The fork is a strict superset of upstream busboy 1.6.0 — its only addition exposes each part's parsed Content-Disposition parameters, which is what lets the upload layer read the `group="…"` tag. **Nothing about upload behaviour or the multipart wire format changes**: files still arrive with their group, an unconfigured group is still rejected, and a file with no group still falls back to `untagged`. No application changes and no client rebuild — pickup is the version plus a bundle restart.
+
 ## 0.5.18 → 0.5.19
 
 ### Changed — `self.redirect()` carries request data through the session by default
