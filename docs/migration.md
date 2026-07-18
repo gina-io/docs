@@ -19,6 +19,40 @@ upward to the target version.
 
 ---
 
+## 0.5.19 → 0.5.20
+
+### Fixed — region locale data: one standalone file per language, localized `countryName`
+
+**Check this one if any of your bundles resolves a non-English culture and
+renders country lists.** The region locale generator used to append each
+requested language's rows to the previous language's output, so
+`dist/region/fr.json` carried every country twice — the English copy first —
+and `isoShort` lookups through `getLocales().getCountries()` always matched the
+English row. Each language now ships as a standalone file, and non-English
+builds localize `countryName`: a bundle resolving a `fr` culture gets
+`Allemagne`, `États-Unis`, `Royaume-Uni` where it previously rendered
+`Germany`, `US`, `UK`. **No application code changes** — the same
+`getLocales().getCountries()` path returns the corrected data, and the
+per-request [culture negotiation](/guides/i18n) keeps selecting the language,
+so an `Accept-Language` flip changes the names per request as it should.
+
+Two data notes. Rows without an ISO 3166 alpha-2 code are dropped (`en.json`
+goes from 251 to 249 entries — the two dropped rows had an empty `isoShort`
+*and* an empty `countryName`, so they could only ever render as blank list
+entries). And the region files are read once at process start, not
+hot-reloaded — restart your bundles after upgrading so they pick up the
+regenerated data.
+
+### Fixed — `getCountries(code)` honors its documented projection argument
+
+The optional `code` argument (e.g. `capital`, `continent`, `tld`) was computed
+and never applied. It now **adds** the requested field to every returned row —
+the four historical fields (`isoShort`, `isoLong`, `countryName`,
+`officialStateName`) are always present, so calls without an argument return
+exactly what they did before. An unknown or non-string field logs a warning and
+is ignored, and a bundle with no locale set now gets an empty list instead of a
+throw.
+
 ## 0.5.18 → 0.5.19
 
 ### Changed — `self.redirect()` carries request data through the session by default
