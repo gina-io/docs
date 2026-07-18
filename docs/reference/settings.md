@@ -153,7 +153,7 @@ See the [Caching guide](../guides/caching) for the full per-route field referenc
 
 ### `upload`
 
-Configures multipart file uploads via [busboy](https://github.com/mscdex/busboy).
+Configures multipart file uploads via [`@rhinostone/busboy`](https://github.com/gina-io/busboy) (a maintained fork of `busboy`).
 Upload groups must be declared here before the upload endpoints in `routing.json`
 can accept files.
 
