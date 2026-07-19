@@ -19,6 +19,24 @@ upward to the target version.
 
 ---
 
+## 0.5.20 → 0.5.21
+
+### Added — popin eager preload (`data-gina-dialog-preload="eager"`)
+
+**Additive — no action required.** AJAX popin triggers can now opt into idle
+warming: mark a trigger with `data-gina-dialog-preload="eager"`
+(case-insensitive) and the popin plugin fetches its content after `window`
+load, at browser idle — one trigger at a time, off the critical path — so the
+popin opens instantly with no second GET. The pass reuses the same safety
+gates as the hover/focus warm: the `"false"` opt-out and the disabled skip
+apply identically, an eager warm and a hover warm coalesce into a single GET,
+and the pass is skipped entirely when the browser signals Save-Data. Default
+behavior is unchanged — hover/focus warm remains the default, and `"false"`
+still disables warming entirely. Browser-bundled: rebuild your bundles
+(`gina bundle:build`) to pick it up.
+
+---
+
 ## 0.5.19 → 0.5.20
 
 ### Fixed — region locale data: one standalone file per language, localized `countryName`
