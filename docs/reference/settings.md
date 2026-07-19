@@ -153,7 +153,7 @@ See the [Caching guide](../guides/caching) for the full per-route field referenc
 
 ### `upload`
 
-Configures multipart file uploads via [busboy](https://github.com/mscdex/busboy).
+Configures multipart file uploads via [`@rhinostone/busboy`](https://github.com/gina-io/busboy) (a maintained fork of `busboy`).
 Upload groups must be declared here before the upload endpoints in `routing.json`
 can accept files.
 
@@ -261,6 +261,58 @@ openssl rand -base64 64
 ```
 Set the resulting value in `env.json` (`{ "dev": { "GINA_CSRF_SECRET": "<paste>" } }`)
 or pass it directly via the deployment platform's secret-injection mechanism.
+:::
+
+### `auth`
+
+Route-authorization settings, consulted when a `routing.json` rule opts in with
+`param.requireAuth`, `param.roles`, or `param.policy`. See the
+[Route authorization guide](../guides/route-authorization) for the full model.
+
+```json
+{
+  "auth": {
+    "loginRoute": null
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `loginRoute` | string | `null` | Rule name or absolute path a browser navigation is redirected to when it hits a `requireAuth` route without an authenticated session. A rule name (`"login"`) resolves to that rule's served URL; an absolute path (`"/login"`) is used verbatim. When `null`, unauthenticated browser requests get a `401` instead of a redirect (fail-closed). XHR requests always get the `401`, never a redirect. The bounce is always a non-cacheable `302`. A non-string value, or a rule name the bundle does not declare, refuses to boot |
+
+### `audit`
+
+Configures the append-only audit trail — a user-attributed record of "who did
+what to which record when", kept separate from application logging (it has its
+own store and never rides the logger sinks). Consulted only when `enabled` is
+`true`; when the trail is on, route-authorization denials are recorded
+automatically. See the [Audit trail guide](../guides/audit-trail) for the
+record schema and backends.
+
+```json
+{
+  "audit": {
+    "enabled":  false,
+    "file":     null,
+    "actorKey": "id",
+    "events":   { "authz": true }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Master switch. Strictly boolean — any other type (a truthy `"true"`, `1`) refuses to boot, so a compliance control can never be silently OFF |
+| `file` | string | `null` | JSONL destination for the default file backend. `null` ⇒ `<project>/logs/audit-<bundle>-<env>.jsonl` (the resolved path is logged at boot). A relative path resolves against the project root, never the process cwd. An empty string refuses to boot |
+| `store` | string | `null` | Advanced: a `connectors.json` entry name, resolved through a store dispatcher instead of the file backend. No connector ships an audit-store implementation yet, so setting this today refuses the boot rather than falling back silently. Mutually exclusive with `file` |
+| `actorKey` | string | `"id"` | Which `session.user` field is snapshotted as the record's actor key. Records keep only that key plus a copy of `user.roles` — never the whole user object. An empty string refuses to boot |
+| `events.authz` | boolean | `true` | Framework auto-events: record every route-authorization denial as an `authz.denied` record. On whenever `enabled` is `true`; set `false` to opt out |
+
+:::note Boot config
+`auth` and `audit` are read once at bundle startup — a change to either needs a
+bundle restart (like `routing.json`, `connectors.json`, and the rest of
+`settings.json`).
 :::
 
 ### `render`

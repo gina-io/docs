@@ -228,7 +228,9 @@ form to set a message (keep `isRequired` first):
 
 :::tip Applying a rule twice
 To attach the same rule to one field more than once in a rule file, suffix it
-with a number — `is`, `is1`, `is2`. Each runs independently.
+with a number — `is`, `is1`, `is2`. Each runs independently and records any
+failure under its own key on both the client and the server, so a per-field
+error map sees one entry per alias.
 :::
 
 ---

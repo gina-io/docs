@@ -19,6 +19,91 @@ upward to the target version.
 
 ---
 
+## 0.5.19 → 0.5.20
+
+### Fixed — region locale data: one standalone file per language, localized `countryName`
+
+**Check this one if any of your bundles resolves a non-English culture and
+renders country lists.** The region locale generator used to append each
+requested language's rows to the previous language's output, so
+`dist/region/fr.json` carried every country twice — the English copy first —
+and `isoShort` lookups through `getLocales().getCountries()` always matched the
+English row. Each language now ships as a standalone file, and non-English
+builds localize `countryName`: a bundle resolving a `fr` culture gets
+`Allemagne`, `États-Unis`, `Royaume-Uni` where it previously rendered
+`Germany`, `US`, `UK`. **No application code changes** — the same
+`getLocales().getCountries()` path returns the corrected data, and the
+per-request [culture negotiation](/guides/i18n) keeps selecting the language,
+so an `Accept-Language` flip changes the names per request as it should.
+
+Two data notes. Rows without an ISO 3166 alpha-2 code are dropped (`en.json`
+goes from 251 to 249 entries — the two dropped rows had an empty `isoShort`
+*and* an empty `countryName`, so they could only ever render as blank list
+entries). And the region files are read once at process start, not
+hot-reloaded — restart your bundles after upgrading so they pick up the
+regenerated data.
+
+### Fixed — `getCountries(code)` honors its documented projection argument
+
+The optional `code` argument (e.g. `capital`, `continent`, `tld`) was computed
+and never applied. It now **adds** the requested field to every returned row —
+the four historical fields (`isoShort`, `isoLong`, `countryName`,
+`officialStateName`) are always present, so calls without an argument return
+exactly what they did before. An unknown or non-string field logs a warning and
+is ignored, and a bundle with no locale set now gets an empty list instead of a
+throw.
+
+### Changed — busboy is now an npm dependency
+
+Multipart parsing uses [`@rhinostone/busboy`](https://github.com/gina-io/busboy) installed from npm instead of a patched copy vendored inside the framework tree. The fork is a strict superset of upstream busboy 1.6.0 — its only addition exposes each part's parsed Content-Disposition parameters, which is what lets the upload layer read the `group="…"` tag. **Nothing about upload behaviour or the multipart wire format changes**: files still arrive with their group, an unconfigured group is still rejected, and a file with no group still falls back to `untagged`. No application changes and no client rebuild — pickup is the version plus a bundle restart.
+
+### Fixed — numbered `is` rules (`is1`, `is2`, …) now enforce
+
+**Check this one if any rule file attaches `is` to a field more than once with
+a numbered suffix.** [Numbered `is` aliases](/reference/validation-rules#is) —
+`is1`, `is2`, and so on — were silently skipped: the alias installer sat behind
+a type check that made it unreachable, so a rule keyed `is1` ran no check at
+all, with no warning, on both the client and the server. They now install and
+run. **A form that submitted clean because its `is2` condition was ignored may
+begin failing validation** (and a server-side check may return a 422), so sweep
+your rule files for `is`-with-a-number keys before upgrading and confirm each
+condition is one you want enforced.
+
+Two riders. Each alias now records its failure under its **own** error key
+(`is`, `is1`, `is2`) on both client and server, so a per-field error map sees
+one entry per alias instead of a single shared `is`. And a server-side rule set
+that references other fields with `$name` — including a plain `is` cross-field
+comparison — no longer crashes before the rules run.
+
+### Fixed — dynamically injected forms activate live checking
+
+When a form is added to the page after load — a popin, a dynamically loaded
+fragment — and bound by id through `gina.validator.validateFormById(id)`, live
+checking now activates. Before, if the form's id differed from its rule name,
+that call resolved to an empty rule set and stamped the form
+`data-gina-form-live-check-enabled="false"`, so keystroke validation never ran
+(submit-time validation still worked, because the submit handler read the rule
+independently). The call now reads the form's `data-gina-form-rule` attribute
+first, matching the framework's three other rule-resolution sites. **No
+application changes** — forms that relied on submit-time validation are
+unaffected. An author-set `data-gina-form-live-check-enabled` attribute still
+wins; the automatic stamp only applies when you leave it off.
+
+### Fixed — boolean conditions in `_case_` rule blocks match during live checking
+
+In a `_case_<field>` conditional rule block, a `case` written as the string
+`"true"` or `"false"` now coerces to a boolean when it is evaluated during live
+checking (one field at a time), the same way full-form validation on submit
+already treated it. Before, such a string case silently failed to match while
+the user typed, so its nested `rules` never applied until the whole form was
+validated. **No application changes** unless a flow relied on that gap — live
+checking and full-form submission now agree.
+
+These three fixes change the client validator bundle, so a version bump and a
+restart alone will not pick them up — **rebuild your bundles** to re-bake the
+browser assets. (The numbered-`is` and `$name`-reference changes also apply
+server-side, which a restart does pick up.)
+
 ## 0.5.18 → 0.5.19
 
 ### Changed — `self.redirect()` carries request data through the session by default
