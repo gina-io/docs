@@ -35,6 +35,52 @@ behavior is unchanged — hover/focus warm remains the default, and `"false"`
 still disables warming entirely. Browser-bundled: rebuild your bundles
 (`gina bundle:build`) to pick it up.
 
+### Changed — a missing bundle `routing.json` now fails the boot (deliberate)
+
+**Check this one if your deployment pipeline can ever produce a release tree
+where a bundle's `config/routing.json` is momentarily absent** (staged file
+sync, partial artifact promotion). A bundle whose `config/routing.json` was
+missing at boot used to start anyway with only the framework's synthetic
+routes — every app route 404'd, and a sibling bundle's cross-bundle
+`getRoute('rule@bundle')` threw hours later with a bare not-found. The boot now
+**refuses to start** with an error naming the bundle and environment, exactly
+like a malformed `routing.json` always has; under a supervisor (Kubernetes,
+a container restart policy, the gina daemon) the restart retries until the
+release tree settles, so a mid-deploy race self-heals instead of half-booting.
+This is deliberate: silent partial route tables produced hours-later mystery
+errors. If a boot refuses after upgrading, the deployment artifact really is
+missing the file — fix the artifact. Related quality-of-life: the route-lookup
+not-found error now names the bundle and its rule count
+(`` …`nope@api` not found ! (bundle `api` holds 6 rules) ``), so a degraded
+table is tellable from a plain mistyped rule; the browser bundle carries the
+same enriched message — rebuild your bundles (`gina bundle:build`) to pick up
+the client side.
+
+### Security — 500 bodies no longer carry stack traces outside local scope
+
+**No action required for most deployments — check your error handling only if
+a service parsed stacks out of 500 response bodies.** Uncaught controller and
+middleware errors route through the server-side error responder, which used to
+serialize the full stack — absolute server paths and frames — into the JSON
+`error` field (and the HTML error fallback) on every scope. Outside **local**
+scope the wire now carries only the error's message line; the full stack goes
+to the server log instead, so the diagnostic is preserved server-side.
+Local scope is unchanged — the dev toolbar keeps reading the stack off the
+wire. Service-to-service consumers that relied on wire stacks for debugging
+should read the failing bundle's server log instead.
+
+### Fixed — the hardcoded `accept-language` response header is gone
+
+**Check your generated `env.json` if you have seen
+`accept-language: en-US,en;q=0.8,fr;q=0.6` on responses.** `Accept-Language`
+is a request header; the framework's env template declared it as a
+response-header default, so every response — error responses included —
+emitted the hardcoded value. The framework default is removed. If your
+project's own `env.json` carries the copied line under
+`server.response.header`, remove it there too — a value your project declares
+deliberately keeps being emitted verbatim (the override path is intact), and
+the locale fallback still honors a declared value.
+
 ---
 
 ## 0.5.19 → 0.5.20
