@@ -67,6 +67,21 @@ declaration order, not on the digit. Numbered rules now keep their distinct
 error keys on every pass and each message renders once. Browser-bundled:
 rebuild your bundles (`gina bundle:build`) to pick it up.
 
+### Fixed — multipart binary uploads arrive byte-identical
+
+**No action required — data-integrity fix. If you base64-encode binary files
+over JSON to work around upload corruption, you can retire that workaround
+after picking up this version.** Binary file payloads uploaded via native
+multipart (`FormData`, `curl -F`, hand-built bodies) were string-decoded on
+their way to disk, so any content that is not valid UTF-8 — images, PDFs,
+archives — arrived mangled and mis-sized (pure-ASCII files were unaffected,
+which is why text uploads always worked, and why the corruption could go
+unnoticed). The request stream now stays raw for multipart bodies and the
+write pipeline passes chunks through verbatim: files reach `req.files[].path`
+byte-identical, and `req.files[].size` now reports the real on-disk byte
+count instead of a decoded character count. Server-side only — no bundle
+rebuild needed; restart your bundles to pick it up.
+
 ---
 
 ## 0.5.20 → 0.5.21
