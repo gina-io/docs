@@ -44,9 +44,12 @@ missing at boot used to start anyway with only the framework's synthetic
 routes — every app route 404'd, and a sibling bundle's cross-bundle
 `getRoute('rule@bundle')` threw hours later with a bare not-found. The boot now
 **refuses to start** with an error naming the bundle and environment, exactly
-like a malformed `routing.json` always has; under a supervisor (Kubernetes,
-a container restart policy, the gina daemon) the restart retries until the
-release tree settles, so a mid-deploy race self-heals instead of half-booting.
+like a malformed `routing.json` always has; under an **external** supervisor
+(Kubernetes, a container restart policy such as `--restart=always`, an init
+system) the restart retries until the release tree settles, so a mid-deploy
+race self-heals instead of half-booting. The gina daemon itself does **not**
+retry a startup crash — a bare `gina bundle:start` bundle reports
+`crashed during startup` once and stays down until you restart it manually.
 This is deliberate: silent partial route tables produced hours-later mystery
 errors. If a boot refuses after upgrading, the deployment artifact really is
 missing the file — fix the artifact. Related quality-of-life: the route-lookup
