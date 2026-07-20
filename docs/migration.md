@@ -82,6 +82,33 @@ byte-identical, and `req.files[].size` now reports the real on-disk byte
 count instead of a decoded character count. Server-side only — no bundle
 rebuild needed; restart your bundles to pick it up.
 
+### Fixed — checkbox migration warnings: payload-only remedy + explicit opt-out
+
+**Action only if the #49 migration warnings fire on markup you authored
+deliberately.** The tick-direction warning ("`value` no longer implies the
+checked state") also fired on checkboxes authored *after* the 0.5.18
+state-model change — `value="true"` with no `checked`, intended to render
+unticked — where both listed remedies would have done the wrong thing. Two
+additions: the messages now name the third remedy — remove the `value`
+attribute; a boolean-classified checkbox posts its live checked state either
+way, so the posted wire is identical — and an explicit
+`data-gina-form-checkbox-value-as-state="false"` on the `<form>` declares the
+current state model and silences both migration warnings for that form (any
+explicit value counts; `"false"` has no other effect). Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+### Fixed — a `query` rule failure can no longer hang the submit
+
+**No action required — robustness fix.** The `query` rule's backend result is
+processed asynchronously: if the form had been unbound by then (for example a
+popin closed mid-flight), the response was malformed JSON under a JSON
+content-type, or the field value was a boolean (a checkbox with a `query`
+rule), the processing threw and the submit pass waited forever on a completion
+event that never fired. Any failure while handling the result now warns in the
+console and releases the pass with the field state unchanged — the server
+still re-validates on submit, which remains the trust boundary. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
 ---
 
 ## 0.5.20 → 0.5.21
