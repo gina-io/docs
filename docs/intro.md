@@ -2,13 +2,13 @@
 title: What is Gina?
 sidebar_label: What is Gina?
 sidebar_position: 1
-description: Gina is a Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency required.
+description: Gina is an MVC framework for Node.js and Bun with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency required.
 level: beginner
 ---
 
 # What is Gina?
 
-**Gina** is a Node.js MVC and event-driven framework for building web applications and services. It ships with its own HTTP/2 server, a multi-bundle process model, scope-based data isolation, and a CLI that manages the full lifecycle of your projects — from scaffolding to deployment.
+**Gina** is an MVC and event-driven framework for building web applications and services on Node.js and Bun. It ships with its own HTTP/2 server, a multi-bundle process model, scope-based data isolation, and a CLI that manages the full lifecycle of your projects — from scaffolding to deployment.
 
 :::tip Read the docs offline
 On a slow or metered connection? [Download the full documentation as an offline ZIP](/download-offline) and browse every page from your own machine — no internet required.

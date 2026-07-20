@@ -13,7 +13,7 @@ const djangoVersion = '2.7.3';
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Gina',
-  tagline: 'MVC framework for Node.js',
+  tagline: 'MVC framework for Node.js and Bun',
   favicon: 'img/favicon.ico',
 
   future: {
