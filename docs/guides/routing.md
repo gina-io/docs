@@ -542,7 +542,7 @@ route without touching every call site.
 
 ## Global routing
 
-`routing.global.json` defines middlewares and settings that apply to **every route**
+`routing.global.json` defines middlewares that apply to **every route**
 in the bundle. The file lives at:
 
 - `shared/config/routing.global.json` — shared across all bundles in the project
@@ -553,10 +553,7 @@ in the bundle. The file lives at:
   "middleware": [
     "middlewares.global.getProjectVersion",
     "middlewares.maintenance.check"
-  ],
-  "cacheControl": {
-    "max-age": 3600
-  }
+  ]
 }
 ```
 
@@ -569,6 +566,14 @@ getProjectVersion → maintenance.check → passport.authentificate → controll
 
 To add a middleware to every route, put it in `routing.global.json`. To add it to
 specific routes only, put it in the individual route's `middleware` array.
+
+:::note One key only
+`middleware` is the only key the framework reads from `routing.global.json` — any
+other key in the file is ignored. For response caching and `Cache-Control` headers,
+use the per-route [`cache` field](./caching.md) in `routing.json`; for a static
+header on every response, declare it under `server.response.header` in your
+project's `env.json`.
+:::
 
 ---
 
