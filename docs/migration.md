@@ -81,6 +81,46 @@ project's own `env.json` carries the copied line under
 deliberately keeps being emitted verbatim (the override path is intact), and
 the locale fallback still honors a declared value.
 
+### Fixed — fields with `autocomplete="off"` accept keyboard shortcuts again
+
+**No action required — behavior fix.** On a [live-check
+form](/guides/forms-and-validation), a field carrying `autocomplete="off"` (or
+`"false"`) has its keystrokes intercepted to defeat the browser's
+autofill/autosuggest dropdown. The interception mishandled modifier chords:
+Cmd/Ctrl+A typed the chord letter into the field instead of selecting all, and
+keyboard paste (Cmd/Ctrl+V) did nothing — its re-implementation relied on
+`document.execCommand("paste")`, which browsers ignore in ordinary page
+content (mouse and context-menu paste worked). Modifier chords now pass
+through to the browser untouched: select-all, copy, paste, cut and undo behave
+natively on intercepted fields, and plain typing still goes through the
+interception. One deliberate delta: Cmd/Ctrl+Z on these fields is now a native
+no-op (it used to reset the field to its default value, discarding input).
+Browser-bundled: rebuild your bundles (`gina bundle:build`) to pick it up.
+
+### Fixed — the `autocomplete="off"` interception no longer runs on Chromium
+
+**Check this one only if you relied on the interception's autofill-defeat on
+Chrome.** The interception is a Safari-specific workaround (Safari ignores
+`autocomplete="off"`), but its browser gate tested `/safari/i` against the
+user agent — and every Chromium browser (Chrome, Edge, Brave, Opera) carries
+the `Safari/537.36` token, so the workaround ran there too, against its own
+documented intent. The gate now matches real Safari only: Chromium users get
+native typing and the browser's own autofill handling on these fields. iOS
+third-party browsers (Chrome, Firefox or Edge on iOS) run Safari's WebKit
+engine and are still treated as Safari. Browser-bundled: rebuild your bundles.
+
+### Fixed — live check clears stale error messages when the form becomes valid
+
+**No action required — display fix.** With live checking enabled, a validation
+pass triggered by one control — ticking a checkbox, changing a select — that
+makes the whole form valid (for example by raising a value another field's
+comparison rule reads) re-enabled the submit trigger but left the other
+field's error message on screen until that field's next keystroke. The
+whole-form pass now clears every previously-errored field's message when it
+comes back valid, on both the input/checkbox/radio path and the select path.
+Error messages for untouched fields still appear only on interaction or
+submit. Browser-bundled: rebuild your bundles.
+
 ---
 
 ## 0.5.19 → 0.5.20
