@@ -119,6 +119,42 @@ console and releases the pass with the field state unchanged — the server
 still re-validates on submit, which remains the trust boundary. Browser-bundled:
 rebuild your bundles (`gina bundle:build`) to pick it up.
 
+### Added — the `settings.i18n.cultures` allowlist is now honoured
+
+**No action unless you had set it — the key was documented as reserved.** A
+non-empty `cultures` array under `settings.json > i18n` now constrains which
+cultures the user-signal negotiation steps (URL prefix, cookie,
+`Accept-Language`) may match, so a staged rollout can ship a
+`locales/de.json` catalog without `de` becoming reachable until it is listed.
+`null` or `[]` keep the historical behavior (available cultures derive from
+the loaded catalogs), and the bundle default (`settings.region.culture`) is
+never constrained. The whole `i18n` block is now declared in the published
+settings.json schema. Restart the bundle to apply.
+
+### Fixed — `page.view.locale` now carries the real country record
+
+**No action required — a dead surface starts working.** The per-request
+country-locale lookup filtered the region data on a key it does not carry, so
+`page.view.locale` had always been an empty object (plus the date stamp) when
+the culture carried a country code — and an arbitrary first record when it did
+not. Templates now receive the real record (`countryName`, `currency`,
+`capital`, …) resolved from the request culture's country code, with lowercase
+country segments normalized; a country-less culture (bare `en`) yields an
+explicit empty object. Nothing read the broken object before, so no existing
+template changes behavior — the surface simply starts working.
+
+### Fixed — install no longer dies on a redactor-matched npm prefix
+
+**No action required — install robustness.** `npm install -g gina` died
+whenever the effective npm prefix contained a path segment npm's redactor
+masks — a UUID-shaped directory is enough (CI sandboxes, generated
+workspaces): `npm config get prefix` refuses such a read as protected on
+every current npm generation (10/11/12), and gina's install scripts probed it
+unguarded. The probe is now guarded, falling back to the prefix npm itself
+exports to the install lifecycle. The fix ships inside the tarball, so it
+applies from this version's install onward — older versions cannot be
+retro-fixed.
+
 ---
 
 ## 0.5.20 → 0.5.21
