@@ -21,6 +21,16 @@ upward to the target version.
 
 ## 0.5.21 → 0.5.22
 
+### Changed — runtime pins now live under the standard `engines` manifest key
+
+**No action on supported runtimes.** Gina's `package.json` declares its runtime
+floors under the standard `engines` key (formerly the non-standard singular
+`engine`, which npm and Bun ignore entirely). On Node `>= 22 <27` or Bun
+`>= 1.2` nothing changes. An out-of-range runtime now gets npm's standard
+`EBADENGINE` **warning** at install time — it becomes a hard failure only if
+your environment sets `engine-strict`. Newly scaffolded projects get the
+standard object-form key in their generated `package.json` too.
+
 ### Fixed — reopening a popin no longer renders the previous open's content
 
 **No action required — behavior fix. Re-check any workaround you built for stale
