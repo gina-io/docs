@@ -124,6 +124,21 @@ comes back valid, on both the input/checkbox/radio path and the select path.
 Error messages for untouched fields still appear only on interaction or
 submit. Browser-bundled: rebuild your bundles.
 
+### Fixed — cross-bundle links in merged-process projects
+
+**No action required — server-side fix; applies only if several bundles share
+one port.** In a merged-process project (every bundle of the project on the
+same port, served by one process), the first cross-bundle
+`{{ 'rule@bundle'|getUrl() }}` permanently replaced the target bundle's
+routing table with the starting app's — from then on every cross-bundle link
+to that bundle rendered the literal `404:[<METHOD>]<rule>@<bundle>` marker
+instead of a URL, and inbound requests statics-matched to that bundle could be
+resolved against the wrong table. Each bundle now keeps its own routing table
+(the shared hostname is preserved). Projects with distinct per-bundle ports —
+the common layout — were never affected. Server-side only: pick it up with the
+version bump and a bundle restart; no rebuild of your bundles is needed for
+this one.
+
 ---
 
 ## 0.5.19 → 0.5.20
