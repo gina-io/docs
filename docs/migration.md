@@ -19,6 +19,56 @@ upward to the target version.
 
 ---
 
+## 0.5.21 → 0.5.22
+
+### Fixed — reopening a popin no longer renders the previous open's content
+
+**No action required — behavior fix. Re-check any workaround you built for stale
+popin content.** The AJAX popin content cache outlived the open it warmed: every
+open after the first paid for a network fetch yet rendered the body fetched
+around the *previous* open — a one-generation lag — because no close path
+invalidated the cached copy. A dialog whose content changes between opens
+(a record edited elsewhere, a value updated server-side) therefore reopened
+showing a stale snapshot. This was a long-standing defect, not a 0.5.21
+regression — it predates the eager preload feature. The cache entry now dies
+with the open: closing a popin clears its cached content — including the copy
+silently re-warmed by the close-time focus return and pointer re-hover — so
+every open renders current content. Default triggers pay at most one extra
+idempotent GET per close. Browser-bundled: rebuild your bundles
+(`gina bundle:build`) to pick it up.
+
+### Changed — `data-gina-dialog-preload="false"` is now a hard always-refetch guarantee
+
+**Action for volatile popins: annotate their triggers `false`.** A trigger
+marked `data-gina-dialog-preload="false"` already opted out of hover/focus/idle
+warming; it now also skips the cache *read* when the popin opens, on both open
+paths. That makes `false` a guarantee: the trigger's popin GET happens at open
+time, every time — never served from a warm, never from a same-URL sibling
+trigger's cache entry. Use it for content that must be current at the moment it
+is displayed.
+
+While auditing triggers, also check the other direction: before relying on the
+default hover/focus warm (or opting into `eager`), audit each popin GET route
+for halting or side-effecting middlewares and session-mutating renders, and
+annotate those triggers `false` too. Pay particular attention to anchors built
+at render time from stored data — a query parameter baked into a stored URL can
+turn a GET into a write path, and those triggers are invisible to template
+greps.
+
+### Fixed — numbered `is<N>` rules no longer collapse onto a doubled bare `is` error
+
+**No action required — display/keying fix** (completes the 0.5.20 `is<N>`
+enforcement fix). When validation re-applied rules against the same form — a
+`_case_` conditional re-evaluation, nested field groups — every numbered
+`is<N>` rule fell back to the bare `is` error key: the last-declared rule
+overwrote its siblings, and its message rendered twice (once under its own key,
+once under the mirrored `is` key). Which rule doubled depended only on
+declaration order, not on the digit. Numbered rules now keep their distinct
+error keys on every pass and each message renders once. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+---
+
 ## 0.5.20 → 0.5.21
 
 ### Added — popin eager preload (`data-gina-dialog-preload="eager"`)
@@ -47,7 +97,12 @@ routes — every app route 404'd, and a sibling bundle's cross-bundle
 like a malformed `routing.json` always has; under an **external** supervisor
 (Kubernetes, a container restart policy such as `--restart=always`, an init
 system) the restart retries until the release tree settles, so a mid-deploy
-race self-heals instead of half-booting. The gina daemon itself does **not**
+race self-heals instead of half-booting. One caveat: a container `restart:`
+policy keys on **PID 1** — if PID 1 is a supervisor-style init whose foreground
+process outlives the app (a log tail, a wrapper script), a crashed bundle never
+exits PID 1 and the policy never fires; make the bundle process (or an init
+that propagates its exit) PID 1 for the retry loop to work. The gina daemon
+itself does **not**
 retry a startup crash — a bare `gina bundle:start` bundle reports
 `crashed during startup` once and stays down until you restart it manually.
 This is deliberate: silent partial route tables produced hours-later mystery
