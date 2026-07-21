@@ -19,6 +19,24 @@ upward to the target version.
 
 ---
 
+## 0.5.22 → 0.5.23
+
+### Fixed — `req.files[].size` now reports the exact stored byte count
+
+**No action required — behavior fix. Re-check any workaround that re-measures
+uploaded files.** On multipart uploads, `req.files[].size` was snapshotted while
+the write pipeline could still hold uncounted chunks, so it under-reported by a
+varying whole-chunk amount — the file bytes on disk were always intact and
+complete; only the reported number was short. The count is now finalized once
+the last chunk has been counted, strictly before your controller runs, so
+`req.files[].size` — and anything persisting it, including the
+`self.store()` result's `size` — is the exact on-disk byte size. If you added a
+consumer-side re-measure (`fs.statSync` on the stored file) to work around the
+short value, it becomes unnecessary after pickup. Server-side only: restart your
+bundles to apply — no client rebuild needed.
+
+---
+
 ## 0.5.21 → 0.5.22
 
 ### Changed — runtime pins now live under the standard `engines` manifest key
