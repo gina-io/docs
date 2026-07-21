@@ -35,6 +35,24 @@ consumer-side re-measure (`fs.statSync` on the stored file) to work around the
 short value, it becomes unnecessary after pickup. Server-side only: restart your
 bundles to apply — no client rebuild needed.
 
+### Fixed — multi-file uploads no longer hang when an early file finishes first
+
+**No action required — behavior fix. Remove any client/proxy-timeout workaround
+you added for stalled multi-file uploads.** A multipart request with two or
+more file parts could hang forever — no response, no log line — whenever an
+early small file finished writing to disk while a later, larger part was still
+streaming in. The internal completion listeners were attached only after the
+whole body was parsed, and a stream that had already finished never re-emits
+its completion event, so the request never resumed; only a client or
+front-proxy timeout severed it. Slow client connections hit this
+deterministically, fast ones intermittently. The listeners are now armed the
+moment each file stream is created, and the request resumes once the parse and
+every file write have both completed — in any order. As part of the same
+change, a disk write error during streaming (missing upload directory, disk
+full) now answers a guarded 500 instead of crashing the bundle process.
+Single-file uploads were never affected. Server-side only: restart your
+bundles to apply — no client rebuild needed.
+
 ---
 
 ## 0.5.21 → 0.5.22
