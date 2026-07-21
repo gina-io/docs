@@ -19,6 +19,57 @@ upward to the target version.
 
 ---
 
+## 0.5.22 → 0.5.23
+
+### Fixed — `req.files[].size` now reports the exact stored byte count
+
+**No action required — behavior fix. Re-check any workaround that re-measures
+uploaded files.** On multipart uploads, `req.files[].size` was snapshotted while
+the write pipeline could still hold uncounted chunks, so it under-reported by a
+varying whole-chunk amount — the file bytes on disk were always intact and
+complete; only the reported number was short. The count is now finalized once
+the last chunk has been counted, strictly before your controller runs, so
+`req.files[].size` — and anything persisting it, including the
+`self.store()` result's `size` — is the exact on-disk byte size. If you added a
+consumer-side re-measure (`fs.statSync` on the stored file) to work around the
+short value, it becomes unnecessary after pickup. Server-side only: restart your
+bundles to apply — no client rebuild needed.
+
+### Fixed — multi-file uploads no longer hang when an early file finishes first
+
+**No action required — behavior fix. Remove any client/proxy-timeout workaround
+you added for stalled multi-file uploads.** A multipart request with two or
+more file parts could hang forever — no response, no log line — whenever an
+early small file finished writing to disk while a later, larger part was still
+streaming in. The internal completion listeners were attached only after the
+whole body was parsed, and a stream that had already finished never re-emits
+its completion event, so the request never resumed; only a client or
+front-proxy timeout severed it. Slow client connections hit this
+deterministically, fast ones intermittently. The listeners are now armed the
+moment each file stream is created, and the request resumes once the parse and
+every file write have both completed — in any order. As part of the same
+change, a disk write error during streaming (missing upload directory, disk
+full) now answers a guarded 500 instead of crashing the bundle process.
+Single-file uploads were never affected. Server-side only: restart your
+bundles to apply — no client rebuild needed.
+
+### Fixed — the stale-release banner now shows on bundles using a custom async template loader
+
+**No action required — behavior fix; relevant only if you use `server.releaseWatch`
+with a custom async template loader.** A bundle configured with an async template
+loader (`settings.template.<engine>.loader`) doing a local production rehearsal
+with `server.releaseWatch` enabled got the `/_gina/release/*` status endpoints and
+the SSE event stream, but no in-page banner — the client banner was spliced in
+only on the synchronous render paths. Both async render delegates (swig and
+nunjucks) now inject the banner onto the finalized HTML exactly like the
+synchronous delegates, carrying the per-request CSP nonce when `useNonce` is
+active. The injector itself is unchanged and stays byte-inert on any request
+outside the release-watch gate (non-local scope, production off, or the feature
+disabled). Server-side only: restart your bundles to apply — no client rebuild
+needed.
+
+---
+
 ## 0.5.21 → 0.5.22
 
 ### Changed — runtime pins now live under the standard `engines` manifest key
