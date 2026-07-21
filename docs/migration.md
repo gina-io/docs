@@ -155,6 +155,22 @@ exports to the install lifecycle. The fix ships inside the tarball, so it
 applies from this version's install onward — older versions cannot be
 retro-fixed.
 
+### Fixed — link HTML callbacks (`data-gina-link-event-on-*`) now work, and no longer break the link
+
+**No action required — a dead feature starts working. If you tried these
+attributes and removed them because the link stopped working, they are safe
+now.** Carrying `data-gina-link-event-on-success` or
+`data-gina-link-event-on-error` on a `data-gina-link` anchor used to make
+every click throw before the request was even opened: no request left the
+page, no callback ran, and the link was effectively dead. The callback
+registration helper was unreachable from the link plugin, and the internal
+success/error events were named and targeted inconsistently between
+registration and dispatch. Both attributes now work as designed: name a
+`window`-level function (bare identifier, no parentheses) and it receives
+`(event, result)` when the link's XHR succeeds or fails. The programmatic
+`gina.link.on('success'/'error')` channel is unchanged. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
 ---
 
 ## 0.5.20 → 0.5.21
