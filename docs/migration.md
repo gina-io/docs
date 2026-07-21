@@ -19,6 +19,160 @@ upward to the target version.
 
 ---
 
+## 0.5.21 → 0.5.22
+
+### Changed — runtime pins now live under the standard `engines` manifest key
+
+**No action on supported runtimes.** Gina's `package.json` declares its runtime
+floors under the standard `engines` key (formerly the non-standard singular
+`engine`, which npm and Bun ignore entirely). On Node `>= 22 <27` or Bun
+`>= 1.2` nothing changes. An out-of-range runtime now gets npm's standard
+`EBADENGINE` **warning** at install time — it becomes a hard failure only if
+your environment sets `engine-strict`. Newly scaffolded projects get the
+standard object-form key in their generated `package.json` too.
+
+### Fixed — reopening a popin no longer renders the previous open's content
+
+**No action required — behavior fix. Re-check any workaround you built for stale
+popin content.** The AJAX popin content cache outlived the open it warmed: every
+open after the first paid for a network fetch yet rendered the body fetched
+around the *previous* open — a one-generation lag — because no close path
+invalidated the cached copy. A dialog whose content changes between opens
+(a record edited elsewhere, a value updated server-side) therefore reopened
+showing a stale snapshot. This was a long-standing defect, not a 0.5.21
+regression — it predates the eager preload feature. The cache entry now dies
+with the open: closing a popin clears its cached content — including the copy
+silently re-warmed by the close-time focus return and pointer re-hover — so
+every open renders current content. Default triggers pay at most one extra
+idempotent GET per close. Browser-bundled: rebuild your bundles
+(`gina bundle:build`) to pick it up.
+
+### Changed — `data-gina-dialog-preload="false"` is now a hard always-refetch guarantee
+
+**Action for volatile popins: annotate their triggers `false`.** A trigger
+marked `data-gina-dialog-preload="false"` already opted out of hover/focus/idle
+warming; it now also skips the cache *read* when the popin opens, on both open
+paths. That makes `false` a guarantee: the trigger's popin GET happens at open
+time, every time — never served from a warm, never from a same-URL sibling
+trigger's cache entry. Use it for content that must be current at the moment it
+is displayed.
+
+While auditing triggers, also check the other direction: before relying on the
+default hover/focus warm (or opting into `eager`), audit each popin GET route
+for halting or side-effecting middlewares and session-mutating renders, and
+annotate those triggers `false` too. Pay particular attention to anchors built
+at render time from stored data — a query parameter baked into a stored URL can
+turn a GET into a write path, and those triggers are invisible to template
+greps.
+
+### Fixed — numbered `is<N>` rules no longer collapse onto a doubled bare `is` error
+
+**No action required — display/keying fix** (completes the 0.5.20 `is<N>`
+enforcement fix). When validation re-applied rules against the same form — a
+`_case_` conditional re-evaluation, nested field groups — every numbered
+`is<N>` rule fell back to the bare `is` error key: the last-declared rule
+overwrote its siblings, and its message rendered twice (once under its own key,
+once under the mirrored `is` key). Which rule doubled depended only on
+declaration order, not on the digit. Numbered rules now keep their distinct
+error keys on every pass and each message renders once. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+### Fixed — multipart binary uploads arrive byte-identical
+
+**No action required — data-integrity fix. If you base64-encode binary files
+over JSON to work around upload corruption, you can retire that workaround
+after picking up this version.** Binary file payloads uploaded via native
+multipart (`FormData`, `curl -F`, hand-built bodies) were string-decoded on
+their way to disk, so any content that is not valid UTF-8 — images, PDFs,
+archives — arrived mangled and mis-sized (pure-ASCII files were unaffected,
+which is why text uploads always worked, and why the corruption could go
+unnoticed). The request stream now stays raw for multipart bodies and the
+write pipeline passes chunks through verbatim: files reach `req.files[].path`
+byte-identical, and `req.files[].size` now reports the real on-disk byte
+count instead of a decoded character count. Server-side only — no bundle
+rebuild needed; restart your bundles to pick it up.
+
+### Fixed — checkbox migration warnings: payload-only remedy + explicit opt-out
+
+**Action only if the #49 migration warnings fire on markup you authored
+deliberately.** The tick-direction warning ("`value` no longer implies the
+checked state") also fired on checkboxes authored *after* the 0.5.18
+state-model change — `value="true"` with no `checked`, intended to render
+unticked — where both listed remedies would have done the wrong thing. Two
+additions: the messages now name the third remedy — remove the `value`
+attribute; a boolean-classified checkbox posts its live checked state either
+way, so the posted wire is identical — and an explicit
+`data-gina-form-checkbox-value-as-state="false"` on the `<form>` declares the
+current state model and silences both migration warnings for that form (any
+explicit value counts; `"false"` has no other effect). Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+### Fixed — a `query` rule failure can no longer hang the submit
+
+**No action required — robustness fix.** The `query` rule's backend result is
+processed asynchronously: if the form had been unbound by then (for example a
+popin closed mid-flight), the response was malformed JSON under a JSON
+content-type, or the field value was a boolean (a checkbox with a `query`
+rule), the processing threw and the submit pass waited forever on a completion
+event that never fired. Any failure while handling the result now warns in the
+console and releases the pass with the field state unchanged — the server
+still re-validates on submit, which remains the trust boundary. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+### Added — the `settings.i18n.cultures` allowlist is now honoured
+
+**No action unless you had set it — the key was documented as reserved.** A
+non-empty `cultures` array under `settings.json > i18n` now constrains which
+cultures the user-signal negotiation steps (URL prefix, cookie,
+`Accept-Language`) may match, so a staged rollout can ship a
+`locales/de.json` catalog without `de` becoming reachable until it is listed.
+`null` or `[]` keep the historical behavior (available cultures derive from
+the loaded catalogs), and the bundle default (`settings.region.culture`) is
+never constrained. The whole `i18n` block is now declared in the published
+settings.json schema. Restart the bundle to apply.
+
+### Fixed — `page.view.locale` now carries the real country record
+
+**No action required — a dead surface starts working.** The per-request
+country-locale lookup filtered the region data on a key it does not carry, so
+`page.view.locale` had always been an empty object (plus the date stamp) when
+the culture carried a country code — and an arbitrary first record when it did
+not. Templates now receive the real record (`countryName`, `currency`,
+`capital`, …) resolved from the request culture's country code, with lowercase
+country segments normalized; a country-less culture (bare `en`) yields an
+explicit empty object. Nothing read the broken object before, so no existing
+template changes behavior — the surface simply starts working.
+
+### Fixed — install no longer dies on a redactor-matched npm prefix
+
+**No action required — install robustness.** `npm install -g gina` died
+whenever the effective npm prefix contained a path segment npm's redactor
+masks — a UUID-shaped directory is enough (CI sandboxes, generated
+workspaces): `npm config get prefix` refuses such a read as protected on
+every current npm generation (10/11/12), and gina's install scripts probed it
+unguarded. The probe is now guarded, falling back to the prefix npm itself
+exports to the install lifecycle. The fix ships inside the tarball, so it
+applies from this version's install onward — older versions cannot be
+retro-fixed.
+
+### Fixed — link HTML callbacks (`data-gina-link-event-on-*`) now work, and no longer break the link
+
+**No action required — a dead feature starts working. If you tried these
+attributes and removed them because the link stopped working, they are safe
+now.** Carrying `data-gina-link-event-on-success` or
+`data-gina-link-event-on-error` on a `data-gina-link` anchor used to make
+every click throw before the request was even opened: no request left the
+page, no callback ran, and the link was effectively dead. The callback
+registration helper was unreachable from the link plugin, and the internal
+success/error events were named and targeted inconsistently between
+registration and dispatch. Both attributes now work as designed: name a
+`window`-level function (bare identifier, no parentheses) and it receives
+`(event, result)` when the link's XHR succeeds or fails. The programmatic
+`gina.link.on('success'/'error')` channel is unchanged. Browser-bundled:
+rebuild your bundles (`gina bundle:build`) to pick it up.
+
+---
+
 ## 0.5.20 → 0.5.21
 
 ### Added — popin eager preload (`data-gina-dialog-preload="eager"`)
@@ -47,7 +201,12 @@ routes — every app route 404'd, and a sibling bundle's cross-bundle
 like a malformed `routing.json` always has; under an **external** supervisor
 (Kubernetes, a container restart policy such as `--restart=always`, an init
 system) the restart retries until the release tree settles, so a mid-deploy
-race self-heals instead of half-booting. The gina daemon itself does **not**
+race self-heals instead of half-booting. One caveat: a container `restart:`
+policy keys on **PID 1** — if PID 1 is a supervisor-style init whose foreground
+process outlives the app (a log tail, a wrapper script), a crashed bundle never
+exits PID 1 and the policy never fires; make the bundle process (or an init
+that propagates its exit) PID 1 for the retry loop to work. The gina daemon
+itself does **not**
 retry a startup crash — a bare `gina bundle:start` bundle reports
 `crashed during startup` once and stays down until you restart it manually.
 This is deliberate: silent partial route tables produced hours-later mystery

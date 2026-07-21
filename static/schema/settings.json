@@ -33,6 +33,35 @@
         }
       }
     },
+    "i18n": {
+      "type": "object",
+      "description": "Runtime i18n configuration for the per-bundle message catalogs (bundle/locales/<culture>.json). All keys are read from the bundle's merged settings.",
+      "additionalProperties": false,
+      "properties": {
+        "cookieName": {
+          "type": ["string", "null"],
+          "description": "Locale-persistence cookie name read by the per-request locale negotiation (honoured since 0.5.16). null disables cookie-based negotiation; absent or empty keeps \"gina_culture\".",
+          "default": "gina_culture"
+        },
+        "devMissingKey": {
+          "type": ["string", "null"],
+          "description": "Dev-mode prefix marker for missing catalog keys (only applied when NODE_ENV_IS_DEV is \"true\"). null disables the marker.",
+          "default": "[MISSING]"
+        },
+        "fallbackChain": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Optional override of the default catalog-lookup fallback chain (specific culture, then base language, then settings.region.culture, then GINA_CULTURE, then \"en\"). null uses the default.",
+          "default": null
+        },
+        "cultures": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Explicit culture allowlist for the user-signal negotiation steps (URL prefix, cookie, Accept-Language), honoured since 0.5.22: a non-empty array constrains matching to the listed cultures (staged rollouts). null or [] derives from the bundle's loaded catalogs. The bundle-default step (settings.region.culture) is never constrained.",
+          "default": null
+        }
+      }
+    },
     "server": {
       "type": "object",
       "description": "HTTP server engine and protocol configuration.",
@@ -64,6 +93,51 @@
             "type": "string",
             "examples": ["https://api.example.com:443"]
           }
+        },
+        "releaseWatch": {
+          "type": "object",
+          "description": "Stale built-release watch for LOCAL production rehearsals — hard-gated on scope `local` + a non-dev env, never active on a real cluster. When enabled, the bundle watches its SOURCE tree, compares fingerprints against the manifest release stamp, surfaces staleness on GET /_gina/release/status (+ the /_gina/release/events SSE stream) and rebuilds via POST /_gina/release/rebuild with an idle-gated restart (in-flight requests + gina.registerBusyProbe application probes). Fail-closed: disabled by default.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master opt-in. Defaults to false."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["notify", "auto"],
+              "description": "notify (default): surface staleness and wait for the operator. auto: rebuild on change automatically — the restart stays idle-gated."
+            },
+            "debounceMs": {
+              "type": "number",
+              "description": "Watch-event batch debounce window in ms. Defaults to 750."
+            },
+            "reconcileIntervalMs": {
+              "type": "number",
+              "description": "Optional slow re-fingerprint sweep interval in ms for event-lossy mounts; 0 (the default) disables the sweep."
+            },
+            "restartMode": {
+              "type": "string",
+              "enum": ["daemon", "supervisor"],
+              "description": "How a rebuild restarts the process. daemon (default): drain, then spawn `gina bundle:restart` (needs the framework daemon). supervisor: drain, then exit(0) for a container/orchestrator to respawn — the daemonless `gina-container` launch path; requires a restart-on-clean-exit policy (a k8s Deployment or `docker run --restart=always` qualifies; `--restart=on-failure` does not)."
+            }
+          }
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "description": "Bundle-wide render/output-cache defaults. `type` / `store` here are folded into the runtime `server.cache` (which also carries the per-env `enable` / `path` / `ttl` / `maxEntries` from env.json), so they act as the default a route inherits when its own `cache` omits them.",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["memory", "fs", "redis"],
+          "description": "Bundle-wide default cache strategy. A per-route `cache.type` overrides it; a route with `cache` set but no `type` inherits it. `memory` = in-process (volatile); `fs` = disk-backed (restart-surviving); `redis` = shared L2 across replicas + per-replica L1."
+        },
+        "store": {
+          "type": "string",
+          "description": "Required for `redis`: the name of a `connectors.json` entry ({ \"<name>\": { \"connector\": \"redis\", \"host\": …, \"port\": … } }) providing the L2 connection. Ignored for memory / fs."
         }
       }
     },
@@ -125,6 +199,159 @@
               "access-control-allow-credentials": true
             }
           ]
+        }
+      }
+    },
+    "swig": {
+      "type": "object",
+      "description": "Opt-in override for the swig template engine. When useProject is true the bundle loads the project-pinned package from the project's node_modules instead of the framework's bundled copy — provided the project version satisfies the framework's same-major and minimum-version constraint. A rejected override falls back to the framework copy and logs a warning at bundle startup.",
+      "additionalProperties": false,
+      "properties": {
+        "useProject": {
+          "type": "boolean",
+          "description": "When true, attempt to load the package from <projectPath>/node_modules. When false or omitted, always load the framework's bundled copy (default, current behaviour).",
+          "default": false
+        },
+        "package": {
+          "type": "string",
+          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig to use the Twig-syntax frontend. The abandoned upstream \"swig\" name is never accepted.",
+          "enum": ["@rhinostone/swig", "@rhinostone/swig-twig"],
+          "default": "@rhinostone/swig"
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "description": "Per-engine custom template loader (async loader extension point). When a loader is configured the engine resolves templates through it instead of the local filesystem, enabling remote / CDN / object-storage / in-memory template backends. Bundles without a loader render from disk exactly as before.",
+      "additionalProperties": false,
+      "properties": {
+        "swig": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loader": {
+              "type": "object",
+              "description": "Custom async loader for the swig render path. Mirrors the connectors.json convention: a named built-in `type` plus type-specific flat keys. When present, the bundle renders via the isolated per-bundle swig engine (controller.render-swig-async.js) instead of the filesystem path.",
+              "additionalProperties": true,
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Built-in loader name. \"memory\" loads templates from an inline `templates` map (no network or filesystem). \"http\" fetches templates over HTTP(S) from a configured origin + basePath, with a TTL'd source cache and opt-in ETag revalidation.",
+                  "enum": ["memory", "http"]
+                },
+                "templates": {
+                  "type": "object",
+                  "description": "For type \"memory\": flat map of template identifier to source string.",
+                  "additionalProperties": { "type": "string" }
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "For type \"http\": scheme://host[:port] of the template origin (no path). http or https. Required for the http loader.",
+                  "examples": ["https://cdn.example.com", "http://127.0.0.1:8080"]
+                },
+                "basePath": {
+                  "type": "string",
+                  "description": "For type \"http\": path prefix under origin that template identifiers resolve against (root-relative, flat namespace). Defaults to \"\". Resolved URLs are containment-checked to stay under origin+basePath.",
+                  "examples": ["/templates", "/site/views"]
+                },
+                "ttl": {
+                  "type": "number",
+                  "description": "For type \"http\": source-cache TTL in seconds (absolute from fetch). Defaults to 60. Raise it for immutable CDN-published templates; 0 caches until evicted.",
+                  "default": 60
+                },
+                "revalidate": {
+                  "type": "boolean",
+                  "description": "For type \"http\": when true, a cache hit issues a conditional GET (If-None-Match) and serves cached source on 304, refreshing the TTL. Off by default (no per-hit round-trip). Turn on for live-CMS templates whose origin emits ETags.",
+                  "default": false
+                },
+                "cache": {
+                  "type": "boolean",
+                  "description": "#TPL1 Tier-2 opt-in: reuse compiled templates across requests via the shared per-bundle engine + AsyncLocalStorage per-request context. Off by default (per-request render, no compiled-template reuse). Force-disabled in dev mode regardless so template edits are picked up live without a restart.",
+                  "default": false
+                }
+              }
+            }
+          }
+        },
+        "nunjucks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loader": {
+              "type": "object",
+              "description": "Custom async loader for the nunjucks render path. Mirrors the connectors.json convention: a named built-in `type` plus type-specific flat keys. When present, the bundle renders via a per-request nunjucks Environment over this loader (controller.render-nunjucks-async.js) instead of the cached-Environment filesystem path.",
+              "additionalProperties": true,
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Built-in loader name. \"memory\" loads templates from an inline `templates` map (no network or filesystem). \"http\" fetches templates over HTTP(S) from a configured origin + basePath, with a TTL'd source cache and opt-in ETag revalidation.",
+                  "enum": ["memory", "http"]
+                },
+                "templates": {
+                  "type": "object",
+                  "description": "For type \"memory\": flat map of template identifier to source string.",
+                  "additionalProperties": { "type": "string" }
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "For type \"http\": scheme://host[:port] of the template origin (no path). http or https. Required for the http loader.",
+                  "examples": ["https://cdn.example.com", "http://127.0.0.1:8080"]
+                },
+                "basePath": {
+                  "type": "string",
+                  "description": "For type \"http\": path prefix under origin that template identifiers resolve against (root-relative, flat namespace). Defaults to \"\". Resolved URLs are containment-checked to stay under origin+basePath.",
+                  "examples": ["/templates", "/site/views"]
+                },
+                "ttl": {
+                  "type": "number",
+                  "description": "For type \"http\": source-cache TTL in seconds (absolute from fetch). Defaults to 60. Raise it for immutable CDN-published templates; 0 caches until evicted.",
+                  "default": 60
+                },
+                "revalidate": {
+                  "type": "boolean",
+                  "description": "For type \"http\": when true, a cache hit issues a conditional GET (If-None-Match) and serves cached source on 304, refreshing the TTL. Off by default (no per-hit round-trip). Turn on for live-CMS templates whose origin emits ETags.",
+                  "default": false
+                },
+                "cache": {
+                  "type": "boolean",
+                  "description": "#TPL1 Tier-2 opt-in: reuse compiled templates across requests via a shared per-request-context (AsyncLocalStorage) nunjucks Environment. Off by default (per-request Environment, no compiled-template reuse). Force-disabled in dev mode regardless so template edits are picked up live without a restart.",
+                  "default": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "render": {
+      "type": "object",
+      "description": "Template engine dispatch. Selects which delegate file (controller.render-swig.js or controller.render-nunjucks.js) handles self.render() calls for this bundle. Switching to \"nunjucks\" requires `npm install nunjucks` in the project root — the framework does not bundle nunjucks.",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "description": "Bundle-level template engine for self.render() HTML output. \"swig\" (default) uses @rhinostone/swig via controller.render-swig.js; \"nunjucks\" uses the project-installed nunjucks package via controller.render-nunjucks.js. When set to \"nunjucks\", bundle startup fails with NUNJUCKS_NOT_INSTALLED if the package is absent from the project's node_modules. An explicit template extension overrides this per render: a section whose templates.json `ext` is \".njk\" (or a self.setTemplate(file, '.njk') call) renders through nunjucks, \".swig\" through swig — so a single bundle can mix engines; \".html\" and any other extension follow this setting.",
+          "enum": ["swig", "nunjucks"],
+          "default": "swig"
+        }
+      }
+    },
+    "nunjucks": {
+      "type": "object",
+      "description": "Configuration for the nunjucks template engine (when render.engine is \"nunjucks\"). The package is never framework-bundled — it must exist in the project's node_modules.",
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "description": "npm package name to resolve in <projectPath>/node_modules. Defaults to \"nunjucks\" (upstream).",
+          "default": "nunjucks"
+        },
+        "autoescape": {
+          "type": "boolean",
+          "description": "Whether the nunjucks Environment autoescapes by default. Passed to `new nunjucks.Environment(loader, { autoescape })`.",
+          "default": true
         }
       }
     }
