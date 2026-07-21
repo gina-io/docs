@@ -53,6 +53,21 @@ full) now answers a guarded 500 instead of crashing the bundle process.
 Single-file uploads were never affected. Server-side only: restart your
 bundles to apply — no client rebuild needed.
 
+### Fixed — the stale-release banner now shows on bundles using a custom async template loader
+
+**No action required — behavior fix; relevant only if you use `server.releaseWatch`
+with a custom async template loader.** A bundle configured with an async template
+loader (`settings.template.<engine>.loader`) doing a local production rehearsal
+with `server.releaseWatch` enabled got the `/_gina/release/*` status endpoints and
+the SSE event stream, but no in-page banner — the client banner was spliced in
+only on the synchronous render paths. Both async render delegates (swig and
+nunjucks) now inject the banner onto the finalized HTML exactly like the
+synchronous delegates, carrying the per-request CSP nonce when `useNonce` is
+active. The injector itself is unchanged and stays byte-inert on any request
+outside the release-watch gate (non-local scope, production off, or the feature
+disabled). Server-side only: restart your bundles to apply — no client rebuild
+needed.
+
 ---
 
 ## 0.5.21 → 0.5.22
