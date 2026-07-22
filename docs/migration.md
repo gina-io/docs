@@ -106,6 +106,26 @@ client). Custom error pages and the inline fallback page render the same ref
 they adopt the ref. Server-side only — restart your bundles to pick it up. See
 the [controller guide](/guides/controller#incident-ref).
 
+### Fixed — staged file uploads store binary files byte-identical
+
+**Action needed if you upload binary files through the staged client layer
+(`data-gina-form-upload-*`): re-bake your bundles AND make sure the receiving
+server is on gina ≥ 0.5.22.** The staged-upload client layer used to assemble
+its multipart body as a JavaScript string, which the browser then UTF-8-encoded
+on the wire — so every file byte ≥ `0x80` was inflated to a two-byte sequence,
+and any real binary upload (image, PDF, archive) was stored corrupted and
+mis-sized server-side. (Pure-ASCII uploads were unaffected, which is what hid
+it; and on servers **before** 0.5.22 a since-removed server-side decode
+accidentally cancelled the inflation, so the corruption only began biting once
+the server became byte-faithful at 0.5.22.) The body is now assembled as a
+`Blob`, so the raw file bytes reach the wire verbatim — the multipart framing
+and the upload-group tag are byte-identical, so there is **no server-contract
+change**. This is **browser-bundled** — rebuild your bundles (re-bake) to pick
+it up, paired with a server ≥ 0.5.22. Files already corrupted by this defect are
+losslessly recoverable: the stored bytes are exactly the UTF-8 encoding of the
+original byte sequence, so decoding as UTF-8 and re-encoding as latin1 restores
+the exact original.
+
 ### Fixed — staged upload client layer: action fallback and missing-preview guard
 
 **No action required — browser-bundled bug fixes; re-bake your bundles to pick
