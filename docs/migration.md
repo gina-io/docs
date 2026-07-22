@@ -51,6 +51,22 @@ See the [file uploads guide](/guides/file-uploads#probing-the-write-error-crash-
 for the full recipe, including why the group tag must be sent as a Content-Disposition
 parameter that `curl -F` / `FormData` cannot emit.
 
+### Added — upload progress for the staged upload client layer
+
+**No action required — opt-in.** File inputs using the `data-gina-form-upload-*`
+staging layer can now report real transfer progress: a declarative indicator
+(`data-gina-form-upload-progress`, default target `<fieldId>-progress` — native
+`<progress>` elements track bytes, anything else gets a percent text plus
+`data-gina-upload-progress` / `data-gina-upload-progress-state` styling hooks), a
+`data-gina-form-upload-on-progress` window callback (bare identifier, the
+`-on-success` convention), and a registered `uploadProgress` form event carrying
+`{ status, progress, loaded, total, lengthComputable, files }`. Progress is
+per-request (one staging POST carries every file of a selection). The indicator
+lifecycle is managed — `preparing` on selection, `complete` on success, an
+emptied bar on error, and a full strip when a staged file is removed. This is
+**browser-bundled**: rebuild your bundles (re-bake) to pick it up. See the
+[file uploads guide](/guides/file-uploads#upload-progress).
+
 ---
 
 ## 0.5.22 → 0.5.23

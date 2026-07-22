@@ -324,9 +324,11 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
 | `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. |
+| `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
 | `data-gina-form-upload-on-success` | Bare name of a `window` callback run when staging succeeds. |
 | `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
+| `data-gina-form-upload-on-progress` | Bare name of a `window` callback run on each staging transfer-progress frame. *New in 0.5.24.* |
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
@@ -379,6 +381,60 @@ interrupts the removal. *The removal callbacks and
 
 ---
 
+### Upload progress
+
+*New in 0.5.24.* The staging POST reports real transfer progress
+(`xhr.upload.onprogress` under the hood). Three opt-in surfaces:
+
+**Declarative indicator.** Point `data-gina-form-upload-progress` at an element
+id, or simply add an element with the default id `<fieldId>-progress` next to
+your input — the indicator activates only when the element exists. A native
+`<progress>` element tracks uploaded/total bytes (and shows the browser's
+indeterminate animation while the length is unknown); any other element gets the
+integer percentage as text. Every target also carries two attributes you can
+style against — `data-gina-upload-progress` (the percent, absent while
+indeterminate) and `data-gina-upload-progress-state` (`preparing`, `uploading`,
+`indeterminate`, `complete`, `error`). No wording is hardcoded: labels are
+yours, via CSS on the state attribute.
+
+```html
+<input
+  type="file"
+  id="avatar"
+  name="avatar"
+  data-gina-form-upload-action="/media/stage"
+  data-gina-form-upload-on-progress="onAvatarProgress">
+<progress id="avatar-progress"></progress>
+```
+
+**Window callback.** `data-gina-form-upload-on-progress` names a function
+registered on `window` (a bare identifier, same convention as `-on-success`).
+It receives `(event, result)` where `result` is:
+
+```json
+{
+  "status": 100,
+  "progress": 42,
+  "loaded": 1048576,
+  "total": 2485760,
+  "lengthComputable": true,
+  "files": ["photo1.jpg", "photo2.jpg"]
+}
+```
+
+`progress` is `null` while the browser cannot compute the length. One staging
+request carries **every file of a selection**, so progress is per-request — the
+`files` array tells you which files the numbers cover.
+
+**Form event.** The same payload rides the registered `uploadProgress` form
+event on the virtual upload form, for code that holds the form instance.
+
+The indicator's lifecycle is managed end-to-end: `preparing` from the moment a
+file is selected (file reading and body assembly happen before the first network
+frame), `complete` fills the bar on success, a staging error empties it (state
+`error` — the error message renders in the `-error` element as usual), and
+removing a staged file (reset/delete) clears the indicator entirely.
+
 ## Limitations and gotchas
 
 - **Multipart text fields are capped.** Text (non-file) fields are captured
@@ -397,10 +453,9 @@ interrupts the removal. *The removal callbacks and
 - **No client-side size or type checking.** The client does not pre-validate a
   file's size or extension before staging — enforcement is server-side only (the
   upload-group rules). Do not assume the browser blocked anything.
-- **No upload progress bar and no drag-and-drop.** The client layer renders
-  previews and reset/delete controls but does not expose upload progress, and
-  files are chosen through the native file input only. Both are planned for the
-  staged upload layer — see the [roadmap](/roadmap).
+- **No drag-and-drop.** Files are chosen through the native file input only. A
+  drop-target attribute for the staged upload layer is planned — see the
+  [roadmap](/roadmap).
 
 ---
 
