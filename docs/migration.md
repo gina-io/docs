@@ -91,6 +91,21 @@ now answers a guarded **HTTP 500** for that one request (a server configuration
 problem, not client input; an unknown group name still answers 400) and the
 bundle keeps serving. Server-side only — restart your bundles to pick it up.
 
+### Added — an incident ref on every error response
+
+**No action required — additive and backward-compatible.** Every `throwError`
+JSON error body now carries a top-level `ref` field — a short, voice-relayable
+correlation code (6 uppercase hex, e.g. `A1B2C3`, or a relay-safe
+caller-supplied value) present in **all scopes**. Server-side, one error-level
+log line pairs that ref with the full error detail (message + stack + cause)
+plus the request correlation id, emitted **before** the stack-egress gate
+strips the wire copy — so support can resolve a user-relayed ref to the exact
+server-side failure, even in production (where the stack never reaches the
+client). Custom error pages and the inline fallback page render the same ref
+(`data.ref`). Consumers that only read `status` / `error` are unaffected until
+they adopt the ref. Server-side only — restart your bundles to pick it up. See
+the [controller guide](/guides/controller#incident-ref).
+
 ---
 
 ## 0.5.22 → 0.5.23
