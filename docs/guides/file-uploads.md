@@ -208,6 +208,10 @@ disk-full or an unwritable directory, both of which affect your real uploads), a
 }
 ```
 
+Load the new group before probing: a **dev** bundle picks it up on restart, but a
+**built** bundle reads its config from the release tree — run `gina bundle:build`
+(then restart) so the new group takes effect.
+
 Every upload tagged with that group now fails with the guarded 500 — no full disk or
 unwritable directory needed, and nothing about your real uploads changes. The flag is
 **honoured outside production scope only**: in `production` scope it is ignored, and a
