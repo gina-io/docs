@@ -187,6 +187,59 @@ flowchart TD
     G -->|yes| H["Streamed to temp"]
 ```
 
+### Probing the write-error crash-guard
+
+If a file's write stream fails mid-stream — a full disk, a revoked permission — Gina
+answers a guarded **HTTP 500** for that one request and keeps the bundle running. To
+re-confirm this on your own upload surface after an upgrade (without engineering a real
+disk-full or an unwritable directory, both of which affect your real uploads), add a
+`simulateWriteError` flag to a throwaway group:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "_probe_fail": {
+      "path": "${tmpPath}",
+      "allowedExtensions": "*",
+      "isMultipleAllowed": true,
+      "simulateWriteError": true
+    }
+  }
+}
+```
+
+Load the new group before probing: a **dev** bundle picks it up on restart, but a
+**built** bundle reads its config from the release tree — run `gina bundle:build`
+(then restart) so the new group takes effect.
+
+Every upload tagged with that group now fails with the guarded 500 — no full disk or
+unwritable directory needed, and nothing about your real uploads changes. The flag is
+**honoured outside production scope only**: in `production` scope it is ignored, and a
+boot warning names it either way so it can never ship silently.
+
+:::note The group tag rides a Content-Disposition parameter
+The `group="…"` tag travels as a **Content-Disposition parameter**, which `curl -F` and
+browser `FormData` cannot set — so a faithful probe has to hand-build the multipart
+body. For example:
+
+```
+------gina-probe
+Content-Disposition: form-data; name="files"; group="_probe_fail"; filename="probe.bin"
+Content-Type: application/octet-stream
+
+any bytes here
+------gina-probe--
+```
+
+Send that body with `Content-Type: multipart/form-data; boundary=----gina-probe` and
+expect a `500` response. Because the write stream is opened before the simulated
+failure, a probe may leave a 0-byte temp file — point the probe group's `path` at a
+temp directory.
+:::
+
+Remove the probe group before shipping to production; if you forget, the flag stays
+inert there and the boot warning flags it.
+
 ---
 
 ## The client upload layer
@@ -275,9 +328,12 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
 | `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. |
+| `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
+| `data-gina-form-upload-dropzone` | Id of an element to bind as a drag-and-drop target for this input. **Explicit id only — no default**; without the attribute the feature is inactive. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
 | `data-gina-form-upload-on-success` | Bare name of a `window` callback run when staging succeeds. |
 | `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
+| `data-gina-form-upload-on-progress` | Bare name of a `window` callback run on each staging transfer-progress frame. *New in 0.5.24.* |
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
@@ -330,6 +386,110 @@ interrupts the removal. *The removal callbacks and
 
 ---
 
+### Upload progress
+
+*New in 0.5.24.* The staging POST reports real transfer progress
+(`xhr.upload.onprogress` under the hood). Three opt-in surfaces:
+
+**Declarative indicator.** Point `data-gina-form-upload-progress` at an element
+id, or simply add an element with the default id `<fieldId>-progress` next to
+your input — the indicator activates only when the element exists. A native
+`<progress>` element tracks uploaded/total bytes (and shows the browser's
+indeterminate animation while the length is unknown); any other element gets the
+integer percentage as text. Every target also carries two attributes you can
+style against — `data-gina-upload-progress` (the percent, absent while
+indeterminate) and `data-gina-upload-progress-state` (`preparing`, `uploading`,
+`indeterminate`, `complete`, `error`). No wording is hardcoded: labels are
+yours, via CSS on the state attribute.
+
+```html
+<input
+  type="file"
+  id="avatar"
+  name="avatar"
+  data-gina-form-upload-action="/media/stage"
+  data-gina-form-upload-on-progress="onAvatarProgress">
+<progress id="avatar-progress"></progress>
+```
+
+**Window callback.** `data-gina-form-upload-on-progress` names a function
+registered on `window` (a bare identifier, same convention as `-on-success`).
+It receives `(event, result)` where `result` is:
+
+```json
+{
+  "status": 100,
+  "progress": 42,
+  "loaded": 1048576,
+  "total": 2485760,
+  "lengthComputable": true,
+  "files": ["photo1.jpg", "photo2.jpg"]
+}
+```
+
+`progress` is `null` while the browser cannot compute the length. One staging
+request carries **every file of a selection**, so progress is per-request — the
+`files` array tells you which files the numbers cover.
+
+**Form event.** The same payload rides the registered `uploadProgress` form
+event on the virtual upload form, for code that holds the form instance.
+
+The indicator's lifecycle is managed end-to-end: `preparing` from the moment a
+file is selected (file reading and body assembly happen before the first network
+frame), `complete` fills the bar on success, a staging error empties it (state
+`error` — the error message renders in the `-error` element as usual), and
+removing a staged file (reset/delete) clears the indicator entirely.
+
+## Drag-and-drop (dropzone)
+
+*New in 0.5.24.* Any element can act as a drop target for a staged file input.
+Point the input at it:
+
+```html
+<input type="file" id="avatar" name="avatar"
+    data-gina-form-upload-action="/upload/tmp"
+    data-gina-form-upload-dropzone="avatar-dropzone">
+
+<div id="avatar-dropzone">Drop a picture here</div>
+```
+
+Files dropped on the zone go through the **exact same staging pipeline** as a
+native picker selection — group tagging, the staging POST, previews, hidden
+metadata fields, reset/delete, and upload progress all behave identically.
+
+Unlike the other target attributes, `data-gina-form-upload-dropzone` has **no
+default id**: the attribute must name an element explicitly, and the feature
+stays inactive without it (a named-but-missing element logs a console warning).
+A dropzone serves exactly one input — the first input that claims it wins.
+
+The layer stamps two attributes on the zone for CSS styling (no wording is
+ever written — labels are yours):
+
+- `data-gina-upload-dropzone` — set at bind time to the owner input's id.
+- `data-gina-upload-dropzone-state` — `idle` (bound, nothing dragged), `over`
+  (a file drag is hovering), `dropped` (files dropped, upload in flight), then
+  back to `idle` when the upload completes or fails, and when a staged file is
+  removed.
+
+```css
+#avatar-dropzone[data-gina-upload-dropzone-state="over"] {
+    outline: 2px dashed #4a90d9;
+}
+```
+
+Only **file** drags react: dragging text or a link over the zone does nothing,
+so native behaviour is preserved. Dropping several files on an input without
+the `multiple` attribute keeps the **first file only** (with a console
+warning) — the server-side group rules (`isMultipleAllowed`) still apply
+regardless.
+
+A bare file input already accepts a file dropped directly **on the input
+itself** in every modern browser — that native path runs the same staging
+pipeline with no attribute needed. The dropzone attribute exists to delegate a
+larger, styled element.
+
+This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
+
 ## Limitations and gotchas
 
 - **Multipart text fields are capped.** Text (non-file) fields are captured
@@ -348,9 +508,6 @@ interrupts the removal. *The removal callbacks and
 - **No client-side size or type checking.** The client does not pre-validate a
   file's size or extension before staging — enforcement is server-side only (the
   upload-group rules). Do not assume the browser blocked anything.
-- **No upload progress bar and no drag-and-drop.** The client layer renders
-  previews and reset/delete controls but does not expose upload progress, and
-  files are chosen through the native file input only.
 
 ---
 

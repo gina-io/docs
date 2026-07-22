@@ -19,6 +19,128 @@ upward to the target version.
 
 ---
 
+## 0.5.23 → 0.5.24
+
+### Added — probe the upload write-error crash-guard with `simulateWriteError`
+
+**No action required — additive, and inert in production.** A new per-upload-group
+`simulateWriteError` flag lets you re-confirm, on your own upload surface after an
+upgrade, that a mid-stream write error answers a guarded **HTTP 500** for that one
+request (rather than crashing the bundle). Add the flag to a throwaway group in your
+bundle's `settings.json`:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "_probe_fail": {
+      "path": "${tmpPath}",
+      "allowedExtensions": "*",
+      "isMultipleAllowed": true,
+      "simulateWriteError": true
+    }
+  }
+}
+```
+
+Any upload tagged with that group (`group="_probe_fail"`) then fails with the same
+guarded 500 a real disk-full / permission error produces — with no filesystem or
+global-config change that affects your real uploads. The flag is **honoured outside
+production scope only**; in production it is ignored, and a boot warning surfaces it
+so it can never ship silently. Server-side only — restart your bundles to pick it up.
+See the [file uploads guide](/guides/file-uploads#probing-the-write-error-crash-guard)
+for the full recipe, including why the group tag must be sent as a Content-Disposition
+parameter that `curl -F` / `FormData` cannot emit.
+
+### Added — upload progress for the staged upload client layer
+
+**No action required — opt-in.** File inputs using the `data-gina-form-upload-*`
+staging layer can now report real transfer progress: a declarative indicator
+(`data-gina-form-upload-progress`, default target `<fieldId>-progress` — native
+`<progress>` elements track bytes, anything else gets a percent text plus
+`data-gina-upload-progress` / `data-gina-upload-progress-state` styling hooks), a
+`data-gina-form-upload-on-progress` window callback (bare identifier, the
+`-on-success` convention), and a registered `uploadProgress` form event carrying
+`{ status, progress, loaded, total, lengthComputable, files }`. Progress is
+per-request (one staging POST carries every file of a selection). The indicator
+lifecycle is managed — `preparing` on selection, `complete` on success, an
+emptied bar on error, and a full strip when a staged file is removed. This is
+**browser-bundled**: rebuild your bundles (re-bake) to pick it up. See the
+[file uploads guide](/guides/file-uploads#upload-progress).
+
+### Added — drag-and-drop for the staged upload client layer
+
+**No action required — opt-in.** A staged file input can now delegate a
+dropzone: `data-gina-form-upload-dropzone="<elementId>"` binds the named
+element, and dropped files go through the exact same staging pipeline as a
+native picker selection (group tagging, staging POST, previews, hidden metadata
+fields, reset/delete, upload progress). Explicit id only — there is
+deliberately no default: without the attribute nothing changes. The zone gets
+`data-gina-upload-dropzone` / `data-gina-upload-dropzone-state`
+(`idle`/`over`/`dropped`) styling hooks; text/link drags are ignored; a
+multi-file drop on a non-`multiple` input keeps the first file with a console
+warning. This is **browser-bundled**: rebuild your bundles (re-bake) to pick it
+up. See the [file uploads guide](/guides/file-uploads#drag-and-drop-dropzone).
+
+### Fixed — a misconfigured upload group destination no longer crashes the bundle
+
+**No action required — behavior fix.** When a configured upload group's custom
+`path` cannot be created (a read-only or permission-denied parent directory),
+the synchronous directory creation inside the multipart parser used to throw
+and take the whole bundle down — an unauthenticated, single-request crash. It
+now answers a guarded **HTTP 500** for that one request (a server configuration
+problem, not client input; an unknown group name still answers 400) and the
+bundle keeps serving. Server-side only — restart your bundles to pick it up.
+
+### Added — an incident ref on every error response
+
+**No action required — additive and backward-compatible.** Every `throwError`
+JSON error body now carries a top-level `ref` field — a short, voice-relayable
+correlation code (6 uppercase hex, e.g. `A1B2C3`, or a relay-safe
+caller-supplied value) present in **all scopes**. Server-side, one error-level
+log line pairs that ref with the full error detail (message + stack + cause)
+plus the request correlation id, emitted **before** the stack-egress gate
+strips the wire copy — so support can resolve a user-relayed ref to the exact
+server-side failure, even in production (where the stack never reaches the
+client). Custom error pages and the inline fallback page render the same ref
+(`data.ref`). Consumers that only read `status` / `error` are unaffected until
+they adopt the ref. Server-side only — restart your bundles to pick it up. See
+the [controller guide](/guides/controller#incident-ref).
+
+### Fixed — staged file uploads store binary files byte-identical
+
+**Action needed if you upload binary files through the staged client layer
+(`data-gina-form-upload-*`): re-bake your bundles AND make sure the receiving
+server is on gina ≥ 0.5.22.** The staged-upload client layer used to assemble
+its multipart body as a JavaScript string, which the browser then UTF-8-encoded
+on the wire — so every file byte ≥ `0x80` was inflated to a two-byte sequence,
+and any real binary upload (image, PDF, archive) was stored corrupted and
+mis-sized server-side. (Pure-ASCII uploads were unaffected, which is what hid
+it; and on servers **before** 0.5.22 a since-removed server-side decode
+accidentally cancelled the inflation, so the corruption only began biting once
+the server became byte-faithful at 0.5.22.) The body is now assembled as a
+`Blob`, so the raw file bytes reach the wire verbatim — the multipart framing
+and the upload-group tag are byte-identical, so there is **no server-contract
+change**. This is **browser-bundled** — rebuild your bundles (re-bake) to pick
+it up, paired with a server ≥ 0.5.22. Files already corrupted by this defect are
+losslessly recoverable: the stored bytes are exactly the UTF-8 encoding of the
+original byte sequence, so decoding as UTF-8 and re-encoding as latin1 restores
+the exact original.
+
+### Fixed — staged upload client layer: action fallback and missing-preview guard
+
+**No action required — browser-bundled bug fixes; re-bake your bundles to pick
+them up.** Two edge-case defects in the `data-gina-form-upload-*` staging layer:
+(1) a file input that declared only its staging action
+(`data-gina-form-upload-action`) and relied on a default route for its
+reset/delete action had the staging action silently repointed at the delete
+route, so the staging POST went to the wrong endpoint (and failed silently when
+the resolved origin also differed from the page origin); (2) an upload
+configured without a preview element threw in its success handler after an
+otherwise-completed upload. Both are fixed. This is **browser-bundled** —
+rebuild your bundles (re-bake) to pick it up.
+
+---
+
 ## 0.5.22 → 0.5.23
 
 ### Fixed — `req.files[].size` now reports the exact stored byte count

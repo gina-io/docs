@@ -369,6 +369,55 @@ self.throwError(404, 'Not found');
 self.throwError(new Error('Forbidden'));  // reads err.status for the HTTP code
 ```
 
+#### Incident ref
+
+Every JSON error body carries a top-level **`ref`** — a short, voice-relayable
+correlation code (6 uppercase hex characters, e.g. `A1B2C3`) present in **all
+scopes**, production included:
+
+```json
+{ "status": 404, "error": "Invoice not found", "ref": "A1B2C3" }
+```
+
+(The `stack` field is included only in local/development scope; outside it the
+stack is stripped from the wire — see below.) The ref carries no server detail,
+so it is safe to show an end user and to have them relay to support.
+
+Server-side, one error-level log line pairs that ref with the **full** error
+detail (message + stack + `Error.cause`) and the request correlation id,
+emitted **before** the stack is stripped from the wire, in every scope
+including production:
+
+```text
+[ ref A1B2C3 ][ req 9f3c… ] GET [ 404 ] /invoice/abc-123
+Error: Invoice not found
+    at ... (full stack)
+```
+
+So support can grep a user-relayed `ref` and land on the exact failure — even
+in production, where the wire response never carried the stack. The `ref`
+composes with the always-on request id (it does not replace it).
+
+**Supplying your own ref.** Pass a `ref` on the error object to correlate a
+throw with your own tracking id. It is honoured when relay-safe (word
+characters, dots or dashes, up to 32 chars); anything else is replaced with a
+fresh minted ref (so it can never be used to forge a log line):
+
+```js
+self.throwError(res, 500, { ref: 'ORDER-42', message: 'payment capture failed' });
+```
+
+**Custom error pages** receive the same value as `data.ref`, so you can surface
+it in your branded HTML error template (the built-in fallback page renders it
+automatically):
+
+```html
+<p>Reference: {{ data.ref }}</p>
+```
+
+The field is additive and always on — consumers that only read `status` /
+`error` are unaffected until they choose to use it.
+
 ---
 
 ## Reading request data
