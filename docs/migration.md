@@ -67,6 +67,16 @@ emptied bar on error, and a full strip when a staged file is removed. This is
 **browser-bundled**: rebuild your bundles (re-bake) to pick it up. See the
 [file uploads guide](/guides/file-uploads#upload-progress).
 
+### Fixed — a misconfigured upload group destination no longer crashes the bundle
+
+**No action required — behavior fix.** When a configured upload group's custom
+`path` cannot be created (a read-only or permission-denied parent directory),
+the synchronous directory creation inside the multipart parser used to throw
+and take the whole bundle down — an unauthenticated, single-request crash. It
+now answers a guarded **HTTP 500** for that one request (a server configuration
+problem, not client input; an unknown group name still answers 400) and the
+bundle keeps serving. Server-side only — restart your bundles to pick it up.
+
 ---
 
 ## 0.5.22 → 0.5.23
