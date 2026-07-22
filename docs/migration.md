@@ -106,6 +106,19 @@ client). Custom error pages and the inline fallback page render the same ref
 they adopt the ref. Server-side only — restart your bundles to pick it up. See
 the [controller guide](/guides/controller#incident-ref).
 
+### Fixed — staged upload client layer: action fallback and missing-preview guard
+
+**No action required — browser-bundled bug fixes; re-bake your bundles to pick
+them up.** Two edge-case defects in the `data-gina-form-upload-*` staging layer:
+(1) a file input that declared only its staging action
+(`data-gina-form-upload-action`) and relied on a default route for its
+reset/delete action had the staging action silently repointed at the delete
+route, so the staging POST went to the wrong endpoint (and failed silently when
+the resolved origin also differed from the page origin); (2) an upload
+configured without a preview element threw in its success handler after an
+otherwise-completed upload. Both are fixed. This is **browser-bundled** —
+rebuild your bundles (re-bake) to pick it up.
+
 ---
 
 ## 0.5.22 → 0.5.23
