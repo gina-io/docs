@@ -67,6 +67,20 @@ emptied bar on error, and a full strip when a staged file is removed. This is
 **browser-bundled**: rebuild your bundles (re-bake) to pick it up. See the
 [file uploads guide](/guides/file-uploads#upload-progress).
 
+### Added — drag-and-drop for the staged upload client layer
+
+**No action required — opt-in.** A staged file input can now delegate a
+dropzone: `data-gina-form-upload-dropzone="<elementId>"` binds the named
+element, and dropped files go through the exact same staging pipeline as a
+native picker selection (group tagging, staging POST, previews, hidden metadata
+fields, reset/delete, upload progress). Explicit id only — there is
+deliberately no default: without the attribute nothing changes. The zone gets
+`data-gina-upload-dropzone` / `data-gina-upload-dropzone-state`
+(`idle`/`over`/`dropped`) styling hooks; text/link drags are ignored; a
+multi-file drop on a non-`multiple` input keeps the first file with a console
+warning. This is **browser-bundled**: rebuild your bundles (re-bake) to pick it
+up. See the [file uploads guide](/guides/file-uploads#drag-and-drop-dropzone).
+
 ### Fixed — a misconfigured upload group destination no longer crashes the bundle
 
 **No action required — behavior fix.** When a configured upload group's custom

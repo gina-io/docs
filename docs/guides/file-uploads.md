@@ -329,6 +329,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
 | `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. |
 | `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
+| `data-gina-form-upload-dropzone` | Id of an element to bind as a drag-and-drop target for this input. **Explicit id only — no default**; without the attribute the feature is inactive. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
 | `data-gina-form-upload-on-success` | Bare name of a `window` callback run when staging succeeds. |
 | `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
@@ -439,6 +440,56 @@ frame), `complete` fills the bar on success, a staging error empties it (state
 `error` — the error message renders in the `-error` element as usual), and
 removing a staged file (reset/delete) clears the indicator entirely.
 
+## Drag-and-drop (dropzone)
+
+*New in 0.5.24.* Any element can act as a drop target for a staged file input.
+Point the input at it:
+
+```html
+<input type="file" id="avatar" name="avatar"
+    data-gina-form-upload-action="/upload/tmp"
+    data-gina-form-upload-dropzone="avatar-dropzone">
+
+<div id="avatar-dropzone">Drop a picture here</div>
+```
+
+Files dropped on the zone go through the **exact same staging pipeline** as a
+native picker selection — group tagging, the staging POST, previews, hidden
+metadata fields, reset/delete, and upload progress all behave identically.
+
+Unlike the other target attributes, `data-gina-form-upload-dropzone` has **no
+default id**: the attribute must name an element explicitly, and the feature
+stays inactive without it (a named-but-missing element logs a console warning).
+A dropzone serves exactly one input — the first input that claims it wins.
+
+The layer stamps two attributes on the zone for CSS styling (no wording is
+ever written — labels are yours):
+
+- `data-gina-upload-dropzone` — set at bind time to the owner input's id.
+- `data-gina-upload-dropzone-state` — `idle` (bound, nothing dragged), `over`
+  (a file drag is hovering), `dropped` (files dropped, upload in flight), then
+  back to `idle` when the upload completes or fails, and when a staged file is
+  removed.
+
+```css
+#avatar-dropzone[data-gina-upload-dropzone-state="over"] {
+    outline: 2px dashed #4a90d9;
+}
+```
+
+Only **file** drags react: dragging text or a link over the zone does nothing,
+so native behaviour is preserved. Dropping several files on an input without
+the `multiple` attribute keeps the **first file only** (with a console
+warning) — the server-side group rules (`isMultipleAllowed`) still apply
+regardless.
+
+A bare file input already accepts a file dropped directly **on the input
+itself** in every modern browser — that native path runs the same staging
+pipeline with no attribute needed. The dropzone attribute exists to delegate a
+larger, styled element.
+
+This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
+
 ## Limitations and gotchas
 
 - **Multipart text fields are capped.** Text (non-file) fields are captured
@@ -457,9 +508,6 @@ removing a staged file (reset/delete) clears the indicator entirely.
 - **No client-side size or type checking.** The client does not pre-validate a
   file's size or extension before staging — enforcement is server-side only (the
   upload-group rules). Do not assume the browser blocked anything.
-- **No drag-and-drop.** Files are chosen through the native file input only. A
-  drop-target attribute for the staged upload layer is planned — see the
-  [roadmap](/roadmap).
 
 ---
 
