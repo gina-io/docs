@@ -187,6 +187,55 @@ flowchart TD
     G -->|yes| H["Streamed to temp"]
 ```
 
+### Probing the write-error crash-guard
+
+If a file's write stream fails mid-stream — a full disk, a revoked permission — Gina
+answers a guarded **HTTP 500** for that one request and keeps the bundle running. To
+re-confirm this on your own upload surface after an upgrade (without engineering a real
+disk-full or an unwritable directory, both of which affect your real uploads), add a
+`simulateWriteError` flag to a throwaway group:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "_probe_fail": {
+      "path": "${tmpPath}",
+      "allowedExtensions": "*",
+      "isMultipleAllowed": true,
+      "simulateWriteError": true
+    }
+  }
+}
+```
+
+Every upload tagged with that group now fails with the guarded 500 — no full disk or
+unwritable directory needed, and nothing about your real uploads changes. The flag is
+**honoured outside production scope only**: in `production` scope it is ignored, and a
+boot warning names it either way so it can never ship silently.
+
+:::note The group tag rides a Content-Disposition parameter
+The `group="…"` tag travels as a **Content-Disposition parameter**, which `curl -F` and
+browser `FormData` cannot set — so a faithful probe has to hand-build the multipart
+body. For example:
+
+```
+------gina-probe
+Content-Disposition: form-data; name="files"; group="_probe_fail"; filename="probe.bin"
+Content-Type: application/octet-stream
+
+any bytes here
+------gina-probe--
+```
+
+Send that body with `Content-Type: multipart/form-data; boundary=----gina-probe` and
+expect a `500` response. Because the write stream is opened before the simulated
+failure, a probe may leave a 0-byte temp file — point the probe group's `path` at a
+temp directory.
+:::
+
+Remove the probe group before shipping to production; if you forget, the flag stays
+inert there and the boot warning flags it.
+
 ---
 
 ## The client upload layer

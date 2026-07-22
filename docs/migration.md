@@ -19,6 +19,40 @@ upward to the target version.
 
 ---
 
+## 0.5.23 → 0.5.24
+
+### Added — probe the upload write-error crash-guard with `simulateWriteError`
+
+**No action required — additive, and inert in production.** A new per-upload-group
+`simulateWriteError` flag lets you re-confirm, on your own upload surface after an
+upgrade, that a mid-stream write error answers a guarded **HTTP 500** for that one
+request (rather than crashing the bundle). Add the flag to a throwaway group in your
+bundle's `settings.json`:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "_probe_fail": {
+      "path": "${tmpPath}",
+      "allowedExtensions": "*",
+      "isMultipleAllowed": true,
+      "simulateWriteError": true
+    }
+  }
+}
+```
+
+Any upload tagged with that group (`group="_probe_fail"`) then fails with the same
+guarded 500 a real disk-full / permission error produces — with no filesystem or
+global-config change that affects your real uploads. The flag is **honoured outside
+production scope only**; in production it is ignored, and a boot warning surfaces it
+so it can never ship silently. Server-side only — restart your bundles to pick it up.
+See the [file uploads guide](/guides/file-uploads#probing-the-write-error-crash-guard)
+for the full recipe, including why the group tag must be sent as a Content-Disposition
+parameter that `curl -F` / `FormData` cannot emit.
+
+---
+
 ## 0.5.22 → 0.5.23
 
 ### Fixed — `req.files[].size` now reports the exact stored byte count
