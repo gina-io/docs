@@ -350,7 +350,8 @@ interrupts the removal. *The removal callbacks and
   upload-group rules). Do not assume the browser blocked anything.
 - **No upload progress bar and no drag-and-drop.** The client layer renders
   previews and reset/delete controls but does not expose upload progress, and
-  files are chosen through the native file input only.
+  files are chosen through the native file input only. Both are planned for the
+  staged upload layer — see the [roadmap](/roadmap).
 
 ---
 
