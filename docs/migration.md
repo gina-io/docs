@@ -77,6 +77,29 @@ rewritten. `--dry-run` previews the full plan, `--force` applies without the
 interactive confirmation, and `--format=json` emits a machine-readable envelope.
 Restart the bundle after a rename.
 
+### Added — opt into Swig output auto-escaping with `settings.swig.autoescape`
+
+**No action required — additive; the default is unchanged.** Swig bundles render
+variable output (`{{ x }}`) **raw** by default, and until now no setting could
+change that. A new boolean `settings.swig.autoescape` makes HTML auto-escaping
+reachable per bundle:
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+When `true`, Swig HTML-escapes variable output as an XSS defense — matching
+Nunjucks, whose `settings.nunjucks.autoescape` already defaults to `true`. Absent
+or `false`, behaviour is exactly as before (raw). A non-boolean value now fails
+the bundle at startup, so the toggle can't be silently mis-typed. See
+[`settings.swig`](/reference/settings#swig) for details. Swig's default stays
+`false` in this release; enabling escaping globally by default is planned for a
+future major.
+
 ---
 
 ## 0.5.23 → 0.5.24

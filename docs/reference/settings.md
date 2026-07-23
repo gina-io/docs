@@ -340,6 +340,33 @@ default — see the [Templating overview](/templating) for the per-engine
 configuration.
 :::
 
+### `swig`
+
+Configures the Swig template engine. `settings.swig.package` selects the
+swig-core frontend (see the note above); `settings.swig.autoescape` controls
+HTML output escaping.
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `autoescape` | boolean | `false` | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. |
+
+:::warning Swig output is not auto-escaped by default in gina
+Unlike standalone `@rhinostone/swig` (which auto-escapes by default) and unlike
+Nunjucks in gina (`settings.nunjucks.autoescape` defaults to `true`), gina
+renders Swig variable output **raw** by default. Set
+`settings.swig.autoescape: true` to enable escaping, or escape explicitly with
+the `e` / `escape` filter. Never render untrusted input through Swig without one
+of these.
+:::
+
 ### `template`
 
 Configures the optional per-engine **async template loader** (shipped in
