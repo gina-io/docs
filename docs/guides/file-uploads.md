@@ -337,7 +337,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
-| `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. |
+| `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. **No framework default** (unlike `-reset-action`) — removing an already-saved file needs an application-specific endpoint Gina cannot supply, so the URL is required only when a delete is actually triggered, not at bind. Omitting the attribute is quiet at bind time. *Quiet-at-bind since 0.5.25.* |
 | `data-gina-form-upload-reset-trigger` / `-delete-trigger` | Id override for the reset/delete trigger element. |
 | `data-gina-form-upload-hidden-class` | Class name the add-affordance restore removes from the file input *and its parent* after a removal — set it when your markup hides the input with a CSS class instead of an inline style. *New in 0.5.15.* |
 | `data-gina-form-upload-is-locked` | When set on a generated hidden field, that field is kept even if its file is removed. |
