@@ -55,6 +55,28 @@ controller file and its `templates/html/<name>/` tree. `--dry-run` previews,
 `--force` deletes even with blockers (leaving the references for you to clean),
 and `--format=json` emits a machine-readable envelope.
 
+### Added — rename a namespace controller with `controller:rename`
+
+**No action required — additive.** [`controller:rename`](/cli/cli-controller#controllerrename)
+renames a namespace controller and rewrites the references that point at it.
+Because a controller is named by its namespace string in several places — the file
+`controllers/controller.<old>.js`, `namespace` values in `routing.json`, and
+`requireController('<old>')` literals — a plain file rename would leave them
+dangling (and a routing rule naming a missing namespace silently falls back to the
+default `controller.js`). So `controller:rename` moves the controller file, moves
+its `templates/html/<old>/` tree, and rewrites the structured references with
+comment-preserving string ops:
+
+```bash
+gina controller:rename checkout basket demo @myproject --dry-run
+```
+
+Anything a static rewrite cannot safely resolve — a `param.namespace` set to a
+`:variable`, or a `requireController(<expression>)` — is reported rather than
+rewritten. `--dry-run` previews the full plan, `--force` applies without the
+interactive confirmation, and `--format=json` emits a machine-readable envelope.
+Restart the bundle after a rename.
+
 ---
 
 ## 0.5.23 → 0.5.24

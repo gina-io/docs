@@ -3,7 +3,7 @@ id: cli-controller
 title: controller
 sidebar_label: controller
 sidebar_position: 18
-description: CLI reference for gina controller commands — scaffold a namespace controller into a bundle and print its routing rules, and remove one safely after a reference-aware scan.
+description: CLI reference for gina controller commands — scaffold a namespace controller into a bundle and print its routing rules, remove one safely after a reference-aware scan, and rename one, rewriting the references that point at it.
 level: beginner
 prereqs:
   - '[gina CLI](/cli/)'
@@ -22,12 +22,15 @@ never by an imported identifier.
 
 - **`controller:add`** — scaffold a namespace controller and print the routing rules to wire it.
 - **`controller:remove`** (alias **`controller:rm`**) — remove a namespace controller, but only after a reference-aware scan refuses to leave a dangling routing rule behind.
+- **`controller:rename`** — rename a namespace controller and rewrite the references that point at it — its `routing.json` `namespace` values and `requireController()` literals — moving its template tree and reporting anything a static rewrite cannot safely resolve.
 
 ```mermaid
 flowchart LR
-    A["gina controller:add<br/>&lt;name&gt; &lt;bundle&gt;"] --> B["controllers/<br/>controller.&lt;name&gt;.js"]
-    A --> C["templates/html/&lt;name&gt;/<br/>(view bundle)"]
-    A --> D["printed routing.json rules<br/>(paste + restart)"]
+    ADD["gina controller:add<br/>&lt;name&gt; &lt;bundle&gt;"] --> ADDo["controller.&lt;name&gt;.js + templates<br/>· printed routing.json rules"]
+    REM["gina controller:remove<br/>&lt;name&gt; &lt;bundle&gt;"] --> SCAN{"references?"}
+    SCAN -->|clean| DEL["delete file + templates"]
+    SCAN -->|remain| REF["refuse · list them"]
+    REN["gina controller:rename<br/>&lt;old&gt; &lt;new&gt; &lt;bundle&gt;"] --> RENo["move file + templates<br/>· rewrite references"]
 ```
 
 All `controller` verbs are **bundle-scoped, same-project** — they take a bundle
@@ -361,6 +364,146 @@ non-interactive). Piping is safe — the payload is written synchronously.
 |------|------|
 | `0` | The controller was removed, a dry-run / JSON report was printed, or a `--force` removal completed. |
 | `1` | Invalid / reserved name, the bundle is not registered, the controller does not exist, blocking references remain (without `--force`), or a non-interactive stdin could not confirm. |
+
+---
+
+## `controller:rename` {#controllerrename}
+
+*New in 0.5.25*
+
+Rename a namespace controller — and rewrite the references that point at it. A
+controller is named by its *namespace string* in more than one place: the file
+`controllers/controller.<old>.js`, a `namespace` value in `routing.json`, and
+`requireController('<old>')` literals across the bundle. A plain file rename would
+leave every one of those dangling — and a routing rule that names a missing
+namespace does not error, it silently falls back to the default `controller.js`.
+So `controller:rename` moves the controller file, moves its
+`templates/html/<old>/` tree, and rewrites the structured references in place with
+**comment-preserving string ops** — never a parse-and-restringify, which would
+drop your `routing.json` comments and ordering.
+
+Anything a static rewrite cannot safely resolve — a `param.namespace` set to a
+`:variable` (resolved from the URL at request time), or a
+`requireController(<expression>)` whose argument is not a plain string literal —
+is **reported, not rewritten**. The controller *class name* inside the moved file
+(`${Bundle}${Namespace}Controller`) and its comments are left as-is too: gina
+loads a controller by file path, not by class name, so rewriting them would be
+purely cosmetic.
+
+```bash
+gina controller:rename <old> <new> <bundle> @<project>
+gina controller:rename <old> <new> <bundle> @<project> --dry-run
+gina controller:rename <old> <new> <bundle> @<project> --force
+gina controller:rename <old> <new> <bundle> @<project> --dry-run --format=json
+```
+
+### `--dry-run` — preview the plan
+
+```bash
+gina controller:rename checkout basket demo @myproject --dry-run
+```
+
+```text
+[ dry-run ] would rename controller "checkout" -> "basket" in demo@myproject (no changes written).
+  - move controllers/controller.checkout.js -> controllers/controller.basket.js
+  - move templates/html/checkout/ -> templates/html/basket/ (2 files)
+  - rewrite config/routing.json (2 namespace values)
+  - rewrite controllers/controller.content.js (1 requireController call)
+
+Not rewritten — 1 dynamic reference a static rewrite cannot resolve (fix by hand):
+  - config/routing.json rule "dyn" param.namespace = ":type"
+
+Note — the controller file is moved and its requireController() calls rewritten,
+but the `DemoCheckoutController` class name and any comments inside it are left as-is (cosmetic — gina loads by file path).
+```
+
+The plan lists every move and rewrite, then a `Not rewritten` block naming each
+reference the rename deliberately left alone — repoint those by hand.
+
+### Running it — the confirmation
+
+With no flag, `controller:rename` prints the same plan (present tense), any
+`Not rewritten` residuals, and asks before touching anything:
+
+```text
+Rename controller "checkout" -> "basket" in demo@myproject?
+  - move controllers/controller.checkout.js -> controllers/controller.basket.js
+  - move templates/html/checkout/ -> templates/html/basket/ (2 files)
+  - rewrite config/routing.json (2 namespace values)
+  - rewrite controllers/controller.content.js (1 requireController call)
+
+Proceed? (yes|no) >
+```
+
+Answer `yes` to apply, `no` to abort (`Aborted — nothing renamed.`). A
+non-interactive stdin (a pipe, no TTY) aborts with a message pointing at `--force`
+(apply without the prompt) or `--dry-run` (preview). On success the report echoes
+the plan in the past tense and reminds you to restart:
+
+```text
+Renamed controller "checkout" -> "basket" in demo@myproject:
+  - moved controllers/controller.checkout.js -> controllers/controller.basket.js
+  - moved templates/html/checkout/ -> templates/html/basket/ (2 files)
+  - rewrote config/routing.json (2 namespace values)
+  - rewrote controllers/controller.content.js (1 requireController call)
+
+Then restart the bundle.
+```
+
+### Why `rename` edits `routing.json` but `remove` does not {#rename-vs-remove}
+
+[`controller:remove`](#controllerremove) refuses to touch `routing.json` because
+there is no safe automatic action — a rule pointing at a deleted controller could
+be dropped, repointed at another namespace, or left as a deliberate placeholder,
+and only you know which. `controller:rename` has exactly one correct substitution
+— the old namespace value becomes the new one — so it *can* rewrite the
+`"namespace"` values (and the `requireController('<old>')` literals) safely, using
+the same word-boundary, quoted-string-anchored string ops as
+[`bundle:rename`](./bundle.md), which preserve the file's comments and ordering.
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Print the plan and any residuals; change nothing. |
+| `--force` | Apply the rename without the interactive confirmation. |
+| `--format=json` | Machine-readable envelope instead of text. Non-interactive: previews unless combined with `--force`. |
+
+### `--format=json`
+
+```bash
+gina controller:rename checkout basket demo @myproject --format=json
+```
+
+```json
+{
+  "old": "checkout",
+  "new": "basket",
+  "bundle": "demo",
+  "project": "myproject",
+  "controllerMove": { "from": "controllers/controller.checkout.js", "to": "controllers/controller.basket.js" },
+  "templateMove": { "from": "templates/html/checkout", "to": "templates/html/basket" },
+  "routingRewrites": 2,
+  "requireRewrites": [ { "file": "controllers/controller.content.js", "count": 1 } ],
+  "dynamicRefs": [ { "file": "config/routing.json", "kind": "routing-namespace", "rule": "dyn", "site": "param.namespace", "value": ":type" } ],
+  "dryRun": false,
+  "force": false,
+  "renamed": false
+}
+```
+
+`renamed` is `true` only when the rename actually happened (`--force`, since JSON
+mode is non-interactive); without `--force` the payload is a preview.
+`routingRewrites` counts the `namespace` values rewritten, `requireRewrites`
+groups the `requireController()` rewrites by file, and `dynamicRefs` lists the
+references left for you. Piping is safe — the payload is written synchronously.
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The controller was renamed, a dry-run / JSON preview was printed, or the confirmation was declined. |
+| `1` | Invalid / reserved old or new name, the two names are identical, the bundle is not registered, the source controller does not exist, the target name is already taken (controller file or template dir), or a non-interactive stdin could not confirm. |
 
 ---
 
