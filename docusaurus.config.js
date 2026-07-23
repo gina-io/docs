@@ -97,6 +97,7 @@ const config = {
           {from: '/cli/cache',     to: '/cli/cli-cache'},
           {from: '/cli/connector', to: '/cli/cli-connector'},
           {from: '/cli/container', to: '/cli/cli-container'},
+          {from: '/cli/controller',to: '/cli/cli-controller'},
           {from: '/cli/env',       to: '/cli/cli-env'},
           {from: '/cli/framework', to: '/cli/cli-framework'},
           {from: '/cli/i18n',      to: '/cli/cli-i18n'},

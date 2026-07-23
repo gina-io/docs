@@ -19,6 +19,29 @@ upward to the target version.
 
 ---
 
+## 0.5.24 → 0.5.25
+
+### Added — scaffold a namespace controller with `controller:add`
+
+**No action required — additive.** A new [`controller:add`](/cli/cli-controller)
+CLI command scaffolds a namespace controller into a bundle and prints the
+paste-ready `routing.json` rules to wire it:
+
+```bash
+gina controller:add checkout demo @myproject --controls=start,confirm,cancel
+```
+
+It creates `controllers/controller.checkout.js` (one JSDoc'd action stub per
+`--controls` entry) and, for a view bundle, one template per action at
+`templates/html/checkout/<action>.html`, then prints the routing rules for you to
+paste. The bundle flavor auto-detects (view → `render()` stubs + templates;
+API-only → `renderJSON()` stubs) and is overridable with `--views` / `--api`.
+`controller:add` **never edits `routing.json`** — it prints the rules and you
+paste them, then restart the bundle. This is a scaffolding command, so nothing in
+existing projects changes.
+
+---
+
 ## 0.5.23 → 0.5.24
 
 ### Added — probe the upload write-error crash-guard with `simulateWriteError`

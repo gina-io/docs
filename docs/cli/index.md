@@ -36,6 +36,7 @@ Run `gina --help` (or `gina -h`) for the top-level command reference, and
 | [`port`](./port.md) | Port assignment and reallocation |
 | [`scope`](./scope.md) | Build scopes and bundle symlinks |
 | [`view`](./view.md) | Scaffold HTML view templates into a bundle |
+| [`controller`](./controller.md) | Scaffold a namespace controller into a bundle and print its routing rules (`controller:add`) |
 | [`cache`](./cache.md) | Inspect in-memory cache stats for running bundles |
 | [`protocol`](./protocol.md) | HTTP protocol and scheme configuration |
 | [`service`](./service.md) | List framework-internal services (@gina-only) |
