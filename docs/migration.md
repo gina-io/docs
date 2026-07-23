@@ -40,6 +40,21 @@ API-only → `renderJSON()` stubs) and is overridable with `--views` / `--api`.
 paste them, then restart the bundle. This is a scaffolding command, so nothing in
 existing projects changes.
 
+### Added — remove a namespace controller safely with `controller:remove`
+
+**No action required — additive.** [`controller:remove`](/cli/cli-controller#controllerremove)
+(alias `controller:rm`) deletes a namespace controller from a bundle, but only
+after a reference-aware scan. Because a routing rule that names a namespace with
+no matching controller file silently falls back to the default `controller.js`
+rather than erroring, a bare delete is unsafe — so `controller:remove` scans
+`routing.json` (rule-level `namespace` and `param.namespace`) plus
+`requireController()` calls across the bundle and **refuses** the removal while
+any still point at the controller, listing each one. It **never edits
+`routing.json`**. When clean, it confirms interactively, then deletes the
+controller file and its `templates/html/<name>/` tree. `--dry-run` previews,
+`--force` deletes even with blockers (leaving the references for you to clean),
+and `--format=json` emits a machine-readable envelope.
+
 ---
 
 ## 0.5.23 → 0.5.24

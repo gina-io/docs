@@ -3,7 +3,7 @@ id: cli-controller
 title: controller
 sidebar_label: controller
 sidebar_position: 18
-description: CLI reference for gina controller commands — scaffold a namespace controller into a bundle and print the routing.json rules to wire it.
+description: CLI reference for gina controller commands — scaffold a namespace controller into a bundle and print its routing rules, and remove one safely after a reference-aware scan.
 level: beginner
 prereqs:
   - '[gina CLI](/cli/)'
@@ -21,6 +21,7 @@ referenced purely by its *namespace string* — the file
 never by an imported identifier.
 
 - **`controller:add`** — scaffold a namespace controller and print the routing rules to wire it.
+- **`controller:remove`** (alias **`controller:rm`**) — remove a namespace controller, but only after a reference-aware scan refuses to leave a dangling routing rule behind.
 
 ```mermaid
 flowchart LR
@@ -208,6 +209,158 @@ namespace controller inherits).
 |------|------|
 | `0` | The controller file (and, for a view bundle, its templates) was created and the rules printed. |
 | `1` | Invalid / reserved name, an invalid `--controls` action, the bundle is not registered, the controller already exists, or both flavor flags were passed. |
+
+---
+
+## `controller:remove` {#controllerremove}
+
+*New in 0.5.25*
+
+Remove a namespace controller from a bundle — safely. A controller is referenced
+only by its namespace string, and a routing rule that names a namespace with no
+matching `controller.<name>.js` does **not** error: it silently falls back to the
+default `controller.js` (a misdispatch). So `controller:remove` first **scans**
+every reference site and **refuses** the removal while any still point at the
+controller, listing each one. It **never edits `routing.json`** — repointing the
+rules is left to you. When nothing references it, it confirms interactively, then
+deletes the controller file and its `templates/html/<name>/` tree.
+
+`controller:rm` is a thin alias. The default `controller.js` (namespace
+`controller`) can never be removed.
+
+```bash
+gina controller:remove <name> <bundle> @<project>
+gina controller:rm checkout demo @myproject
+gina controller:remove <name> <bundle> @<project> --dry-run
+gina controller:remove <name> <bundle> @<project> --force
+```
+
+### It refuses while references remain {#refuse-unless-clean}
+
+```bash
+gina controller:remove checkout demo @myproject
+```
+
+```text
+Cannot remove controller "checkout" from demo@myproject — 2 blocking references:
+
+  config/routing.json
+    - rule "checkout-start"  ("namespace": "checkout")
+    - rule "checkout-confirm"  ("namespace": "checkout")
+
+Remove or repoint these first (a stale namespace silently falls back to
+controller.js — see the docs), or re-run with --force to delete the
+controller file only, leaving the references for you to clean.
+```
+
+The scan covers the four sites a controller is named at:
+
+- the routing rule-level `"namespace": "<name>"` (which loads the controller file);
+- a `"param": { "namespace": "<name>" }` (which overrides the view/template namespace);
+- every `requireController('<name>')` call across the bundle's `.js` files;
+- the controller file and its `templates/html/<name>/` tree (deleted with it, not a blocker).
+
+A reference whose value cannot be resolved by a static scan — a `param.namespace`
+set to a `:variable` (resolved from the URL at request time), or a
+`requireController(<expression>)` with a non-literal argument — is surfaced as an
+advisory note rather than silently cleared.
+
+### When it is clean
+
+With no blocking references, `controller:remove` prints the deletion plan and
+asks for confirmation before deleting anything:
+
+```text
+Remove controller "account" from demo@myproject?
+  - delete controllers/controller.account.js
+Proceed? (yes|no) >
+```
+
+Answer `yes` to delete, `no` to abort. A non-interactive stdin (a pipe, no TTY)
+aborts with a message pointing at `--force` (delete without a prompt) or
+`--dry-run` (preview).
+
+### Flags
+
+| Flag | Effect |
+|------|--------|
+| `--dry-run` | Print the plan and any blockers; change nothing. |
+| `--force` | Delete the controller file and its templates **even with blockers**, skipping the confirmation. `routing.json` is still never edited — the references left behind are listed for you to clean up. |
+| `--format=json` | Machine-readable envelope instead of text. Deletes only when combined with `--force`. |
+
+### `--dry-run`
+
+```bash
+gina controller:remove checkout demo @myproject --dry-run
+```
+
+```text
+[ dry-run ] would remove controller "checkout" from demo@myproject (no changes written).
+  - delete controllers/controller.checkout.js
+  - delete templates/html/checkout/ (2 files)
+
+Blocked — 2 references still point at "checkout":
+  config/routing.json
+    - rule "checkout-start"  ("namespace": "checkout")
+    - rule "checkout-confirm"  ("namespace": "checkout")
+
+routing.json is never edited by this command — repoint these first, or pass --force.
+```
+
+### `--force`
+
+```bash
+gina controller:remove checkout demo @myproject --force
+```
+
+```text
+Force-removed controller "checkout" from demo@myproject (--force):
+  - deleted controllers/controller.checkout.js
+  - deleted templates/html/checkout/ (2 files)
+
+2 references NOT touched (routing.json is never edited) — clean up manually:
+  config/routing.json
+    - rule "checkout-start"  ("namespace": "checkout")
+    - rule "checkout-confirm"  ("namespace": "checkout")
+```
+
+### `--format=json`
+
+```bash
+gina controller:remove checkout demo @myproject --format=json
+```
+
+```json
+{
+  "name": "checkout",
+  "bundle": "demo",
+  "project": "myproject",
+  "controllerFile": "controllers/controller.checkout.js",
+  "templateDir": "templates/html/checkout",
+  "routingRefs": [
+    { "file": "config/routing.json", "rule": "checkout-start", "site": "namespace" },
+    { "file": "config/routing.json", "rule": "checkout-confirm", "site": "namespace" }
+  ],
+  "requireRefs": [],
+  "dynamicRefs": [],
+  "blocking": 2,
+  "removable": false,
+  "dryRun": false,
+  "force": false,
+  "removed": false
+}
+```
+
+`removable` is `true` when nothing blocks the removal; `removed` is `true` only
+when the deletion actually happened (`--force`, since JSON mode is
+non-interactive). Piping is safe — the payload is written synchronously.
+
+### Exit codes
+
+| Exit | When |
+|------|------|
+| `0` | The controller was removed, a dry-run / JSON report was printed, or a `--force` removal completed. |
+| `1` | Invalid / reserved name, the bundle is not registered, the controller does not exist, blocking references remain (without `--force`), or a non-interactive stdin could not confirm. |
 
 ---
 
