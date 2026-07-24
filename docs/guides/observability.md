@@ -271,6 +271,48 @@ built-ins.
 
 ---
 
+## Request correlation
+
+Every request gets an always-on correlation id (`req._ginaReqId`), resolved from
+a sanitised inbound `X-Request-Id` (`/^[\w.\-]{1,128}$/`, regenerated on
+violation) or a fresh UUID. It is stamped on structured (JSON) logs and audit
+records, **propagated** on every outbound `self.query()` as `x-request-id`, and
+**echoed** back on every response as `X-Request-Id` — so a single logical request
+stays correlatable end-to-end as it fans out across bundles.
+
+```mermaid
+sequenceDiagram
+    participant C as Caller / Gateway
+    participant A as Bundle A
+    participant B as Bundle B
+    C->>A: request (X-Request-Id: r-123, or none)
+    Note over A: resolve req._ginaReqId<br/>(honour inbound, else UUID)
+    A->>B: self.query() — x-request-id: r-123
+    Note over B: logs + audits under r-123
+    B-->>A: response
+    A-->>C: response — X-Request-Id: r-123
+```
+
+- **Inbound** — a gateway or the caller may set `X-Request-Id`; Gina honours it
+  (sanitised) and reuses it, so an existing trace id flows through unchanged.
+- **Fan-out** — `self.query()` forwards the id to the downstream bundle (the
+  file-download proxy path and both the HTTP/1 and HTTP/2 inter-bundle clients),
+  so the downstream bundle logs and audits under the same id.
+- **Response** — the id comes back on `X-Request-Id`, so a caller, load-balancer
+  access log, or APM can pin the response to the originating request.
+
+The echo is independent of `GINA_LOG_FORMAT` — the id is always-on even when the
+JSON `requestId` log field is not enabled — and a caller that sets its own
+`x-request-id` on a `self.query()` call is never overwritten.
+
+:::tip Distributed tracing
+`X-Request-Id` gives you cross-bundle correlation today. Full W3C `traceparent` /
+OpenTelemetry propagation is a separate, larger effort on the roadmap; until
+then, the request id covers most day-to-day cross-service debugging.
+:::
+
+---
+
 ## Related
 
 - [`app.json` reference](/reference/app)

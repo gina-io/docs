@@ -21,6 +21,30 @@ upward to the target version.
 
 ## 0.5.24 → 0.5.25
 
+### Added — cross-service request-id propagation
+
+**No action required — additive.** The always-on request id (`req._ginaReqId`,
+resolved from a sanitised inbound `X-Request-Id` or a fresh UUID) now travels
+with your inter-bundle calls. Every `self.query()` forwards it as `x-request-id`
+(a caller-set value is never overwritten), and every response echoes it back as
+`X-Request-Id` — so one logical request stays correlatable as it fans out across
+bundles, and a caller, load balancer, or APM can read the id off the wire. It is
+independent of log format (the id is always-on even when the JSON-log
+`requestId` field is not) and is never emitted after the response has been sent.
+Server-side only — running bundles pick it up at restart, no asset re-bake. See
+[Observability → Request correlation](/guides/observability#request-correlation).
+
+### Added — `/_gina/health/check` liveness on every engine
+
+**No action required — additive.** The built-in `GET /_gina/health/check`
+liveness endpoint — which returns `200` with `{"status":"healthy","timestamp":…}`
+and was previously served only by the Isaac engine — now answers on the default
+(Express) engine too. It is deliberately **ungated** (no admin allowlist, no dev
+gate) so a kubelet, Docker `HEALTHCHECK`, or load-balancer probe reaches it
+off-loopback. If you kept a bundle on the Isaac engine only to pass a health
+probe, that constraint is gone. Server-side only — pick it up at restart. See
+[Kubernetes & Docker → Liveness and readiness probes](/guides/k8s-docker#liveness-and-readiness-probes).
+
 ### Fixed — absolute URLs no longer poisoned by port-less internal calls
 
 **No action required.** A request whose `Host` header carries no `:port` — a
