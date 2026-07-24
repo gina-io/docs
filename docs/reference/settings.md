@@ -72,6 +72,7 @@ The primary server settings file.
 | `keepAliveTimeout` | string | `"5s"` | Keep-alive socket timeout (e.g. `"5s"`, `"30s"`) |
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
+| `proxy.requireForwardedHeaders` | boolean | `false` | Opt-in deterministic reverse-proxy classification: when `true`, only requests carrying `X-Forwarded-Host` are classified as proxied — the port-less-Host heuristic is disabled, so internal service-DNS calls (health probes on app routes, mesh hops, sibling-bundle calls) can never rewrite the worker's proxy-host context. Enable only behind a front proxy that always sends `X-Forwarded-Host`. *New in 0.5.25* |
 
 ### `region`
 

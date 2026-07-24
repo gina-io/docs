@@ -21,6 +21,40 @@ upward to the target version.
 
 ## 0.5.24 → 0.5.25
 
+### Fixed — absolute URLs no longer poisoned by port-less internal calls
+
+**No action required.** A request whose `Host` header carries no `:port` — a
+container health probe pointed at an app route, a service-mesh hop, a
+sibling-bundle call addressed by service/DNS name — was classified as
+reverse-proxied and rewrote the worker's proxy-host context, so later renders'
+`getUrl`/`url` filter output and cross-bundle redirect targets could carry the
+internal host (dead links, images that never load, redirects to unreachable
+hosts — alternating per replica behind a load balancer). Each render now
+prefers its own request's classification, on both engines; renders with no
+request of their own still use the worker context — see the new opt-in below to
+make that deterministic. Server-side only: running bundles pick the fix up at
+restart, no asset re-bake.
+
+### Added — `server.proxy.requireForwardedHeaders` (opt-in)
+
+**No action required — additive (defaults to `false`).** When `true`, a request
+is classified as reverse-proxied **only** when it carries an `X-Forwarded-Host`
+header — the port-less-Host heuristic is disabled, so internal service-DNS
+calls can never rewrite the worker's proxy-host context. This is the
+deterministic option, and the only one that also protects renders with no
+request of their own (e.g. worker-driven mail). Enable it only behind a front
+proxy that always sends `X-Forwarded-Host`:
+
+```json
+{
+  "server": {
+    "proxy": {
+      "requireForwardedHeaders": true
+    }
+  }
+}
+```
+
 ### Added — scaffold a namespace controller with `controller:add`
 
 **No action required — additive.** A new [`controller:add`](/cli/cli-controller)
