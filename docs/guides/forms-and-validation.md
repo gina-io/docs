@@ -144,7 +144,7 @@ page loads, Gina:
 1. finds the form, resolves the `signup` rule set, and binds each named field;
 2. turns **live checking on** (it is on by default for any rule-bound form);
 3. tracks the `<button type="submit">` as the form's **submit control** and
-   toggles its `disabled` state as validity changes;
+   marks it `aria-disabled` while the form is invalid;
 4. publishes the running instance as `window.gina.validator`.
 
 :::note Binding by form id
@@ -263,8 +263,8 @@ in both directions: a checkbox whose `value` reads `true`/`on` without a
 
 ## The submit control
 
-The form's submit control is the element whose `disabled` state Gina toggles to
-gate submission. Gina discovers it automatically:
+The form's submit control is the element Gina marks while the form is invalid.
+Gina discovers it automatically:
 
 - a `<button type="submit">` owned by the form, or
 - an `<a data-gina-form-submit="true">` acting as a submit link (anchors are not
@@ -272,12 +272,32 @@ gate submission. Gina discovers it automatically:
 
 You do not need to give the button an `id` — Gina assigns one if it is missing.
 
-:::warning The gate is the disabled button, not an attribute
-The only thing that prevents submission of an invalid form is the **disabled
-state of the submit control**. There is no "block submit" data attribute. If a
-form has no discoverable submit control, Gina logs a console warning and submit
-gating quietly does nothing — so make sure every validated form has a
-`<button type="submit">` or an `<a data-gina-form-submit="true">`.
+While the form is invalid and live checking is on, Gina sets
+`aria-disabled="true"` on the control and adds the class
+`gina-form-submit-disabled`; both are cleared as soon as the form validates. It
+deliberately does **not** set the native `disabled` property — a natively
+disabled button emits no click event, so clicking it would give the user no
+feedback at all. Left operable, a click still runs validation, revealing every
+invalid field and moving focus to the first one, while the send stays blocked.
+
+The framework ships no CSS for this state, so style it yourself:
+
+```css
+.gina-form-submit-disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+```
+
+:::warning The gate is validity, not the attribute
+`aria-disabled` and `gina-form-submit-disabled` are presentation and
+assistive-technology signals — on their own they do not prevent submission. What
+actually blocks an invalid form is Gina's validity check at submit time, and
+that runs whether or not a submit control was discovered. There is no "block
+submit" data attribute. If a form has no discoverable submit control Gina logs a
+console warning and you lose the invalid-state affordance, but the form is still
+gated — so give every validated form a `<button type="submit">` or an
+`<a data-gina-form-submit="true">` for the affordance, not for the gate.
 :::
 
 To override the HTTP method a submit link uses, add
@@ -570,8 +590,9 @@ To participate, a component must:
 - carry a `name` attribute — the key its rule set and the submitted payload use;
 - expose a `.value` getter returning the current value (a string, like every other
   field);
-- dispatch a **composed, bubbling** `change` (or `input`) event on commit, so the
-  form-level listener sees it;
+- dispatch a **composed, bubbling** `change` event on commit, so the form-level
+  listener sees it — Gina proxies `change`, not `input`, so a component that only
+  emits `input` is never live-checked;
 - reflect validity through `ElementInternals` — `internals.setValidity(...)` and
   `internals.ariaInvalid` — so screen readers get the same feedback native controls
   give (see [Accessibility](#accessibility)).

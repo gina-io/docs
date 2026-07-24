@@ -580,6 +580,53 @@ var [user, orders] = await Promise.all([
 ]);
 ```
 
+### Transient vs permanent errors
+
+*New in 0.5.25.* When a query fails, the error you get back carries a
+classification of the failure, so you can tell a self-healing condition from a
+real one without string-matching vendor error text:
+
+- `err.isTransient` — `true` when a retry after backoff can plausibly succeed: a
+  datastore timeout, a dropped connection, a node warming up after a restart,
+  rebalance or failover.
+- `err.transientReason` — a normalized `source:condition` token naming the
+  condition when `isTransient` is `true`, and `null` when it is `false`. For
+  example `socket:econnrefused`, `postgres:serialization-failure`,
+  `mongo:transient-transaction`, `couchbase:timeout`.
+
+```js
+db.userEntity.getById(req.routing.param.id).onComplete(function(err, user) {
+    if (err) {
+        if (err.isTransient) {
+            // self-healing — tell the caller to come back
+            return self.throwError(503, 'Store temporarily unavailable, please retry');
+        }
+        return self.render(err);   // permanent — the framework error page
+    }
+    self.renderJSON(user);
+});
+```
+
+Both call styles are covered: the fields are stamped on the error a callback
+receives *and* on the error an `await` call rejects with, so a `try`/`catch`
+branches identically.
+
+All six connectors classify — Couchbase, MongoDB, MySQL, PostgreSQL, ScyllaDB
+and SQLite — by normalizing signals the drivers already carry: socket errno,
+driver error codes and class names, ANSI SQLSTATE classes, MongoDB error labels,
+Couchbase N1QL cause codes.
+
+**The classification is deliberately conservative: anything unrecognized is
+reported as permanent.** So `isTransient === true` is a positive signal you can
+act on, while `false` means "not recognized as transient" — which covers
+genuinely permanent failures (a query syntax error, a duplicate key, or a DNS
+misconfiguration, since `ENOTFOUND` is a config error rather than a blip) *and*
+any condition the classifier does not yet recognise. Treat `false` as the
+default path, not as proof that a retry is pointless.
+
+The two fields are purely additive — nothing else about the error changes — so
+existing code that ignores them behaves exactly as before.
+
 ---
 
 ## Scope-based data isolation

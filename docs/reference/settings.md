@@ -144,11 +144,19 @@ Master switch for route-level response caching. Per-route `cache` fields in
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enable` | boolean | `false` | Master on/off switch |
-| `type` | `"memory"` \| `"fs"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
+| `type` | `"memory"` \| `"fs"` \| `"redis"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
+| `store` | string | — | Required when `type` is `"redis"` — names the [`connectors.json`](./connectors) entry holding the redis connection |
 | `path` | string | — | Directory for `fs`-type cached files |
 | `ttl` | number (seconds) | — | Default TTL when a route's `cache` config does not set one |
-| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding` |
+| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding`. Not supported with `redis` |
 | `maxAge` | number (seconds) | — | Bundle-wide absolute lifetime ceiling; routes inherit it when they omit `maxAge`. Only meaningful when `sliding` is `true` |
+| `maxEntries` | number | `1000` | Upper bound on entries held in the in-memory cache; the least recently used are evicted past it. A value of `0` or less is ignored and the default applies |
+
+Three `redis` rules are checked at boot and fail the bundle loudly rather than
+silently disabling the cache: `store` must be set, `sliding: true` is rejected
+(redis TTLs are absolute per key), and a redis-cached route needs either a `ttl`
+or `invalidateOnEvents` — a non-expiring L2 key would be orphaned permanently on
+a release-namespace rotation.
 
 See the [Caching guide](../guides/caching) for the full per-route field reference.
 

@@ -195,6 +195,84 @@ the bundle at startup, so the toggle can't be silently mis-typed. See
 `false` in this release; enabling escaping globally by default is planned for a
 future major.
 
+### Added — transient-vs-permanent classification on datastore query errors
+
+**No action required — additive.** When a datastore query fails, the error
+reaching your controller is now stamped with `err.isTransient` (true when a
+retry after backoff can succeed — a timeout, a dropped connection, a node
+warming up after a restart, rebalance or failover) and `err.transientReason`, a
+normalized token naming the condition (`socket:econnrefused`,
+`postgres:serialization-failure`, `mongo:transient-transaction`,
+`couchbase:timeout`, …), or `null` when the failure is permanent. Branch on it
+to render an honest "temporarily unavailable, please retry" instead of a generic
+500 for a condition that clears itself in seconds — without string-matching
+vendor error text. The classifier normalizes signals every driver already
+carries: socket errno, driver error codes and class names, ANSI SQLSTATE
+classes, MongoDB error labels, Couchbase N1QL cause codes. It covers all six
+datastore connectors (Couchbase, MongoDB, MySQL, PostgreSQL, ScyllaDB, SQLite)
+and is deliberately conservative — an unrecognized error, or a genuinely
+permanent one such as a DNS misconfiguration (`ENOTFOUND`) or a duplicate key,
+classifies as permanent. It sets only those two fields, never alters existing
+ones, and never throws, so nothing changes for code that ignores them.
+Server-side only — pick it up at restart, no asset re-bake. See
+[Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
+
+### Fixed — a Couchbase N1QL socket failure no longer hangs the request
+
+**No action required.** An N1QL query that fails at the socket level —
+connection refused or reset, a node still warming up after a restart or
+rebalance — arrives with no vendor query-error envelope. The connector's three
+query error handlers read that envelope unconditionally, so on such a failure a
+swallowed `TypeError` left the query callback un-fired and the request never
+settled: no response, no error page, just a hang until the client gave up. Each
+handler now forwards a usable error on both paths — built from the query-error
+envelope when present, otherwise the raw driver error with its code and errno
+preserved — and always settles the query. This is exactly the window the new
+classification above describes, so a condition that used to hang now surfaces as
+a classified error you can render. Server-side only: running bundles pick the
+fix up at restart, no asset re-bake.
+
+### Added — a `processing` state on the staged upload progress indicator
+
+**No action required — additive.** `data-gina-upload-progress-state` gains a
+`processing` value, stamped the moment the browser finishes sending the bytes
+(`xhr.upload.onloadend`) — the window during which the server post-processes the
+upload (rendering a preview, transcoding, scanning) before it responds. On a
+fast link the bytes finish in milliseconds while that server window can run for
+seconds, during which the bar would otherwise sit frozen at a full `uploading`
+state. The new state advances the state attribute **only**, leaving the bar full
+(value, max and the percent attribute untouched), so a styled bar can show a
+distinct processing affordance in CSS instead of appearing stuck, and a native
+indeterminate bar keeps its animation running. The enum is now `preparing`,
+`uploading`, `indeterminate`, `processing`, `complete`, `error`. No wording is
+hardcoded, so this is i18n-neutral: a consumer that does not style the new state
+sees the bar stay full, exactly as before. This is **browser-bundled** — rebuild
+your bundles (re-bake) to pick it up. See
+[File uploads → Upload progress](/guides/file-uploads#upload-progress).
+
+### Fixed — a file input declaring only its upload action no longer warns on bind
+
+**No action required.** A file input that declares only its staging action
+(`data-gina-form-upload-action`) and relies on route defaults for the rest
+emitted a spurious warning-and-error pair on every bind and re-bind — and wrote
+a visible error into the form's error container. The delete action
+(`data-gina-form-upload-delete-action`, which removes an already-saved file)
+deliberately has no framework default, because its endpoint is app-specific, so
+its absence is now a quiet debug at bind time; the requirement is still enforced
+when a delete is actually triggered. If you declared the delete action purely to
+silence the warning — the previous workaround — you can drop it. This is
+**browser-bundled** — rebuild your bundles (re-bake) to pick it up.
+
+### Fixed — a zero-match staged-upload removal now logs a diagnostic
+
+**No action required.** When a staged-upload reset or delete click matched none
+of the rendered previews, the framework skipped its whole cleanup path — the
+server-side temp-file delete request, the progress-indicator reset, and the
+removal callback — with no signal at all, so orphaned temp files could pile up
+unnoticed. Such a removal now logs a diagnostic warning instead of doing nothing
+silently. A normal removal (at least one preview matched) is unchanged. This is
+**browser-bundled** — rebuild your bundles (re-bake) to pick it up.
+
 ---
 
 ## 0.5.23 → 0.5.24

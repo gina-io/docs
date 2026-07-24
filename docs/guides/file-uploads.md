@@ -399,8 +399,8 @@ indeterminate animation while the length is unknown); any other element gets the
 integer percentage as text. Every target also carries two attributes you can
 style against — `data-gina-upload-progress` (the percent, absent while
 indeterminate) and `data-gina-upload-progress-state` (`preparing`, `uploading`,
-`indeterminate`, `complete`, `error`). No wording is hardcoded: labels are
-yours, via CSS on the state attribute.
+`indeterminate`, `processing`, `complete`, `error`). No wording is hardcoded:
+labels are yours, via CSS on the state attribute.
 
 ```html
 <input
@@ -436,9 +436,23 @@ event on the virtual upload form, for code that holds the form instance.
 
 The indicator's lifecycle is managed end-to-end: `preparing` from the moment a
 file is selected (file reading and body assembly happen before the first network
-frame), `complete` fills the bar on success, a staging error empties it (state
-`error` — the error message renders in the `-error` element as usual), and
-removing a staged file (reset/delete) clears the indicator entirely.
+frame), `processing` once the browser has finished sending the bytes, `complete`
+fills the bar on success, a staging error empties it (state `error` — the error
+message renders in the `-error` element as usual), and removing a staged file
+(reset/delete) clears the indicator entirely.
+
+*The `processing` state is new in 0.5.25.* It covers the server post-processing
+window — the seconds a server can spend rendering a preview, transcoding or
+scanning after the last byte lands. It advances the state attribute **only**:
+value, max and `data-gina-upload-progress` are left untouched, so a determinate
+bar stays visually full (and an indeterminate one keeps animating) rather than
+appearing frozen. Style it like any other state:
+
+```css
+#avatar-progress[data-gina-upload-progress-state="processing"] {
+    opacity: .6;
+}
+```
 
 ## Drag-and-drop (dropzone)
 
