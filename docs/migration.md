@@ -45,6 +45,27 @@ off-loopback. If you kept a bundle on the Isaac engine only to pass a health
 probe, that constraint is gone. Server-side only — pick it up at restart. See
 [Kubernetes & Docker → Liveness and readiness probes](/guides/k8s-docker#liveness-and-readiness-probes).
 
+### Added — machine-caller authentication (`auth.machine`)
+
+**No action required — additive (opt-in, fail-closed).** Service-to-service
+callers can now pass `requireAuth` / `roles` / `policy` routes **without a
+session**: declare named callers under `settings.json > auth.machine.callers`
+(keys are `${secret:KEY}`-capable and compared in constant time against
+boot-computed sha256 hashes), and the caller presents
+`Authorization: Bearer <key>` on each request — including from another bundle
+via `self.query()`'s `headers` option. A verified caller is the request's
+principal everywhere a session user would be: it satisfies `requireAuth`, its
+configured roles ride the same ANY-of match, policies receive it as
+`{ name, roles, machine: true }`, `self.hasRole()` answers its roles, and
+audit records carry the caller name as the actor key (a new `401-machine`
+`authz.denied` outcome covers rejected credentials, which get a clean `401`
+with `WWW-Authenticate: Bearer` — never the login bounce). A signed-in session
+always wins, and `enabled: false` (the default) is byte-identical to before.
+For JWT / HMAC / API-key schemes, `auth.machine.authenticator` names a
+per-bundle synchronous verifier module (the `policies/<name>.js` shape).
+Boot config — enable it with a bundle restart; server-side only, no asset
+re-bake. See [Route authorization → Machine callers](/guides/route-authorization#machine-callers).
+
 ### Fixed — absolute URLs no longer poisoned by port-less internal calls
 
 **No action required.** A request whose `Host` header carries no `:port` — a

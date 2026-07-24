@@ -28,6 +28,10 @@ these keys behaves exactly as before. Author mistakes **refuse to boot** rather
 than leaving a route silently open — a security control that is quietly OFF is
 worse than an obvious startup error.
 
+Service-to-service callers that cannot hold a session — another bundle, a job
+runner, an external system — authenticate with a Bearer key instead: see
+[Machine callers](#machine-callers).
+
 ---
 
 ## How authorization composes
@@ -108,7 +112,8 @@ and never reach the page.
 A request is authenticated when `req.session.user` is truthy — the gate reads
 that property directly. Populating it at login (verifying credentials, loading
 the user record) stays your application's job; the framework only enforces the
-gate.
+gate. A [machine caller](#machine-callers) verified from its Bearer key counts
+as authenticated too — and a signed-in session always wins over it.
 :::
 
 ---
@@ -237,12 +242,149 @@ in the Controllers guide for the pause/replay mechanics.
 
 ---
 
+## Machine callers — service-to-service authentication {#machine-callers}
+
+*New in 0.5.25*
+
+A service calling your gated routes — another bundle via `self.query()`, a job
+runner, an external system — has no browser to sign in with. Declare it a
+**machine caller** in `settings.json` and it authenticates per request with a
+Bearer key:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "auth": {
+    "machine": {
+      "enabled": true,
+      "callers": {
+        "billing": { "key": "${secret:BILLING_SVC_KEY}", "roles": ["service"] }
+      }
+    }
+  }
+}
+```
+
+The caller presents its key on every request — from anywhere that can set a
+header, including another bundle's `self.query()`:
+
+```bash
+curl -H "Authorization: Bearer $BILLING_SVC_KEY" https://api.example.com/reports
+```
+
+```js title="from another bundle — inside a controller action"
+self.query({
+    hostname : 'reports@',   // name-based resolution to the target bundle
+    path     : '/reports',
+    method   : 'GET',
+    headers  : { authorization: 'Bearer ' + process.env.BILLING_SVC_KEY }
+}, {}, function (err, result) {
+    // ...
+});
+```
+
+A verified machine caller becomes the request's **principal** exactly where a
+session user would be:
+
+- it satisfies `requireAuth`;
+- its configured `roles` ride the same **ANY-of** match as a session user's —
+  which is also your per-route granularity: keep a route **human-only** by
+  requiring a role no caller holds, or **machine-only** by requiring one only
+  callers hold;
+- a `policy` receives it as its `user` argument, shaped
+  `{ name, roles, machine: true }` — branch on `user.machine === true` when a
+  policy must treat services differently;
+- `self.hasRole()` answers its configured roles;
+- [audit records](/guides/audit-trail) carry the caller **name** as the actor
+  key, marked `machine: true`.
+
+```mermaid
+flowchart LR
+    RQ["Gated request<br/>without a session"] --> B{"Bearer key matches<br/>a configured caller?"}
+    B -->|"yes"| P["machine principal<br/>{ name, roles, machine: true }"]
+    B -->|"no"| H{"custom authenticator<br/>admits?"}
+    H -->|"yes"| P
+    H -->|"no — a Bearer<br/>was presented"| M["401 +<br/>WWW-Authenticate: Bearer"]
+    H -->|"no — nothing<br/>presented"| O["ordinary 401 /<br/>login bounce"]
+    P --> N["roles → policy → action"]
+```
+
+Facts worth knowing before you enable it:
+
+- **Session wins.** A signed-in request never consults the machine path, so a
+  browser session with a stray `Authorization` header behaves exactly as
+  before.
+- **Enabling admits configured callers to _all_ gated routes**, subject to
+  `roles` and `policy` — the fail-closed default is `enabled: false`, and
+  there is deliberately no per-route opt-in key (use roles, as above).
+- **Keys**: prefer `${secret:KEY}` placeholders (resolved from the environment
+  at config load) and long random values (32+ bytes). The framework compares
+  them in constant time against boot-computed sha256 hashes — the raw key is
+  not retained in memory after boot.
+- **An invalid presented key gets a clean `401`** with
+  `WWW-Authenticate: Bearer` — never the login bounce (a `302` to a login page
+  is meaningless to a service).
+- `auth.machine` is **boot config** — changing it needs a bundle restart.
+
+:::note mTLS is out of scope by design
+Transport-level mutual TLS is not part of this feature: terminate mTLS at your
+ingress or service mesh, and use machine callers (or a custom authenticator)
+for application-level identity.
+:::
+
+### Custom authenticator — `auth.machine.authenticator`
+
+When a shared key isn't the right credential — you verify JWTs, an HMAC
+header, an `x-api-key` scheme — name a per-bundle authenticator module. It is
+the `policies/<name>.js` shape applied to authentication:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "auth": {
+    "machine": {
+      "enabled": true,
+      "authenticator": "verifyJwt"
+    }
+  }
+}
+```
+
+```js title="src/<bundle>/authenticators/verifyJwt.js"
+var jwt = require('jsonwebtoken');
+
+module.exports = function (req) {
+    var m = /^Bearer\s+(.+)$/i.exec((req.headers && req.headers.authorization) || '');
+    if (!m) { return null; }
+    try {
+        var claims = jwt.verify(m[1].trim(), process.env.JWT_PUBLIC_KEY);
+        return { name: claims.sub, roles: claims.roles || [] };
+    } catch (e) {
+        return null;   // invalid signature / expired — not authenticated by me
+    }
+};
+```
+
+- The function is **synchronous** and returns `{ name, roles }` to admit, or
+  `null` to pass. It runs **after** the built-in caller map (first success
+  wins) and regardless of which header the request carries, so it can verify
+  any credential a synchronous check can settle — `jwt.verify` with a local
+  secret or public key is synchronous.
+- The gate **normalizes** the return: the principal is always
+  `{ name, roles, machine: true }`-shaped, and a non-array `roles` collapses
+  to holding none.
+- A missing, broken, or `async function` module **refuses to boot** (an async
+  authenticator could never admit — the gate is synchronous). At request time
+  a throw or a malformed return is **fail-closed unauthenticated** — logged
+  server-side, never a `500`.
+
+---
+
 ## Denials are recorded automatically
 
 When the [audit trail](/guides/audit-trail) is enabled
 (`settings.json > audit.enabled: true`), every denial this gate issues is
 written to the trail as an `authz.denied` record, with `meta.outcome`
-distinguishing `401` / `login-bounce` / `403-roles` / `403-policy`. An audit
+distinguishing `401` / `login-bounce` / `403-roles` / `403-policy` /
+`401-machine` (an invalid machine credential). An audit
 write failure can **never** change an authorization outcome — the two are fully
 decoupled. See the [Audit trail guide](/guides/audit-trail) for the record
 shape and how to opt out.
@@ -260,6 +402,9 @@ boot on any of these rather than serving a silently-open route:
 | `auth.loginRoute` names a rule the bundle doesn't declare (or a multi-URL / parameterized target) | Refuses to boot |
 | `roles` is `null`, a bare string, an empty array, or has non-string / empty members | Refuses to boot |
 | `policy` is missing, not a function, a non-string name, or an `async function` | Refuses to boot |
+| `auth.machine.enabled` set to a non-boolean (`"true"`, `1`) | Refuses to boot — a truthy string would silently NOT enable machine auth |
+| A machine caller with a missing / empty `key`, or malformed `roles` | Refuses to boot |
+| `auth.machine.authenticator` names a missing, broken, or `async function` module | Refuses to boot (linted even while `enabled` is `false`) |
 
 :::note Authorization keys stay server-side
 `requireAuth`, `roles`, and `policy` are stripped from the routing maps served
