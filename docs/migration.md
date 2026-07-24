@@ -214,6 +214,11 @@ and is deliberately conservative — an unrecognized error, or a genuinely
 permanent one such as a DNS misconfiguration (`ENOTFOUND`) or a duplicate key,
 classifies as permanent. It sets only those two fields, never alters existing
 ones, and never throws, so nothing changes for code that ignores them.
+Known limitation in this release: on the Couchbase query path, a *client-side*
+driver timeout (the SDK giving up before the server responds) still classifies
+as permanent — the typed timeout class is not preserved through the connector's
+error forwarding; the fix is queued for the next release. Server-reported
+errors, socket-level failures and the other five connectors are unaffected.
 Server-side only — pick it up at restart, no asset re-bake. See
 [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
 
