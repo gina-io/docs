@@ -66,6 +66,22 @@ per-bundle synchronous verifier module (the `policies/<name>.js` shape).
 Boot config — enable it with a bundle restart; server-side only, no asset
 re-bake. See [Route authorization → Machine callers](/guides/route-authorization#machine-callers).
 
+### Added — `bundle:openapi` authorization contract
+
+**No action required — additive.** `bundle:openapi` now documents route
+authorization in the generated spec. Routes gated with `requireAuth` /
+`roles` / `policy` emit a `401` response entry (plus a `403` when roles or a
+policy add authorization beyond authentication), and when
+[machine-caller auth](/guides/route-authorization#machine-callers) is
+configured (`auth.machine.enabled: true` with at least one caller or a custom
+authenticator) the spec gains a `components.securitySchemes.bearerAuth`
+scheme (`http`/`bearer`) plus a per-operation `security` requirement on gated
+routes. Role and policy **names** are never emitted — the spec follows the
+same no-disclosure rule as the runtime (generic 403 bodies, stripped client
+routing maps). Re-run `gina bundle:openapi` to refresh a bundle's spec; an
+un-gated bundle without machine auth produces an unchanged spec. This is a
+CLI-time change only — nothing changes at runtime.
+
 ### Fixed — absolute URLs no longer poisoned by port-less internal calls
 
 **No action required.** A request whose `Host` header carries no `:port` — a

@@ -376,6 +376,12 @@ module.exports = function (req) {
   a throw or a malformed return is **fail-closed unauthenticated** — logged
   server-side, never a `500`.
 
+Gated routes are also self-documenting: [`bundle:openapi`](/cli/cli-bundle#bundleopenapi)
+emits `401`/`403` response entries on every gated route, and — when
+`auth.machine` is configured — declares a matching `bearerAuth` security
+scheme with per-operation `security` requirements, without ever naming your
+roles or policies in the spec.
+
 ---
 
 ## Denials are recorded automatically
