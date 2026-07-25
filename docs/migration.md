@@ -72,6 +72,42 @@ An `https://` upstream declared in `proxy.json` is named in the warning but
 never silences it — only the explicit acknowledgment does. Server-side only —
 pick it up at restart, no asset re-bake.
 
+### Security — authorization keys on a WebSocket route now refuse to boot
+
+**Action required if a `method: "ws"` route declares `requireAuth`, `roles` or
+`policy`.** The bundle will not start until the key is removed.
+
+Those keys could never do anything on a WebSocket route. A handshake is answered
+by the engine's extended-CONNECT handler and never reaches the authorization
+gate, so the route was accepted, started, and even counted in the boot line
+`Registered N authorization-gated route(s)` — the framework confirming
+protection that did not exist.
+
+Authenticate inside the channel handler instead. It receives the full request,
+so it can inspect headers and cookies and refuse the socket itself:
+
+```js title="src/<bundle>/channels/live.js"
+module.exports = function (session, request) {
+    if ( !request.session || !request.session.user ) {
+        return session.close(1008, 'Unauthorized');   // policy violation
+    }
+    // ...
+};
+```
+
+Relatedly, `auth.requireAuthByDefault` no longer counts WebSocket routes among
+the routes it gates — it cannot reach them either. Instead it names them once at
+boot so the gap is visible:
+
+```
+[ BUNDLE ][ server ][ init ] `auth.requireAuthByDefault` does NOT cover 1
+WebSocket route(s) — live. A ws handshake never reaches the authorization gate,
+so these stay open unless their `wsHandler` authenticates.
+```
+
+Mark such a route `"public": true` once you have confirmed its handler
+authenticates, and the notice goes away.
+
 ### Security — a gated route may no longer be cached
 
 **Action required if you pair route authorization with `cache`.** A bundle that

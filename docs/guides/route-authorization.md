@@ -477,6 +477,31 @@ describes a newly gated route as unauthenticated.
 
 ---
 
+## WebSocket routes authenticate in the handler {#websocket-routes}
+
+Authorization keys are refused on a `method: "ws"` route. A handshake is answered
+by the engine's extended-CONNECT handler and never reaches the gate, so
+`requireAuth`, `roles` and `policy` are unenforceable there by construction —
+and a route that merely *looks* protected is worse than one that plainly is not.
+The boot says so rather than letting it through.
+
+Do the check in the channel handler, which receives the full request:
+
+```js title="src/<bundle>/channels/live.js"
+module.exports = function (session, request) {
+    if ( !request.session || !request.session.user ) {
+        return session.close(1008, 'Unauthorized');
+    }
+    session.on('message', function (data) { /* ... */ });
+};
+```
+
+[Deny-by-default](#deny-by-default) cannot reach ws routes either. Rather than
+counting them as gated, it names them at boot so the gap stays visible; mark one
+`"public": true` once its handler authenticates.
+
+---
+
 ## A gated route can never be cached {#no-cache-on-gated-routes}
 
 Authorization and the render cache are mutually exclusive on the same route. The
