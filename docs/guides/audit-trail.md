@@ -99,7 +99,7 @@ Each call appends one JSON line to the trail:
 ```json
 {
   "id":        "018f5b2c-...",
-  "ts":        "2026-07-17T14:03:22.481Z",
+  "ts":        1784297002481,
   "requestId": "9f1e2a7c-...",
   "actor":     { "key": "user_42", "roles": ["admin"] },
   "action":    "invoice.delete",
@@ -115,7 +115,7 @@ Each call appends one JSON line to the trail:
 | Field | Source | Meaning |
 |---|---|---|
 | `id` | framework | Unique record id |
-| `ts` | framework | ISO 8601 timestamp |
+| `ts` | framework | Epoch milliseconds — a **number**, not a string (`Date.now()` at emit time). It is wall-clock, so it is neither monotonic nor unique: two records emitted in the same millisecond share a `ts`. Order records by their position in the trail, not by this field |
 | `requestId` | framework | Per-request correlation id, shared with the JSON logs — see [below](#request-correlation) |
 | `actor` | framework | `{ key, roles }` snapshot of the session user — see the note below |
 | `action` | your call | The verb you passed to `self.audit()` (framework auto-events use `"authz.denied"`) |
