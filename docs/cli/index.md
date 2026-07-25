@@ -49,12 +49,16 @@ Run `gina --help` (or `gina -h`) for the top-level command reference, and
 
 ## Online vs offline commands
 
-Commands that operate on running bundles (e.g. `bundle:start`, `bundle:stop`)
-are **online** — they connect to the framework socket server on port `8124`.
-The server must be running.
+`bundle:start` is **online** — it connects to the framework socket server on
+port `8124`, so the server must be running (`gina start`).
 
-Commands that only read local config (e.g. `env:list`, `project:list`) are
-**offline** — they execute directly without a server connection.
+Every other command is **offline** — it executes directly in the CLI process
+without a server connection. That includes commands which act on running
+bundles, such as `bundle:stop` and `bundle:restart` (they signal the bundle's
+own process), as well as read-only commands like `env:list` and `project:list`.
+
+The framework socket listens on `127.0.0.1` by default — see
+[Ports](../concepts/ports.md) for exposing it deliberately.
 
 ```bash
 gina start          # start the framework socket server (required for online commands)
