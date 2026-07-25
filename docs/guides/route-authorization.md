@@ -384,6 +384,99 @@ roles or policies in the spec.
 
 ---
 
+## Deny-by-default — gate everything unless marked public {#deny-by-default}
+
+Everything above is **opt-in per route**: a route you forget to annotate is
+open. For a zero-trust posture you usually want the opposite, so that forgetting
+an annotation fails safe. Set `requireAuthByDefault` and it inverts:
+
+```json title="<bundle>/config/settings.json"
+{
+  "auth": {
+    "loginRoute": "login",
+    "requireAuthByDefault": true
+  }
+}
+```
+
+Now every route requires an authenticated session **unless** it says otherwise:
+
+```json title="<bundle>/config/routing.json"
+{
+  "pricing": {
+    "method": "GET",
+    "url": "/pricing",
+    "param": { "control": "pricing", "public": true }
+  }
+}
+```
+
+`public: true` is a *positive* marker on purpose. Reusing `requireAuth: false`
+would make one literal mean "nothing to do here" in an ordinary bundle and
+"deliberate, audited exemption" in this one — and a reviewer could not tell an
+intentional exemption from a leftover.
+
+```mermaid
+flowchart TD
+    A[Request matched a route] --> B{Declares requireAuth,<br/>roles or policy?}
+    B -- yes --> C[Gate as usual:<br/>authN, then roles, then policy]
+    B -- no --> D{param.public: true?}
+    D -- yes --> E[Allow]
+    D -- no --> F{requireAuthByDefault<br/>for this bundle?}
+    F -- no --> E
+    F -- yes --> G[Require authentication:<br/>401, or the login bounce]
+```
+
+Note where `public` sits: it is only consulted for a route that declares *no*
+gate key. It can never un-gate a route you explicitly protected — that ordering
+is structural, not a rule the gate has to remember.
+
+### The mode is per bundle
+
+In merged mode every bundle of a project runs in one process. The setting is
+recorded per bundle, so enabling it in one never changes the posture of a
+sibling, whatever order they boot in.
+
+### What it does not cover
+
+Static assets and the built-in `/_gina/*` endpoints never pass through this
+gate, so the mode does not touch them. `/_gina/*` endpoints keep their own
+controls — see [Observability](/guides/observability) and the `admin.allowFrom`
+allowlist.
+
+### The boot refuses configurations the mode would make dangerous
+
+Rather than fail at the first visitor, the bundle refuses to start when:
+
+- a route declares **both** `public: true` and an explicit gate key — one axis,
+  two contradictory answers, and no safe way to pick;
+- the **login route would itself be gated**, which would bounce a visitor to the
+  login page, which would bounce again — an infinite redirect that locks
+  everyone out. Mark it `public: true`. If you configure no `loginRoute` at all
+  this is only a warning: an API bundle answering `401` everywhere is a
+  perfectly coherent posture;
+- a route the mode gates **also declares `cache`**. The render cache is read
+  before authorization runs and its key carries no user identity, so a cached
+  gated route would replay the first authenticated response to everyone after
+  it. Either mark the route `public: true` if it is meant to be cacheable and
+  open, or drop `cache`.
+
+:::caution Enable it in a non-production environment first
+Read the boot line — it reports how many routes the mode just gated and how
+many are marked public. Note that the login **form's POST** is a separate route
+from the login page: exempt both, or the page loads and the submit answers 401.
+:::
+
+The routes the framework injects for you — the webroot redirect (which also
+serves `/`), the custom error page, `/_status` and the upload endpoints — ship
+`public: true`, so enabling the mode cannot take your site root or your error
+renderer offline. To gate one of them, declare your own route at the same url.
+
+`gina bundle:openapi` follows the mode, so a generated specification never
+describes a newly gated route as unauthenticated.
+
+---
+
 ## Denials are recorded automatically
 
 When the [audit trail](/guides/audit-trail) is enabled

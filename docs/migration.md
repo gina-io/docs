@@ -21,6 +21,40 @@ upward to the target version.
 
 ## 0.5.25 → 0.5.26
 
+### Added — deny-by-default authorization
+
+**No action required.** Nothing changes unless you opt in, and an existing
+bundle behaves exactly as before.
+
+Route authorization has always been opt-in per route: a route you forget to
+annotate is open. `settings.json > auth.requireAuthByDefault: true` inverts that
+for a bundle — every route requires an authenticated session unless its
+`routing.json` `param` block carries `"public": true`. Your existing
+`requireAuth` / `roles` / `policy` routes are unaffected; the mode only changes
+what an *un-annotated* route does, and `public` can never un-gate a route you
+explicitly protected.
+
+The setting is recorded per bundle, so in merged mode enabling it in one bundle
+never changes the posture of a sibling. The routes the framework injects for you
+— the webroot redirect (which also serves `/`), the custom error page,
+`/_status` and the upload endpoints — ship `"public": true`, so turning the mode
+on cannot take your site root or your error renderer offline.
+
+Because the mode makes a few configurations dangerous that were previously
+merely odd, the bundle refuses to start on three of them: `"public": true`
+alongside an explicit gate key; a login route the mode would gate, which would
+bounce to itself in an infinite redirect; and a mode-gated route that also
+declares `cache`, since the render cache is read before authorization runs and
+its key carries no user identity. All three are checked only while the mode is
+on, so no existing bundle can newly fail to boot.
+
+If you enable it, do so in a non-production environment first and read the boot
+line — it reports how many routes were just gated. Watch for the login form's
+POST, which is a separate route from the login page and needs its own
+exemption. `gina bundle:openapi` follows the mode, so generated specifications
+stay accurate. Server-side only — pick it up at restart, no asset re-bake. See
+[Route authorization → Deny-by-default](/guides/route-authorization#deny-by-default).
+
 ### Fixed — Couchbase client-side query timeouts classify as transient
 
 **No action required.** On the Couchbase query path, a *client-side* driver
