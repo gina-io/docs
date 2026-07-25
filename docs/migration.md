@@ -19,6 +19,29 @@ upward to the target version.
 
 ---
 
+## 0.5.25 → 0.5.26
+
+### Fixed — Couchbase client-side query timeouts classify as transient
+
+**No action required.** On the Couchbase query path, a *client-side* driver
+timeout — the SDK giving up before the server responds — classified as
+**permanent**, and reached your controller with an empty `err.message`. The
+connector replaced the driver error with one built from the query-error
+envelope whenever that envelope was present; the driver attaches that envelope
+to every query error, and a client-side timeout carries no server text, so the
+replacement was an empty-message `Error` that had lost the typed timeout class
+name the classifier matches on. The connector now builds a replacement only
+when the envelope actually carries text, and forwards the driver error
+untouched otherwise — so `err.isTransient` reports `true` with
+`err.transientReason: 'couchbase:timeout'`, and `err.message` keeps the driver's
+own timeout text. Server-reported query errors, socket-level failures and the
+other five connectors are unchanged. If you added a workaround that treats an
+empty-message Couchbase error as retryable, you can drop it. Server-side only —
+pick it up at restart, no asset re-bake. See
+[Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
+
+---
+
 ## 0.5.24 → 0.5.25
 
 ### Added — cross-service request-id propagation
@@ -214,11 +237,12 @@ and is deliberately conservative — an unrecognized error, or a genuinely
 permanent one such as a DNS misconfiguration (`ENOTFOUND`) or a duplicate key,
 classifies as permanent. It sets only those two fields, never alters existing
 ones, and never throws, so nothing changes for code that ignores them.
-Known limitation in this release: on the Couchbase query path, a *client-side*
-driver timeout (the SDK giving up before the server responds) still classifies
-as permanent — the typed timeout class is not preserved through the connector's
-error forwarding; the fix is queued for the next release. Server-reported
-errors, socket-level failures and the other five connectors are unaffected.
+Known limitation **in 0.5.25 only**: on the Couchbase query path, a *client-side*
+driver timeout (the SDK giving up before the server responds) classifies as
+permanent, because the typed timeout class is not preserved through the
+connector's error forwarding. Fixed in 0.5.26 — see the `0.5.25 → 0.5.26`
+section above. Server-reported errors, socket-level failures and the other five
+connectors are unaffected.
 Server-side only — pick it up at restart, no asset re-bake. See
 [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
 
