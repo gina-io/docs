@@ -217,6 +217,101 @@ The `--auth-token` flag and the `mcp.json > server > authToken` field were not
 affected. If you used the environment variable, restart the server and confirm
 the startup line reports `bearer auth: enabled`.
 
+### Security — the framework control plane now binds to loopback by default
+
+**Action required only if you reached the framework ports from another
+machine.** Everything on the local host keeps working with no change.
+
+The framework's two control-plane listeners — the command socket (`8124`, which
+receives every online `gina` command) and the MQ listener (`8125`, which serves
+`gina tail`) — previously bound whatever address the runtime defaulted to. They
+now bind an explicit host, and that host defaults to loopback.
+
+The new setting is `bind_host`, settable three ways:
+
+```bash
+gina framework:set --bind-host=127.0.0.1     # or 0.0.0.0 to expose deliberately
+export GINA_BIND_HOST=127.0.0.1              # env override
+```
+
+It is **separate from `host_v4`**, which is unchanged and still means "the
+address clients connect to". That separation matters on a workstation that
+points `host_v4` at another machine: such a setup still starts its own daemon
+normally, because the bind address is no longer inferred from the connect
+address.
+
+Existing installs inherit the loopback default, so exposing the control plane
+beyond the local host is now a deliberate opt-in — the same shape a bundle
+already uses for `--http-host`. If you relied on driving `gina` commands or
+tailing logs across machines, set `bind_host` explicitly on the host running the
+daemon, and restrict access to those ports at the network layer.
+
+### Security — a command over the framework socket resolves inside the shipped namespace
+
+**No action required.** This changes what the daemon accepts, not what it does
+for any valid command.
+
+A command name arriving over the framework socket is now constrained to the
+shipped command namespace before it is resolved to a handler, so it can only
+ever resolve inside `lib/cmd/`. An unresolvable name is answered on the
+connection that sent it, instead of ending the daemon process — which previously
+took down service for every other connected client at the same time. A one-shot
+offline CLI run still exits non-zero on an unknown command, so scripts that
+check the exit code are unaffected. The MQ listener likewise skips a malformed
+frame rather than letting the parse failure drop the listener.
+
+### Fixed — an ineffective `@options` annotation now warns
+
+**No action required, but check your logs after upgrading.** Query behaviour is
+unchanged — this only makes an already-ineffective annotation visible.
+
+On the Couchbase N1QL path, a `.sql` file's `@options` annotation that silently
+did nothing now logs a warning naming the problem. Two shapes were affected:
+
+- **The parser could not read it.** Braces are required — write
+  `@options { … }`. The warning shows the working form.
+- **Every key was dropped for want of `consistency`.** Keys such as `adhoc` or
+  `timeout` apply only alongside a `consistency` key; without one the whole set
+  is ignored. The warning lists exactly which keys were dropped.
+
+If a query has been behaving as though its `@options` never applied, this is
+why — and the warning now says so at the point it happens. Server-side only —
+pick it up at restart, no asset re-bake.
+
+### Fixed — the JSON schemas describe the route-authorization vocabulary
+
+**No action required.** Runtime behaviour is unchanged; the schemas are editor
+tooling and are never enforced at boot.
+
+If your editor validates Gina config against the published schemas, it was
+flagging valid route-authorization configuration:
+
+- `auth.requireAuthByDefault` was missing from the `settings.json` schema, whose
+  `auth` block forbids unknown keys — so a perfectly valid deny-by-default
+  configuration was reported as invalid.
+- `param.requireAuth`, `param.roles`, `param.policy` and `param.public` were
+  undeclared in the `routing.json` schema. That block permits unknown keys, so
+  they were accepted — but with no completion, no type checking and no
+  description on hover.
+
+Both are now declared, with the constraints the boot lint actually enforces.
+
+### Fixed — `lib/merge`'s documented default was inverted
+
+**No action required.** Only the documentation was wrong; the behaviour it
+describes has not changed.
+
+`lib/merge`'s JSDoc claimed `override` defaults to `true`. It defaults to
+**`false`** — the two-argument form preserves existing target keys on a
+conflict, which is what the several hundred two-argument call sites throughout
+the framework rely on. The array example was wrong for the same reason: a
+two-argument array merge *combines* elements (`merge([1,2],[3,4])` gives
+`[1,2,3,4]`); replacing the target array requires `override=true`.
+
+If you wrote a two-argument `merge()` call from the documented default rather
+than from observed behaviour, re-read it — the call has always behaved as
+target-wins.
+
 ---
 
 ## 0.5.24 → 0.5.25
