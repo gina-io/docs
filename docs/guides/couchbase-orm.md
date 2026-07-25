@@ -169,8 +169,9 @@ WHERE u.type = 'user'
 | `profile` | `off`, `phases`, `timings` | `off` (dev: `timings`) | Query execution profiling |
 
 :::caution
-Two parsing rules that fail **silently** — a malformed `@options` is ignored without
-any warning:
+Two parsing rules to watch. Before 0.5.26 both failed **silently**; from 0.5.26 the
+connector logs a `[CONNECTOR] @options …` warning naming the ignored keys and the
+form to write — but the annotation still does not apply:
 
 - **The braces are required.** `@options consistency=request_plus` does not match the
   parser, so the whole annotation is skipped.

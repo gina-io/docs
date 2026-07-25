@@ -412,7 +412,8 @@ when a query must see a document written in the same request. The default is `no
 
 The braces are required, and any other key (`adhoc`, `profile`, `timeout`, …) is applied
 only when `consistency` is present alongside it — `@options { adhoc: true }` on its own is
-silently ignored. Always include an explicit `consistency`. See
+ignored (silently before 0.5.26; with a logged warning from 0.5.26). Always include an
+explicit `consistency`. See
 [Couchbase ORM → `@options` annotations](/guides/couchbase-orm) for the full table.
 
 **`@include` — sub-file composition**
