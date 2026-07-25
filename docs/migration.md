@@ -72,6 +72,47 @@ An `https://` upstream declared in `proxy.json` is named in the warning but
 never silences it — only the explicit acknowledgment does. Server-side only —
 pick it up at restart, no asset re-bake.
 
+### Security — a gated route may no longer be cached
+
+**Action required if you pair route authorization with `cache`.** A bundle that
+declares both on the same route will not start until you change one of them.
+
+A route that carried an authorization key — `param.requireAuth`, `param.roles`
+or `param.policy` — *and* a `cache` block was serving the first authenticated
+caller's rendered response to every later anonymous one. The render cache is
+read before the authorization gate runs, and its key is composed from the
+release namespace, the kind, the bundle and the URL — it carries no user
+identity — so a cached gated page had no way to distinguish who was asking.
+
+The boot now refuses that pairing and names the route:
+
+```
+[ SERVER ] Route `dashboard@app`: `param.requireAuth` / `param.roles` /
+`param.policy` gate this route, but it also declares `cache`. The render cache
+is read BEFORE authorization runs and its key carries no user identity, so the
+first authenticated response would be replayed to unauthenticated callers.
+Drop `cache`, or remove the authorization keys if the route is meant to be
+open to everyone.
+```
+
+Pick whichever is true of the route:
+
+- **It is genuinely per-user** (a dashboard, an account page) — remove `cache`.
+  Caching it was never safe.
+- **It is the same for everyone and fine to publish** — remove the
+  authorization keys. If the bundle runs with
+  `auth.requireAuthByDefault: true`, mark it `"public": true` instead.
+
+`auth.requireAuthByDefault` already refused this pairing for routes it gated
+implicitly; the refusal now covers explicitly annotated routes too, in both
+modes. As a second layer the render delegates never store a response for a
+gated route, so a configuration that somehow bypassed the boot check still
+cannot populate the cache.
+
+If a gated route was cached before you upgraded, flush the cache after fixing
+the configuration — a `fs` or `redis` entry written by the previous version
+outlives the restart. `gina cache:clear <bundle> @<project>` does it.
+
 ### Fixed — Couchbase client-side query timeouts classify as transient
 
 **No action required.** On the Couchbase query path, a *client-side* driver

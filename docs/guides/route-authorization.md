@@ -477,6 +477,31 @@ describes a newly gated route as unauthenticated.
 
 ---
 
+## A gated route can never be cached {#no-cache-on-gated-routes}
+
+Authorization and the render cache are mutually exclusive on the same route. The
+cache is read *before* the gate runs — on the isaac engine it is read before the
+router has even matched the route — and its key is composed from the release
+namespace, the kind, the bundle and the URL. No part of it identifies the
+caller, so a cached gated page is handed to whoever asks next.
+
+The boot refuses the combination and names the route:
+
+```
+[ SERVER ] Route `dashboard@app`: `param.requireAuth` / `param.roles` /
+`param.policy` gate this route, but it also declares `cache`. ...
+```
+
+Drop `cache` if the route is genuinely per-user, or drop the authorization keys
+if it is the same for everyone. Under
+[deny-by-default](#deny-by-default) a route the mode gates is refused too —
+mark it `"public": true` if it is meant to be cacheable and open.
+
+As a second layer the render delegates never store a response for a gated route,
+so a configuration that bypassed the boot check still cannot fill the cache.
+
+---
+
 ## Denials are recorded automatically
 
 When the [audit trail](/guides/audit-trail) is enabled
