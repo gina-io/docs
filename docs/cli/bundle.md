@@ -529,11 +529,12 @@ The bundle MUST already be started (`gina bundle:start`) and a manifest generate
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--http-host=<host>` | `$GINA_HOST_V4` → `127.0.0.1` | Bind host. Pass `0.0.0.0` to expose externally (deliberate opt-in). |
+| `--http-host=<host>` | `127.0.0.1` | Bind host. Pass `0.0.0.0` to expose externally (deliberate opt-in) — which then requires `--auth-token` or `--allow-insecure`. |
 | `--http-port=<n>` | `0` (OS-assigned) | Bind port. Resolved port logged to stderr on start. |
 | `--max-in-flight=<n>` | `16` | Concurrency cap on upstream dispatch. Applies globally across HTTP clients. |
-| `--auth-token=<token>` | none | When set, `Authorization: Bearer <token>` is required on every non-OPTIONS request. Also `$GINA_MCP_AUTH_TOKEN` or `mcp.json > server > authToken`. |
-| `--cors-origin=<list>` | loopback-only | Comma-separated extra origins beyond the built-in loopback allowlist (`http(s)://localhost`, `127.0.0.1`, `[::1]` on any port). Pass `*` to disable the Origin check entirely. |
+| `--auth-token=<token>` | none | When set, `Authorization: Bearer <token>` is required on every non-OPTIONS request. Also `$GINA_MCP_AUTH_TOKEN` or `mcp.json > server > authToken`. Required once the server is exposed — see [Default security posture](#default-security-posture). |
+| `--cors-origin=<list>` | loopback-only | Comma-separated extra origins beyond the built-in loopback allowlist (`http(s)://localhost`, `127.0.0.1`, `[::1]` on any port). Pass `*` to disable the Origin check entirely — which then requires `--auth-token` or `--allow-insecure`. |
+| `--allow-insecure` | off | Run without a bearer token even when the server is exposed. Assert only when access is restricted upstream (service mesh, NetworkPolicy, authenticating proxy). Also `mcp.json > server > allowInsecure` (strict boolean). |
 
 Every CLI flag has a matching `mcp.json > server > <field>` manifest fallback (`transport`, `httpHost`, `httpPort`, `maxInFlight`, `authToken`, `allowedOrigins`, `timeoutMs`). Precedence at each layer: CLI → manifest → env (where sensible) → default. Invalid values (non-numeric port, unknown transport name) warn on stderr and fall through to the next tier — a malformed override cannot silently disable the guard.
 
@@ -545,10 +546,27 @@ One endpoint, `POST /`. The `Accept` header picks the response shape: `applicati
 
 ### Default security posture
 
-Bind loopback (`127.0.0.1`), no auth. The network boundary IS the security. The `Origin` allowlist accepts `http(s)://localhost`, `127.0.0.1`, and `[::1]` on any port so browser-based MCP clients (MCP Inspector, dev tools) work without configuration; requests without an `Origin` header (curl, desktop agent hosts) pass through. Disallowed origins receive `403 Forbidden` without CORS headers; missing or invalid bearer tokens receive `401 Unauthorized` + `WWW-Authenticate: Bearer realm="MCP"` with CORS preserved so browser clients can read the error body.
+Bind loopback (`127.0.0.1`) plus the built-in `Origin` allowlist. Those two are the security, and a bearer token is optional **only** while both are intact. The allowlist accepts `http(s)://localhost`, `127.0.0.1`, and `[::1]` on any port so browser-based MCP clients (MCP Inspector, dev tools) work without configuration; requests without an `Origin` header (curl, desktop agent hosts) pass through, because the `Origin` check exists to stop DNS rebinding, which is a browser-only attack and always carries an `Origin`. Disallowed origins receive `403 Forbidden` without CORS headers; missing or invalid bearer tokens receive `401 Unauthorized` + `WWW-Authenticate: Bearer realm="MCP"` with CORS preserved so browser clients can read the error body.
+
+Remove either protection and a token becomes **required**: the server refuses to start rather than listen unauthenticated. Nothing binds, so there is no window in which an open port is reachable.
+
+```mermaid
+flowchart TD
+    A[bundle:mcp-start --transport=http] --> B{Bearer token configured?}
+    B -- yes --> OK[Starts normally]
+    B -- no --> C{Bound to loopback?}
+    C -- no --> D{--allow-insecure?}
+    C -- yes --> E{Origin check disabled<br/>via --cors-origin=*?}
+    E -- no --> OK
+    E -- yes --> D
+    D -- yes --> WARN[Starts, logs<br/>'bearer auth: none']
+    D -- no --> STOP[Refuses to start]
+```
+
+`--allow-insecure` is the escape hatch for deployments whose boundary lives elsewhere — a service mesh, a Kubernetes NetworkPolicy, or an authenticating reverse proxy. It asserts a fact about your infrastructure; it does not add protection.
 
 :::info OAuth 2.1 deployments
-Gina's MCP server ships **static bearer auth only**. For OAuth-protected deployments, place gina behind a reverse proxy (e.g. `oauth2-proxy`, Traefik `ForwardAuth`, nginx `auth_request`) that handles the OAuth dance and forwards the upstream request with a static bearer or no auth. This is the MCP community standard and keeps gina's surface small.
+Gina's MCP server ships **static bearer auth only**. For OAuth-protected deployments, place gina behind a reverse proxy (e.g. `oauth2-proxy`, Traefik `ForwardAuth`, nginx `auth_request`) that handles the OAuth dance and forwards the upstream request with a static bearer or no auth. This is the MCP community standard and keeps gina's surface small. That topology is non-loopback and often token-less by design, so it is exactly the case `--allow-insecure` exists for — pass it (or give the proxy a static bearer to forward).
 :::
 
 ### Manifest example — pin every tunable

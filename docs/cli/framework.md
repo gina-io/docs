@@ -313,7 +313,8 @@ gina framework:set --<flag>=<value>
 | `--port` | Framework socket port (default `8124`) |
 | `--mq-port` | MQ listener port (default `8125`) |
 | `--debug-port` | Node.js inspector port |
-| `--host-v4` | IPv4 host address |
+| `--host-v4` | IPv4 address the CLI **connects to** when reaching the framework socket (default `127.0.0.1`) |
+| `--bind-host` | Address the framework socket and MQ listener **bind to** (default `127.0.0.1`). Pass `0.0.0.0` to expose the control plane beyond this host (deliberate opt-in) |
 | `--hostname` | Hostname |
 | `--culture` | Default culture (e.g. `en_US`) |
 | `--timezone` | Default timezone (e.g. `America/New_York`) |

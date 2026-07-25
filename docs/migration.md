@@ -19,6 +19,301 @@ upward to the target version.
 
 ---
 
+## 0.5.25 → 0.5.26
+
+### Added — deny-by-default authorization
+
+**No action required.** Nothing changes unless you opt in, and an existing
+bundle behaves exactly as before.
+
+Route authorization has always been opt-in per route: a route you forget to
+annotate is open. `settings.json > auth.requireAuthByDefault: true` inverts that
+for a bundle — every route requires an authenticated session unless its
+`routing.json` `param` block carries `"public": true`. Your existing
+`requireAuth` / `roles` / `policy` routes are unaffected; the mode only changes
+what an *un-annotated* route does, and `public` can never un-gate a route you
+explicitly protected.
+
+The setting is recorded per bundle, so in merged mode enabling it in one bundle
+never changes the posture of a sibling. The routes the framework injects for you
+— the webroot redirect (which also serves `/`), the custom error page,
+`/_status` and the upload endpoints — ship `"public": true`, so turning the mode
+on cannot take your site root or your error renderer offline.
+
+Because the mode makes a few configurations dangerous that were previously
+merely odd, the bundle refuses to start on three of them: `"public": true`
+alongside an explicit gate key; a login route the mode would gate, which would
+bounce to itself in an infinite redirect; and a mode-gated route that also
+declares `cache`, since the render cache is read before authorization runs and
+its key carries no user identity. All three are checked only while the mode is
+on, so no existing bundle can newly fail to boot.
+
+If you enable it, do so in a non-production environment first and read the boot
+line — it reports how many routes were just gated. Watch for the login form's
+POST, which is a separate route from the login page and needs its own
+exemption. `gina bundle:openapi` follows the mode, so generated specifications
+stay accurate. Server-side only — pick it up at restart, no asset re-bake. See
+[Route authorization → Deny-by-default](/guides/route-authorization#deny-by-default).
+
+### Added — boot-time transport posture
+
+**No action required — but you may see one new boot line.** Outside the `local`
+scope, a bundle resolving a cleartext scheme (anything but `https`) now says so
+once at boot: a single warning naming the bundle, scheme and scope, plus the two
+ways to make the posture deliberate. If TLS terminates upstream of the bundle —
+a service mesh, an ingress or load balancer, a reverse proxy (the documented
+[h2c topology](/guides/https#h2c--cleartext-http2)) — acknowledge it with
+`settings.json > server.allowInsecure: true` and the warning becomes one info
+line. To enforce https at the bundle itself, set `server.requireHttps: true`: a
+cleartext bundle outside the `local` scope then refuses to start — before
+anything binds, so the cleartext port is never reachable. Both are strict
+booleans; a non-boolean value, or setting both, refuses to boot in every scope.
+An `https://` upstream declared in `proxy.json` is named in the warning but
+never silences it — only the explicit acknowledgment does. Server-side only —
+pick it up at restart, no asset re-bake.
+
+### Security — authorization keys on a WebSocket route now refuse to boot
+
+**Action required if a `method: "ws"` route declares `requireAuth`, `roles` or
+`policy`.** The bundle will not start until the key is removed.
+
+Those keys could never do anything on a WebSocket route. A handshake is answered
+by the engine's extended-CONNECT handler and never reaches the authorization
+gate, so the route was accepted, started, and even counted in the boot line
+`Registered N authorization-gated route(s)` — the framework confirming
+protection that did not exist.
+
+Authenticate inside the channel handler instead. It receives the full request,
+so it can inspect headers and cookies and refuse the socket itself:
+
+```js title="src/<bundle>/channels/live.js"
+module.exports = function (session, request) {
+    if ( !request.session || !request.session.user ) {
+        return session.close(1008, 'Unauthorized');   // policy violation
+    }
+    // ...
+};
+```
+
+Relatedly, `auth.requireAuthByDefault` no longer counts WebSocket routes among
+the routes it gates — it cannot reach them either. Instead it names them once at
+boot so the gap is visible:
+
+```
+[ BUNDLE ][ server ][ init ] `auth.requireAuthByDefault` does NOT cover 1
+WebSocket route(s) — live. A ws handshake never reaches the authorization gate,
+so these stay open unless their `wsHandler` authenticates.
+```
+
+Mark such a route `"public": true` once you have confirmed its handler
+authenticates, and the notice goes away.
+
+### Security — a gated route may no longer be cached
+
+**Action required if you pair route authorization with `cache`.** A bundle that
+declares both on the same route will not start until you change one of them.
+
+A route that carried an authorization key — `param.requireAuth`, `param.roles`
+or `param.policy` — *and* a `cache` block was serving the first authenticated
+caller's rendered response to every later anonymous one. The render cache is
+read before the authorization gate runs, and its key is composed from the
+release namespace, the kind, the bundle and the URL — it carries no user
+identity — so a cached gated page had no way to distinguish who was asking.
+
+The boot now refuses that pairing and names the route:
+
+```
+[ SERVER ] Route `dashboard@app`: `param.requireAuth` / `param.roles` /
+`param.policy` gate this route, but it also declares `cache`. The render cache
+is read BEFORE authorization runs and its key carries no user identity, so the
+first authenticated response would be replayed to unauthenticated callers.
+Drop `cache`, or remove the authorization keys if the route is meant to be
+open to everyone.
+```
+
+Pick whichever is true of the route:
+
+- **It is genuinely per-user** (a dashboard, an account page) — remove `cache`.
+  Caching it was never safe.
+- **It is the same for everyone and fine to publish** — remove the
+  authorization keys. If the bundle runs with
+  `auth.requireAuthByDefault: true`, mark it `"public": true` instead.
+
+`auth.requireAuthByDefault` already refused this pairing for routes it gated
+implicitly; the refusal now covers explicitly annotated routes too, in both
+modes. As a second layer the render delegates never store a response for a
+gated route, so a configuration that somehow bypassed the boot check still
+cannot populate the cache.
+
+If a gated route was cached before you upgraded, flush the cache after fixing
+the configuration — a `fs` or `redis` entry written by the previous version
+outlives the restart. `gina cache:clear <bundle> @<project>` does it.
+
+### Fixed — Couchbase client-side query timeouts classify as transient
+
+**No action required.** On the Couchbase query path, a *client-side* driver
+timeout — the SDK giving up before the server responds — classified as
+**permanent**, and reached your controller with an empty `err.message`. The
+connector replaced the driver error with one built from the query-error
+envelope whenever that envelope was present; the driver attaches that envelope
+to every query error, and a client-side timeout carries no server text, so the
+replacement was an empty-message `Error` that had lost the typed timeout class
+name the classifier matches on. The connector now builds a replacement only
+when the envelope actually carries text, and forwards the driver error
+untouched otherwise — so `err.isTransient` reports `true` with
+`err.transientReason: 'couchbase:timeout'`, and `err.message` keeps the driver's
+own timeout text. Server-reported query errors, socket-level failures and the
+other five connectors are unchanged. If you added a workaround that treats an
+empty-message Couchbase error as retryable, you can drop it. Server-side only —
+pick it up at restart, no asset re-bake. See
+[Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
+
+### Security — the MCP HTTP transport refuses to start once it is exposed
+
+**Action required if you expose the MCP HTTP transport without a bearer token.**
+This affects `gina bundle:mcp-start --transport=http` only; the default stdio
+transport is untouched, and so is the default HTTP posture.
+
+The transport has always relied on two ambient protections: the loopback bind
+and the built-in `Origin` allowlist. A bearer token was optional because those
+two were doing the work — but nothing enforced that, so removing them left the
+server reachable with no authentication at all. Removing either one now
+requires a token, and the server refuses to start instead of listening
+unauthenticated. Nothing binds, so there is no window in which an open port is
+reachable.
+
+Concretely, you now need `--auth-token` (or `mcp.json > server > authToken`, or
+`$GINA_MCP_AUTH_TOKEN`) if you pass either:
+
+- a non-loopback `--http-host`, such as `0.0.0.0`; or
+- `--cors-origin=*`, which disables the `Origin` check — the only defence
+  against DNS rebinding. The loopback bind does not help there, because the
+  browser driving the attack is already on the machine.
+
+If your deployment restricts access upstream — a service mesh, a Kubernetes
+NetworkPolicy, or an authenticating reverse proxy such as `oauth2-proxy` or
+nginx `auth_request` — pass the new `--allow-insecure` flag (or
+`mcp.json > server > allowInsecure`, a strict boolean) to assert that and keep
+running token-less. The reverse-proxy topology the docs recommend is
+non-loopback and token-less by design, so it wants this flag.
+
+Unchanged: a loopback bind with the built-in allowlist still runs without a
+token, so local development and MCP Inspector need no changes. Bearer
+validation also now hashes both sides before its constant-time comparison, so
+the comparison no longer varies with the configured token's length; this is
+transparent to clients. See
+[bundle:mcp-start → Default security posture](/cli/cli-bundle#default-security-posture).
+
+### Fixed — `GINA_MCP_AUTH_TOKEN` is now actually applied
+
+**Action required if you configured the MCP bearer token through that
+environment variable.** The CLI moves every `GINA_*` variable into the framework
+environment during startup, and the token resolver was reading the raw process
+environment, so the value was never found and the token silently never applied
+— a server configured that way ran with no authentication. The resolver now
+reads through the framework environment reader.
+
+The `--auth-token` flag and the `mcp.json > server > authToken` field were not
+affected. If you used the environment variable, restart the server and confirm
+the startup line reports `bearer auth: enabled`.
+
+### Security — the framework control plane now binds to loopback by default
+
+**Action required only if you reached the framework ports from another
+machine.** Everything on the local host keeps working with no change.
+
+The framework's two control-plane listeners — the command socket (`8124`, which
+receives every online `gina` command) and the MQ listener (`8125`, which serves
+`gina tail`) — previously bound whatever address the runtime defaulted to. They
+now bind an explicit host, and that host defaults to loopback.
+
+The new setting is `bind_host`, settable three ways:
+
+```bash
+gina framework:set --bind-host=127.0.0.1     # or 0.0.0.0 to expose deliberately
+export GINA_BIND_HOST=127.0.0.1              # env override
+```
+
+It is **separate from `host_v4`**, which is unchanged and still means "the
+address clients connect to". That separation matters on a workstation that
+points `host_v4` at another machine: such a setup still starts its own daemon
+normally, because the bind address is no longer inferred from the connect
+address.
+
+Existing installs inherit the loopback default, so exposing the control plane
+beyond the local host is now a deliberate opt-in — the same shape a bundle
+already uses for `--http-host`. If you relied on driving `gina` commands or
+tailing logs across machines, set `bind_host` explicitly on the host running the
+daemon, and restrict access to those ports at the network layer.
+
+### Security — a command over the framework socket resolves inside the shipped namespace
+
+**No action required.** This changes what the daemon accepts, not what it does
+for any valid command.
+
+A command name arriving over the framework socket is now constrained to the
+shipped command namespace before it is resolved to a handler, so it can only
+ever resolve inside `lib/cmd/`. An unresolvable name is answered on the
+connection that sent it, instead of ending the daemon process — which previously
+took down service for every other connected client at the same time. A one-shot
+offline CLI run still exits non-zero on an unknown command, so scripts that
+check the exit code are unaffected. The MQ listener likewise skips a malformed
+frame rather than letting the parse failure drop the listener.
+
+### Fixed — an ineffective `@options` annotation now warns
+
+**No action required, but check your logs after upgrading.** Query behaviour is
+unchanged — this only makes an already-ineffective annotation visible.
+
+On the Couchbase N1QL path, a `.sql` file's `@options` annotation that silently
+did nothing now logs a warning naming the problem. Two shapes were affected:
+
+- **The parser could not read it.** Braces are required — write
+  `@options { … }`. The warning shows the working form.
+- **Every key was dropped for want of `consistency`.** Keys such as `adhoc` or
+  `timeout` apply only alongside a `consistency` key; without one the whole set
+  is ignored. The warning lists exactly which keys were dropped.
+
+If a query has been behaving as though its `@options` never applied, this is
+why — and the warning now says so at the point it happens. Server-side only —
+pick it up at restart, no asset re-bake.
+
+### Fixed — the JSON schemas describe the route-authorization vocabulary
+
+**No action required.** Runtime behaviour is unchanged; the schemas are editor
+tooling and are never enforced at boot.
+
+If your editor validates Gina config against the published schemas, it was
+flagging valid route-authorization configuration:
+
+- `auth.requireAuthByDefault` was missing from the `settings.json` schema, whose
+  `auth` block forbids unknown keys — so a perfectly valid deny-by-default
+  configuration was reported as invalid.
+- `param.requireAuth`, `param.roles`, `param.policy` and `param.public` were
+  undeclared in the `routing.json` schema. That block permits unknown keys, so
+  they were accepted — but with no completion, no type checking and no
+  description on hover.
+
+Both are now declared, with the constraints the boot lint actually enforces.
+
+### Fixed — `lib/merge`'s documented default was inverted
+
+**No action required.** Only the documentation was wrong; the behaviour it
+describes has not changed.
+
+`lib/merge`'s JSDoc claimed `override` defaults to `true`. It defaults to
+**`false`** — the two-argument form preserves existing target keys on a
+conflict, which is what the several hundred two-argument call sites throughout
+the framework rely on. The array example was wrong for the same reason: a
+two-argument array merge *combines* elements (`merge([1,2],[3,4])` gives
+`[1,2,3,4]`); replacing the target array requires `override=true`.
+
+If you wrote a two-argument `merge()` call from the documented default rather
+than from observed behaviour, re-read it — the call has always behaved as
+target-wins.
+
+---
+
 ## 0.5.24 → 0.5.25
 
 ### Added — cross-service request-id propagation
@@ -214,11 +509,12 @@ and is deliberately conservative — an unrecognized error, or a genuinely
 permanent one such as a DNS misconfiguration (`ENOTFOUND`) or a duplicate key,
 classifies as permanent. It sets only those two fields, never alters existing
 ones, and never throws, so nothing changes for code that ignores them.
-Known limitation in this release: on the Couchbase query path, a *client-side*
-driver timeout (the SDK giving up before the server responds) still classifies
-as permanent — the typed timeout class is not preserved through the connector's
-error forwarding; the fix is queued for the next release. Server-reported
-errors, socket-level failures and the other five connectors are unaffected.
+Known limitation **in 0.5.25 only**: on the Couchbase query path, a *client-side*
+driver timeout (the SDK giving up before the server responds) classifies as
+permanent, because the typed timeout class is not preserved through the
+connector's error forwarding. Fixed in 0.5.26 — see the `0.5.25 → 0.5.26`
+section above. Server-reported errors, socket-level failures and the other five
+connectors are unaffected.
 Server-side only — pick it up at restart, no asset re-bake. See
 [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
 

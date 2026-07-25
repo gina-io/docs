@@ -88,6 +88,7 @@ right of the framework remains yours.
 | Control | What it gives you | Supports | Status | Guide |
 |---|---|---|---|---|
 | **Authorization / RBAC** | Per-route `requireAuth` / `roles` / `policy` gate before the action runs; generic 403; boot-refusal on a silently-ungated route | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · HIPAA §164.312(a)(1) | ✅ 0.5.19 | [Route authorization](/guides/route-authorization) |
+| **Deny-by-default authorization** | Opt-in `auth.requireAuthByDefault` inverts the posture per bundle — an un-annotated route is gated, not open — with `param.public` as the audited exemption and boot-refusal on the shapes the mode makes unsafe | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · NIST SP 800-207 | ✅ 0.5.26 | [Route authorization](/guides/route-authorization#deny-by-default) |
 | **Audit trail** (record) | Append-only, user-attributed JSONL of who did what to which record when; auto-records authorization denials; own store, never the log sinks | PCI-DSS Req 10 (10.2) · SOC 2 CC7.2 · HIPAA §164.312(b) | ✅ 0.5.19 | [Audit trail](/guides/audit-trail) |
 | **Security headers** | CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP/COEP/CORP, and the rest of the header-plugin family; batteries-included or per-header. CSP in particular is a primary mechanism for PCI-DSS v4's payment-page script control | PCI-DSS Req 6 (6.4.3 via CSP) · SOC 2 CC6.6 | ✅ | [Security headers](/guides/security-headers) |
 | **CSRF protection** | Signed double-submit token + Origin/Referer pre-filter; per-route exemptions | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [CSRF](/guides/csrf) |
@@ -96,7 +97,7 @@ right of the framework remains yours.
 | **Output escaping** | **Nunjucks bundles auto-escape variable output by default.** Swig bundles render variable output raw by default; enable auto-escaping per bundle with `settings.swig.autoescape: true` (`0.5.25`+), or escape explicitly with the `e` / `escape` filter | PCI-DSS Req 6 (6.2.4 — XSS) | ✅ Nunjucks · opt-in for Swig (`settings.swig.autoescape`) | [Templating](/templating) |
 | **Parameterized queries** | Connector query APIs bind parameters — the primary injection defense | PCI-DSS Req 6 (6.2.4 — injection) | ✅ | [Connectors](/reference/connectors) |
 | **Dependency / CVE scanning** | Socket, Dependabot, and an OSV workflow gate the framework's own supply chain; HTTP/2 CVEs mitigated by default | PCI-DSS Req 6 (6.3.1–6.3.2) · SOC 2 CC7.1 | ✅ | [Security & CVE compliance](/security) |
-| **Transport security** | HTTP/2 + TLS, with HSTS emitted by the header plugin | PCI-DSS Req 4 (4.2.1) · SOC 2 CC6.7 | ✅ | [HTTPS](/guides/https) |
+| **Transport security** | HTTP/2 + TLS, with HSTS emitted by the header plugin. A cleartext bundle outside the local scope warns at boot; `server.requireHttps` refuses to boot it at all, and `server.allowInsecure` records that TLS terminates upstream (`0.5.26`+) | PCI-DSS Req 4 (4.2.1) · SOC 2 CC6.7 | ✅ | [HTTPS](/guides/https) |
 
 :::note Recording vs. making the trail tamper-resistant
 Today's audit trail gives you the **record** an assessor asks for (PCI-DSS
@@ -201,3 +202,7 @@ This is a **living reference**. As Security & Compliance Controls ship, their
 rows move from *planned* to *available* here and on the
 [roadmap](/roadmap). ✅ marks what you can use today; 📋 marks what is scoped but
 not yet built. If a control you need is 📋, it is not a control you have.
+
+For a deployment-shaped view of the same boundary — which of these controls the
+framework enforces, and which your mesh, ingress, and network policy have to
+supply — see [Running Gina zero-trust](/guides/zero-trust).

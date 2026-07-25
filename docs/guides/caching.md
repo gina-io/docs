@@ -56,6 +56,24 @@ Add a `cache` field to any route:
 The first `GET /` request renders and stores the response. Every subsequent
 request is served from the cache until the entry expires.
 
+:::danger Never cache a route you protect
+
+A route that declares `cache` must not also declare `requireAuth`, `roles` or
+`policy`. The cache is read before authorization runs, and the key is built from
+the URL alone — it carries no user identity — so the first signed-in visitor's
+page would be replayed to everyone who asked for that URL afterwards, signed in
+or not.
+
+Since 0.5.26 the bundle refuses to start on that pairing rather than serving it.
+The same applies under
+[deny-by-default](/guides/route-authorization#deny-by-default): a route the mode
+gates cannot be cached either, unless you mark it `"public": true`.
+
+Cache what is the same for every visitor. For a per-user page, leave the route
+uncached and cache the expensive pieces behind it instead.
+
+:::
+
 ---
 
 ## Configuration reference

@@ -67,6 +67,8 @@ The primary server settings file.
 | `engine` | `"isaac"` | `"isaac"` | HTTP server engine. `"isaac"` is the built-in HTTP/2 engine |
 | `protocol` | `"http/2.0"` \| `"http/1.1"` | `"http/2.0"` | Wire protocol |
 | `scheme` | `"https"` \| `"http"` | `"https"` | URL scheme |
+| `requireHttps` | boolean | `false` | Opt-in transport enforcement: outside the `local` scope, a bundle resolving a cleartext scheme (anything but `"https"`) refuses to boot — before anything binds, so the cleartext port is never reachable. Inert in the `local` scope. Setting it together with `allowInsecure` refuses to boot. *New in 0.5.26* |
+| `allowInsecure` | boolean | `false` | Asserts that TLS terminates upstream (service mesh, ingress/load balancer, reverse proxy — the [h2c topology](/guides/https#h2c--cleartext-http2)): the boot-time cleartext-transport warning outside the `local` scope becomes a single info line. Same vocabulary as `mcp.json > server > allowInsecure`. *New in 0.5.26* |
 | `address` | string | `"0.0.0.0"` | Bind address. Use `"127.0.0.1"` for IPv4-only or `"::"` for IPv6-only |
 | `allowHTTP1` | boolean | `true` | Accept HTTP/1.1 connections on the HTTP/2 server |
 | `keepAliveTimeout` | string | `"5s"` | Keep-alive socket timeout (e.g. `"5s"`, `"30s"`) |

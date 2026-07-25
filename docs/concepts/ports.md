@@ -112,6 +112,23 @@ Two categories of ports are reserved and cannot be assigned to bundles.
 | 8124 | Framework socket server (online CLI commands) |
 | 8125 | Message queue listener / log tail |
 
+Both are **control-plane** listeners: a connection to the framework socket
+executes a CLI command in the running daemon. They bind `127.0.0.1` by default,
+so they are reachable only from the machine running `gina start`.
+
+To expose them deliberately — for example a daemon driven from another host —
+set `bind_host` (or `GINA_BIND_HOST`, or `gina framework:set --bind-host=`):
+
+```bash
+gina framework:set --bind-host=0.0.0.0
+```
+
+`bind_host` is where the listeners **bind**; `host_v4` is the address the CLI
+**connects to**. They are separate keys on purpose, so a workstation whose
+`host_v4` points at another machine still starts its own daemon normally. When
+you widen `bind_host`, restrict access at the network layer — anything that can
+reach the socket can run framework commands.
+
 ### Gina infrastructure range — 4100–4199
 
 Ports `4100–4199` are reserved for Gina internal services. The port scanner
