@@ -147,10 +147,14 @@ application code.
 
 ## `@options` annotations
 
-Control query behavior directly in the SQL file using annotations:
+Control query behavior directly in the SQL file. `@options` takes a **brace-delimited
+object**, written inside a comment block — the same form used in the
+[models guide](/guides/models):
 
 ```sql
--- @options scanConsistency=request_plus
+/*
+ * @options { consistency: "request_plus" }
+ */
 SELECT u.*
 FROM `myBucket` u
 WHERE u.type = 'user'
@@ -158,11 +162,22 @@ WHERE u.type = 'user'
   AND u.email = $1
 ```
 
-| Annotation | Values | Default | Purpose |
+| Key | Values | Default | Purpose |
 |---|---|---|---|
-| `scanConsistency` | `not_bounded`, `request_plus` | `not_bounded` | Index consistency level |
-| `adhoc` | `true`, `false` | `true` | Whether to use prepared statements |
+| `consistency` | `not_bounded`, `request_plus` | `not_bounded` | Index consistency level |
+| `adhoc` | `true`, `false` | `false` | `false` prepares the statement and caches its plan; `true` runs it ad-hoc |
 | `profile` | `off`, `phases`, `timings` | `off` (dev: `timings`) | Query execution profiling |
+
+:::caution
+Two parsing rules that fail **silently** — a malformed `@options` is ignored without
+any warning:
+
+- **The braces are required.** `@options consistency=request_plus` does not match the
+  parser, so the whole annotation is skipped.
+- **Keys other than `consistency` apply only when `consistency` is present too.**
+  `@options { adhoc: true }` on its own is skipped; `@options { consistency: "not_bounded", adhoc: true }`
+  applies both. When in doubt, always include an explicit `consistency`.
+:::
 
 `request_plus` ensures the query sees all mutations up to the current moment --
 useful for read-after-write patterns. `not_bounded` (the default) is faster but
