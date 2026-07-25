@@ -40,6 +40,55 @@ empty-message Couchbase error as retryable, you can drop it. Server-side only �
 pick it up at restart, no asset re-bake. See
 [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
 
+### Security — the MCP HTTP transport refuses to start once it is exposed
+
+**Action required if you expose the MCP HTTP transport without a bearer token.**
+This affects `gina bundle:mcp-start --transport=http` only; the default stdio
+transport is untouched, and so is the default HTTP posture.
+
+The transport has always relied on two ambient protections: the loopback bind
+and the built-in `Origin` allowlist. A bearer token was optional because those
+two were doing the work — but nothing enforced that, so removing them left the
+server reachable with no authentication at all. Removing either one now
+requires a token, and the server refuses to start instead of listening
+unauthenticated. Nothing binds, so there is no window in which an open port is
+reachable.
+
+Concretely, you now need `--auth-token` (or `mcp.json > server > authToken`, or
+`$GINA_MCP_AUTH_TOKEN`) if you pass either:
+
+- a non-loopback `--http-host`, such as `0.0.0.0`; or
+- `--cors-origin=*`, which disables the `Origin` check — the only defence
+  against DNS rebinding. The loopback bind does not help there, because the
+  browser driving the attack is already on the machine.
+
+If your deployment restricts access upstream — a service mesh, a Kubernetes
+NetworkPolicy, or an authenticating reverse proxy such as `oauth2-proxy` or
+nginx `auth_request` — pass the new `--allow-insecure` flag (or
+`mcp.json > server > allowInsecure`, a strict boolean) to assert that and keep
+running token-less. The reverse-proxy topology the docs recommend is
+non-loopback and token-less by design, so it wants this flag.
+
+Unchanged: a loopback bind with the built-in allowlist still runs without a
+token, so local development and MCP Inspector need no changes. Bearer
+validation also now hashes both sides before its constant-time comparison, so
+the comparison no longer varies with the configured token's length; this is
+transparent to clients. See
+[bundle:mcp-start → Default security posture](/cli/cli-bundle#default-security-posture).
+
+### Fixed — `GINA_MCP_AUTH_TOKEN` is now actually applied
+
+**Action required if you configured the MCP bearer token through that
+environment variable.** The CLI moves every `GINA_*` variable into the framework
+environment during startup, and the token resolver was reading the raw process
+environment, so the value was never found and the token silently never applied
+— a server configured that way ran with no authentication. The resolver now
+reads through the framework environment reader.
+
+The `--auth-token` flag and the `mcp.json > server > authToken` field were not
+affected. If you used the environment variable, restart the server and confirm
+the startup line reports `bearer auth: enabled`.
+
 ---
 
 ## 0.5.24 → 0.5.25
