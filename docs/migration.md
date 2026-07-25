@@ -19,6 +19,267 @@ upward to the target version.
 
 ---
 
+## 0.5.24 → 0.5.25
+
+### Added — cross-service request-id propagation
+
+**No action required — additive.** The always-on request id (`req._ginaReqId`,
+resolved from a sanitised inbound `X-Request-Id` or a fresh UUID) now travels
+with your inter-bundle calls. Every `self.query()` forwards it as `x-request-id`
+(a caller-set value is never overwritten), and every response echoes it back as
+`X-Request-Id` — so one logical request stays correlatable as it fans out across
+bundles, and a caller, load balancer, or APM can read the id off the wire. It is
+independent of log format (the id is always-on even when the JSON-log
+`requestId` field is not) and is never emitted after the response has been sent.
+Server-side only — running bundles pick it up at restart, no asset re-bake. See
+[Observability → Request correlation](/guides/observability#request-correlation).
+
+### Added — `/_gina/health/check` liveness on every engine
+
+**No action required — additive.** The built-in `GET /_gina/health/check`
+liveness endpoint — which returns `200` with `{"status":"healthy","timestamp":…}`
+and was previously served only by the Isaac engine — now answers on the default
+(Express) engine too. It is deliberately **ungated** (no admin allowlist, no dev
+gate) so a kubelet, Docker `HEALTHCHECK`, or load-balancer probe reaches it
+off-loopback. If you kept a bundle on the Isaac engine only to pass a health
+probe, that constraint is gone. Server-side only — pick it up at restart. See
+[Kubernetes & Docker → Liveness and readiness probes](/guides/k8s-docker#liveness-and-readiness-probes).
+
+### Added — machine-caller authentication (`auth.machine`)
+
+**No action required — additive (opt-in, fail-closed).** Service-to-service
+callers can now pass `requireAuth` / `roles` / `policy` routes **without a
+session**: declare named callers under `settings.json > auth.machine.callers`
+(keys are `${secret:KEY}`-capable and compared in constant time against
+boot-computed sha256 hashes), and the caller presents
+`Authorization: Bearer <key>` on each request — including from another bundle
+via `self.query()`'s `headers` option. A verified caller is the request's
+principal everywhere a session user would be: it satisfies `requireAuth`, its
+configured roles ride the same ANY-of match, policies receive it as
+`{ name, roles, machine: true }`, `self.hasRole()` answers its roles, and
+audit records carry the caller name as the actor key (a new `401-machine`
+`authz.denied` outcome covers rejected credentials, which get a clean `401`
+with `WWW-Authenticate: Bearer` — never the login bounce). A signed-in session
+always wins, and `enabled: false` (the default) is byte-identical to before.
+For JWT / HMAC / API-key schemes, `auth.machine.authenticator` names a
+per-bundle synchronous verifier module (the `policies/<name>.js` shape).
+Boot config — enable it with a bundle restart; server-side only, no asset
+re-bake. See [Route authorization → Machine callers](/guides/route-authorization#machine-callers).
+
+### Added — `bundle:openapi` authorization contract
+
+**No action required — additive.** `bundle:openapi` now documents route
+authorization in the generated spec. Routes gated with `requireAuth` /
+`roles` / `policy` emit a `401` response entry (plus a `403` when roles or a
+policy add authorization beyond authentication), and when
+[machine-caller auth](/guides/route-authorization#machine-callers) is
+configured (`auth.machine.enabled: true` with at least one caller or a custom
+authenticator) the spec gains a `components.securitySchemes.bearerAuth`
+scheme (`http`/`bearer`) plus a per-operation `security` requirement on gated
+routes. Role and policy **names** are never emitted — the spec follows the
+same no-disclosure rule as the runtime (generic 403 bodies, stripped client
+routing maps). Re-run `gina bundle:openapi` to refresh a bundle's spec; an
+un-gated bundle without machine auth produces an unchanged spec. This is a
+CLI-time change only — nothing changes at runtime.
+
+### Fixed — absolute URLs no longer poisoned by port-less internal calls
+
+**No action required.** A request whose `Host` header carries no `:port` — a
+container health probe pointed at an app route, a service-mesh hop, a
+sibling-bundle call addressed by service/DNS name — was classified as
+reverse-proxied and rewrote the worker's proxy-host context, so later renders'
+`getUrl`/`url` filter output and cross-bundle redirect targets could carry the
+internal host (dead links, images that never load, redirects to unreachable
+hosts — alternating per replica behind a load balancer). Each render now
+prefers its own request's classification, on both engines; renders with no
+request of their own still use the worker context — see the new opt-in below to
+make that deterministic. Server-side only: running bundles pick the fix up at
+restart, no asset re-bake.
+
+### Added — `server.proxy.requireForwardedHeaders` (opt-in)
+
+**No action required — additive (defaults to `false`).** When `true`, a request
+is classified as reverse-proxied **only** when it carries an `X-Forwarded-Host`
+header — the port-less-Host heuristic is disabled, so internal service-DNS
+calls can never rewrite the worker's proxy-host context. This is the
+deterministic option, and the only one that also protects renders with no
+request of their own (e.g. worker-driven mail). Enable it only behind a front
+proxy that always sends `X-Forwarded-Host`:
+
+```json
+{
+  "server": {
+    "proxy": {
+      "requireForwardedHeaders": true
+    }
+  }
+}
+```
+
+### Added — scaffold a namespace controller with `controller:add`
+
+**No action required — additive.** A new [`controller:add`](/cli/cli-controller)
+CLI command scaffolds a namespace controller into a bundle and prints the
+paste-ready `routing.json` rules to wire it:
+
+```bash
+gina controller:add checkout demo @myproject --controls=start,confirm,cancel
+```
+
+It creates `controllers/controller.checkout.js` (one JSDoc'd action stub per
+`--controls` entry) and, for a view bundle, one template per action at
+`templates/html/checkout/<action>.html`, then prints the routing rules for you to
+paste. The bundle flavor auto-detects (view → `render()` stubs + templates;
+API-only → `renderJSON()` stubs) and is overridable with `--views` / `--api`.
+`controller:add` **never edits `routing.json`** — it prints the rules and you
+paste them, then restart the bundle. This is a scaffolding command, so nothing in
+existing projects changes.
+
+### Added — remove a namespace controller safely with `controller:remove`
+
+**No action required — additive.** [`controller:remove`](/cli/cli-controller#controllerremove)
+(alias `controller:rm`) deletes a namespace controller from a bundle, but only
+after a reference-aware scan. Because a routing rule that names a namespace with
+no matching controller file silently falls back to the default `controller.js`
+rather than erroring, a bare delete is unsafe — so `controller:remove` scans
+`routing.json` (rule-level `namespace` and `param.namespace`) plus
+`requireController()` calls across the bundle and **refuses** the removal while
+any still point at the controller, listing each one. It **never edits
+`routing.json`**. When clean, it confirms interactively, then deletes the
+controller file and its `templates/html/<name>/` tree. `--dry-run` previews,
+`--force` deletes even with blockers (leaving the references for you to clean),
+and `--format=json` emits a machine-readable envelope.
+
+### Added — rename a namespace controller with `controller:rename`
+
+**No action required — additive.** [`controller:rename`](/cli/cli-controller#controllerrename)
+renames a namespace controller and rewrites the references that point at it.
+Because a controller is named by its namespace string in several places — the file
+`controllers/controller.<old>.js`, `namespace` values in `routing.json`, and
+`requireController('<old>')` literals — a plain file rename would leave them
+dangling (and a routing rule naming a missing namespace silently falls back to the
+default `controller.js`). So `controller:rename` moves the controller file, moves
+its `templates/html/<old>/` tree, and rewrites the structured references with
+comment-preserving string ops:
+
+```bash
+gina controller:rename checkout basket demo @myproject --dry-run
+```
+
+Anything a static rewrite cannot safely resolve — a `param.namespace` set to a
+`:variable`, or a `requireController(<expression>)` — is reported rather than
+rewritten. `--dry-run` previews the full plan, `--force` applies without the
+interactive confirmation, and `--format=json` emits a machine-readable envelope.
+Restart the bundle after a rename.
+
+### Added — opt into Swig output auto-escaping with `settings.swig.autoescape`
+
+**No action required — additive; the default is unchanged.** Swig bundles render
+variable output (`{{ x }}`) **raw** by default, and until now no setting could
+change that. A new boolean `settings.swig.autoescape` makes HTML auto-escaping
+reachable per bundle:
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+When `true`, Swig HTML-escapes variable output as an XSS defense — matching
+Nunjucks, whose `settings.nunjucks.autoescape` already defaults to `true`. Absent
+or `false`, behaviour is exactly as before (raw). A non-boolean value now fails
+the bundle at startup, so the toggle can't be silently mis-typed. See
+[`settings.swig`](/reference/settings#swig) for details. Swig's default stays
+`false` in this release; enabling escaping globally by default is planned for a
+future major.
+
+### Added — transient-vs-permanent classification on datastore query errors
+
+**No action required — additive.** When a datastore query fails, the error
+reaching your controller is now stamped with `err.isTransient` (true when a
+retry after backoff can succeed — a timeout, a dropped connection, a node
+warming up after a restart, rebalance or failover) and `err.transientReason`, a
+normalized token naming the condition (`socket:econnrefused`,
+`postgres:serialization-failure`, `mongo:transient-transaction`,
+`couchbase:timeout`, …), or `null` when the failure is permanent. Branch on it
+to render an honest "temporarily unavailable, please retry" instead of a generic
+500 for a condition that clears itself in seconds — without string-matching
+vendor error text. The classifier normalizes signals every driver already
+carries: socket errno, driver error codes and class names, ANSI SQLSTATE
+classes, MongoDB error labels, Couchbase N1QL cause codes. It covers all six
+datastore connectors (Couchbase, MongoDB, MySQL, PostgreSQL, ScyllaDB, SQLite)
+and is deliberately conservative — an unrecognized error, or a genuinely
+permanent one such as a DNS misconfiguration (`ENOTFOUND`) or a duplicate key,
+classifies as permanent. It sets only those two fields, never alters existing
+ones, and never throws, so nothing changes for code that ignores them.
+Known limitation in this release: on the Couchbase query path, a *client-side*
+driver timeout (the SDK giving up before the server responds) still classifies
+as permanent — the typed timeout class is not preserved through the connector's
+error forwarding; the fix is queued for the next release. Server-reported
+errors, socket-level failures and the other five connectors are unaffected.
+Server-side only — pick it up at restart, no asset re-bake. See
+[Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
+
+### Fixed — a Couchbase N1QL socket failure no longer hangs the request
+
+**No action required.** An N1QL query that fails at the socket level —
+connection refused or reset, a node still warming up after a restart or
+rebalance — arrives with no vendor query-error envelope. The connector's three
+query error handlers read that envelope unconditionally, so on such a failure a
+swallowed `TypeError` left the query callback un-fired and the request never
+settled: no response, no error page, just a hang until the client gave up. Each
+handler now forwards a usable error on both paths — built from the query-error
+envelope when present, otherwise the raw driver error with its code and errno
+preserved — and always settles the query. This is exactly the window the new
+classification above describes, so a condition that used to hang now surfaces as
+a classified error you can render. Server-side only: running bundles pick the
+fix up at restart, no asset re-bake.
+
+### Added — a `processing` state on the staged upload progress indicator
+
+**No action required — additive.** `data-gina-upload-progress-state` gains a
+`processing` value, stamped the moment the browser finishes sending the bytes
+(`xhr.upload.onloadend`) — the window during which the server post-processes the
+upload (rendering a preview, transcoding, scanning) before it responds. On a
+fast link the bytes finish in milliseconds while that server window can run for
+seconds, during which the bar would otherwise sit frozen at a full `uploading`
+state. The new state advances the state attribute **only**, leaving the bar full
+(value, max and the percent attribute untouched), so a styled bar can show a
+distinct processing affordance in CSS instead of appearing stuck, and a native
+indeterminate bar keeps its animation running. The enum is now `preparing`,
+`uploading`, `indeterminate`, `processing`, `complete`, `error`. No wording is
+hardcoded, so this is i18n-neutral: a consumer that does not style the new state
+sees the bar stay full, exactly as before. This is **browser-bundled** — rebuild
+your bundles (re-bake) to pick it up. See
+[File uploads → Upload progress](/guides/file-uploads#upload-progress).
+
+### Fixed — a file input declaring only its upload action no longer warns on bind
+
+**No action required.** A file input that declares only its staging action
+(`data-gina-form-upload-action`) and relies on route defaults for the rest
+emitted a spurious warning-and-error pair on every bind and re-bind — and wrote
+a visible error into the form's error container. The delete action
+(`data-gina-form-upload-delete-action`, which removes an already-saved file)
+deliberately has no framework default, because its endpoint is app-specific, so
+its absence is now a quiet debug at bind time; the requirement is still enforced
+when a delete is actually triggered. If you declared the delete action purely to
+silence the warning — the previous workaround — you can drop it. This is
+**browser-bundled** — rebuild your bundles (re-bake) to pick it up.
+
+### Fixed — a zero-match staged-upload removal now logs a diagnostic
+
+**No action required.** When a staged-upload reset or delete click matched none
+of the rendered previews, the framework skipped its whole cleanup path — the
+server-side temp-file delete request, the progress-indicator reset, and the
+removal callback — with no signal at all, so orphaned temp files could pile up
+unnoticed. Such a removal now logs a diagnostic warning instead of doing nothing
+silently. A normal removal (at least one preview matched) is unchanged. This is
+**browser-bundled** — rebuild your bundles (re-bake) to pick it up.
+
+---
+
 ## 0.5.23 → 0.5.24
 
 ### Added — probe the upload write-error crash-guard with `simulateWriteError`

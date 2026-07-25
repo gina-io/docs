@@ -160,6 +160,48 @@ gina-container <bundle> @<project>
 
 ---
 
+## Liveness and readiness probes
+
+Every Gina bundle serves a built-in, ungated liveness endpoint on **both**
+engines — the Isaac engine and the default Express engine:
+
+```
+GET /_gina/health/check  →  200  {"status":"healthy","timestamp":"<ISO>"}
+```
+
+It exposes no process state, carries no admin allowlist, and answers
+off-loopback, so a kubelet or Docker probe reaches it directly. Wire it as a
+Kubernetes liveness probe:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /_gina/health/check
+    port: <bundle-port>
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+…or as a Docker `HEALTHCHECK`:
+
+```dockerfile
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
+  CMD curl -fsS http://127.0.0.1:<bundle-port>/_gina/health/check || exit 1
+```
+
+:::note Liveness vs. readiness
+`/_gina/health/check` returns `200` as soon as the HTTP server is listening — it
+is a **liveness** signal (the process is up), not a **readiness** signal (safe to
+route traffic). During the graceful drain window (the bundle keeps serving
+in-flight requests after `SIGTERM` — see the `gina-container` launcher above) the
+endpoint still returns `200`. A drain-aware **readiness** endpoint
+(`/_gina/health/ready`, returning `503` once draining begins) is a planned
+follow-up; until then, give the load balancer a `preStop` sleep so it stops
+routing before `SIGTERM`.
+:::
+
+---
+
 ## Base image
 
 The examples below use `node:22-slim`. For production, consider a pointer-compressed

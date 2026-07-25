@@ -936,6 +936,13 @@ var Controller = function() {
 module.exports = Controller;
 ```
 
+A datastore error — whether it rejects an `await` or reaches an `.onComplete()`
+callback — carries `err.isTransient` and `err.transientReason`, so you can
+answer a self-healing failure with a retry response instead of a generic 500.
+See [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
+This is specific to the model layer; the `self.query()` error shape documented
+above is a different contract and does not carry those fields.
+
 ### `await` with PathObject and Shell — `onCompleteCall()`
 
 PathObject file operations (`mkdir`, `cp`, `mv`, `rm`) and `Shell` commands fire

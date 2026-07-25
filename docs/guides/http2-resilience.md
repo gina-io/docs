@@ -166,3 +166,7 @@ Look for these patterns in your logs:
 
 The `/_gina/info` endpoint includes HTTP/2 session metrics (`activeSessions`,
 `goawayCount`, `rstCount`) for monitoring session pool health.
+
+Every `self.query()` call also forwards the request's correlation id as
+`x-request-id` (see [Request correlation](/guides/observability#request-correlation)),
+so a retried or fanned-out inter-bundle request stays traceable across bundles.

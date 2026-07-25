@@ -337,7 +337,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
-| `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. |
+| `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. **No framework default** (unlike `-reset-action`) — removing an already-saved file needs an application-specific endpoint Gina cannot supply, so the URL is required only when a delete is actually triggered, not at bind. Omitting the attribute is quiet at bind time. *Quiet-at-bind since 0.5.25.* |
 | `data-gina-form-upload-reset-trigger` / `-delete-trigger` | Id override for the reset/delete trigger element. |
 | `data-gina-form-upload-hidden-class` | Class name the add-affordance restore removes from the file input *and its parent* after a removal — set it when your markup hides the input with a CSS class instead of an inline style. *New in 0.5.15.* |
 | `data-gina-form-upload-is-locked` | When set on a generated hidden field, that field is kept even if its file is removed. |
@@ -399,8 +399,8 @@ indeterminate animation while the length is unknown); any other element gets the
 integer percentage as text. Every target also carries two attributes you can
 style against — `data-gina-upload-progress` (the percent, absent while
 indeterminate) and `data-gina-upload-progress-state` (`preparing`, `uploading`,
-`indeterminate`, `complete`, `error`). No wording is hardcoded: labels are
-yours, via CSS on the state attribute.
+`indeterminate`, `processing`, `complete`, `error`). No wording is hardcoded:
+labels are yours, via CSS on the state attribute.
 
 ```html
 <input
@@ -436,9 +436,23 @@ event on the virtual upload form, for code that holds the form instance.
 
 The indicator's lifecycle is managed end-to-end: `preparing` from the moment a
 file is selected (file reading and body assembly happen before the first network
-frame), `complete` fills the bar on success, a staging error empties it (state
-`error` — the error message renders in the `-error` element as usual), and
-removing a staged file (reset/delete) clears the indicator entirely.
+frame), `processing` once the browser has finished sending the bytes, `complete`
+fills the bar on success, a staging error empties it (state `error` — the error
+message renders in the `-error` element as usual), and removing a staged file
+(reset/delete) clears the indicator entirely.
+
+*The `processing` state is new in 0.5.25.* It covers the server post-processing
+window — the seconds a server can spend rendering a preview, transcoding or
+scanning after the last byte lands. It advances the state attribute **only**:
+value, max and `data-gina-upload-progress` are left untouched, so a determinate
+bar stays visually full (and an indeterminate one keeps animating) rather than
+appearing frozen. Style it like any other state:
+
+```css
+#avatar-progress[data-gina-upload-progress-state="processing"] {
+    opacity: .6;
+}
+```
 
 ## Drag-and-drop (dropzone)
 

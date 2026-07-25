@@ -72,6 +72,7 @@ The primary server settings file.
 | `keepAliveTimeout` | string | `"5s"` | Keep-alive socket timeout (e.g. `"5s"`, `"30s"`) |
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
+| `proxy.requireForwardedHeaders` | boolean | `false` | Opt-in deterministic reverse-proxy classification: when `true`, only requests carrying `X-Forwarded-Host` are classified as proxied — the port-less-Host heuristic is disabled, so internal service-DNS calls (health probes on app routes, mesh hops, sibling-bundle calls) can never rewrite the worker's proxy-host context. Enable only behind a front proxy that always sends `X-Forwarded-Host`. *New in 0.5.25* |
 
 ### `region`
 
@@ -143,11 +144,19 @@ Master switch for route-level response caching. Per-route `cache` fields in
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enable` | boolean | `false` | Master on/off switch |
-| `type` | `"memory"` \| `"fs"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
+| `type` | `"memory"` \| `"fs"` \| `"redis"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
+| `store` | string | — | Required when `type` is `"redis"` — names the [`connectors.json`](./connectors) entry holding the redis connection |
 | `path` | string | — | Directory for `fs`-type cached files |
 | `ttl` | number (seconds) | — | Default TTL when a route's `cache` config does not set one |
-| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding` |
+| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding`. Not supported with `redis` |
 | `maxAge` | number (seconds) | — | Bundle-wide absolute lifetime ceiling; routes inherit it when they omit `maxAge`. Only meaningful when `sliding` is `true` |
+| `maxEntries` | number | `1000` | Upper bound on entries held in the in-memory cache; the least recently used are evicted past it. A value of `0` or less is ignored and the default applies |
+
+Three `redis` rules are checked at boot and fail the bundle loudly rather than
+silently disabling the cache: `store` must be set, `sliding: true` is rejected
+(redis TTLs are absolute per key), and a redis-cached route needs either a `ttl`
+or `invalidateOnEvents` — a non-expiring L2 key would be orphaned permanently on
+a release-namespace rotation.
 
 See the [Caching guide](../guides/caching) for the full per-route field reference.
 
@@ -338,6 +347,33 @@ Those syntaxes are swig-core frontends selected through `settings.swig.package`
 (e.g. `"@rhinostone/swig-twig"`) with `render.engine` left at its `"swig"`
 default — see the [Templating overview](/templating) for the per-engine
 configuration.
+:::
+
+### `swig`
+
+Configures the Swig template engine. `settings.swig.package` selects the
+swig-core frontend (see the note above); `settings.swig.autoescape` controls
+HTML output escaping.
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `autoescape` | boolean | `false` | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. |
+
+:::warning Swig output is not auto-escaped by default in gina
+Unlike standalone `@rhinostone/swig` (which auto-escapes by default) and unlike
+Nunjucks in gina (`settings.nunjucks.autoescape` defaults to `true`), gina
+renders Swig variable output **raw** by default. Set
+`settings.swig.autoescape: true` to enable escaping, or escape explicitly with
+the `e` / `escape` filter. Never render untrusted input through Swig without one
+of these.
 :::
 
 ### `template`

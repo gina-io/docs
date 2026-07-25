@@ -401,6 +401,8 @@ Bundles running inside a Docker container write their pidfile inside the contain
 
 Generate an [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) specification from a bundle's `routing.json`. The spec is written to `<bundle>/config/openapi.json` by default.
 
+Since 0.5.25, the spec also carries the bundle's **authorization contract**: routes gated with [`requireAuth` / `roles` / `policy`](/guides/route-authorization) get a `401` response entry (plus a `403` when roles or a policy apply), and when [machine-caller auth](/guides/route-authorization#machine-callers) is configured the spec declares a `bearerAuth` security scheme (`http`/`bearer`) and marks each gated operation with `security: [{ "bearerAuth": [] }]`. Role and policy names are never emitted into the spec.
+
 ```bash
 gina bundle:openapi <bundle> @<project>
 ```
