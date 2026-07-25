@@ -191,6 +191,13 @@ HTTP/2 without TLS is available for internal services behind a TLS-terminating l
 
 h2c does not use ALPN. The client must explicitly request HTTP/2 (e.g. `--http2-prior-knowledge` with curl). It is not suitable for direct browser traffic.
 
+Since 0.5.26, a cleartext bundle outside the `local` scope announces itself at
+boot with a single warning. The h2c-behind-a-terminator topology is exactly what
+`settings.json > server.allowInsecure: true` acknowledges — set it and the
+warning becomes one info line. To instead enforce TLS at the bundle itself, set
+`server.requireHttps: true` (the cleartext bundle then refuses to start, before
+anything binds). See [Settings → server](/reference/settings#server).
+
 ### Connection settings
 
 The most common settings to tune, set in `settings.json`:

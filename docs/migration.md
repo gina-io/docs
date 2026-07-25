@@ -55,6 +55,23 @@ exemption. `gina bundle:openapi` follows the mode, so generated specifications
 stay accurate. Server-side only — pick it up at restart, no asset re-bake. See
 [Route authorization → Deny-by-default](/guides/route-authorization#deny-by-default).
 
+### Added — boot-time transport posture
+
+**No action required — but you may see one new boot line.** Outside the `local`
+scope, a bundle resolving a cleartext scheme (anything but `https`) now says so
+once at boot: a single warning naming the bundle, scheme and scope, plus the two
+ways to make the posture deliberate. If TLS terminates upstream of the bundle —
+a service mesh, an ingress or load balancer, a reverse proxy (the documented
+[h2c topology](/guides/https#h2c--cleartext-http2)) — acknowledge it with
+`settings.json > server.allowInsecure: true` and the warning becomes one info
+line. To enforce https at the bundle itself, set `server.requireHttps: true`: a
+cleartext bundle outside the `local` scope then refuses to start — before
+anything binds, so the cleartext port is never reachable. Both are strict
+booleans; a non-boolean value, or setting both, refuses to boot in every scope.
+An `https://` upstream declared in `proxy.json` is named in the warning but
+never silences it — only the explicit acknowledgment does. Server-side only —
+pick it up at restart, no asset re-bake.
+
 ### Fixed — Couchbase client-side query timeouts classify as transient
 
 **No action required.** On the Couchbase query path, a *client-side* driver
