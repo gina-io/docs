@@ -219,8 +219,13 @@ the startup line reports `bearer auth: enabled`.
 
 ### Security — the framework control plane now binds to loopback by default
 
-**Action required only if you reached the framework ports from another
-machine.** Everything on the local host keeps working with no change.
+**Action may be required even when everything runs on one host.** The question
+to ask is not "do I administer gina remotely?" — it is **"does anything dial the
+control plane at an address other than loopback?"** In a containerized
+deployment the answer is routinely yes even though the CLI and the daemon sit in
+the same container. See
+[Containerized deployments](#containerized-deployments-read-this-before-upgrading)
+below, which is the case most likely to break.
 
 The framework's two control-plane listeners — the command socket (`8124`, which
 receives every online `gina` command) and the MQ listener (`8125`, which serves
@@ -245,6 +250,77 @@ beyond the local host is now a deliberate opt-in — the same shape a bundle
 already uses for `--http-host`. If you relied on driving `gina` commands or
 tailing logs across machines, set `bind_host` explicitly on the host running the
 daemon, and restrict access to those ports at the network layer.
+
+#### Containerized deployments — read this before upgrading {#containerized-deployments-read-this-before-upgrading}
+
+The daemon binds `bind_host`; the CLI dials `host_v4`. Those are resolved
+independently, so whenever `host_v4` is not loopback the two no longer meet —
+**and the process that dials a non-loopback address is gina's own CLI, not a
+developer on another machine.**
+
+Container images commonly set `host_v4` to the container's own routable address
+(for example from `hostname -I`) so that siblings and tooling can reach the
+bundle. After upgrading, the daemon listens on `127.0.0.1:8124` while the
+co-located CLI dials `<host_v4>:8124`.
+
+**Symptom.** `bundle:start` aborts *before the HTTP server ever binds*, so the
+bundle has no listener at all and every route fails at the reverse proxy.
+Depending on the supervisor the container either restart-loops or reports
+healthy-but-unresponsive. Note that nothing in the output names `bind_host`, so
+the symptom does not point at its cause:
+
+```text
+[ gina ] not started, try to start framework with :
+$ sudo gina start
+[error][gina] [MQTail] Error: connect ECONNREFUSED <host_v4>:8125 - Gina might not be running, or host IP has changed.
+```
+
+**Check before upgrading.** Compare what the daemon binds against what the CLI
+dials:
+
+```bash
+# on the host/container running the daemon
+ss -lntp | grep -E '8124|8125'      # after upgrading: LISTEN 127.0.0.1:8124
+grep -E '"(host_v4|bind_host)"' <gina-home>/<short-version>/settings.json
+```
+
+If `host_v4` is anything other than `127.0.0.1`, the control plane will be
+unreachable after the upgrade.
+
+**Fix.** Set the bind address in the environment before starting the daemon:
+
+```bash
+GINA_BIND_HOST=0.0.0.0
+```
+
+Binding all interfaces is appropriate when the container's network namespace is
+your security boundary and `8124`/`8125` are not published to the host — that
+restores the previous reachability without exposing anything the host can reach.
+Bind the specific routable address instead if you need loopback to remain
+unserved.
+
+:::warning `gina framework:set --bind-host=` is not currently a working lever
+
+It writes the key to the home `settings.json`, but a subsequently started daemon
+still binds loopback. The cause is precedence: the bind address resolves as
+`GINA_BIND_HOST` **first** and the settings value only as a fallback, and the
+startup path seeds that environment variable itself — so the value you wrote can
+never win. Use `GINA_BIND_HOST` until this is fixed.
+
+:::
+
+:::warning Orchestrated rollouts — apply the environment change first
+
+Set `GINA_BIND_HOST` in a **separate, earlier change** than the version bump. If
+your deployment pins a gina version in one place and every replica converges on
+it at boot, moving the pin without the environment variable already in place
+fails every replica simultaneously. Apply the environment change, roll it out,
+verify, and only then move the version.
+
+:::
+
+**Not affected:** deployments where `host_v4` is already loopback, or where the
+control plane is never dialled from outside the daemon's own host and address.
 
 ### Security — a command over the framework socket resolves inside the shipped namespace
 
