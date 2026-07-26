@@ -19,6 +19,37 @@ upward to the target version.
 
 ---
 
+## 0.5.26 → 0.5.27
+
+### Fixed — co-located CLIs reach the control plane again (no action)
+
+0.5.26's loopback bind default had a dial-side regression: CLI-side clients
+(the command socket, the MQ log containers, and `gina tail`) dialled `host_v4`
+while the daemon binds `bind_host`, so any deployment whose `host_v4` was a
+non-loopback address of the same machine — the common containerized shape —
+could not reach its own daemon (`bundle:start` aborted;
+`[MQTail] Error: connect ECONNREFUSED <host_v4>:8125`). Clients now detect
+that `host_v4` names one of the machine's own interfaces and dial the bind
+address instead (loopback by default). A genuinely remote `host_v4` is dialled
+unchanged, so remote administration behaves exactly as before, and the bind
+side is untouched — nothing is newly exposed.
+
+If you applied the `GINA_BIND_HOST=0.0.0.0` workaround from the 0.5.26 notes
+purely to un-break co-located CLIs, you can remove it after upgrading and the
+control plane returns to loopback-only. Keep it only if something on another
+machine genuinely needs to reach `8124`/`8125`. The connection-refused error
+now also names the dial target and the `bind_host` setting, so a future
+mismatch points at its own cause.
+
+### Fixed — `gina framework:set --bind-host=` persists (no action)
+
+The value written to `settings.json` now survives both the settings
+regeneration that runs on every gina command and container bootstraps
+(`gina-init`), so setting the bind address via `framework:set` works as
+documented. `GINA_BIND_HOST` still takes precedence when set.
+
+---
+
 ## 0.5.25 → 0.5.26
 
 ### Added — deny-by-default authorization
@@ -299,13 +330,14 @@ restores the previous reachability without exposing anything the host can reach.
 Bind the specific routable address instead if you need loopback to remain
 unserved.
 
-:::warning `gina framework:set --bind-host=` is not currently a working lever
+:::warning `gina framework:set --bind-host=` does not persist on 0.5.26
 
-It writes the key to the home `settings.json`, but a subsequently started daemon
-still binds loopback. The cause is precedence: the bind address resolves as
-`GINA_BIND_HOST` **first** and the settings value only as a fallback, and the
-startup path seeds that environment variable itself — so the value you wrote can
-never win. Use `GINA_BIND_HOST` until this is fixed.
+It writes the key to the home `settings.json`, but the next gina command
+regenerates that file and reverts the value to its default — `bind_host` was
+the only connection setting whose persisted value did not survive the
+regeneration — and container bootstraps rewrite it as well. A subsequently
+started daemon therefore still binds loopback. This is fixed in 0.5.27 (the
+persisted value survives both paths); on 0.5.26 use `GINA_BIND_HOST`.
 
 :::
 
