@@ -183,6 +183,72 @@ connector store lands.
 
 ---
 
+## Tamper-evidence — the hash chain
+
+The JSONL trail records what happened, but on its own nothing stops someone with
+write access to the file from editing a line, deleting a record, or reordering
+history after the fact. Turn on the **tamper-evidence chain** and every record
+gains a `hash` that cryptographically chains it to its predecessor, so any such
+change becomes detectable.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "audit": {
+    "enabled": true,
+    "chain": {
+      "enabled": true,
+      "secret":  "${secret:MY_AUDIT_KEY}"
+    }
+  }
+}
+```
+
+Each record's hash is `HMAC-SHA256(secret, previousHash + canonicalRecord)`,
+written as 64-character hex. Because every hash folds in the one before it,
+editing, deleting, inserting, or reordering any record breaks the chain from that
+point on — and only someone holding the signing key could recompute a valid hash.
+Supply the key with `audit.chain.secret` (a literal or a `${secret:VAR}`
+placeholder) or the `GINA_AUDIT_SECRET` environment variable; a key shorter than
+32 characters boots with a warning. The chain is file-backend only.
+
+A crash mid-write leaves a torn final line; the next startup acknowledges it with
+a chained `audit.chain.break` record and a warning rather than refusing to boot,
+and the chain continues cleanly from there.
+
+:::caution What the chain does and does not protect against
+The chain proves the trail has not been altered **by anyone who does not hold the
+signing key**. It is deliberately **not** a defence against the process that
+writes the records: that process holds the key and could forge an entirely
+self-consistent chain. For that stronger adversary — a compromised application —
+stream the trail off the box to write-once storage (a WORM / Object-Lock bucket,
+via a log agent), as described in the [compliance guide](/guides/compliance). The
+two controls are complementary: the chain gives change-detection on the live
+file, WORM gives an unrewritable copy.
+
+Two boundaries the chain cannot cross: truncation at the exact tail is invisible
+(nothing after the last record commits to it — watch the record count), and an
+empty trail verifies trivially.
+:::
+
+### Verifying — `gina audit:verify`
+
+Check a trail's integrity offline, with no running bundle:
+
+```bash
+gina audit:verify <bundle> @<project>
+# OK — chain intact: 1042 chained record(s), 0 pre-chain record(s)
+```
+
+It recomputes every record's hash and reports either the intact totals or the
+first break with its line and reason. Exit codes: **0** intact, **1** broken,
+**2** a usage or configuration error (no trail file, no signing key). Pass
+`--env=<env>` to select a non-default environment's trail, `--file=</abs/path>`
+to verify an exact file, or `--format=json` for a machine-readable report. The
+signing key resolves from `audit.chain.secret` or `GINA_AUDIT_SECRET`, exactly as
+at boot. See the [`gina audit` CLI reference](/cli/cli-audit).
+
+---
+
 ## Automatic authorization denials — `authz.denied`
 
 When the trail is on, every [route-authorization](/guides/route-authorization)
@@ -231,6 +297,10 @@ than leaving a compliance control silently off:
 | `audit.store` and `audit.file` both set | Refuses to boot (mutually exclusive) |
 | `audit.store` set (no audit-store connector exists yet) | Refuses to boot |
 | The audit destination is unwritable at startup | Refuses to boot |
+| `audit.chain.enabled` true with no signing key (neither `secret` nor `GINA_AUDIT_SECRET`) | Refuses to boot |
+| `audit.chain` combined with `audit.store` (a connector store cannot guarantee ordered append) | Refuses to boot |
+| Two bundles chaining into the same `audit.file` (two writers fork a linear chain) | Refuses to boot |
+| `audit.chain.enabled` a non-boolean, or `audit.chain.secret` an empty string / unresolved `${...}` | Refuses to boot |
 | `action` passed to `self.audit()` is empty or not a string | Record dropped (counted + logged), never thrown |
 
 ---
@@ -238,6 +308,7 @@ than leaving a compliance control silently off:
 ## See also
 
 - [Route authorization](/guides/route-authorization) — the source of automatic `authz.denied` events
+- [`gina audit` CLI](/cli/cli-audit) — `gina audit:verify`, the offline tamper-evidence check
 - [Controllers](/guides/controller) — `self.audit()` and the other controller helpers
 - [Logging — per-request requestId](/guides/logging#per-request-requestid-and-durationms) — the correlation id the trail shares with JSON logs
 - [settings.json reference](/reference/settings#audit) — the full `audit` block schema

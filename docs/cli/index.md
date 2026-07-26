@@ -46,6 +46,7 @@ Run `gina --help` (or `gina -h`) for the top-level command reference, and
 | [`minion`](./minion.md) | List and reap a project's running bundle child-processes |
 | [`secrets`](./secrets.md) | Scan required `${secret:KEY}` placeholders and check they are set — read-only, never resolves a value |
 | [`i18n`](./i18n.md) | Translation-catalog coverage, seeding, and translator round-trip (PO / CSV / JSON) |
+| [`audit`](./audit.md) | Verify the tamper-evidence hash chain of a bundle's audit trail (`audit:verify`) |
 
 ## Online vs offline commands
 

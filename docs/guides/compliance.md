@@ -90,6 +90,7 @@ right of the framework remains yours.
 | **Authorization / RBAC** | Per-route `requireAuth` / `roles` / `policy` gate before the action runs; generic 403; boot-refusal on a silently-ungated route | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · HIPAA §164.312(a)(1) | ✅ 0.5.19 | [Route authorization](/guides/route-authorization) |
 | **Deny-by-default authorization** | Opt-in `auth.requireAuthByDefault` inverts the posture per bundle — an un-annotated route is gated, not open — with `param.public` as the audited exemption and boot-refusal on the shapes the mode makes unsafe | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · NIST SP 800-207 | ✅ 0.5.26 | [Route authorization](/guides/route-authorization#deny-by-default) |
 | **Audit trail** (record) | Append-only, user-attributed JSONL of who did what to which record when; auto-records authorization denials; own store, never the log sinks | PCI-DSS Req 10 (10.2) · SOC 2 CC7.2 · HIPAA §164.312(b) | ✅ 0.5.19 | [Audit trail](/guides/audit-trail) |
+| **Audit tamper-evidence** (change-detection) | Opt-in HMAC hash chain (`audit.chain`) — every record chains to its predecessor, so any edit, deletion, insertion, or reordering by anyone without the signing key is detectable; verified offline with `gina audit:verify`. Change-detection on the live file, complementary to streaming the trail to WORM storage (which covers a compromised writer) | PCI-DSS Req 10 (10.3.4 — change-detection) · SOC 2 CC7 · HIPAA §164.312(b) | ✅ 0.6.0 | [Audit trail](/guides/audit-trail#tamper-evidence--the-hash-chain) |
 | **Security headers** | CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP/COEP/CORP, and the rest of the header-plugin family; batteries-included or per-header. CSP in particular is a primary mechanism for PCI-DSS v4's payment-page script control | PCI-DSS Req 6 (6.4.3 via CSP) · SOC 2 CC6.6 | ✅ | [Security headers](/guides/security-headers) |
 | **CSRF protection** | Signed double-submit token + Origin/Referer pre-filter; per-route exemptions | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [CSRF](/guides/csrf) |
 | **Session cookie hardening** | `HttpOnly` (default on), `SameSite` (default `lax`), and a boot-time invariant rejecting `SameSite=None` without `Secure`; per-bundle expiry policy | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [Sessions](/guides/sessions) |
@@ -112,9 +113,15 @@ complementary halves:
   process*, off the request path, and is the recognized way to satisfy
   PCI-DSS v4.0.1's **10.3.3** — audit logs *"promptly backed up to a secure,
   central, internal log server(s) or other media that is difficult to modify."*
-- **Tamper-evidence — planned.** An HMAC hash chain plus `gina audit:verify`,
-  making an edited, deleted, or reordered record *detectable* — see the
-  roadmap row below.
+- **Tamper-evidence — available (`0.6.0`).** Opt in with `audit.chain` and every
+  record carries an HMAC hash chain, making an edited, deleted, inserted, or
+  reordered record *detectable* offline with `gina audit:verify`. This is
+  *change-detection* — PCI-DSS v4.0.1's **10.3.4** — the complement to the
+  isolation above: the chain catches tampering on the live file; WORM gives the
+  unrewritable copy. Because the signing key lives in the writing process, the
+  chain does **not** defend against a compromised application — that is exactly
+  what the WORM copy covers. See the
+  [audit-trail guide](/guides/audit-trail#tamper-evidence--the-hash-chain).
 :::
 
 ---
@@ -126,7 +133,6 @@ absent until the release notes say otherwise.**
 
 | Planned control | Will support | Status |
 |---|---|---|
-| **Audit tamper-evidence** — HMAC hash chain + `gina audit:verify` | PCI-DSS Req 10 (10.3.2, 10.3.4) · SOC 2 CC7 · HIPAA §164.312(b) | 📋 `0.6.x` |
 | **Authentication hardening** — password hashing/policy helpers, account lockout, MFA/TOTP hooks | PCI-DSS Req 8 (8.3.2 auth-factor storage · 8.3.4 lockout · 8.4 MFA) · HIPAA §164.312(d) | 📋 `0.6.x` |
 | **Session lifecycle hardening** — session-id rotation on privilege change, idle + absolute timeout | PCI-DSS Req 8 (8.2.8 idle timeout) | 📋 `0.6.x` |
 | **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA | 📋 `0.6.x` |

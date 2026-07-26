@@ -19,7 +19,33 @@ upward to the target version.
 
 ---
 
-## 0.5.26 → 0.5.27
+## 0.5.26 → 0.6.0
+
+### Added — audit tamper-evidence hash chain (opt-in)
+
+The audit trail can now carry a tamper-evidence HMAC hash chain. It is **opt-in
+and off by default**, so no action is required on upgrade. Enable it by adding a
+`chain` block with a signing key:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "audit": {
+    "enabled": true,
+    "chain": { "enabled": true, "secret": "${secret:MY_AUDIT_KEY}" }
+  }
+}
+```
+
+Every record then gains a `hash` that chains to its predecessor, and
+`gina audit:verify <bundle> @<project>` checks the chain offline — detecting any
+edited, deleted, inserted, or reordered record made by anyone without the signing
+key. This is *change-detection* (PCI-DSS v4.0.1 §10.3.4); for the stronger
+adversary of a compromised writer, keep streaming the trail to WORM storage. Once
+the chain is on, an unsafe configuration — two bundles pointed at the same
+`audit.file`, `audit.store` combined with `chain`, or the chain enabled with no
+signing key — **refuses to boot** rather than starting a chain that cannot be
+trusted. See the
+[audit-trail guide](/guides/audit-trail#tamper-evidence--the-hash-chain).
 
 ### Fixed — co-located CLIs reach the control plane again (no action)
 

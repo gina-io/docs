@@ -93,6 +93,7 @@ const config = {
           // frontmatter routes the canonical URL to `/cli/cli-<file>`; these entries
           // cover external references that assume filename-form. Paired with Cloudflare
           // Worker 301s (infra/cloudflare/worker.js § CLI_REDIRECTS). See gina-io/docs#11.
+          {from: '/cli/audit',     to: '/cli/cli-audit'},
           {from: '/cli/bundle',    to: '/cli/cli-bundle'},
           {from: '/cli/cache',     to: '/cli/cli-cache'},
           {from: '/cli/connector', to: '/cli/cli-connector'},
