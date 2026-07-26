@@ -74,6 +74,31 @@ regeneration that runs on every gina command and container bootstraps
 (`gina-init`), so setting the bind address via `framework:set` works as
 documented. `GINA_BIND_HOST` still takes precedence when set.
 
+### Fixed — Couchbase session `lastModified` is refreshed and UTC (no action)
+
+Only affects bundles using the Couchbase session store.
+
+The store's `touch()` carried an internal throttle that was documented as
+skipping the `lastModified` update for recently-touched sessions. It compared an
+elapsed value in milliseconds against a TTL in seconds, so it actually fired
+about a thousand times sooner than intended — and because `touch()` refreshes
+the document's expiry on *every* call regardless, the stamp fell out of step
+with the expiry it is supposed to describe. The throttle is gone: `lastModified`
+is now re-stamped on every touch, which keeps the client-side session countdown
+(`gina.session`) measuring from the right origin.
+
+Bundles on SDK 4 also get a format correction. `lastModified` was written as a
+zone-less local-time string (`2026-07-26T21:04:11`), which a browser re-parses
+in *its own* timezone — so the countdown skewed by the offset between server and
+visitor. It is now an ISO 8601 UTC string (`2026-07-26T20:04:11.000Z`), matching
+the redis, sqlite, mongodb and scylladb stores and the shape already shown in
+the [Couchbase guide](/guides/couchbase-orm#document-shape).
+
+No action is required. Sessions written before the upgrade keep their old stamp
+until their next `touch()`, at which point they pick up the new format; nothing
+reads the old value except the countdown, which self-corrects on that first
+touch.
+
 ---
 
 ## 0.5.25 → 0.5.26

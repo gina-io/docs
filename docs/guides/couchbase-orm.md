@@ -526,14 +526,15 @@ myapp.start();
 Couchbase documents carry their TTL in document metadata. Every `set()` writes
 the session with the resolved TTL, and the server reaps the document
 server-side once it elapses. `touch()` rewrites with the same body + fresh TTL,
-short-circuiting if `lastModified` was stamped recently enough to skip the
-rewrite (an internal throttle to avoid hot-row-style write amplification on
-every request).
+and re-stamps `lastModified` on every call. That stamp is the origin the
+client-side session countdown measures from, so it has to track each expiry
+extension — throttling it would freeze the countdown's starting point while the
+document itself kept being extended.
 
 | Express-session method | Couchbase operation |
 |---|---|
 | `set(sid, sess, fn)` | `cluster.upsert("<prefix><sid>", JSON.stringify(sess), { expiry: ttl })` |
-| `touch(sid, sess, fn)` | Same as `set`, with throttled `lastModified` updates |
+| `touch(sid, sess, fn)` | Same as `set` — rewrites the body, refreshes `expiry`, re-stamps `lastModified` |
 | `get(sid, fn)` | `cluster.get("<prefix><sid>")` (returns parsed session or `null` on key-not-found) |
 | `destroy(sid, fn)` | `cluster.remove("<prefix><sid>")` |
 
