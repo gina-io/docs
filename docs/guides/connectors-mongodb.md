@@ -461,7 +461,7 @@ compatibility.
 ### Bundle bootstrap
 
 The framework exposes a generic `SessionStore` factory on `gina.lib`. It reads
-`config/connectors.json`, looks up the entry whose key matches `session.name`,
+`config/connectors.json`, looks up the entry named `session`,
 and returns the connector-specific Store class — the same one-line wiring used
 for every other connector (Redis, SQLite, Couchbase, ScyllaDB).
 
@@ -471,8 +471,7 @@ var session      = require('express-session');
 var SessionStore = myapp.lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                        // key in connectors.json
-    var MongodbStore = new SessionStore(session);    // returns the MongodbStore class
+    var MongodbStore = new SessionStore(session);    // resolves the "session" entry → MongodbStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
@@ -488,8 +487,9 @@ myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
 
-`session.name` must match the key in `connectors.json` whose `connector` field
-is `"mongodb"` (above the entry is named `"session"`, so `session.name = 'session'`).
+The factory resolves the `connectors.json` entry named `session` — the name
+comes from `express-session`'s function name, which is read-only — and expects
+its `connector` field to be `"mongodb"`.
 No framework path or version string ever appears in user code — `require('gina')`
 and the `lib.SessionStore` factory shield bundles from version drift.
 

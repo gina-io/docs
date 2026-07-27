@@ -475,6 +475,9 @@ controller examples. Field reference below.
 
 Session store connectors back Gina's session layer. They do not expose an ORM and are
 not used directly by model entities. Choose one based on your deployment topology.
+The entry must be named `session` — the `SessionStore` factory resolves it from
+`express-session`'s function name, which is read-only (see the
+[Sessions guide](../guides/sessions#configuring-the-store)).
 
 ### Redis
 
@@ -502,7 +505,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "127.0.0.1",
     "port"     : 6379,
@@ -518,7 +521,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "cluster"  : [
       { "host": "node1.redis.internal", "port": 6379 },
@@ -568,7 +571,7 @@ server restart — ideal for local development.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector": "sqlite",
     "database" : ":memory:",
     "ttl"      : 86400
@@ -584,7 +587,7 @@ single-pod production where a shared Redis instance is not available.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector"      : "sqlite",
     "database"       : "/app/data/sessions.db",
     "ttl"            : 86400,

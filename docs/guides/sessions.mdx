@@ -102,6 +102,14 @@ decoupled from the cookie's.
 
 ## Configuring the store
 
+:::note The `connectors.json` entry must be named `session`
+The `SessionStore` factory resolves the connector entry from
+`express-session`'s function name — which is `session` and cannot be changed
+(`Function.name` is read-only; assigning to it is a silent no-op). Name the
+session entry `"session"` in every example below; any other key makes the
+factory throw at boot with `[SessionStore] Could not be loaded`.
+:::
+
 <Tabs groupId="session-store">
   <TabItem value="sqlite" label="SQLite — dev / staging / single-pod" default>
 
@@ -112,7 +120,7 @@ Requires Node.js ≥ 22.5.0.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector"      : "sqlite",
     "database"       : ":memory:",
     "ttl"            : 86400,
@@ -126,7 +134,7 @@ For a persistent file store (survives restarts):
 
 ```json
 {
-  "myDb": {
+  "session": {
     "connector": "sqlite",
     "database" : "/app/data/sessions.db",
     "ttl"      : 86400
@@ -151,8 +159,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'myDb';                      // key in connectors.json
-    var SqliteStore = new SessionStore(session); // returns the SqliteStore class
+    var SqliteStore = new SessionStore(session); // resolves the "session" entry → SqliteStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET || 'changeme'
@@ -175,7 +182,7 @@ Point dev at an in-memory store without touching `connectors.json`:
 
 ```json title="src/api/config/connectors.dev.json"
 {
-  "myDb": {
+  "session": {
     "database": ":memory:"
   }
 }
@@ -197,7 +204,7 @@ npm install ioredis
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "127.0.0.1",
     "port"     : 6379,
@@ -212,7 +219,7 @@ npm install ioredis
 
 ```json
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "cluster"  : [
       { "host": "node1.redis.internal", "port": 6379 },
@@ -229,7 +236,7 @@ npm install ioredis
 
 ```json
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "my-instance.upstash.io",
     "port"     : 6379,
@@ -261,8 +268,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'myRedis';                    // key in connectors.json
-    var RedisStore = new SessionStore(session);   // returns the RedisStore class
+    var RedisStore = new SessionStore(session);   // resolves the "session" entry → RedisStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET
@@ -288,7 +294,7 @@ Point dev at a local Redis without changing `connectors.json`:
 
 ```json title="src/api/config/connectors.dev.json"
 {
-  "myRedis": {
+  "session": {
     "host"    : "127.0.0.1",
     "port"    : 6379,
     "password": "",
@@ -464,8 +470,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                         // key in connectors.json
-    var ScylladbStore = new SessionStore(session);    // returns the ScylladbStore class
+    var ScylladbStore = new SessionStore(session);    // resolves the "session" entry → ScylladbStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
@@ -560,8 +565,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                        // key in connectors.json
-    var MongodbStore = new SessionStore(session);    // returns the MongodbStore class
+    var MongodbStore = new SessionStore(session);    // resolves the "session" entry → MongodbStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
