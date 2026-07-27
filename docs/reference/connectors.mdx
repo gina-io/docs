@@ -550,7 +550,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 | `password` | string | — | `AUTH` password. Supports `${ENV_VAR}` substitution |
 | `tls` | boolean | `false` | Enable TLS. Required for Upstash, ElastiCache, and Cloud Memorystore |
 | `cluster` | array | — | Cluster nodes `[{ host, port }, ...]`. When present, standalone `host` and `port` are ignored |
-| `ttl` | number | `86400` | Session TTL in seconds |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix in Redis |
 
 ---
@@ -606,7 +606,7 @@ single-pod production where a shared Redis instance is not available.
 |---|---|---|---|
 | `connector` | `"sqlite"` | — | Selects the SQLite connector |
 | `database` | string | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
-| `ttl` | number | `86400` | Session TTL in seconds |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
 | `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable |
 

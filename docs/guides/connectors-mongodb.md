@@ -456,7 +456,7 @@ compatibility.
 | Option | Default | Notes |
 |---|---|---|
 | `collection` | `"sessions"` | Collection name |
-| `ttl` | `86400` | Default expiry in seconds. Falls back to the cookie's `maxAge` (truncated to integer seconds) when set, then to a one-day floor |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds. Unset, the record follows the cookie's `maxAge` (truncated to integer seconds), with one day as the last resort |
 
 ### Bundle bootstrap
 
