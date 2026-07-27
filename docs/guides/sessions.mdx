@@ -89,6 +89,15 @@ For staging and production pick a persistent backend in
 | [ScyllaDB](#configuring-the-store) | Bundles already using ScyllaDB / Cassandra; CQL `USING TTL` per-row reaping |
 | [MongoDB](#configuring-the-store) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
 
+:::note Record TTL vs cookie `maxAge`
+Every store resolves a session record's lifetime the same way since 0.6.0: an
+explicitly configured `ttl` wins; with no `ttl` configured, the record follows
+the session cookie's `maxAge`; one day (`86400` seconds) is the last resort
+when the cookie has none either. The `ttl` values in the examples below are
+therefore optional — set one only when the record's lifetime should be
+decoupled from the cookie's.
+:::
+
 ---
 
 ## Configuring the store
@@ -129,7 +138,7 @@ For a persistent file store (survives restarts):
 |---|---|---|
 | `connector` | — | Must be `"sqlite"` |
 | `database` | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` |
-| `ttl` | `86400` | Session TTL in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix stored in the DB |
 | `cleanupInterval` | `900` | Seconds between expired-session purges. Set `0` to disable. |
 
@@ -240,7 +249,7 @@ npm install ioredis
 | `password` | — | Redis `AUTH` password |
 | `tls` | `false` | Enable TLS. Required for most managed providers. |
 | `cluster` | — | Array of `{ host, port }` nodes for Redis Cluster mode |
-| `ttl` | `86400` | Session TTL in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix in Redis |
 
 **2. Wire the store in `bundle/index.js`**
@@ -409,7 +418,7 @@ npm install cassandra-driver
 | `keyspace` | (required) | Falls back to `database` for parity with other connectors |
 | `table` | `"sessions"` | Sessions table name |
 | `credentials` | — | `{ username, password }` — wraps in `PlainTextAuthProvider` |
-| `ttl` | `86400` | Default session TTL in seconds. Stamped via CQL `USING TTL` |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default session TTL in seconds. Stamped via CQL `USING TTL` |
 
 **2. Create the sessions table** (the store does not auto-create)
 
@@ -514,7 +523,7 @@ Or decomposed form (self-hosted single node):
 | `authSource` | — | Auth database, when different from `database` |
 | `replicaSet` | — | Replica set name |
 | `ssl` | — | `true` to enable TLS, or an object passed through to the driver as `tlsOptions` |
-| `ttl` | `86400` | Default expiry in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
 
 **2. Wire the store in `bundle/index.js`**
 

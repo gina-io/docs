@@ -99,6 +99,27 @@ until their next `touch()`, at which point they pick up the new format; nothing
 reads the old value except the countdown, which self-corrects on that first
 touch.
 
+### Fixed — session records honour the cookie `maxAge` (review if you relied on the 24-hour cap)
+
+Affects the redis, sqlite, mongodb and scylladb session stores. The Couchbase
+stores already behaved this way.
+
+These stores used to fall back to a fixed one-day record TTL whenever no `ttl`
+was configured, ignoring the session cookie's `maxAge`: a 1-hour cookie left
+its record alive server-side for 24 hours, while a 7-day cookie was silently
+logged out after 24 hours. When neither the store options nor the
+connectors.json entry set a `ttl`, the record's lifetime now follows the
+cookie's `maxAge` (one day only when the cookie has none) — the same rule the
+Couchbase stores have always applied.
+
+Nothing changes for bundles that set `ttl` explicitly — an explicit value still
+wins over `maxAge`. If your bundle sets neither `ttl` nor a cookie `maxAge`,
+the default stays one day. But where your cookie `maxAge` and the old implicit
+24-hour cap disagreed, the record lifetime moves to match the cookie — in both
+directions: sessions with a longer cookie now genuinely last that long, and
+records for short-lived cookies stop lingering server-side after the cookie has
+expired. Set an explicit `ttl` if you were relying on the old cap.
+
 ---
 
 ## 0.5.25 → 0.5.26
