@@ -99,6 +99,23 @@ until their next `touch()`, at which point they pick up the new format; nothing
 reads the old value except the countdown, which self-corrects on that first
 touch.
 
+### Fixed — the Couchbase session store requires its open bucket (no action)
+
+Only affects bundles using the Couchbase session store.
+
+The store now requires `options.db` — the already-open bucket the model layer
+creates from your `session` connector entry, which you obtain with
+`getModel('session').getConnection()` — and fails fast with an actionable error
+when it is missing or is not a bucket. Previously a missing `db` fell through to
+a self-connect path that called the SDK v2 `openBucket()` API, absent from the
+supported v3 and v4 SDKs, so the bundle crashed at init with an opaque error
+instead. No working deployment is affected: the path that error replaces could
+not succeed on any supported SDK.
+
+The connection options that only fed that dead path — `host`, `hosts`,
+`username`, `password`, `bucket` and `cachefile` — were removed with it. If your
+bootstrap passes them they were already being ignored; drop them and pass `db`.
+
 ### Fixed — session records honour the cookie `maxAge` (review if you relied on the 24-hour cap)
 
 Affects the redis, sqlite, mongodb and scylladb session stores. The Couchbase
@@ -119,6 +136,18 @@ the default stays one day. But where your cookie `maxAge` and the old implicit
 directions: sessions with a longer cookie now genuinely last that long, and
 records for short-lived cookies stop lingering server-side after the cookie has
 expired. Set an explicit `ttl` if you were relying on the old cap.
+
+### Fixed — the SQLite session store no longer expires the session it refreshes (no action)
+
+Only affects bundles using the SQLite session store.
+
+`touch()` stamped `now + ttl` without first checking the resolved ttl. Because
+express-session's `cookie.maxAge` is a decaying remainder — it truncates to zero
+in a session's final second and turns negative once the cookie has expired — a
+session nearing its expiry had an already-past expiry written to it, ending it
+early. The store now performs no write and returns cleanly on a non-positive
+ttl, matching the redis, mongodb and scylladb stores which already guarded this.
+Sessions with a positive ttl are refreshed exactly as before.
 
 ### Security — `req.logout()` now destroys the session record
 
@@ -203,6 +232,44 @@ Two things are easy to get wrong, and both are the caller's responsibility:
 Gina still owns no user record, credential store, or login route — these are
 helpers, not an identity provider. See the
 [authentication guide](/guides/authentication) for the full login recipe.
+
+### Fixed — the `settings.json` schema describes the `audit` block (no action)
+
+Editor tooling only — runtime behaviour is unchanged, and the schemas are never
+enforced at boot.
+
+All five audit keys — `enabled`, `file`, `store`, `actorKey` and `events.authz`
+— were undeclared, so an editor offered no completion, no type checking and no
+description on hover, and a mistyped key or a wrong type surfaced only as a boot
+refusal at the next restart. The declaration mirrors the boot lint rather than
+merely permitting the keys: `enabled` and `events.authz` are strictly boolean (a
+truthy string such as `"true"` would leave the trail silently off), `file` and
+`store` are non-empty strings and mutually exclusive, and unknown keys are
+rejected — so an editor now flags the same shapes the boot would refuse.
+
+### Fixed — the `settings.json` schema describes the `session` block (no action)
+
+Editor tooling only — runtime behaviour is unchanged.
+
+The three consumed keys — `session.cookie.sameSite`, `session.cookie.httpOnly`
+and `session.cookie.secure` — were undeclared, so a documented configuration
+surface offered no completion, no type checking and no hover description. The
+declaration mirrors the plugin's own factory-time validation (`sameSite` one of
+`lax` / `strict` / `none`, `httpOnly` boolean, `secure` `true`, `false` or
+`"auto"`) and rejects unread keys — putting `maxAge` or a store `ttl` under
+`settings.json > session` has never had any effect, and an editor now says so.
+
+### Fixed — the `connectors.json` schema no longer mislabels `ttl` and `prefix` (no action)
+
+Editor tooling only — runtime behaviour is unchanged.
+
+Both keys were labelled "Redis only", steering you away from keys that do work:
+`ttl` is read by the Redis, SQLite, MongoDB and ScyllaDB stores, and `prefix` by
+Redis and SQLite. The `ttl` entry also still advertised a default of `86400`,
+which stopped being true when an unset ttl began deferring to the cookie's
+`maxAge` (above). That stale default is gone, and both descriptions now name the
+stores that read them — plus the Couchbase stores, which take these as
+constructor options instead.
 
 ---
 
@@ -492,7 +559,7 @@ It writes the key to the home `settings.json`, but the next gina command
 regenerates that file and reverts the value to its default — `bind_host` was
 the only connection setting whose persisted value did not survive the
 regeneration — and container bootstraps rewrite it as well. A subsequently
-started daemon therefore still binds loopback. This is fixed in 0.5.27 (the
+started daemon therefore still binds loopback. This is fixed in 0.6.0 (the
 persisted value survives both paths); on 0.5.26 use `GINA_BIND_HOST`.
 
 :::
