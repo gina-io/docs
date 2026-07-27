@@ -370,27 +370,27 @@ path.
 
 ### Verification and replay defence
 
-`verifyTotp(token, secret[, options])` returns `{ valid, delta }` and checks
+`verifyTotp(token, secret[, options])` returns `{ valid, counter }` and checks
 the current step plus `window` steps either side (default `1`, so ±30 seconds
 of clock drift), comparing in constant time.
 
-**`delta` is the absolute step counter that matched** — not an offset — and it
-is how you stop replay:
+**`counter` is the absolute step counter that matched** — an index, not an
+offset from now — and it is how you stop replay:
 
 ```js
 var res = authn.verifyTotp(req.post.code, user.totpSecret);
-if (!res.valid)                     { return deny(); }
-if (res.delta <= user.totpLastStep) { return deny(); }   // replayed
-user.totpLastStep = res.delta;
+if (!res.valid)                          { return deny(); }
+if (res.counter <= user.totpLastCounter) { return deny(); }   // replayed
+user.totpLastCounter = res.counter;
 user.save();
 ```
 
 :::warning Replay defence is yours, and it is not optional
-Without the `delta` check a code stays valid for its whole acceptance window,
-so anyone who observes one — over your shoulder, in a phishing proxy, in a log
-— can reuse it. The RFC assigns this to the verifier, and Gina cannot do it:
-it has no place to write. Persist the accepted step per user and require the
-next one to be **strictly greater**.
+Without the `counter` check a code stays valid for its whole acceptance
+window, so anyone who observes one — over your shoulder, in a phishing proxy,
+in a log — can reuse it. The RFC assigns this to the verifier, and Gina cannot
+do it: it has no place to write. Persist the accepted counter per user and
+require the next one to be **strictly greater**.
 :::
 
 Widening `window` linearly widens the interval an observed code stays usable,

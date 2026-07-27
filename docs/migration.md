@@ -196,9 +196,9 @@ Two things are easy to get wrong, and both are the caller's responsibility:
   *more* than the known one — inverting the user-enumeration oracle it exists
   to close (measured at 13.9× the wrong way). Handle its
   `AUTHN_QUEUE_FULL` error exactly as you handle `verifyPassword`'s.
-- **TOTP replay defence is yours.** `verifyTotp` returns the matched step as
-  `delta`; persist it per user and refuse anything not strictly greater, or an
-  observed code stays usable for its whole acceptance window.
+- **TOTP replay defence is yours.** `verifyTotp` returns the matched step as an
+  absolute `counter`; persist it per user and refuse anything not strictly
+  greater, or an observed code stays usable for its whole acceptance window.
 
 Gina still owns no user record, credential store, or login route — these are
 helpers, not an identity provider. See the
