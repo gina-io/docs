@@ -87,6 +87,7 @@ right of the framework remains yours.
 
 | Control | What it gives you | Supports | Status | Guide |
 |---|---|---|---|---|
+| **Authentication hardening** | scrypt password hashing with the cost encoded in the hash (plus argon2/bcrypt *verification* for migrating stores), `needsRehash` upgrade-on-login, length-first policy checks, a constant-time verify whose account-not-found branch is enumeration-safe, account lockout defaulting to 10 attempts / 30 minutes, and RFC 6238 TOTP. Gina supplies the primitives, not the identity store | PCI-DSS Req 8 (8.3.2 — authentication-factor storage · 8.3.4 — lockout thresholds · 8.4 — MFA building block) · SOC 2 CC6.1 · HIPAA §164.312(d) | ✅ 0.6.0 | [Authentication](/guides/authentication) |
 | **Authorization / RBAC** | Per-route `requireAuth` / `roles` / `policy` gate before the action runs; generic 403; boot-refusal on a silently-ungated route | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · HIPAA §164.312(a)(1) | ✅ 0.5.19 | [Route authorization](/guides/route-authorization) |
 | **Deny-by-default authorization** | Opt-in `auth.requireAuthByDefault` inverts the posture per bundle — an un-annotated route is gated, not open — with `param.public` as the audited exemption and boot-refusal on the shapes the mode makes unsafe | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · NIST SP 800-207 | ✅ 0.5.26 | [Route authorization](/guides/route-authorization#deny-by-default) |
 | **Audit trail** (record) | Append-only, user-attributed JSONL of who did what to which record when; auto-records authorization denials; own store, never the log sinks | PCI-DSS Req 10 (10.2) · SOC 2 CC7.2 · HIPAA §164.312(b) | ✅ 0.5.19 | [Audit trail](/guides/audit-trail) |
@@ -94,6 +95,7 @@ right of the framework remains yours.
 | **Security headers** | CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP/COEP/CORP, and the rest of the header-plugin family; batteries-included or per-header. CSP in particular is a primary mechanism for PCI-DSS v4's payment-page script control | PCI-DSS Req 6 (6.4.3 via CSP) · SOC 2 CC6.6 | ✅ | [Security headers](/guides/security-headers) |
 | **CSRF protection** | Signed double-submit token + Origin/Referer pre-filter; per-route exemptions | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [CSRF](/guides/csrf) |
 | **Session cookie hardening** | `HttpOnly` (default on), `SameSite` (default `lax`), and a boot-time invariant rejecting `SameSite=None` without `Secure`; per-bundle expiry policy | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [Sessions](/guides/sessions) |
+| **Session lifecycle hardening** | `req.login()` rotates the session id before binding the user, destroying the pre-login record — the session-fixation defense. Opt-in `absoluteTimeout` caps an authenticated session's total life measured from login, regardless of activity. Idle expiry composes from the cookie `maxAge` and the store record's TTL, both rolling with activity — **you set the window** (PCI-DSS asks for 15 minutes) and add `rolling: true` | PCI-DSS Req 6 (6.2.4 — session fixation, an attack on an access-control mechanism) · Req 8 (8.2.8 — idle re-authentication, once you set the window) · SOC 2 CC6.1 | ✅ 0.6.0 | [Sessions](/guides/sessions#session-lifetime) |
 | **Secrets resolver** | `${secret:KEY}` placeholders keep credentials out of config and source; fail-closed on an unset key. Values are read from the environment — the standard delivery channel for cloud secret managers and KMS-backed stores | PCI-DSS Req 8 (8.6.2 — no hard-coded credentials) · SOC 2 CC6.1 | ✅ | [Secrets](/guides/secrets) |
 | **Output escaping** | **Nunjucks bundles auto-escape variable output by default.** Swig bundles render variable output raw by default; enable auto-escaping per bundle with `settings.swig.autoescape: true` (`0.5.25`+), or escape explicitly with the `e` / `escape` filter | PCI-DSS Req 6 (6.2.4 — XSS) | ✅ Nunjucks · opt-in for Swig (`settings.swig.autoescape`) | [Templating](/templating) |
 | **Parameterized queries** | Connector query APIs bind parameters — the primary injection defense | PCI-DSS Req 6 (6.2.4 — injection) | ✅ | [Connectors](/reference/connectors) |
@@ -133,8 +135,6 @@ absent until the release notes say otherwise.**
 
 | Planned control | Will support | Status |
 |---|---|---|
-| **Authentication hardening** — password hashing/policy helpers, account lockout, MFA/TOTP hooks | PCI-DSS Req 8 (8.3.2 auth-factor storage · 8.3.4 lockout · 8.4 MFA) · HIPAA §164.312(d) | 📋 `0.6.x` |
-| **Session lifecycle hardening** — session-id rotation on privilege change, idle + absolute timeout | PCI-DSS Req 8 (8.2.8 idle timeout) | 📋 `0.6.x` |
 | **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA | 📋 `0.6.x` |
 | **Application-level rate limiting** — per-endpoint / per-client throttling at the route layer | PCI-DSS (anti-automation) · SOC 2 (Availability) | 📋 `0.6.x` |
 | **Data-at-rest / field-level encryption helpers** — field encryption + key-management utilities | PCI-DSS Req 3 (3.5) · HIPAA §164.312(a)(2)(iv) | 📋 `0.6.x` |
@@ -142,9 +142,6 @@ absent until the release notes say otherwise.**
 :::tip Interim guidance while the planned controls ship
 A planned row is not a blocker — each has an established interim pattern:
 
-- **Password hashing** — until the authentication-hardening helpers ship, hash
-  credentials in your bundle with a maintained library (**argon2** or
-  **bcrypt**) — never a homegrown scheme, and never a plain digest.
 - **Audit-log integrity** — use the isolation pattern above (agent-shipped
   JSONL to an immutable store); it is an accepted control on its own.
 - **Keys & encryption** — deliver secrets from your KMS / secret manager
@@ -196,9 +193,10 @@ Services Criteria as a whole, and the auditor's examination of your controls
 over a period, are organizational.
 
 **HIPAA** — Gina supplies technical-safeguard building blocks under
-**§164.312**: access control (a)(1), audit controls (b), and — once shipped —
-authentication (d) and encryption (a)(2)(iv). Administrative and physical
-safeguards, the risk analysis, and BAAs are outside any framework.
+**§164.312**: access control (a)(1), audit controls (b), person-or-entity
+authentication (d), and — once shipped — encryption (a)(2)(iv).
+Administrative and physical safeguards, the risk analysis, and BAAs are
+outside any framework.
 
 ---
 

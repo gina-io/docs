@@ -163,6 +163,47 @@ naturally-expired record. Idle expiry is unchanged and composes with it (the
 cookie `maxAge` and store TTL keep rolling with activity). Declared in the
 published settings.json schema.
 
+### Added — authentication primitives (`lib.authn`)
+
+**No action required — new surface, nothing existing changes.** Reach it with
+`require('gina').lib.authn`. It introduces **no `settings.json` keys**: every
+option is passed at the call site.
+
+- **Passwords** — `hashPassword` mints scrypt hashes as self-describing PHC
+  strings (`$scrypt$ln=17,r=8,p=1$<salt>$<key>`), so the cost travels with the
+  hash and can be raised later without a flag day. `verifyPassword` compares in
+  constant time, `needsRehash` flags stored hashes below current policy, and
+  `validatePasswordPolicy` checks length first per NIST SP 800-63B.
+- **Migrating an existing store** — `verifyPassword` also verifies `$argon2*$`
+  and `$2a/2b/2y$` (bcrypt) hashes through your own project's `argon2` /
+  `bcrypt` package, so a bundle arriving with credentials already hashed keeps
+  working. Pair it with `needsRehash` to re-hash on the next successful login
+  and the store migrates itself with no password resets.
+- **Account lockout** — `createLockout()` counts consecutive credential
+  failures per account key, defaulting to PCI-DSS v4.0.1 §8.3.4 (10 attempts,
+  30 minutes). Pass `normalizeKey` when the key comes from a form, or case
+  variants of an email each get their own counter; pass a shared `store` for
+  multi-replica correctness. Crossing the threshold writes one `auth.lockout`
+  audit record.
+- **TOTP** — `generateTotpSecret`, `otpauthURL`, `generateTotp` and
+  `verifyTotp` implement RFC 6238 for a second factor.
+
+Two things are easy to get wrong, and both are the caller's responsibility:
+
+- **`dummyVerify` needs a cost.** On the account-not-found branch, always pass
+  `{ like: <a stored hash> }`. With no stored hash to read from it runs at the
+  shipped defaults, so against cheaper hashes the unknown-account branch costs
+  *more* than the known one — inverting the user-enumeration oracle it exists
+  to close (measured at 13.9× the wrong way). Handle its
+  `AUTHN_QUEUE_FULL` error exactly as you handle `verifyPassword`'s.
+- **TOTP replay defence is yours.** `verifyTotp` returns the matched step as
+  `delta`; persist it per user and refuse anything not strictly greater, or an
+  observed code stays usable for its whole acceptance window.
+
+Gina still owns no user record, credential store, or login route — these are
+helpers, not an identity provider. See the
+[authentication guide](/guides/authentication) for the full login recipe.
+
 ---
 
 ## 0.5.25 → 0.5.26
