@@ -85,7 +85,7 @@ For staging and production pick a persistent backend in
 | In-memory (default) | Local development only |
 | [SQLite](#configuring-the-store) | Dev, staging, single-pod production |
 | [Redis](#configuring-the-store) | Multi-pod / K8s horizontal scaling |
-| [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v2 / v3 / v4 auto-selected |
+| [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v3 / v4 auto-selected |
 | [ScyllaDB](#configuring-the-store) | Bundles already using ScyllaDB / Cassandra; CQL `USING TTL` per-row reaping |
 | [MongoDB](#configuring-the-store) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
 
@@ -300,10 +300,12 @@ Point dev at a local Redis without changing `connectors.json`:
   </TabItem>
   <TabItem value="couchbase" label="Couchbase — when Couchbase is already the primary store">
 
-Uses the same connector that powers the Couchbase ORM. Couchbase has native
+Uses the same connector that powers the Couchbase ORM — literally: the model
+layer opens the bucket from your `session` connector entry at boot, and you
+hand that already-open handle to the store as `db`. Couchbase has native
 per-document expiry — the `expiry` argument on `upsert` makes the server reap
 the document automatically. No TTL index, no sweeper job. The dispatcher
-auto-selects v2 / v3 / v4 SDK based on the project's `couchbase` pin.
+auto-selects the v3 / v4 SDK based on the project's `couchbase` pin.
 
 ```bash
 npm install couchbase
@@ -316,8 +318,8 @@ npm install couchbase
   "session": {
     "connector": "couchbase",
     "protocol":  "couchbase://",
-    "host":      "127.0.0.1:8091",
-    "bucket":    "sessions",
+    "host":      "127.0.0.1",
+    "database":  "sessions",
     "username":  "appuser",
     "password":  "${COUCHBASE_PASSWORD}"
   }
@@ -327,28 +329,39 @@ npm install couchbase
 For Capella / Couchbase Cloud, switch to `protocol: "couchbases://"` and pass
 the cluster hostname.
 
+These fields configure the **model-layer connection** — the same fields as any
+Couchbase connector entry (see the
+[Connectors reference](/reference/connectors)). The session store itself reads
+none of them; it receives the open bucket through its constructor (step 2).
+
 | Field | Default | Description |
 |---|---|---|
 | `connector` | — | Must be `"couchbase"` |
 | `protocol` | `"couchbase://"` | `couchbases://` for TLS |
-| `host` | — | One or more `host:port` entries (`;`-separated string or array) |
-| `bucket` | — | Bucket dedicated to sessions (recommended) |
+| `host` | — | Cluster hostname(s), comma-separated for multi-node |
+| `database` | — | Bucket dedicated to sessions (recommended). Couchbase's bucket name — the reference field is `database`, not `bucket` |
 | `username` | — | RBAC user |
 | `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
 
-:::note `ttl` and `prefix` are constructor options here, not `connectors.json` fields
-Unlike the SQLite, Redis, MongoDB and ScyllaDB stores — which read `ttl` (and,
-for SQLite and Redis, `prefix`) straight from `connectors.json` — the Couchbase
-stores read both from the options object you pass to the constructor. A `ttl` or
-`prefix` key placed in `connectors.json` under a Couchbase connector is silently
-ignored.
+:::note The Couchbase store is configured through its constructor, not `connectors.json`
+Unlike the SQLite, Redis, MongoDB and ScyllaDB stores — which configure
+themselves from `connectors.json` — the Couchbase store takes everything from
+the options object you pass to the constructor, including the connection
+itself: `db` **is required** and must be the already-open bucket the model
+layer created from the entry above. A `ttl` or `prefix` key placed in
+`connectors.json` under a Couchbase connector is silently ignored.
 
 ```js
-store: new CouchbaseStore({ ttl: 86400, prefix: 'sess:' })
+store: new CouchbaseStore({
+    db: getModel('session').getConnection(),   // the open bucket — required
+    ttl: 86400,
+    prefix: 'sess:'
+})
 ```
 
 | Option | Default | Description |
 |---|---|---|
+| `db` | — (**required**) | The open Couchbase bucket for the `session` entry: `getModel('session').getConnection()` |
 | `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
 | `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the doc key |
 :::
@@ -362,14 +375,15 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                          // key in connectors.json
-    var CouchbaseStore = new SessionStore(session);    // returns the CouchbaseStore class
+    var CouchbaseStore = new SessionStore(session);    // resolves the "session" entry → CouchbaseStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
         resave           : false,
         saveUninitialized: false,
-        store            : new CouchbaseStore(),
+        store            : new CouchbaseStore({
+            db: getModel('session').getConnection()    // open bucket, created by the model layer at boot
+        }),
         cookie           : { secure: true, maxAge: 86400000 }
     }));
 
@@ -380,11 +394,10 @@ myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
 
-:::note SDK v2 deprecated since 0.2.0
-The dispatcher still selects v2 when the project pins `couchbase@^2.x`, but new
-bundles should pin v3 or v4. v2 reached upstream end-of-life in 2021 and emits
-a deprecation warning at connection time. v4 is recommended for any greenfield
-bundle.
+:::note SDK v2 was removed in gina 0.4.0
+The dispatcher selects v3 or v4 from the project's `couchbase` pin and refuses
+a `couchbase@^2` (or older) pin with an upgrade message — v2 reached upstream
+end-of-life in 2021. v4 is recommended for any greenfield bundle.
 :::
 
 :::caution `length()`, `clear()`, `all()` not implemented

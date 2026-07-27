@@ -428,15 +428,21 @@ The Couchbase connector is configured in `connectors.json`:
 ```json
 {
   "couchbase": {
-    "type": "couchbase",
-    "host": "couchbase://localhost",
-    "bucket": "myBucket",
-    "username": "admin",
-    "password": "password",
-    "scope": "local"
+    "connector": "couchbase",
+    "protocol":  "couchbase://",
+    "host":      "localhost",
+    "database":  "myBucket",
+    "username":  "admin",
+    "password":  "password",
+    "scope":     "local"
   }
 }
 ```
+
+The connector is selected by the `connector` field, and the bucket name is the
+`database` field — the same field names every connector entry uses (see the
+[Connectors reference](/reference/connectors)). The SDK connection string is
+built as `protocol + host`, so `host` carries no scheme.
 
 The `scope` field sets the default `$scope` value for all queries through this
 connector. It can be overridden per environment in `env.json`.
@@ -450,43 +456,67 @@ has native per-document expiry — the `expiry` argument on `upsert` tells the
 server to delete the document automatically when its TTL elapses. There is no
 separate TTL index or sweeper job.
 
-Three implementations live alongside the ORM connector at
-`core/connectors/couchbase/lib/session-store.v{2,3,4}.js`. The dispatcher at
+Two implementations live alongside the ORM connector at
+`core/connectors/couchbase/lib/session-store.v{3,4}.js`. The dispatcher at
 `session-store.js` reads the project's `couchbase` SDK version pin from
-`package.json` and selects the matching variant automatically — `v2` (legacy
-callbacks), `v3` (Promise + bucket API), or `v4` (Promise + cluster /
-collection API). v2 has been deprecated since `0.2.0` and emits a deprecation warning at
-connection time; new bundles should pin v3 or v4.
+`package.json` and selects the matching variant automatically — `v3`
+(Promise + bucket API) or `v4` (Promise + cluster / collection API). SDK v2
+support was removed in gina `0.4.0`: the dispatcher refuses a `couchbase@^2`
+(or older) pin with an upgrade message.
 
 ### Configuration
 
+The Couchbase store is configured differently from the SQLite / Redis /
+MongoDB / ScyllaDB stores, which configure themselves from `connectors.json`.
+Here the connector entry configures the **model layer**, which opens the
+bucket at boot — and the store receives that already-open handle through its
+constructor's `db` option. The `connectors.json` entry and the constructor
+each own half of the picture:
+
+```mermaid
+flowchart LR
+    CJ["connectors.json<br/>&quot;session&quot; entry"] -->|"boot: model layer<br/>opens cluster + bucket"| B["Open bucket<br/>getModel('session').getConnection()"]
+    B -->|"options.db"| ST["CouchbaseStore<br/>db.defaultCollection()"]
+    ST --> DOCS["Session documents<br/>&lt;prefix&gt;&lt;sid&gt;, server-side expiry"]
+```
+
 A bundle can use the same Couchbase cluster for both ORM and sessions, or
-declare a separate connector entry. The store reads from the entry whose key
-matches `session.name`:
+declare a separate connector entry (recommended — a dedicated bucket separates
+the session lifecycle from primary data). The factory resolves the entry named
+`session`:
 
 ```json title="src/api/config/connectors.json"
 {
   "session": {
     "connector": "couchbase",
     "protocol":  "couchbase://",
-    "host":      "127.0.0.1:8091",
-    "bucket":    "sessions",
+    "host":      "127.0.0.1",
+    "database":  "sessions",
     "username":  "appuser",
-    "password":  "${COUCHBASE_PASSWORD}",
-    "ttl":       86400,
-    "prefix":    "sess:"
+    "password":  "${COUCHBASE_PASSWORD}"
   }
 }
 ```
 
-| Option | Default | Notes |
+**Connection fields — read by the model layer, not the store** (the same
+fields as any Couchbase connector entry):
+
+| Field | Default | Notes |
 |---|---|---|
 | `connector` | (required) | Must be `"couchbase"` |
 | `protocol` | `"couchbase://"` | `couchbases://` for TLS (Capella, Couchbase Cloud) |
-| `host` | — | One or more `host:port` entries; `;`-separated string or array |
-| `bucket` | — | Bucket dedicated to sessions (recommended — separates session lifecycle from primary data) |
+| `host` | — | Cluster hostname(s), comma-separated for multi-node |
+| `database` | — | Bucket name (the reference field is `database`, not `bucket`) |
 | `username` | — | Bucket / RBAC user |
 | `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+
+**Store options — passed to the `CouchbaseStore` constructor.** A `ttl` or
+`prefix` key placed in the `connectors.json` entry is silently ignored — the
+store reads nothing from that file:
+
+| Option | Default | Notes |
+|---|---|---|
+| `db` | — (**required**) | The open bucket for the `session` entry: `getModel('session').getConnection()` |
 | `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds. Stamped into each document via Couchbase's `expiry` argument |
 | `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the document key |
 | `operationTimeout` | `10000` | Per-operation timeout in ms |
@@ -496,7 +526,7 @@ matches `session.name`:
 
 The same `lib.SessionStore` factory used for every other connector resolves to
 the right `CouchbaseStore` class — no version path, no explicit
-SDK-variant import:
+SDK-variant import. Pass the model layer's open bucket as `db`:
 
 ```javascript
 var myapp        = require('gina');
@@ -504,14 +534,15 @@ var session      = require('express-session');
 var SessionStore = myapp.lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                          // key in connectors.json
-    var CouchbaseStore = new SessionStore(session);    // returns the CouchbaseStore class
+    var CouchbaseStore = new SessionStore(session);    // resolves the "session" entry → CouchbaseStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
         resave           : false,
         saveUninitialized: false,
-        store            : new CouchbaseStore()
+        store            : new CouchbaseStore({
+            db: getModel('session').getConnection()    // open bucket, created by the model layer at boot
+        })
     }));
 
     event.emit('complete', app);
@@ -533,10 +564,13 @@ document itself kept being extended.
 
 | Express-session method | Couchbase operation |
 |---|---|
-| `set(sid, sess, fn)` | `cluster.upsert("<prefix><sid>", JSON.stringify(sess), { expiry: ttl })` |
+| `set(sid, sess, fn)` | `collection.upsert("<prefix><sid>", JSON.stringify(sess), { expiry: ttl })` |
 | `touch(sid, sess, fn)` | Same as `set` — rewrites the body, refreshes `expiry`, re-stamps `lastModified` |
-| `get(sid, fn)` | `cluster.get("<prefix><sid>")` (returns parsed session or `null` on key-not-found) |
-| `destroy(sid, fn)` | `cluster.remove("<prefix><sid>")` |
+| `get(sid, fn)` | `collection.get("<prefix><sid>")` (returns parsed session or `null` on key-not-found) |
+| `destroy(sid, fn)` | `collection.remove("<prefix><sid>")` |
+
+The operations run on the bucket's default collection — the store calls
+`db.defaultCollection()` on the bucket you pass in.
 
 ### Document shape
 
