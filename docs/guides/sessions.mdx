@@ -600,8 +600,7 @@ this.login = function(req, res, next) {
     // Validate credentials ...
     var user = { id: 42, name: 'Martin', role: 'admin' };
 
-    req.session.user = user;
-    req.session.save(function(err) {
+    req.login(user, function(err) {
         if (err) return self.throwError(res, 500, err);
         self.renderJSON({ ok: true });
     });
@@ -621,6 +620,41 @@ this.profile = function(req, res, next) {
     self.renderJSON({ user: req.session.user });
 };
 ```
+
+### `req.login(user, done)`
+
+Since 0.6.0 the framework's own `req.login()` works without Passport, and it
+**rotates the session id before binding the user** — the session-fixation
+defense. In order it: regenerates the session (destroying the pre-login
+record, so an id planted or leaked before authentication is dead the moment
+authentication succeeds), binds the principal at `req.session.user` (what the
+[route authorization](/guides/route-authorization) gate reads), stamps the
+absolute-timeout anchor, persists, then fires the **required** callback:
+
+```js
+req.login(user, function(err) {
+    if (err) return self.throwError(res, 500, err);
+    // rotated + bound + persisted — safe to respond
+});
+```
+
+Worth knowing:
+
+- **Anything in the pre-login session is gone after `req.login()`** — that is
+  the point of rotation. To carry a value across (a cart, a return-to URL),
+  read it before the call and re-set it inside the callback.
+- **CSRF tokens survive** — they are derived from the current session id, and
+  the next response re-issues automatically after the id changes.
+- **Role elevation**: re-call `req.login()` with the elevated user — a
+  privilege change deserves the same rotation as a login.
+- **Before 0.6.0** the shim threw `passport.initialize() middleware not in
+  use` without Passport — on older versions call
+  `req.session.regenerate()` yourself, then bind and save inside its callback.
+- **Passport bundles** — when Passport is initialized, `req.login()` is
+  Passport's own (the framework shim never installs); Passport ≥ 0.6 performs
+  its own regenerate.
+- If the session provider exposes no `regenerate()`, the user is bound
+  without rotation and a warning says the fixation defense is unavailable.
 
 ### `req.logout([done])`
 
@@ -674,6 +708,71 @@ afterwards, snapshot it into `req.session.haltedRequest` with the controller's
 
 ---
 
+## Session lifetime — idle vs absolute {#session-lifetime}
+
+Two different clocks bound a session's life, and they answer different
+threats:
+
+- **Idle timeout** — "log me out after N minutes of inactivity". This already
+  exists and *rolls with activity*: the cookie's `maxAge` bounds the browser
+  side (add `rolling: true` to refresh it on every response), and the store
+  record's TTL follows the cookie `maxAge` and is refreshed on every request.
+  An untouched session dies after one idle window on both sides.
+- **Absolute timeout** — "no session lives longer than N hours, active or
+  not". Rolling idle alone lets a session that keeps making requests — or a
+  stolen session id an attacker keeps warm — live forever. The absolute cap
+  closes that, and is what PCI-DSS-style re-authentication requirements ask
+  for.
+
+```mermaid
+flowchart LR
+    A[login\nreq.login rotates the sid\nand stamps the anchor] --> B[active session]
+    B -- request --> B
+    B -- "idle > cookie maxAge" --> C[idle expiry\ncookie + record die]
+    B -- "age since login > absoluteTimeout" --> D[absolute expiry\nrecord destroyed,\nnext request is anonymous]
+```
+
+Enable the absolute cap on the Session plugin (milliseconds — it lives beside
+`cookie.maxAge`, which uses the same unit):
+
+```js title="src/api/index.js"
+app.use(session({
+    secret            : process.env.SESSION_SECRET,
+    resave            : false,
+    saveUninitialized : false,
+    rolling           : true,
+    cookie            : { secure: true, maxAge: 900000 },  // 15 min idle
+    absoluteTimeout   : 28800000                           // 8 h hard cap
+}));
+```
+
+Or set a deployment-wide default in `settings.json` — bundle code always
+wins, and `absoluteTimeout: false` in bundle code disables the default:
+
+```json title="src/api/config/settings.json"
+{
+  "session": {
+    "absoluteTimeout": 28800000
+  }
+}
+```
+
+How it behaves:
+
+- The clock starts at **login** — `req.login()` stamps an anchor on the fresh
+  session at rotation. A session where you bound the user by hand is anchored
+  on its next request instead (one request late).
+- Anonymous sessions are never touched: no anchor is written, so
+  `saveUninitialized: false` keeps meaning what it says.
+- An over-age session is destroyed **on its next request**, which then
+  proceeds with a fresh anonymous session — exactly what a naturally-expired
+  record looks like, so protected routes 401/redirect through the same paths
+  they already have. There is no timer sweeping sessions in the background.
+- Fail-closed: if the record cannot be destroyed (store error), the
+  authentication is dropped for the request anyway.
+
+---
+
 ## Cookie options
 
 | Option | Recommended (prod) | Notes |
@@ -720,6 +819,7 @@ factory, passport integration — all identical.
 ```json title="src/api/config/settings.json"
 {
   "session": {
+    "absoluteTimeout": 28800000,
     "cookie": {
       "sameSite": "lax",
       "httpOnly": true,
@@ -734,6 +834,7 @@ factory, passport integration — all identical.
 | `sameSite` | `"lax"` | `"strict"` blocks cross-origin navigation (breaks email-link logins). `"none"` permits cross-site sending and **requires** `secure: true`. |
 | `httpOnly` | `true` | Override to `false` only if a validator or toolbar has to read `document.cookie`. |
 | `secure`   | `"auto"` | express-session's idiom for "mirror the request security flag" — typically paired with `app.set('trust proxy', 1)`. |
+| `absoluteTimeout` | *(none)* | Opt-in [absolute session cap](#session-lifetime) in ms since login. Bundle code wins; `absoluteTimeout: false` in bundle code disables the default. |
 
 ### Bundle choices always win
 

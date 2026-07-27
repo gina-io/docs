@@ -136,6 +136,33 @@ don't want the dead id resent by the browser. Passport bundles are unaffected
 — the shim never installs when Passport is initialized, and Passport ≥ 0.6
 already destroys the record via its own `regenerate()`.
 
+### Added — `req.login()` rotates the session id (gina-native bundles)
+
+**No action required, one behaviour change to know.** `req.login(user, done)`
+now works without Passport: it regenerates the session id BEFORE binding the
+user — the session-fixation defense — then binds at `req.session.user`, stamps
+the absolute-timeout anchor, persists, and fires the required callback.
+Previously the native path threw `passport.initialize() middleware not in
+use`, so no working code can have depended on it. If you bind the user by
+hand today (`req.session.user = user`), that keeps working — but switching to
+`req.login()` is one line shorter and closes session fixation. Anything
+stored in the pre-login session is destroyed by the rotation: read it before
+the call and re-set it in the callback if you need it to survive. CSRF tokens
+re-issue themselves on the next response. Passport bundles are unaffected —
+Passport's own `req.login` still wins.
+
+### Added — opt-in absolute session timeout
+
+**No action required — opt-in, off by default.** `session({ absoluteTimeout:
+<ms> })` on the Session plugin — or `settings.json > session.absoluteTimeout`
+as the deployment default, bundle code winning (`absoluteTimeout: false`
+disables it) — caps an authenticated session's total lifetime measured from
+login, regardless of activity. An over-age session is destroyed on its next
+request, which proceeds anonymously — indistinguishable from a
+naturally-expired record. Idle expiry is unchanged and composes with it (the
+cookie `maxAge` and store TTL keep rolling with activity). Declared in the
+published settings.json schema.
+
 ---
 
 ## 0.5.25 → 0.5.26
