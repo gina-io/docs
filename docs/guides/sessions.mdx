@@ -319,9 +319,7 @@ npm install couchbase
     "host":      "127.0.0.1:8091",
     "bucket":    "sessions",
     "username":  "appuser",
-    "password":  "${COUCHBASE_PASSWORD}",
-    "ttl":       86400,
-    "prefix":    "sess:"
+    "password":  "${COUCHBASE_PASSWORD}"
   }
 }
 ```
@@ -337,8 +335,23 @@ the cluster hostname.
 | `bucket` | — | Bucket dedicated to sessions (recommended) |
 | `username` | — | RBAC user |
 | `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+
+:::note `ttl` and `prefix` are constructor options here, not `connectors.json` fields
+Unlike the SQLite, Redis, MongoDB and ScyllaDB stores — which read `ttl` (and,
+for SQLite and Redis, `prefix`) straight from `connectors.json` — the Couchbase
+stores read both from the options object you pass to the constructor. A `ttl` or
+`prefix` key placed in `connectors.json` under a Couchbase connector is silently
+ignored.
+
+```js
+store: new CouchbaseStore({ ttl: 86400, prefix: 'sess:' })
+```
+
+| Option | Default | Description |
+|---|---|---|
 | `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
 | `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the doc key |
+:::
 
 **2. Wire the store in `bundle/index.js`**
 
