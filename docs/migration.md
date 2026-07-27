@@ -120,6 +120,22 @@ directions: sessions with a longer cookie now genuinely last that long, and
 records for short-lived cookies stop lingering server-side after the cookie has
 expired. Set an explicit `ttl` if you were relying on the old cap.
 
+### Security — `req.logout()` now destroys the session record
+
+The gina-native `logout()` shim used to only set `req.session.user = null`:
+the request de-authenticated, but the store record, the session id and every
+other session key (cart, flash data, …) stayed alive in the store until TTL —
+a leaked session id remained valid server-side long after logout. It now also
+destroys the session record (through the session's own `destroy()` when
+present) and accepts an optional callback: `req.logout(function(err) { … })`.
+
+Review any logout flow that relied on other session keys surviving logout —
+after the upgrade the whole record is gone. The session cookie is unchanged
+(its name is not discoverable by the framework): expire it yourself if you
+don't want the dead id resent by the browser. Passport bundles are unaffected
+— the shim never installs when Passport is initialized, and Passport ≥ 0.6
+already destroys the record via its own `regenerate()`.
+
 ---
 
 ## 0.5.25 → 0.5.26

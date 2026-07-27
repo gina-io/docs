@@ -609,6 +609,35 @@ this.profile = function(req, res, next) {
 };
 ```
 
+### `req.logout([done])`
+
+Since 0.6.0 the framework's own `req.logout()` does the full job — it clears
+`req.session.user` AND destroys the persisted record, so it is equivalent to
+the explicit `req.session.destroy()` form above:
+
+```js
+this.logout = function(req, res, next) {
+    req.logout(function(err) {
+        if (err) return self.throwError(res, 500, err);
+        self.renderJSON({ ok: true });
+    });
+};
+```
+
+The callback is optional. Before 0.6.0, `req.logout()` only cleared
+`req.session.user` — the record, the session id and every other session key
+stayed alive in the store until TTL — so prefer the explicit
+`req.session.destroy()` form on older versions. Two things stay yours to
+handle either way:
+
+- **The cookie** — the framework cannot discover the session cookie's name.
+  If you don't want the browser resending the now-dead id, expire the cookie
+  yourself when responding (a `Set-Cookie` for your session-cookie name with
+  an expiry in the past).
+- **Passport bundles** — when Passport is initialized, `req.logout()` is
+  Passport's own (the framework shim never installs); record destruction
+  comes from Passport's `regenerate()` flow.
+
 :::tip Session user vs req.user
 Gina stores the authenticated user at `req.session.user`, not `req.user`.
 Middleware that references `req.user` (Passport.js, etc.) will need a small
