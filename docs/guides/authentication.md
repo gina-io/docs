@@ -334,9 +334,9 @@ the other**:
 | Stops | One account, many passwords | Many accounts, one source |
 
 Gina ships lockout. Application-level request-rate limiting is a separate
-[roadmap](/roadmap) item — until it lands, put throttling in front of the login
-route at your ingress, WAF, or reverse proxy. Do not read "lockout is enabled"
-as "the endpoint is throttled".
+[roadmap](/roadmap) item, deferred until a consumer asks for it — put
+throttling in front of the login route at your ingress, WAF, or reverse proxy.
+Do not read "lockout is enabled" as "the endpoint is throttled".
 
 ### The audit record
 

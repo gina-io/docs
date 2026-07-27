@@ -70,8 +70,10 @@ right of the framework remains yours.
 ## How to read the tables
 
 - ✅ **Available** — shipped and usable today (release noted where it matters).
-- 📋 **Planned** — on the [roadmap](/roadmap) under Security & Compliance
-  Controls; **do not rely on it as a control until it ships.**
+- ⏸ **Deferred** — scoped and measured on the [roadmap](/roadmap) under
+  Security & Compliance Controls, and built **when a consumer asks for it**
+  rather than against a release date. Not a control you have — every deferred
+  row names the interim pattern to use instead.
 - References are **version-pinned**: PCI-DSS cites use the **v4.0.1**
   numbering (the current edition), SOC 2 cites use the **2017 Trust Services
   Criteria (Revised Points of Focus, 2022)**, and HIPAA cites are regulatory —
@@ -128,27 +130,20 @@ complementary halves:
 
 ---
 
-## Controls on the roadmap (not yet available)
+## Deferred controls (built on request)
 
-These are scoped on the [roadmap](/roadmap) targeting `0.6.x`. **Treat them as
-absent until the release notes say otherwise.**
+Three controls are scoped and measured on the [roadmap](/roadmap) but
+**deliberately deferred**: they get built when a consumer asks for them, not
+against a release date. Treat them as absent — and use the interim pattern,
+which in each case is an established control in its own right, not a stopgap.
+If you need the real thing, say so on
+[the tracker](https://github.com/gina-io/gina/issues).
 
-| Planned control | Will support | Status |
+| Deferred control | Would support | Interim pattern — use this today |
 |---|---|---|
-| **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA | 📋 `0.6.x` |
-| **Application-level rate limiting** — per-endpoint / per-client throttling at the route layer | PCI-DSS (anti-automation) · SOC 2 (Availability) | 📋 `0.6.x` |
-| **Data-at-rest / field-level encryption helpers** — field encryption + key-management utilities | PCI-DSS Req 3 (3.5) · HIPAA §164.312(a)(2)(iv) | 📋 `0.6.x` |
-
-:::tip Interim guidance while the planned controls ship
-A planned row is not a blocker — each has an established interim pattern:
-
-- **Audit-log integrity** — use the isolation pattern above (agent-shipped
-  JSONL to an immutable store); it is an accepted control on its own.
-- **Keys & encryption** — deliver secrets from your KMS / secret manager
-  through the environment (the `${secret:KEY}` resolver reads it); perform
-  field-level encryption with your platform's KMS SDK until the framework
-  helpers ship. HSM/KMS *infrastructure* remains yours in every scenario.
-:::
+| ⏸ **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA | Keep credentials and personal identifiers **out of query strings** — the always-on access log records full request URLs. Headers, bodies, and cookies are not logged on any always-on path |
+| ⏸ **Application-level rate limiting** — per-endpoint / per-client throttling at the route layer | PCI-DSS (anti-automation) · SOC 2 (Availability) | Throttle at your reverse proxy, ingress, or WAF. Distinct from [account lockout](/guides/authentication#lockout-is-not-rate-limiting), which ships today and brakes credential failures per **account**, not requests per client |
+| ⏸ **Data-at-rest / field-level encryption helpers** — field encryption + key-management utilities | PCI-DSS Req 3 (3.5) · HIPAA §164.312(a)(2)(iv) | Encrypt at the application layer with your platform's KMS SDK, delivering key material through the environment — the [`${secret:KEY}` resolver](/guides/secrets) reads it there. HSM/KMS *infrastructure* remains yours in every scenario |
 
 ---
 
@@ -183,8 +178,9 @@ process controls an assessor evaluates alongside your application:
 control (Req 7), audit logging (Req 10), secure development practices (Req 6),
 credential hygiene (Req 8), and transport security (Req 4). It does **not**
 address cardholder-data environment scoping, network segmentation, stored
-cardholder-data controls beyond the planned encryption helpers, or the QSA
-assessment — the bulk of the standard.
+cardholder-data controls (the field-level encryption helpers are deferred —
+encrypt with your platform's KMS SDK), or the QSA assessment — the bulk of the
+standard.
 
 **SOC 2** — Gina supports Common Criteria controls, mostly under **CC6**
 (logical access: authorization, sessions, secrets, transport) and **CC7**
@@ -193,19 +189,21 @@ Services Criteria as a whole, and the auditor's examination of your controls
 over a period, are organizational.
 
 **HIPAA** — Gina supplies technical-safeguard building blocks under
-**§164.312**: access control (a)(1), audit controls (b), person-or-entity
-authentication (d), and — once shipped — encryption (a)(2)(iv).
-Administrative and physical safeguards, the risk analysis, and BAAs are
-outside any framework.
+**§164.312**: access control (a)(1), audit controls (b), and person-or-entity
+authentication (d). Encryption (a)(2)(iv) stays with your platform's KMS SDK —
+the field-level helpers are deferred, built on request. Administrative and
+physical safeguards, the risk analysis, and BAAs are outside any framework.
 
 ---
 
 ## Status
 
-This is a **living reference**. As Security & Compliance Controls ship, their
-rows move from *planned* to *available* here and on the
-[roadmap](/roadmap). ✅ marks what you can use today; 📋 marks what is scoped but
-not yet built. If a control you need is 📋, it is not a control you have.
+This is a **living reference**. ✅ marks what you can use today; ⏸ marks what
+is scoped and measured but deliberately deferred — built when a consumer asks,
+never promised for a date. A deferred control is not a control you have: use
+its interim pattern, and if you need the real thing,
+[ask for it](https://github.com/gina-io/gina/issues) — demand is exactly the
+signal that un-defers a row here and on the [roadmap](/roadmap).
 
 For a deployment-shaped view of the same boundary — which of these controls the
 framework enforces, and which your mesh, ingress, and network policy have to
