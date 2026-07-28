@@ -148,7 +148,7 @@ Drivers are resolved from the framework's `peerDependencies` declared in `packag
 | `postgresql` | `pg` | `>=8.0.0` |
 | `mongodb` | `mongodb` | `>=5.0.0` |
 | `scylladb` | `@scylladb/scylla-driver` | `>=1.0.0` |
-| `sqlite` | *(built-in: `node:sqlite`)* | Node ≥ 22.5.0 |
+| `sqlite` | *(built-in: `node:sqlite`; `bun:sqlite` under Bun)* | Node ≥ 22.5.0 (Bun ≥ 1.2 from gina 0.6.1) |
 | `ai` | Resolved from `entry.protocol` | See below |
 
 The `ai` connector resolves its driver from `entry.protocol`:

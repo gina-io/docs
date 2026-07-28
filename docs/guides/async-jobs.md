@@ -206,7 +206,7 @@ By default job records live in memory: a bundle restart forgets them, and a clie
 }
 ```
 
-`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into Node.js (`node:sqlite`), so there is nothing to install. Records are readable by any process that opens the same file.
+`file` is the SQLite file path; omit it for a per-bundle default under the gina home directory. SQLite support is built into the runtime — `node:sqlite` on Node.js, `bun:sqlite` under Bun (*from 0.6.1*) — so there is nothing to install. Records are readable by any process that opens the same file.
 
 :::warning Use `file` for the path — not `database`
 Every `connectors.json` entry is also visible to the model layer at boot, which treats `database` as a database *name* (resolved under the gina home directory) — a filesystem path there fails the boot. Keep paths in `file`.

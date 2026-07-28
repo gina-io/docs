@@ -19,6 +19,14 @@ upward to the target version.
 
 ---
 
+## 0.6.0 → 0.6.1
+
+### Added — SQLite works under the Bun runtime
+
+The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly. The MongoDB connector remains unavailable under Bun (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
+
+---
+
 ## 0.5.26 → 0.6.0
 
 ### Action required — settings reset (shortVersion bump)

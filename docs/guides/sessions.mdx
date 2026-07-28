@@ -114,7 +114,8 @@ factory throw at boot with `[SessionStore] Could not be loaded`.
   <TabItem value="sqlite" label="SQLite — dev / staging / single-pod" default>
 
 Uses the Node.js built-in `node:sqlite` module. **Zero npm dependencies.**
-Requires Node.js ≥ 22.5.0.
+Requires Node.js ≥ 22.5.0 — or [Bun](https://bun.sh) ≥ 1.2, where the built-in
+`bun:sqlite` is used automatically (*new in 0.6.1*).
 
 **1. Configure `connectors.json`**
 
