@@ -223,6 +223,7 @@ export default {
     // docusaurus.config.js as a fallback for direct-to-Vercel access.
     // Tracked at https://github.com/gina-io/docs/issues/11.
     const CLI_REDIRECTS = {
+      '/docs/cli/audit':     '/docs/cli/cli-audit',
       '/docs/cli/bundle':    '/docs/cli/cli-bundle',
       '/docs/cli/cache':     '/docs/cli/cli-cache',
       '/docs/cli/connector': '/docs/cli/cli-connector',

@@ -19,6 +19,291 @@ upward to the target version.
 
 ---
 
+## 0.5.26 → 0.6.0
+
+### Action required — settings reset (shortVersion bump)
+
+`0.6.0` is a **shortVersion bump** (`0.5` → `0.6`). On install, the framework
+creates a fresh `~/.gina/0.6/settings.json` from defaults — your
+`~/.gina/0.5/settings.json` customizations (log level, port, culture, timezone,
+etc.) are **not** carried forward. This is intentional: the per-version settings
+schema can change between short versions.
+
+After upgrading, re-apply your customizations with `gina framework:set`, or copy
+the values across from `~/.gina/0.5/settings.json`. Root-level state
+(`~/.gina/main.json`, `projects.json`, `ports.json`, `gina.db`) is shared across
+short versions and is unaffected — only the per-version `settings.json` resets.
+
+### Added — audit tamper-evidence hash chain (opt-in)
+
+The audit trail can now carry a tamper-evidence HMAC hash chain. It is **opt-in
+and off by default**, so no action is required on upgrade. Enable it by adding a
+`chain` block with a signing key:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "audit": {
+    "enabled": true,
+    "chain": { "enabled": true, "secret": "${secret:MY_AUDIT_KEY}" }
+  }
+}
+```
+
+Every record then gains a `hash` that chains to its predecessor, and
+`gina audit:verify <bundle> @<project>` checks the chain offline — detecting any
+edited, deleted, inserted, or reordered record made by anyone without the signing
+key. This is *change-detection* (PCI-DSS v4.0.1 §10.3.4); for the stronger
+adversary of a compromised writer, keep streaming the trail to WORM storage. Once
+the chain is on, an unsafe configuration — two bundles pointed at the same
+`audit.file`, `audit.store` combined with `chain`, or the chain enabled with no
+signing key — **refuses to boot** rather than starting a chain that cannot be
+trusted. See the
+[audit-trail guide](/guides/audit-trail#tamper-evidence--the-hash-chain).
+
+### Fixed — co-located CLIs reach the control plane again (no action)
+
+0.5.26's loopback bind default had a dial-side regression: CLI-side clients
+(the command socket, the MQ log containers, and `gina tail`) dialled `host_v4`
+while the daemon binds `bind_host`, so any deployment whose `host_v4` was a
+non-loopback address of the same machine — the common containerized shape —
+could not reach its own daemon (`bundle:start` aborted;
+`[MQTail] Error: connect ECONNREFUSED <host_v4>:8125`). Clients now detect
+that `host_v4` names one of the machine's own interfaces and dial the bind
+address instead (loopback by default). A genuinely remote `host_v4` is dialled
+unchanged, so remote administration behaves exactly as before, and the bind
+side is untouched — nothing is newly exposed.
+
+If you applied the `GINA_BIND_HOST=0.0.0.0` workaround from the 0.5.26 notes
+purely to un-break co-located CLIs, you can remove it after upgrading and the
+control plane returns to loopback-only. Keep it only if something on another
+machine genuinely needs to reach `8124`/`8125`. The connection-refused error
+now also names the dial target and the `bind_host` setting, so a future
+mismatch points at its own cause.
+
+### Fixed — `gina framework:set --bind-host=` persists (no action)
+
+The value written to `settings.json` now survives both the settings
+regeneration that runs on every gina command and container bootstraps
+(`gina-init`), so setting the bind address via `framework:set` works as
+documented. `GINA_BIND_HOST` still takes precedence when set.
+
+### Fixed — Couchbase session `lastModified` is refreshed and UTC (no action)
+
+Only affects bundles using the Couchbase session store.
+
+The store's `touch()` carried an internal throttle that was documented as
+skipping the `lastModified` update for recently-touched sessions. It compared an
+elapsed value in milliseconds against a TTL in seconds, so it actually fired
+about a thousand times sooner than intended — and because `touch()` refreshes
+the document's expiry on *every* call regardless, the stamp fell out of step
+with the expiry it is supposed to describe. The throttle is gone: `lastModified`
+is now re-stamped on every touch, which keeps the client-side session countdown
+(`gina.session`) measuring from the right origin.
+
+Bundles on SDK 4 also get a format correction. `lastModified` was written as a
+zone-less local-time string (`2026-07-26T21:04:11`), which a browser re-parses
+in *its own* timezone — so the countdown skewed by the offset between server and
+visitor. It is now an ISO 8601 UTC string (`2026-07-26T20:04:11.000Z`), matching
+the redis, sqlite, mongodb and scylladb stores and the shape already shown in
+the [Couchbase guide](/guides/couchbase-orm#document-shape).
+
+No action is required. Sessions written before the upgrade keep their old stamp
+until their next `touch()`, at which point they pick up the new format; nothing
+reads the old value except the countdown, which self-corrects on that first
+touch.
+
+### Fixed — the Couchbase session store requires its open bucket (no action)
+
+Only affects bundles using the Couchbase session store.
+
+The store now requires `options.db` — the already-open bucket the model layer
+creates from your `session` connector entry, which you obtain with
+`getModel('session').getConnection()` — and fails fast with an actionable error
+when it is missing or is not a bucket. Previously a missing `db` fell through to
+a self-connect path that called the SDK v2 `openBucket()` API, absent from the
+supported v3 and v4 SDKs, so the bundle crashed at init with an opaque error
+instead. No working deployment is affected: the path that error replaces could
+not succeed on any supported SDK.
+
+The connection options that only fed that dead path — `host`, `hosts`,
+`username`, `password`, `bucket` and `cachefile` — were removed with it. If your
+bootstrap passes them they were already being ignored; drop them and pass `db`.
+
+### Fixed — session records honour the cookie `maxAge` (review if you relied on the 24-hour cap)
+
+Affects the redis, sqlite, mongodb and scylladb session stores. The Couchbase
+stores already behaved this way.
+
+These stores used to fall back to a fixed one-day record TTL whenever no `ttl`
+was configured, ignoring the session cookie's `maxAge`: a 1-hour cookie left
+its record alive server-side for 24 hours, while a 7-day cookie was silently
+logged out after 24 hours. When neither the store options nor the
+connectors.json entry set a `ttl`, the record's lifetime now follows the
+cookie's `maxAge` (one day only when the cookie has none) — the same rule the
+Couchbase stores have always applied.
+
+Nothing changes for bundles that set `ttl` explicitly — an explicit value still
+wins over `maxAge`. If your bundle sets neither `ttl` nor a cookie `maxAge`,
+the default stays one day. But where your cookie `maxAge` and the old implicit
+24-hour cap disagreed, the record lifetime moves to match the cookie — in both
+directions: sessions with a longer cookie now genuinely last that long, and
+records for short-lived cookies stop lingering server-side after the cookie has
+expired. Set an explicit `ttl` if you were relying on the old cap.
+
+### Fixed — the SQLite session store no longer expires the session it refreshes (no action)
+
+Only affects bundles using the SQLite session store.
+
+`touch()` stamped `now + ttl` without first checking the resolved ttl. Because
+express-session's `cookie.maxAge` is a decaying remainder — it truncates to zero
+in a session's final second and turns negative once the cookie has expired — a
+session nearing its expiry had an already-past expiry written to it, ending it
+early. The store now performs no write and returns cleanly on a non-positive
+ttl, matching the redis, mongodb and scylladb stores which already guarded this.
+Sessions with a positive ttl are refreshed exactly as before.
+
+### Fixed — `getRoute()` no longer crashes without a resolvable proxy hostname (no action)
+
+Server-side only. When a proxied context was active but no proxy hostname could
+be resolved — both the worker-wide global and the per-render `envConf` fallback
+unset, each a state the framework itself can legitimately produce — every
+`getRoute()` call threw
+`TypeError: Cannot read properties of null (reading 'replace')`, taking down any
+render or readiness probe that resolved a route.
+
+The route now degrades to its direct hostname, and `route.isProxyHost` flips
+false so `toUrl()` cannot stringify the unset value into the emitted URL. A
+once-per-process warning names the degraded state, so a recurrence is visible in
+the bundle log rather than silent. The `url` template filters hold `getRoute()`'s
+own resolution, so their per-request override can never replace a usable value
+with an unset one.
+
+Restart your bundles to pick it up.
+
+### Security — `req.logout()` now destroys the session record
+
+The gina-native `logout()` shim used to only set `req.session.user = null`:
+the request de-authenticated, but the store record, the session id and every
+other session key (cart, flash data, …) stayed alive in the store until TTL —
+a leaked session id remained valid server-side long after logout. It now also
+destroys the session record (through the session's own `destroy()` when
+present) and accepts an optional callback: `req.logout(function(err) { … })`.
+
+Review any logout flow that relied on other session keys surviving logout —
+after the upgrade the whole record is gone. The session cookie is unchanged
+(its name is not discoverable by the framework): expire it yourself if you
+don't want the dead id resent by the browser. Passport bundles are unaffected
+— the shim never installs when Passport is initialized, and Passport ≥ 0.6
+already destroys the record via its own `regenerate()`.
+
+### Added — `req.login()` rotates the session id (gina-native bundles)
+
+**No action required, one behaviour change to know.** `req.login(user, done)`
+now works without Passport: it regenerates the session id BEFORE binding the
+user — the session-fixation defense — then binds at `req.session.user`, stamps
+the absolute-timeout anchor, persists, and fires the required callback.
+Previously the native path threw `passport.initialize() middleware not in
+use`, so no working code can have depended on it. If you bind the user by
+hand today (`req.session.user = user`), that keeps working — but switching to
+`req.login()` is one line shorter and closes session fixation. Anything
+stored in the pre-login session is destroyed by the rotation: read it before
+the call and re-set it in the callback if you need it to survive. CSRF tokens
+re-issue themselves on the next response. Passport bundles are unaffected —
+Passport's own `req.login` still wins.
+
+### Added — opt-in absolute session timeout
+
+**No action required — opt-in, off by default.** `session({ absoluteTimeout:
+<ms> })` on the Session plugin — or `settings.json > session.absoluteTimeout`
+as the deployment default, bundle code winning (`absoluteTimeout: false`
+disables it) — caps an authenticated session's total lifetime measured from
+login, regardless of activity. An over-age session is destroyed on its next
+request, which proceeds anonymously — indistinguishable from a
+naturally-expired record. Idle expiry is unchanged and composes with it (the
+cookie `maxAge` and store TTL keep rolling with activity). Declared in the
+published settings.json schema.
+
+### Added — authentication primitives (`lib.authn`)
+
+**No action required — new surface, nothing existing changes.** Reach it with
+`require('gina').lib.authn`. It introduces **no `settings.json` keys**: every
+option is passed at the call site.
+
+- **Passwords** — `hashPassword` mints scrypt hashes as self-describing PHC
+  strings (`$scrypt$ln=17,r=8,p=1$<salt>$<key>`), so the cost travels with the
+  hash and can be raised later without a flag day. `verifyPassword` compares in
+  constant time, `needsRehash` flags stored hashes below current policy, and
+  `validatePasswordPolicy` checks length first per NIST SP 800-63B.
+- **Migrating an existing store** — `verifyPassword` also verifies `$argon2*$`
+  and `$2a/2b/2y$` (bcrypt) hashes through your own project's `argon2` /
+  `bcrypt` package, so a bundle arriving with credentials already hashed keeps
+  working. Pair it with `needsRehash` to re-hash on the next successful login
+  and the store migrates itself with no password resets.
+- **Account lockout** — `createLockout()` counts consecutive credential
+  failures per account key, defaulting to PCI-DSS v4.0.1 §8.3.4 (10 attempts,
+  30 minutes). Pass `normalizeKey` when the key comes from a form, or case
+  variants of an email each get their own counter; pass a shared `store` for
+  multi-replica correctness. Crossing the threshold writes one `auth.lockout`
+  audit record.
+- **TOTP** — `generateTotpSecret`, `otpauthURL`, `generateTotp` and
+  `verifyTotp` implement RFC 6238 for a second factor.
+
+Two things are easy to get wrong, and both are the caller's responsibility:
+
+- **`dummyVerify` needs a cost.** On the account-not-found branch, always pass
+  `{ like: <a stored hash> }`. With no stored hash to read from it runs at the
+  shipped defaults, so against cheaper hashes the unknown-account branch costs
+  *more* than the known one — inverting the user-enumeration oracle it exists
+  to close (measured at 13.9× the wrong way). Handle its
+  `AUTHN_QUEUE_FULL` error exactly as you handle `verifyPassword`'s.
+- **TOTP replay defence is yours.** `verifyTotp` returns the matched step as an
+  absolute `counter`; persist it per user and refuse anything not strictly
+  greater, or an observed code stays usable for its whole acceptance window.
+
+Gina still owns no user record, credential store, or login route — these are
+helpers, not an identity provider. See the
+[authentication guide](/guides/authentication) for the full login recipe.
+
+### Fixed — the `settings.json` schema describes the `audit` block (no action)
+
+Editor tooling only — runtime behaviour is unchanged, and the schemas are never
+enforced at boot.
+
+All five audit keys — `enabled`, `file`, `store`, `actorKey` and `events.authz`
+— were undeclared, so an editor offered no completion, no type checking and no
+description on hover, and a mistyped key or a wrong type surfaced only as a boot
+refusal at the next restart. The declaration mirrors the boot lint rather than
+merely permitting the keys: `enabled` and `events.authz` are strictly boolean (a
+truthy string such as `"true"` would leave the trail silently off), `file` and
+`store` are non-empty strings and mutually exclusive, and unknown keys are
+rejected — so an editor now flags the same shapes the boot would refuse.
+
+### Fixed — the `settings.json` schema describes the `session` block (no action)
+
+Editor tooling only — runtime behaviour is unchanged.
+
+The three consumed keys — `session.cookie.sameSite`, `session.cookie.httpOnly`
+and `session.cookie.secure` — were undeclared, so a documented configuration
+surface offered no completion, no type checking and no hover description. The
+declaration mirrors the plugin's own factory-time validation (`sameSite` one of
+`lax` / `strict` / `none`, `httpOnly` boolean, `secure` `true`, `false` or
+`"auto"`) and rejects unread keys — putting `maxAge` or a store `ttl` under
+`settings.json > session` has never had any effect, and an editor now says so.
+
+### Fixed — the `connectors.json` schema no longer mislabels `ttl` and `prefix` (no action)
+
+Editor tooling only — runtime behaviour is unchanged.
+
+Both keys were labelled "Redis only", steering you away from keys that do work:
+`ttl` is read by the Redis, SQLite, MongoDB and ScyllaDB stores, and `prefix` by
+Redis and SQLite. The `ttl` entry also still advertised a default of `86400`,
+which stopped being true when an unset ttl began deferring to the cookie's
+`maxAge` (above). That stale default is gone, and both descriptions now name the
+stores that read them — plus the Couchbase stores, which take these as
+constructor options instead.
+
+---
+
 ## 0.5.25 → 0.5.26
 
 ### Added — deny-by-default authorization
@@ -299,13 +584,14 @@ restores the previous reachability without exposing anything the host can reach.
 Bind the specific routable address instead if you need loopback to remain
 unserved.
 
-:::warning `gina framework:set --bind-host=` is not currently a working lever
+:::warning `gina framework:set --bind-host=` does not persist on 0.5.26
 
-It writes the key to the home `settings.json`, but a subsequently started daemon
-still binds loopback. The cause is precedence: the bind address resolves as
-`GINA_BIND_HOST` **first** and the settings value only as a fallback, and the
-startup path seeds that environment variable itself — so the value you wrote can
-never win. Use `GINA_BIND_HOST` until this is fixed.
+It writes the key to the home `settings.json`, but the next gina command
+regenerates that file and reverts the value to its default — `bind_host` was
+the only connection setting whose persisted value did not survive the
+regeneration — and container bootstraps rewrite it as well. A subsequently
+started daemon therefore still binds loopback. This is fixed in 0.6.0 (the
+persisted value survives both paths); on 0.5.26 use `GINA_BIND_HOST`.
 
 :::
 

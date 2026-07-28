@@ -301,9 +301,9 @@ not a control:
 - **The identity provider** — Gina verifies and enforces; it does not mint
   identities.
 - **Device posture and user behavior signals** — no framework sees them.
-- **Application-level rate limiting** — on the [roadmap](/roadmap); today,
-  throttle at the ingress (the HTTP/2 rapid-reset limiter covers the
-  transport flood case).
+- **Application-level rate limiting** — deferred on the [roadmap](/roadmap),
+  built on request; throttle at the ingress (the HTTP/2 rapid-reset limiter
+  covers the transport flood case).
 - **Distributed tracing** — on the roadmap; the request-id chain covers
   cross-bundle correlation today.
 

@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → npm registry → node_modules.
-const ginaVersion = '0.5.26';
+const ginaVersion = '0.6.0';
 const swigVersion = '2.7.3';
 const twigVersion = '2.7.3';
 const jinjaVersion = '2.7.3';
@@ -93,6 +93,7 @@ const config = {
           // frontmatter routes the canonical URL to `/cli/cli-<file>`; these entries
           // cover external references that assume filename-form. Paired with Cloudflare
           // Worker 301s (infra/cloudflare/worker.js § CLI_REDIRECTS). See gina-io/docs#11.
+          {from: '/cli/audit',     to: '/cli/cli-audit'},
           {from: '/cli/bundle',    to: '/cli/cli-bundle'},
           {from: '/cli/cache',     to: '/cli/cli-cache'},
           {from: '/cli/connector', to: '/cli/cli-connector'},

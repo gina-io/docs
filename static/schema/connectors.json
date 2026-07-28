@@ -15,7 +15,12 @@
         "connector": {
           "type": "string",
           "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
-          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai"]
+          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb", "mongodb"]
+        },
+        "version": {
+          "type": "string",
+          "description": "Optional semver range for the driver npm package. Used by `connector:list` to flag cross-bundle version-pin disagreements and by `connector:add` to print the exact install command. When omitted, the framework falls back to the project's package.json dependency range, then to the framework's built-in driver range table.",
+          "examples": ["^5.0.0", ">=5.3.0 <6.0.0", "5.4.1"]
         },
         "protocol": {
           "type": "string",
@@ -34,7 +39,30 @@
         },
         "database": {
           "type": "string",
-          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite."
+          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite, ScyllaDB."
+        },
+        "contactPoints": {
+          "type": ["array", "string"],
+          "description": "ScyllaDB / Cassandra only. Cluster contact points. Accepts an array of `host:port` strings, a comma-separated string, or falls back to the `host`+`port` pair when omitted. Defaults to [\"127.0.0.1:9042\"].",
+          "examples": [["10.0.0.1:9042", "10.0.0.2:9042"], "node1:9042,node2:9042"]
+        },
+        "localDataCenter": {
+          "type": "string",
+          "description": "ScyllaDB / Cassandra only. Data center name used for token-aware routing. Required by cassandra-driver 4.x. Defaults to \"datacenter1\".",
+          "examples": ["datacenter1", "us-east-1"]
+        },
+        "keyspace": {
+          "type": "string",
+          "description": "ScyllaDB / Cassandra only. CQL keyspace name. Alias for `database` when both are supported; `keyspace` wins when both are set.",
+          "examples": ["mykeyspace"]
+        },
+        "credentials": {
+          "type": "object",
+          "description": "ScyllaDB / Cassandra only. Authentication credentials. Use this OR the legacy `username`+`password` pair.",
+          "properties": {
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          }
         },
         "username": {
           "type": "string",
@@ -85,13 +113,12 @@
         },
         "prefix": {
           "type": "string",
-          "description": "Redis only. Key prefix for session store entries. Defaults to \"sess:\".",
+          "description": "Redis and SQLite session stores. Key prefix for session store entries. Defaults to \"sess:\". The Couchbase stores read `prefix` as a constructor option only, never from this file.",
           "default": "sess:"
         },
         "ttl": {
           "type": "number",
-          "description": "Redis only. Default TTL in seconds for session entries. Defaults to 86400.",
-          "default": 86400
+          "description": "Redis, SQLite, MongoDB and ScyllaDB session stores. Default TTL in seconds for session entries. When omitted, the session record follows the cookie's `maxAge`, falling back to 86400 only when the cookie has none. The Couchbase stores read `ttl` as a constructor option only, never from this file."
         },
         "cluster": {
           "type": "array",
@@ -143,6 +170,21 @@
         "baseURL": {
           "type": "string",
           "description": "AI connector only. Override the default API base URL (OpenAI-compatible providers)."
+        },
+        "uri": {
+          "type": "string",
+          "description": "MongoDB only. Full connection string (mongodb:// or mongodb+srv://). Takes precedence over the decomposed host/port/username/password/authSource/replicaSet fields. The `database` field is still required and is used to select the db on the client.",
+          "examples": ["mongodb://user:pass@localhost:27017/mydb?authSource=admin", "mongodb+srv://user:pass@cluster.mongodb.net/mydb"]
+        },
+        "authSource": {
+          "type": "string",
+          "description": "MongoDB only. Authentication database name (typically \"admin\"). Used when `uri` is absent and the username/password live under a different db than the one you're querying.",
+          "examples": ["admin"]
+        },
+        "replicaSet": {
+          "type": "string",
+          "description": "MongoDB only. Replica set name. Used when `uri` is absent and you connect to a replica-set deployment.",
+          "examples": ["rs0"]
         }
       }
     }

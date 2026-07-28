@@ -566,7 +566,7 @@ Add a Redis connector to your bundle's `connectors.json`:
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "redis.internal",
     "port"     : 6379,
@@ -587,8 +587,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'myRedis';
-    var RedisStore = new SessionStore(session);
+    var RedisStore = new SessionStore(session);   // resolves the "session" entry
 
     app.use(session({
         secret           : process.env.SESSION_SECRET
@@ -644,7 +643,7 @@ For Redis Cluster mode (ElastiCache with cluster enabled):
 
 ```json
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "cluster"  : [
       { "host": "node1.cache.amazonaws.com", "port": 6379 },

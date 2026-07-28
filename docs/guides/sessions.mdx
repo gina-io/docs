@@ -85,13 +85,30 @@ For staging and production pick a persistent backend in
 | In-memory (default) | Local development only |
 | [SQLite](#configuring-the-store) | Dev, staging, single-pod production |
 | [Redis](#configuring-the-store) | Multi-pod / K8s horizontal scaling |
-| [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v2 / v3 / v4 auto-selected |
+| [Couchbase](#configuring-the-store) | Bundles already using Couchbase as primary store; SDK v3 / v4 auto-selected |
 | [ScyllaDB](#configuring-the-store) | Bundles already using ScyllaDB / Cassandra; CQL `USING TTL` per-row reaping |
 | [MongoDB](#configuring-the-store) | Bundles already using MongoDB; TTL-index auto-created on first `set()` |
+
+:::note Record TTL vs cookie `maxAge`
+Every store resolves a session record's lifetime the same way since 0.6.0: an
+explicitly configured `ttl` wins; with no `ttl` configured, the record follows
+the session cookie's `maxAge`; one day (`86400` seconds) is the last resort
+when the cookie has none either. The `ttl` values in the examples below are
+therefore optional — set one only when the record's lifetime should be
+decoupled from the cookie's.
+:::
 
 ---
 
 ## Configuring the store
+
+:::note The `connectors.json` entry must be named `session`
+The `SessionStore` factory resolves the connector entry from
+`express-session`'s function name — which is `session` and cannot be changed
+(`Function.name` is read-only; assigning to it is a silent no-op). Name the
+session entry `"session"` in every example below; any other key makes the
+factory throw at boot with `[SessionStore] Could not be loaded`.
+:::
 
 <Tabs groupId="session-store">
   <TabItem value="sqlite" label="SQLite — dev / staging / single-pod" default>
@@ -103,7 +120,7 @@ Requires Node.js ≥ 22.5.0.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector"      : "sqlite",
     "database"       : ":memory:",
     "ttl"            : 86400,
@@ -117,7 +134,7 @@ For a persistent file store (survives restarts):
 
 ```json
 {
-  "myDb": {
+  "session": {
     "connector": "sqlite",
     "database" : "/app/data/sessions.db",
     "ttl"      : 86400
@@ -129,7 +146,7 @@ For a persistent file store (survives restarts):
 |---|---|---|
 | `connector` | — | Must be `"sqlite"` |
 | `database` | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` |
-| `ttl` | `86400` | Session TTL in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix stored in the DB |
 | `cleanupInterval` | `900` | Seconds between expired-session purges. Set `0` to disable. |
 
@@ -142,8 +159,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'myDb';                      // key in connectors.json
-    var SqliteStore = new SessionStore(session); // returns the SqliteStore class
+    var SqliteStore = new SessionStore(session); // resolves the "session" entry → SqliteStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET || 'changeme'
@@ -166,7 +182,7 @@ Point dev at an in-memory store without touching `connectors.json`:
 
 ```json title="src/api/config/connectors.dev.json"
 {
-  "myDb": {
+  "session": {
     "database": ":memory:"
   }
 }
@@ -188,7 +204,7 @@ npm install ioredis
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "127.0.0.1",
     "port"     : 6379,
@@ -203,7 +219,7 @@ npm install ioredis
 
 ```json
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "cluster"  : [
       { "host": "node1.redis.internal", "port": 6379 },
@@ -220,7 +236,7 @@ npm install ioredis
 
 ```json
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "my-instance.upstash.io",
     "port"     : 6379,
@@ -240,7 +256,7 @@ npm install ioredis
 | `password` | — | Redis `AUTH` password |
 | `tls` | `false` | Enable TLS. Required for most managed providers. |
 | `cluster` | — | Array of `{ host, port }` nodes for Redis Cluster mode |
-| `ttl` | `86400` | Session TTL in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix in Redis |
 
 **2. Wire the store in `bundle/index.js`**
@@ -252,8 +268,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'myRedis';                    // key in connectors.json
-    var RedisStore = new SessionStore(session);   // returns the RedisStore class
+    var RedisStore = new SessionStore(session);   // resolves the "session" entry → RedisStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET
@@ -279,7 +294,7 @@ Point dev at a local Redis without changing `connectors.json`:
 
 ```json title="src/api/config/connectors.dev.json"
 {
-  "myRedis": {
+  "session": {
     "host"    : "127.0.0.1",
     "port"    : 6379,
     "password": "",
@@ -291,10 +306,12 @@ Point dev at a local Redis without changing `connectors.json`:
   </TabItem>
   <TabItem value="couchbase" label="Couchbase — when Couchbase is already the primary store">
 
-Uses the same connector that powers the Couchbase ORM. Couchbase has native
+Uses the same connector that powers the Couchbase ORM — literally: the model
+layer opens the bucket from your `session` connector entry at boot, and you
+hand that already-open handle to the store as `db`. Couchbase has native
 per-document expiry — the `expiry` argument on `upsert` makes the server reap
 the document automatically. No TTL index, no sweeper job. The dispatcher
-auto-selects v2 / v3 / v4 SDK based on the project's `couchbase` pin.
+auto-selects the v3 / v4 SDK based on the project's `couchbase` pin.
 
 ```bash
 npm install couchbase
@@ -307,12 +324,10 @@ npm install couchbase
   "session": {
     "connector": "couchbase",
     "protocol":  "couchbase://",
-    "host":      "127.0.0.1:8091",
-    "bucket":    "sessions",
+    "host":      "127.0.0.1",
+    "database":  "sessions",
     "username":  "appuser",
-    "password":  "${COUCHBASE_PASSWORD}",
-    "ttl":       86400,
-    "prefix":    "sess:"
+    "password":  "${COUCHBASE_PASSWORD}"
   }
 }
 ```
@@ -320,16 +335,42 @@ npm install couchbase
 For Capella / Couchbase Cloud, switch to `protocol: "couchbases://"` and pass
 the cluster hostname.
 
+These fields configure the **model-layer connection** — the same fields as any
+Couchbase connector entry (see the
+[Connectors reference](/reference/connectors)). The session store itself reads
+none of them; it receives the open bucket through its constructor (step 2).
+
 | Field | Default | Description |
 |---|---|---|
 | `connector` | — | Must be `"couchbase"` |
 | `protocol` | `"couchbase://"` | `couchbases://` for TLS |
-| `host` | — | One or more `host:port` entries (`;`-separated string or array) |
-| `bucket` | — | Bucket dedicated to sessions (recommended) |
+| `host` | — | Cluster hostname(s), comma-separated for multi-node |
+| `database` | — | Bucket dedicated to sessions (recommended). Couchbase's bucket name — the reference field is `database`, not `bucket` |
 | `username` | — | RBAC user |
 | `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+
+:::note The Couchbase store is configured through its constructor, not `connectors.json`
+Unlike the SQLite, Redis, MongoDB and ScyllaDB stores — which configure
+themselves from `connectors.json` — the Couchbase store takes everything from
+the options object you pass to the constructor, including the connection
+itself: `db` **is required** and must be the already-open bucket the model
+layer created from the entry above. A `ttl` or `prefix` key placed in
+`connectors.json` under a Couchbase connector is silently ignored.
+
+```js
+store: new CouchbaseStore({
+    db: getModel('session').getConnection(),   // the open bucket — required
+    ttl: 86400,
+    prefix: 'sess:'
+})
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `db` | — (**required**) | The open Couchbase bucket for the `session` entry: `getModel('session').getConnection()` |
 | `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
 | `prefix` | `"sess:"` | Document key prefix. Combined with the session id (`sess:<sid>`) to form the doc key |
+:::
 
 **2. Wire the store in `bundle/index.js`**
 
@@ -340,14 +381,15 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                          // key in connectors.json
-    var CouchbaseStore = new SessionStore(session);    // returns the CouchbaseStore class
+    var CouchbaseStore = new SessionStore(session);    // resolves the "session" entry → CouchbaseStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
         resave           : false,
         saveUninitialized: false,
-        store            : new CouchbaseStore(),
+        store            : new CouchbaseStore({
+            db: getModel('session').getConnection()    // open bucket, created by the model layer at boot
+        }),
         cookie           : { secure: true, maxAge: 86400000 }
     }));
 
@@ -358,11 +400,10 @@ myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
 
-:::note SDK v2 deprecated since 0.2.0
-The dispatcher still selects v2 when the project pins `couchbase@^2.x`, but new
-bundles should pin v3 or v4. v2 reached upstream end-of-life in 2021 and emits
-a deprecation warning at connection time. v4 is recommended for any greenfield
-bundle.
+:::note SDK v2 was removed in gina 0.4.0
+The dispatcher selects v3 or v4 from the project's `couchbase` pin and refuses
+a `couchbase@^2` (or older) pin with an upgrade message — v2 reached upstream
+end-of-life in 2021. v4 is recommended for any greenfield bundle.
 :::
 
 :::caution `length()`, `clear()`, `all()` not implemented
@@ -409,7 +450,7 @@ npm install cassandra-driver
 | `keyspace` | (required) | Falls back to `database` for parity with other connectors |
 | `table` | `"sessions"` | Sessions table name |
 | `credentials` | — | `{ username, password }` — wraps in `PlainTextAuthProvider` |
-| `ttl` | `86400` | Default session TTL in seconds. Stamped via CQL `USING TTL` |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default session TTL in seconds. Stamped via CQL `USING TTL` |
 
 **2. Create the sessions table** (the store does not auto-create)
 
@@ -429,8 +470,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                         // key in connectors.json
-    var ScylladbStore = new SessionStore(session);    // returns the ScylladbStore class
+    var ScylladbStore = new SessionStore(session);    // resolves the "session" entry → ScylladbStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
@@ -514,7 +554,7 @@ Or decomposed form (self-hosted single node):
 | `authSource` | — | Auth database, when different from `database` |
 | `replicaSet` | — | Replica set name |
 | `ssl` | — | `true` to enable TLS, or an object passed through to the driver as `tlsOptions` |
-| `ttl` | `86400` | Default expiry in seconds |
+| `ttl` | (cookie `maxAge` / 1000, then `86400`) | Default expiry in seconds |
 
 **2. Wire the store in `bundle/index.js`**
 
@@ -525,8 +565,7 @@ var session      = require('express-session');
 var SessionStore = lib.SessionStore;
 
 myapp.onInitialize(function(event, app) {
-    session.name = 'session';                        // key in connectors.json
-    var MongodbStore = new SessionStore(session);    // returns the MongodbStore class
+    var MongodbStore = new SessionStore(session);    // resolves the "session" entry → MongodbStore class
 
     app.use(session({
         secret           : process.env.SESSION_SECRET,
@@ -578,8 +617,7 @@ this.login = function(req, res, next) {
     // Validate credentials ...
     var user = { id: 42, name: 'Martin', role: 'admin' };
 
-    req.session.user = user;
-    req.session.save(function(err) {
+    req.login(user, function(err) {
         if (err) return self.throwError(res, 500, err);
         self.renderJSON({ ok: true });
     });
@@ -599,6 +637,70 @@ this.profile = function(req, res, next) {
     self.renderJSON({ user: req.session.user });
 };
 ```
+
+### `req.login(user, done)`
+
+Since 0.6.0 the framework's own `req.login()` works without Passport, and it
+**rotates the session id before binding the user** — the session-fixation
+defense. In order it: regenerates the session (destroying the pre-login
+record, so an id planted or leaked before authentication is dead the moment
+authentication succeeds), binds the principal at `req.session.user` (what the
+[route authorization](/guides/route-authorization) gate reads), stamps the
+absolute-timeout anchor, persists, then fires the **required** callback:
+
+```js
+req.login(user, function(err) {
+    if (err) return self.throwError(res, 500, err);
+    // rotated + bound + persisted — safe to respond
+});
+```
+
+Worth knowing:
+
+- **Anything in the pre-login session is gone after `req.login()`** — that is
+  the point of rotation. To carry a value across (a cart, a return-to URL),
+  read it before the call and re-set it inside the callback.
+- **CSRF tokens survive** — they are derived from the current session id, and
+  the next response re-issues automatically after the id changes.
+- **Role elevation**: re-call `req.login()` with the elevated user — a
+  privilege change deserves the same rotation as a login.
+- **Before 0.6.0** the shim threw `passport.initialize() middleware not in
+  use` without Passport — on older versions call
+  `req.session.regenerate()` yourself, then bind and save inside its callback.
+- **Passport bundles** — when Passport is initialized, `req.login()` is
+  Passport's own (the framework shim never installs); Passport ≥ 0.6 performs
+  its own regenerate.
+- If the session provider exposes no `regenerate()`, the user is bound
+  without rotation and a warning says the fixation defense is unavailable.
+
+### `req.logout([done])`
+
+Since 0.6.0 the framework's own `req.logout()` does the full job — it clears
+`req.session.user` AND destroys the persisted record, so it is equivalent to
+the explicit `req.session.destroy()` form above:
+
+```js
+this.logout = function(req, res, next) {
+    req.logout(function(err) {
+        if (err) return self.throwError(res, 500, err);
+        self.renderJSON({ ok: true });
+    });
+};
+```
+
+The callback is optional. Before 0.6.0, `req.logout()` only cleared
+`req.session.user` — the record, the session id and every other session key
+stayed alive in the store until TTL — so prefer the explicit
+`req.session.destroy()` form on older versions. Two things stay yours to
+handle either way:
+
+- **The cookie** — the framework cannot discover the session cookie's name.
+  If you don't want the browser resending the now-dead id, expire the cookie
+  yourself when responding (a `Set-Cookie` for your session-cookie name with
+  an expiry in the past).
+- **Passport bundles** — when Passport is initialized, `req.logout()` is
+  Passport's own (the framework shim never installs); record destruction
+  comes from Passport's `regenerate()` flow.
 
 :::tip Session user vs req.user
 Gina stores the authenticated user at `req.session.user`, not `req.user`.
@@ -620,6 +722,71 @@ To send an unauthenticated visitor to `/login` and replay their original request
 afterwards, snapshot it into `req.session.haltedRequest` with the controller's
 [pause / resume request](/guides/controller#pausing-resuming-requests) methods.
 :::
+
+---
+
+## Session lifetime — idle vs absolute {#session-lifetime}
+
+Two different clocks bound a session's life, and they answer different
+threats:
+
+- **Idle timeout** — "log me out after N minutes of inactivity". This already
+  exists and *rolls with activity*: the cookie's `maxAge` bounds the browser
+  side (add `rolling: true` to refresh it on every response), and the store
+  record's TTL follows the cookie `maxAge` and is refreshed on every request.
+  An untouched session dies after one idle window on both sides.
+- **Absolute timeout** — "no session lives longer than N hours, active or
+  not". Rolling idle alone lets a session that keeps making requests — or a
+  stolen session id an attacker keeps warm — live forever. The absolute cap
+  closes that, and is what PCI-DSS-style re-authentication requirements ask
+  for.
+
+```mermaid
+flowchart LR
+    A[login\nreq.login rotates the sid\nand stamps the anchor] --> B[active session]
+    B -- request --> B
+    B -- "idle > cookie maxAge" --> C[idle expiry\ncookie + record die]
+    B -- "age since login > absoluteTimeout" --> D[absolute expiry\nrecord destroyed,\nnext request is anonymous]
+```
+
+Enable the absolute cap on the Session plugin (milliseconds — it lives beside
+`cookie.maxAge`, which uses the same unit):
+
+```js title="src/api/index.js"
+app.use(session({
+    secret            : process.env.SESSION_SECRET,
+    resave            : false,
+    saveUninitialized : false,
+    rolling           : true,
+    cookie            : { secure: true, maxAge: 900000 },  // 15 min idle
+    absoluteTimeout   : 28800000                           // 8 h hard cap
+}));
+```
+
+Or set a deployment-wide default in `settings.json` — bundle code always
+wins, and `absoluteTimeout: false` in bundle code disables the default:
+
+```json title="src/api/config/settings.json"
+{
+  "session": {
+    "absoluteTimeout": 28800000
+  }
+}
+```
+
+How it behaves:
+
+- The clock starts at **login** — `req.login()` stamps an anchor on the fresh
+  session at rotation. A session where you bound the user by hand is anchored
+  on its next request instead (one request late).
+- Anonymous sessions are never touched: no anchor is written, so
+  `saveUninitialized: false` keeps meaning what it says.
+- An over-age session is destroyed **on its next request**, which then
+  proceeds with a fresh anonymous session — exactly what a naturally-expired
+  record looks like, so protected routes 401/redirect through the same paths
+  they already have. There is no timer sweeping sessions in the background.
+- Fail-closed: if the record cannot be destroyed (store error), the
+  authentication is dropped for the request anyway.
 
 ---
 
@@ -669,6 +836,7 @@ factory, passport integration — all identical.
 ```json title="src/api/config/settings.json"
 {
   "session": {
+    "absoluteTimeout": 28800000,
     "cookie": {
       "sameSite": "lax",
       "httpOnly": true,
@@ -683,6 +851,7 @@ factory, passport integration — all identical.
 | `sameSite` | `"lax"` | `"strict"` blocks cross-origin navigation (breaks email-link logins). `"none"` permits cross-site sending and **requires** `secure: true`. |
 | `httpOnly` | `true` | Override to `false` only if a validator or toolbar has to read `document.cookie`. |
 | `secure`   | `"auto"` | express-session's idiom for "mirror the request security flag" — typically paired with `app.set('trust proxy', 1)`. |
+| `absoluteTimeout` | *(none)* | Opt-in [absolute session cap](#session-lifetime) in ms since login. Bundle code wins; `absoluteTimeout: false` in bundle code disables the default. |
 
 ### Bundle choices always win
 

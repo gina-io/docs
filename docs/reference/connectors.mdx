@@ -475,6 +475,9 @@ controller examples. Field reference below.
 
 Session store connectors back Gina's session layer. They do not expose an ORM and are
 not used directly by model entities. Choose one based on your deployment topology.
+The entry must be named `session` — the `SessionStore` factory resolves it from
+`express-session`'s function name, which is read-only (see the
+[Sessions guide](../guides/sessions#configuring-the-store)).
 
 ### Redis
 
@@ -502,7 +505,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "host"     : "127.0.0.1",
     "port"     : 6379,
@@ -518,7 +521,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 ```json title="src/api/config/connectors.json"
 {
-  "myRedis": {
+  "session": {
     "connector": "redis",
     "cluster"  : [
       { "host": "node1.redis.internal", "port": 6379 },
@@ -547,7 +550,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 | `password` | string | — | `AUTH` password. Supports `${ENV_VAR}` substitution |
 | `tls` | boolean | `false` | Enable TLS. Required for Upstash, ElastiCache, and Cloud Memorystore |
 | `cluster` | array | — | Cluster nodes `[{ host, port }, ...]`. When present, standalone `host` and `port` are ignored |
-| `ttl` | number | `86400` | Session TTL in seconds |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix in Redis |
 
 ---
@@ -568,7 +571,7 @@ server restart — ideal for local development.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector": "sqlite",
     "database" : ":memory:",
     "ttl"      : 86400
@@ -584,7 +587,7 @@ single-pod production where a shared Redis instance is not available.
 
 ```json title="src/api/config/connectors.json"
 {
-  "myDb": {
+  "session": {
     "connector"      : "sqlite",
     "database"       : "/app/data/sessions.db",
     "ttl"            : 86400,
@@ -603,7 +606,7 @@ single-pod production where a shared Redis instance is not available.
 |---|---|---|---|
 | `connector` | `"sqlite"` | — | Selects the SQLite connector |
 | `database` | string | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` for a volatile in-process store |
-| `ttl` | number | `86400` | Session TTL in seconds |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
 | `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable |
 
