@@ -21,6 +21,19 @@ upward to the target version.
 
 ## 0.5.26 → 0.6.0
 
+### Action required — settings reset (shortVersion bump)
+
+`0.6.0` is a **shortVersion bump** (`0.5` → `0.6`). On install, the framework
+creates a fresh `~/.gina/0.6/settings.json` from defaults — your
+`~/.gina/0.5/settings.json` customizations (log level, port, culture, timezone,
+etc.) are **not** carried forward. This is intentional: the per-version settings
+schema can change between short versions.
+
+After upgrading, re-apply your customizations with `gina framework:set`, or copy
+the values across from `~/.gina/0.5/settings.json`. Root-level state
+(`~/.gina/main.json`, `projects.json`, `ports.json`, `gina.db`) is shared across
+short versions and is unaffected — only the per-version `settings.json` resets.
+
 ### Added — audit tamper-evidence hash chain (opt-in)
 
 The audit trail can now carry a tamper-evidence HMAC hash chain. It is **opt-in
@@ -148,6 +161,24 @@ session nearing its expiry had an already-past expiry written to it, ending it
 early. The store now performs no write and returns cleanly on a non-positive
 ttl, matching the redis, mongodb and scylladb stores which already guarded this.
 Sessions with a positive ttl are refreshed exactly as before.
+
+### Fixed — `getRoute()` no longer crashes without a resolvable proxy hostname (no action)
+
+Server-side only. When a proxied context was active but no proxy hostname could
+be resolved — both the worker-wide global and the per-render `envConf` fallback
+unset, each a state the framework itself can legitimately produce — every
+`getRoute()` call threw
+`TypeError: Cannot read properties of null (reading 'replace')`, taking down any
+render or readiness probe that resolved a route.
+
+The route now degrades to its direct hostname, and `route.isProxyHost` flips
+false so `toUrl()` cannot stringify the unset value into the emitted URL. A
+once-per-process warning names the degraded state, so a recurrence is visible in
+the bundle log rather than silent. The `url` template filters hold `getRoute()`'s
+own resolution, so their per-request override can never replace a usable value
+with an unset one.
+
+Restart your bundles to pick it up.
 
 ### Security — `req.logout()` now destroys the session record
 
