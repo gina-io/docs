@@ -332,9 +332,20 @@ The same applies to any inherited API name — `EventEmitter` methods (`on`,
 `name`, `model`, …).
 
 **Rename the file** — `countRows.sql` works, and `@return {number}` gives you
-the count as a real number. This applies to every Gina SQL connector (MySQL,
-PostgreSQL, SQLite, DuckDB), not just DuckDB — count queries are simply where
-it is most often met.
+the count as a real number.
+
+This is not DuckDB-specific. Six connectors share the same guard, and only the
+colliding filename differs:
+
+| Connector | Colliding file |
+|---|---|
+| MySQL, PostgreSQL, SQLite, DuckDB | `sql/<Entity>/count.sql` |
+| ScyllaDB | `cql/<Entity>/count.sql` |
+| MongoDB | `pipelines/<Entity>/count.json` |
+
+Couchbase is the exception: it attaches every query method unconditionally, so
+there a colliding name **shadows** the inherited helper rather than being
+skipped. Count queries are simply where the collision is most often met.
 
 ---
 
