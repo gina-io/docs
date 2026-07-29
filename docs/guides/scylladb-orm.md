@@ -359,5 +359,5 @@ document store, prefer [Couchbase](/guides/couchbase-orm) or
 
 - [cassandra-driver API documentation](https://docs.datastax.com/en/developer/nodejs-driver/latest/)
 - [CQL syntax reference (ScyllaDB)](https://docs.scylladb.com/stable/cql/)
-- [Cassandra data modeling guide](https://cassandra.apache.org/doc/latest/cassandra/data_modeling/intro.html)
+- [Cassandra data modeling guide](https://cassandra.apache.org/doc/latest/cassandra/developing/data-modeling/intro.html)
 - [Connectors reference](/reference/connectors)
