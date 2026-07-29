@@ -345,12 +345,17 @@ colliding filename differs:
 
 Couchbase is the exception: it attaches every query method unconditionally, so
 there a colliding name **shadows** the inherited helper rather than being
-skipped. Count queries are simply where the collision is most often met.
+skipped — `count.sql` works on Couchbase, and stays quiet. Count queries are
+simply where the collision is most often met.
 
-Since 0.6.1 the skip is no longer silent: the connector logs a startup warning
-naming the file and suggesting a rename. Earlier versions skip without any
-signal. A file matching a method your entity class itself defines still skips
-silently — that is by design, your code wins.
+Since 0.6.1 neither side is silent where it matters: the six connectors log a
+startup warning when a file is skipped (naming the file and suggesting a
+rename — earlier versions skip without any signal), and Couchbase logs a
+startup warning when a file **overwrites** an entity property or shadows an
+inherited member such as `EventEmitter`'s `on` (the file still attaches and
+still wins — the warning never skips it). A file matching a method your entity
+class itself defines still skips silently on the six — that is by design, your
+code wins.
 
 ---
 

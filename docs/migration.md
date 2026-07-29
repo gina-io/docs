@@ -43,6 +43,19 @@ file matching a method your entity class itself defines still skips silently
 query file that has never worked — rename it. See
 [reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
 
+### Fixed — Couchbase warns when a query file overwrites or shadows an entity member
+
+Couchbase is the opposite case of the six connectors above: it attaches every
+N1QL query file **unconditionally**, so a colliding filename silently
+**overwrote** an entity property (for example `getCluster.sql`, or a duplicate
+of an already-attached method) or **shadowed** an inherited one (an `on.sql`
+file replaces `EventEmitter`'s `on` for that entity and breaks its event
+wiring). That clobber now logs a startup warning naming the file and suggesting
+a rename. **Behavior is unchanged** — the file still attaches and still wins.
+A file shadowing the framework's global `count()` / `functionCount()` helpers
+stays silent: on Couchbase the query file winning there is exactly what you
+want, and `count.sql` keeps working as before.
+
 ---
 
 ## 0.5.26 → 0.6.0
