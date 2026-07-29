@@ -347,6 +347,11 @@ Couchbase is the exception: it attaches every query method unconditionally, so
 there a colliding name **shadows** the inherited helper rather than being
 skipped. Count queries are simply where the collision is most often met.
 
+Since 0.6.1 the skip is no longer silent: the connector logs a startup warning
+naming the file and suggesting a rename. Earlier versions skip without any
+signal. A file matching a method your entity class itself defines still skips
+silently — that is by design, your code wins.
+
 ---
 
 ## Single writer across processes — locking and `readOnly`

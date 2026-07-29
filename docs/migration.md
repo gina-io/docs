@@ -29,6 +29,20 @@ The SQLite ORM connector, the SQLite session store, the SQLite async-job store a
 
 New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/guides/duckdb-analytics).
 
+### Fixed — reserved-name query files now warn at startup
+
+A query file named after an inherited prototype member — most commonly
+`count.sql`, which collides with the framework's global `count()` helper — was
+**silently skipped** by the MySQL, PostgreSQL, SQLite, DuckDB, ScyllaDB, and
+MongoDB connectors: the method never attached, and calling it ran the inherited
+member instead (returning a plausible but unrelated value). The skip now logs a
+startup warning naming the file and suggesting a rename (for example
+`countRows.sql`). **Behavior is unchanged** — the file is still skipped, and a
+file matching a method your entity class itself defines still skips silently
+(your code wins, by design). If a warning appears on upgrade, it points at a
+query file that has never worked — rename it. See
+[reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
+
 ---
 
 ## 0.5.26 → 0.6.0
