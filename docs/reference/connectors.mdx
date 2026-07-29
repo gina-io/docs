@@ -45,6 +45,7 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
 | [ScyllaDB / Cassandra](/guides/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
+| [DuckDB](/guides/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
 
 ---
 
