@@ -47,6 +47,10 @@ gina bundle:add api @shortener --import
 ```
 
 ```bash
+node scripts/migrate.js
+```
+
+```bash
 gina bundle:start api @shortener
 ```
 :::
@@ -421,8 +425,7 @@ function ApiLinksController() {
 
         await db.link.insert(slug, url, new Date().toISOString());
 
-        var srv      = self.getConfig('server');
-        var hostname = srv.scheme + '://' + req.headers.host + ':' + srv.port;
+        var hostname = self.getConfig().hostname;
 
         self.renderJSON({
             slug      : slug
@@ -486,6 +489,7 @@ module.exports = ApiLinksController;
 | `await db.link.findBySlug(slug)` | Returns a row object or `null` — no `.onComplete()` needed for ORM entity methods. |
 | `self.redirect(link.url)` | Issues the 302 using the status code declared in `routing.json` (`"code": 302`). |
 | `self.renderJSON({ status: 400, … })` | `renderJSON()` takes **one** argument. The HTTP status comes from a `status` key inside the payload — there is no second parameter. |
+| `self.getConfig().hostname` | The bundle's configured origin (`scheme://host:port`, from `env.json` + the assigned port) — the canonical base for stored short links, independent of whatever `Host` header a client sent. |
 
 :::caution Never name an action after a SuperController method
 The action is called `follow`, not `redirect`, and that is deliberate. Your actions are assigned onto the controller instance (`this.follow = …`), which is the **same object** `self` points at — so `this.redirect = …` would overwrite the inherited `self.redirect()` method. `self.redirect(link.url)` would then re-enter your own action with a string in place of `req`, and the request would die on `Cannot read properties of undefined (reading 'slug')`.
