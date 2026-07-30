@@ -380,8 +380,12 @@ correlation code (6 uppercase hex characters, e.g. `A1B2C3`) present in **all
 scopes**, production included:
 
 ```json
-{ "status": 404, "error": "Invoice not found", "ref": "A1B2C3" }
+{ "status": 404, "error": "Not Found", "message": "Invoice not found", "ref": "A1B2C3" }
 ```
+
+Note that `error` holds the **status text** for the code, and the text you passed lands
+in `message` — so a client that wants to display your sentence should read `message`,
+not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
 stack is stripped from the wire — see below.) The ref carries no server detail,
