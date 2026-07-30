@@ -84,6 +84,21 @@ A file shadowing the framework's global `count()` / `functionCount()` helpers
 stays silent: on Couchbase the query file winning there is exactly what you
 want, and `count.sql` keeps working as before.
 
+### Fixed — the `renderJSON()` `status` key now reaches the wire over HTTP/2
+
+On a genuine HTTP/2 stream, `self.renderJSON({ status: 404, ... })` was served as
+HTTP **200** with the error payload in the body: the HTTP/2 body path built its
+header frame with a hardcoded `:status: 200`, discarding the resolved status code.
+HTTP/1.1, HEAD requests, and HTML renders were always correct — so if your bundle
+serves JSON errors over HTTP/2, clients checking `res.ok` or the status code start
+seeing the real 4xx/5xx after this release. Two smaller corrections ride along:
+an `errno`-only payload (no usable `status`) used to poison the status code — the
+response was silently never sent on HTTP/1.1 and became a 500 on HTTP/2 — and is
+now served as a normal 200 with the payload in the body; and the
+[controller guide](/guides/controller) no longer suggests `errno` sets the
+response code (it never did — always pass `status`). Server-side fix: a bundle
+restart picks it up, no client re-bake needed.
+
 ---
 
 ## 0.5.26 → 0.6.0

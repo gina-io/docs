@@ -156,12 +156,16 @@ this.apiStatus = function(req, res, next) {
 };
 ```
 
-If `data` has a `status` or `errno` field with a non-200 value, the HTTP response code
-is set accordingly:
+If `data` carries a `status` key naming a valid non-200 HTTP code, the response is served
+with that code — the `status` key stays in the body, so client-side JavaScript can still
+read it after checking `res.ok`:
 
 ```js
 self.renderJSON({ status: 404, error: 'Not found' });  // HTTP 404
 ```
+
+An `errno` key on its own does not set the response code — always pass `status` when you
+want a non-200 response.
 
 ### `self.renderTEXT(content)`
 
