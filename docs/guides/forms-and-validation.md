@@ -462,6 +462,24 @@ localized labels too.
   region-specific set.
 - **Your custom rules are already localized.** A rule's own message (the rule
   set's `error` key, or `setFlash`) always wins over the built-in label.
+- **Translate the key you can observe.** *Changed in 0.6.1.* A few rules render
+  their message from a more specific label key than the one they report in the
+  field's `errors` object — `toFloat` failing on a non-numeric value renders the
+  `toFloatNAN` label, and a length bound on `isNumber` / `isInteger` / `isString`
+  renders the `…MinLength` / `…MaxLength` variant while reporting the generic
+  `…Length` key. From 0.6.1, translating the **observable** key covers those
+  variants automatically (a specific key you supply still wins). On earlier
+  versions, translate the specific keys directly — `toFloatNAN`,
+  `isNumberMinLength`, and so on.
+- **Numbered `is` aliases share the `is` label.** *Changed in 0.6.1.* A failing
+  `is1` / `is2` rule that supplies no text of its own renders the `is` label
+  (`Condition not satisfied`) — translate `_validator.is` once to cover every
+  alias. Before 0.6.1 such a rule rendered an **empty** message.
+- **Custom-validator keys are translatable.** *Changed in 0.6.1.* A
+  `_validator.<yourValidatorName>` catalog entry (or a `setErrorLabels()` key)
+  now sets the default message for a
+  [custom validator](/reference/validation-rules#custom-validators);
+  earlier versions overwrote it with the English default at setup.
 
 :::caution Keep the `%` placeholders — and mind a bare `%`
 A label may contain `%l` (the field label), `%n` (the field name) and `%s` (the

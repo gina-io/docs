@@ -88,6 +88,46 @@ unaffected either way — it had no live checking before and has none now, so if
 you size the affected set from observed behaviour rather than from the
 attribute, you will undercount. Browser-bundle fix — re-bake to pick it up.
 
+### Fixed — validator error labels: translating the observable key now works
+
+A few built-in rules render their message from a more specific label key than
+the one they report in the field's `errors` object: `toFloat` failing on a
+non-numeric value renders the `toFloatNAN` label, and a length bound on
+`isNumber` / `isInteger` / `isString` renders the `…MinLength` / `…MaxLength`
+variant while reporting the generic `…Length` key. Translating the key you
+could observe was therefore a silent no-op, and a partial catalog rendered a
+localized message from one rule next to an English default from its neighbour
+— on the same field, for the same input.
+
+From 0.6.1 an app-supplied generic key fills the specific variants it did not
+supply itself (a specific key you supply still wins, and English defaults are
+untouched). Two related label fixes ride along: a failing numbered `is` alias
+(`is1`, `is2`, …) with no text of its own now renders the shared `is` label
+instead of an **empty** message — translate `_validator.is` once to cover every
+alias — and a `_validator.<name>` catalog entry for a custom validator is no
+longer overwritten by the English default at setup.
+
+**What changes at pickup:** wherever you had translated only observable keys,
+those messages switch from English to your language. If a message changes that
+you wanted kept in English, remove that catalog key. Browser-bundle fix —
+re-bake to pick it up (the same alias keys also apply server-side to `422`
+response messages).
+
+### Fixed — duplicate error messages and run-on screen-reader announcements
+
+The error container renders one message per failing rule with no
+deduplication, so two rules resolving to byte-identical text — canonically a
+coercion paired with its validator (`toFloat` + `isNumber`), both failing on
+the same non-numeric input — showed the same sentence twice. Each distinct
+text now renders once (the dev inspector still records every error key).
+
+Separately, the screen-reader announcement passed the container's raw
+`textContent`, which concatenates the messages with **no separator** — a
+screen reader received `…numberDoit être…` as one run-on string. Announcements
+now join the messages with a sentence separator. The visible layout is
+unchanged (messages already stacked as separate blocks). Browser-bundle fix —
+re-bake to pick it up.
+
 ### Fixed — Couchbase warns when a query file overwrites or shadows an entity member
 
 Couchbase is the opposite case of the six connectors above: it attaches every
