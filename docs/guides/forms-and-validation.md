@@ -168,6 +168,12 @@ To turn it off for a specific form, set the attribute explicitly to `false`:
 <form id="signup" data-gina-form-rule="signup" data-gina-form-live-check-enabled="false">
 ```
 
+:::note
+On versions before 0.6.1 the explicit `"false"` was ignored for rule-bound
+forms — the form got live checking anyway. Fixed in 0.6.1; see the
+[migration notes](/migration).
+:::
+
 A few behaviours worth knowing:
 
 - **Only the touched field shows its error.** The whole-form pass controls the

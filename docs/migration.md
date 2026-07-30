@@ -43,6 +43,34 @@ file matching a method your entity class itself defines still skips silently
 query file that has never worked — rename it. See
 [reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
 
+### Fixed — form submits no longer strand a sibling form's submit button
+
+FormValidator reused one shared `XMLHttpRequest` for every form submit on a
+page. Re-opening it replayed the **previous** submit's completion handler, so
+submitting form B after form A had completed re-disabled A's submit button and
+re-stamped its `data-gina-form-loading` — permanently, since nothing ever
+released them (the diagnostic signature: a `<select>` change revived the
+button, typing did not). Every send now builds its own XHR, and a `loadend`
+listener releases the submit trigger and loading flag on success, error,
+timeout and abort alike. Two related corrections ship with it:
+`$form.isSending` now genuinely means "a request is in flight" (it used to be
+cleared almost immediately — `$form.sent` was the only flag that spanned the
+request), and a timed-out form has `data-gina-form-loading` removed instead of
+being left holding the truthy string `"false"`. This is a **browser-bundle**
+fix — rebuild your bundles (re-bake) to pick it up. If you shipped a
+consumer-side sweep that heals stranded triggers, it can be retired once your
+pages run a 0.6.1 bundle.
+
+### Fixed — the live-check opt-out is honored
+
+A form declaring `data-gina-form-live-check-enabled="false"` with resolvable
+rules still got live checking — the opt-out was evaluated inside the gate's
+regex test and never took effect. From 0.6.1 the explicit `"false"` genuinely
+disables live checking, as the guide has always described. **Check your
+forms:** if any form relies on the broken behaviour (declaring `"false"` while
+counting on live checking anyway), remove the attribute — live checking is on
+by default for rule-bound forms. Browser-bundle fix — re-bake to pick it up.
+
 ### Fixed — Couchbase warns when a query file overwrites or shadows an entity member
 
 Couchbase is the opposite case of the six connectors above: it attaches every
