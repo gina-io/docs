@@ -156,6 +156,29 @@ now served as a normal 200 with the payload in the body; and the
 response code (it never did — always pass `status`). Server-side fix: a bundle
 restart picks it up, no client re-bake needed.
 
+### Security — Inspector asset path traversal fixed
+
+The dev-mode Inspector handler (`/_gina/inspector/*`) resolved the files it serves
+by joining the request path onto its asset directory without confining the result,
+and the path helper it used **normalizes** `../` rather than rejecting it. A request
+carrying a literal `../` could therefore read any file the bundle process had access
+to — application config and credentials included. Both engines were affected.
+
+Only bundles running in **dev mode** were exposed — production bundles never serve
+this handler. A browser could not trigger it (browsers normalize `../` before the
+request is sent), but any raw HTTP client could. URL-encoded forms (`%2e%2e`) were
+never affected, because this handler does not decode.
+
+**No action required beyond upgrading.** The resolved path is now confined to the
+Inspector asset root, and anything resolving outside it returns the same 404 as a
+missing file. Server-side fix: a bundle restart picks it up, no client re-bake
+needed.
+
+One thing worth reviewing while you are here: this endpoint has no IP allowlist,
+unlike `/_gina/info` and `/_gina/cache/*`, and a dev bundle binds all interfaces by
+default. If you run dev bundles on a shared or network-reachable host, restricting
+access at the network layer is still worthwhile.
+
 ---
 
 ## 0.5.26 → 0.6.0
