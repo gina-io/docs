@@ -64,12 +64,29 @@ pages run a 0.6.1 bundle.
 ### Fixed — the live-check opt-out is honored
 
 A form declaring `data-gina-form-live-check-enabled="false"` with resolvable
-rules still got live checking — the opt-out was evaluated inside the gate's
-regex test and never took effect. From 0.6.1 the explicit `"false"` genuinely
-disables live checking, as the guide has always described. **Check your
-forms:** if any form relies on the broken behaviour (declaring `"false"` while
-counting on live checking anyway), remove the attribute — live checking is on
-by default for rule-bound forms. Browser-bundle fix — re-bake to pick it up.
+rules was only partly opted out: two validation gates evaluated the rules-count
+boolean inside their regex test, so the attribute short-circuited to that
+boolean and matched. From 0.6.1 the explicit `"false"` is honored consistently,
+as the guide has always described.
+
+**What actually changes at pickup.** The attribute was not ignored outright, so
+the difference is narrower than "live checking turns off":
+
+| behaviour on an opted-out, rule-bound form | before 0.6.1 | from 0.6.1 |
+| --- | --- | --- |
+| text validation as you type | already off | off |
+| validation when a `<select>` changes | ran | off |
+| a validation pass at bind time | ran | off |
+| submit button enabled | yes | yes (unchanged) |
+
+**Check your forms:** if any form relies on the pre-0.6.1 behaviour — declaring
+`"false"` while counting on select-change or bind-time validation — remove the
+attribute, since live checking is on by default for rule-bound forms. A form
+that declared `"false"` deliberately needs no change; it simply becomes
+consistent. Note that a form whose rules do not resolve (`0` rules found) is
+unaffected either way — it had no live checking before and has none now, so if
+you size the affected set from observed behaviour rather than from the
+attribute, you will undercount. Browser-bundle fix — re-bake to pick it up.
 
 ### Fixed — Couchbase warns when a query file overwrites or shadows an entity member
 
