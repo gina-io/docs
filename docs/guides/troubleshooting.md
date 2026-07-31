@@ -43,6 +43,33 @@ node node_modules/gina/script/pre_install.js -g
 node node_modules/gina/script/post_install.js -g
 ```
 
+### The bundle refuses to start and names `env.json`
+
+```
+[ myBundle ][ prod ] no configuration block for this bundle/env in
+/path/to/project/env.json (file NOT FOUND) — every bundle must be declared
+there for the env it starts in; refusing to start
+```
+
+Every bundle needs a block in the project's `env.json` for the environment it
+starts in. Gina refuses to boot without one rather than starting on guessed
+host and port values. The parenthesis tells you which of the two cases you are
+in:
+
+| Message | Cause | Fix |
+|---|---|---|
+| `file NOT FOUND` | The project has no `env.json` at all | Restore it, or scaffold a fresh project and copy its `env.json` shape |
+| ``the file declares no `<bundle>.<env>` block`` | `env.json` exists but has no entry for this bundle and environment | Add the missing `"<bundle>": { "<env>": { … } }` block |
+
+The second case also covers an `env.json` that only declares *other* bundles —
+the message always names the bundle that was being **started**, not the ones it
+found. The process exits `1`, so a container restart policy or orchestrator
+liveness check retries automatically while a release tree finishes deploying.
+
+*(A clearer refusal since `0.6.2`. Earlier versions crashed here with an opaque
+`Cannot read properties of undefined` error that named neither the file nor the
+bundle.)*
+
 ### After a crash
 
 A stale process may be left running. Find and kill it:
