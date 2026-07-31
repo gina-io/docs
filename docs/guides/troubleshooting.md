@@ -78,10 +78,24 @@ declares no block), not `file NOT FOUND`. Nothing about `env.json` is copied
 into the built release tree, so the project file is read fresh on every boot.
 :::
 
-One shape is still opaque: a bundle declared in `env.json` but **not for the
-environment you are starting** fails earlier, with `Cannot set properties of
-undefined (setting 'bundlesPath')`, rather than the refusal above. The remedy is
-the same — add the missing `"<env>"` block for that bundle.
+A bundle declared in `env.json` but **not for the environment you are starting**
+falls under the second case above and refuses with the same message. Before
+`0.6.2` this shape failed earlier and far more opaquely, with `Cannot set
+properties of undefined (setting 'bundlesPath')` and exit code `143`; the remedy
+is unchanged — add the missing `"<env>"` block for that bundle.
+
+Only the bundle you are **starting** refuses. A *different* bundle declared in
+the same `env.json` with no block for this environment is skipped, and the boot
+continues without it:
+
+```
+[CONFIG][<bundle>][<env>] no `<env>` block in the project env.json — skipping this bundle for this environment
+```
+
+Watch for that warning if a bundle you expected to be served is missing. Before
+`0.6.2` this was not survivable: one bundle missing its block for the current
+environment crashed the boot of *any* bundle in that project, because every
+declared bundle is walked while the environment configuration is assembled.
 
 ### The certificate path contains a literal `${host}`
 
