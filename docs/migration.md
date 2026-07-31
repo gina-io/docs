@@ -29,6 +29,22 @@ The SQLite ORM connector, the SQLite session store, the SQLite async-job store a
 
 New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/guides/duckdb-analytics).
 
+### Fixed — Bun: a bundle declaring any connector boots again
+
+Two Bun-only crashes stopped model loading outright, so under Bun *any* bundle
+declaring a connector failed to start. `new require(mod)(args)` parses as
+`(new require(mod))(args)` — `require` invoked as a constructor — which Node
+tolerates because its `require` has a construct slot and Bun's does not, so the
+call threw `TypeError: function is not a constructor`. Separately the entity
+loader reassigned `arguments`, which V8 permits in sloppy mode but Bun's parser
+rejects outright with `SyntaxError: Invalid assignment target`.
+
+**No action required, and nothing changes on Node.** Both repairs are no-ops
+there by construction — the plain call is exactly what Node was already doing.
+The release smoke now boots a SQLite-backed bundle and round-trips a real query
+on every Node leg and on the Bun leg, so connector support under Bun is gated
+rather than assumed.
+
 ### Fixed — reserved-name query files now warn at startup
 
 A query file named after an inherited prototype member — most commonly
