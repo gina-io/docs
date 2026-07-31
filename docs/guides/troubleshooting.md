@@ -70,6 +70,57 @@ liveness check retries automatically while a release tree finishes deploying.
 `Cannot read properties of undefined` error that named neither the file nor the
 bundle.)*
 
+:::note
+Deleting `env.json` does not make it stay deleted — the next `gina` command of
+any kind recreates it as an empty `{}` and warns `Project env.json not found.
+Trying to fix it ...`. A boot then reports the *second* case above (the file
+declares no block), not `file NOT FOUND`. Nothing about `env.json` is copied
+into the built release tree, so the project file is read fresh on every boot.
+:::
+
+One shape is still opaque: a bundle declared in `env.json` but **not for the
+environment you are starting** fails earlier, with `Cannot set properties of
+undefined (setting 'bundlesPath')`, rather than the refusal above. The remedy is
+the same — add the missing `"<env>"` block for that bundle.
+
+### The certificate path contains a literal `${host}`
+
+```
+ENOENT: no such file or directory, open
+'/home/you/.gina/certificates/scopes/local/${host}/private.key'
+```
+
+An https or HTTP/2 bundle stops with a "secured server without sufficient
+credentials" error, and the path it names still contains `${host}` verbatim. The
+unsubstituted token is the tell: the bundle's block in the project `env.json`
+does not declare `host`, and that block is the only place a project supplies it.
+The error points at your server settings, but the credentials are fine — the
+host is what is missing.
+
+Add it to the block for the environment you are starting:
+
+```json
+{
+  "myBundle": {
+    "prod": {
+      "host": "localhost"
+    }
+  }
+}
+```
+
+Since `0.6.2` the framework carries `localhost` as a default, so a block that
+sets only a subset of keys — say just `server.cache` — resolves on its own, and
+an omitted declaration is reported instead of applied silently:
+
+```
+[CONFIG][myBundle][prod] no `host` declared in the project env.json — defaulting to `localhost`
+```
+
+Declare `host` explicitly for any bundle not reached on `localhost`: it is the
+value substituted into every `${host}` token, including the TLS credentials
+paths above.
+
 ### After a crash
 
 A stale process may be left running. Find and kill it:
