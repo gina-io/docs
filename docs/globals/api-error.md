@@ -67,7 +67,7 @@ per field in its `.fields` map.
 |----------|------|-------------|
 | `.status` | `number` | HTTP status code |
 | `.error` | `string` | Human-readable status text derived from the status code (e.g. `'Internal Server Error'`, `'Precondition Failed'`) |
-| `.message` | `string` | The error message (first message for multi-field errors) |
+| `.message` | `string` | The error message — **server errors only**, and never part of the response body (see [What reaches the client](#what-reaches-the-client)) |
 | `.tag` | `string` | Internal reference string — only present on client errors |
 | `.fields` | `object` | Field-to-message map — only present on client errors. Shape: `{ fieldName: 'message', ... }` |
 | `.path` | `string` | Source file path where `ApiError` was constructed — only present on client errors |
@@ -81,6 +81,39 @@ full stack in `local` for debugging. Pass a real, user-facing message per field 
 than relying on the raw error. *Added in 0.5.14.*
 :::
 
+### What reaches the client
+
+`renderJSON` serialises the object with `JSON.stringify`, and that is where the two
+return flavours diverge:
+
+| Constructor form | Returns | `message` in the body? |
+|------------------|---------|------------------------|
+| `new ApiError(message)`, `new ApiError(message, httpStatus)` | a real `Error` | **No** — an `Error`'s `message` is a *non-enumerable* own property, so `JSON.stringify` skips it. It stays readable server-side. |
+| `new ApiError(message, fieldName)`, `new ApiError(message, fieldName, httpStatus)`, the array form | a plain object | **No** — the object is built by merging over the `Error`, and that copies enumerable properties only. The text travels in `.fields` instead. |
+
+So an `ApiError` response body carries `status` and `error` — the status *text* — plus
+`fields`, `tag` and `path` for client errors, but **never** `message`.
+
+:::caution Sending a human-readable sentence
+If the client needs the message itself, either build the payload yourself:
+
+```js
+return self.renderJSON({
+    status  : 503,
+    error   : 'Service Unavailable',
+    message : 'Database connection lost'
+});
+```
+
+…or use [`throwError`](/guides/controller#selfthrowerrorres-code-err), which copies
+`message` onto the payload explicitly (and `stack` too, in `local` scope):
+
+```js
+return self.throwError(res, 503, new Error('Database connection lost'));
+// → { "status": 503, "error": "Service Unavailable", "message": "Database connection lost", "ref": "A1B2C3" }
+```
+:::
+
 ---
 
 ## Examples
@@ -89,19 +122,21 @@ than relying on the raw error. *Added in 0.5.14.*
 
 ```js
 return self.renderJSON(new ApiError('Database connection lost'));
-// { status: 500, error: 'Internal Server Error', message: 'Database connection lost' }
+// → { "status": 500, "error": "Internal Server Error" }
+// 'Database connection lost' stays server-side — see "What reaches the client" above.
 ```
 
 ### Single field validation error
 
 ```js
 return self.renderJSON(new ApiError('Email is required', 'email'));
-// {
-//   status: 412,
-//   error: 'Precondition Failed',
-//   message: 'Email is required',
-//   fields: { email: 'Email is required' }
-// }
+// → {
+//     "status" : 412,
+//     "error"  : "Precondition Failed",
+//     "fields" : { "email": "Email is required" },
+//     "tag"    : "…",   // internal framework reference
+//     "path"   : "…"    // source file that built the error
+//   }
 ```
 
 ### Multiple field validation errors
@@ -111,16 +146,23 @@ return self.renderJSON(new ApiError(
     ['Email is required', 'Password too short'],
     ['email', 'password']
 ));
-// {
-//   status: 412,
-//   fields: { email: 'Email is required', password: 'Password too short' }
-// }
+// → {
+//     "status" : 412,
+//     "error"  : "Precondition Failed",
+//     "fields" : {
+//       "email"    : "Email is required",
+//       "password" : "Password too short"
+//     },
+//     "tag"    : "…",
+//     "path"   : "…"
+//   }
 ```
 
 ### Custom status code
 
 ```js
 return self.renderJSON(new ApiError('Feature not implemented', 501));
+// → { "status": 501, "error": "Not Implemented" }
 ```
 
 ---

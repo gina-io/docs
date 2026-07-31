@@ -19,6 +19,184 @@ upward to the target version.
 
 ---
 
+## 0.6.0 → 0.6.1
+
+### Added — SQLite works under the Bun runtime
+
+The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly. The MongoDB connector remains unavailable under Bun (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
+
+### Added — DuckDB connector
+
+New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/guides/duckdb-analytics).
+
+### Fixed — Bun: a bundle declaring any connector boots again
+
+Two Bun-only crashes stopped model loading outright, so under Bun *any* bundle
+declaring a connector failed to start. `new require(mod)(args)` parses as
+`(new require(mod))(args)` — `require` invoked as a constructor — which Node
+tolerates because its `require` has a construct slot and Bun's does not, so the
+call threw `TypeError: function is not a constructor`. Separately the entity
+loader reassigned `arguments`, which V8 permits in sloppy mode but Bun's parser
+rejects outright with `SyntaxError: Invalid assignment target`.
+
+**No action required, and nothing changes on Node.** Both repairs are no-ops
+there by construction — the plain call is exactly what Node was already doing.
+The release smoke now boots a SQLite-backed bundle and round-trips a real query
+on every Node leg and on the Bun leg, so connector support under Bun is gated
+rather than assumed.
+
+### Fixed — reserved-name query files now warn at startup
+
+A query file named after an inherited prototype member — most commonly
+`count.sql`, which collides with the framework's global `count()` helper — was
+**silently skipped** by the MySQL, PostgreSQL, SQLite, DuckDB, ScyllaDB, and
+MongoDB connectors: the method never attached, and calling it ran the inherited
+member instead (returning a plausible but unrelated value). The skip now logs a
+startup warning naming the file and suggesting a rename (for example
+`countRows.sql`). **Behavior is unchanged** — the file is still skipped, and a
+file matching a method your entity class itself defines still skips silently
+(your code wins, by design). If a warning appears on upgrade, it points at a
+query file that has never worked — rename it. See
+[reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
+
+### Fixed — form submits no longer strand a sibling form's submit button
+
+FormValidator reused one shared `XMLHttpRequest` for every form submit on a
+page. Re-opening it replayed the **previous** submit's completion handler, so
+submitting form B after form A had completed re-disabled A's submit button and
+re-stamped its `data-gina-form-loading` — permanently, since nothing ever
+released them (the diagnostic signature: a `<select>` change revived the
+button, typing did not). Every send now builds its own XHR, and a `loadend`
+listener releases the submit trigger and loading flag on success, error,
+timeout and abort alike. Two related corrections ship with it:
+`$form.isSending` now genuinely means "a request is in flight" (it used to be
+cleared almost immediately — `$form.sent` was the only flag that spanned the
+request), and a timed-out form has `data-gina-form-loading` removed instead of
+being left holding the truthy string `"false"`. This is a **browser-bundle**
+fix — rebuild your bundles (re-bake) to pick it up. If you shipped a
+consumer-side sweep that heals stranded triggers, it can be retired once your
+pages run a 0.6.1 bundle.
+
+### Fixed — the live-check opt-out is honored
+
+A form declaring `data-gina-form-live-check-enabled="false"` with resolvable
+rules was only partly opted out: two validation gates evaluated the rules-count
+boolean inside their regex test, so the attribute short-circuited to that
+boolean and matched. From 0.6.1 the explicit `"false"` is honored consistently,
+as the guide has always described.
+
+**What actually changes at pickup.** The attribute was not ignored outright, so
+the difference is narrower than "live checking turns off":
+
+| behaviour on an opted-out, rule-bound form | before 0.6.1 | from 0.6.1 |
+| --- | --- | --- |
+| text validation as you type | already off | off |
+| validation when a `<select>` changes | ran | off |
+| a validation pass at bind time | ran | off |
+| submit button enabled | yes | yes (unchanged) |
+
+**Check your forms:** if any form relies on the pre-0.6.1 behaviour — declaring
+`"false"` while counting on select-change or bind-time validation — remove the
+attribute, since live checking is on by default for rule-bound forms. A form
+that declared `"false"` deliberately needs no change; it simply becomes
+consistent. Note that a form whose rules do not resolve (`0` rules found) is
+unaffected either way — it had no live checking before and has none now, so if
+you size the affected set from observed behaviour rather than from the
+attribute, you will undercount. Browser-bundle fix — re-bake to pick it up.
+
+### Fixed — validator error labels: translating the observable key now works
+
+A few built-in rules render their message from a more specific label key than
+the one they report in the field's `errors` object: `toFloat` failing on a
+non-numeric value renders the `toFloatNAN` label, and a length bound on
+`isNumber` / `isInteger` / `isString` renders the `…MinLength` / `…MaxLength`
+variant while reporting the generic `…Length` key. Translating the key you
+could observe was therefore a silent no-op, and a partial catalog rendered a
+localized message from one rule next to an English default from its neighbour
+— on the same field, for the same input.
+
+From 0.6.1 an app-supplied generic key fills the specific variants it did not
+supply itself (a specific key you supply still wins, and English defaults are
+untouched). Two related label fixes ride along: a failing numbered `is` alias
+(`is1`, `is2`, …) with no text of its own now renders the shared `is` label
+instead of an **empty** message — translate `_validator.is` once to cover every
+alias — and a `_validator.<name>` catalog entry for a custom validator is no
+longer overwritten by the English default at setup.
+
+**What changes at pickup:** wherever you had translated only observable keys,
+those messages switch from English to your language. If a message changes that
+you wanted kept in English, remove that catalog key. Browser-bundle fix —
+re-bake to pick it up (the same alias keys also apply server-side to `422`
+response messages).
+
+### Fixed — duplicate error messages and run-on screen-reader announcements
+
+The error container renders one message per failing rule with no
+deduplication, so two rules resolving to byte-identical text — canonically a
+coercion paired with its validator (`toFloat` + `isNumber`), both failing on
+the same non-numeric input — showed the same sentence twice. Each distinct
+text now renders once (the dev inspector still records every error key).
+
+Separately, the screen-reader announcement passed the container's raw
+`textContent`, which concatenates the messages with **no separator** — a
+screen reader received `…numberDoit être…` as one run-on string. Announcements
+now join the messages with a sentence separator. The visible layout is
+unchanged (messages already stacked as separate blocks). Browser-bundle fix —
+re-bake to pick it up.
+
+### Fixed — Couchbase warns when a query file overwrites or shadows an entity member
+
+Couchbase is the opposite case of the six connectors above: it attaches every
+N1QL query file **unconditionally**, so a colliding filename silently
+**overwrote** an entity property (for example `getCluster.sql`, or a duplicate
+of an already-attached method) or **shadowed** an inherited one (an `on.sql`
+file replaces `EventEmitter`'s `on` for that entity and breaks its event
+wiring). That clobber now logs a startup warning naming the file and suggesting
+a rename. **Behavior is unchanged** — the file still attaches and still wins.
+A file shadowing the framework's global `count()` / `functionCount()` helpers
+stays silent: on Couchbase the query file winning there is exactly what you
+want, and `count.sql` keeps working as before.
+
+### Fixed — the `renderJSON()` `status` key now reaches the wire over HTTP/2
+
+On a genuine HTTP/2 stream, `self.renderJSON({ status: 404, ... })` was served as
+HTTP **200** with the error payload in the body: the HTTP/2 body path built its
+header frame with a hardcoded `:status: 200`, discarding the resolved status code.
+HTTP/1.1, HEAD requests, and HTML renders were always correct — so if your bundle
+serves JSON errors over HTTP/2, clients checking `res.ok` or the status code start
+seeing the real 4xx/5xx after this release. Two smaller corrections ride along:
+an `errno`-only payload (no usable `status`) used to poison the status code — the
+response was silently never sent on HTTP/1.1 and became a 500 on HTTP/2 — and is
+now served as a normal 200 with the payload in the body; and the
+[controller guide](/guides/controller) no longer suggests `errno` sets the
+response code (it never did — always pass `status`). Server-side fix: a bundle
+restart picks it up, no client re-bake needed.
+
+### Security — Inspector asset path traversal fixed
+
+The dev-mode Inspector handler (`/_gina/inspector/*`) resolved the files it serves
+by joining the request path onto its asset directory without confining the result,
+and the path helper it used **normalizes** `../` rather than rejecting it. A request
+carrying a literal `../` could therefore read any file the bundle process had access
+to — application config and credentials included. Both engines were affected.
+
+Only bundles running in **dev mode** were exposed — production bundles never serve
+this handler. A browser could not trigger it (browsers normalize `../` before the
+request is sent), but any raw HTTP client could. URL-encoded forms (`%2e%2e`) were
+never affected, because this handler does not decode.
+
+**No action required beyond upgrading.** The resolved path is now confined to the
+Inspector asset root, and anything resolving outside it returns the same 404 as a
+missing file. Server-side fix: a bundle restart picks it up, no client re-bake
+needed.
+
+One thing worth reviewing while you are here: this endpoint has no IP allowlist,
+unlike `/_gina/info` and `/_gina/cache/*`, and a dev bundle binds all interfaces by
+default. If you run dev bundles on a shared or network-reachable host, restricting
+access at the network layer is still worthwhile.
+
+---
+
 ## 0.5.26 → 0.6.0
 
 ### Action required — settings reset (shortVersion bump)

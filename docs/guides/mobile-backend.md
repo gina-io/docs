@@ -126,7 +126,7 @@ self.renderJSON({
 
 // Error — handled automatically by throwError(), but you can also format manually
 self.throwError(res, 404, 'User not found');
-// sends: { "error": "User not found" }
+// sends: { "status": 404, "error": "Not Found", "message": "User not found", "ref": "A1B2C3" }
 ```
 
 ```json
@@ -134,10 +134,10 @@ self.throwError(res, 404, 'User not found');
 ```
 
 ```json
-{ "error": "User not found" }
+{ "status": 404, "error": "Not Found", "message": "User not found", "ref": "A1B2C3" }
 ```
 
-Mobile SDKs can then check for the presence of `"error"` as a single convention rather than parsing status codes alone.
+Mobile SDKs can then check for the presence of `"error"` as a single convention rather than parsing status codes alone. Read `"message"` for the human-readable detail — `"error"` is the status text for the code, not the message you passed.
 
 ---
 
@@ -316,7 +316,7 @@ module.exports = Cors;
 
 ## Error handling
 
-`self.throwError(res, statusCode, message)` terminates the request and sends a standard `{ "error": "..." }` JSON body. Always `return` immediately after:
+`self.throwError(res, statusCode, message)` terminates the request and sends a standard `{ "status": …, "error": …, "message": …, "ref": … }` JSON body — where `error` is the status text and `message` is the text you passed. Always `return` immediately after:
 
 ```js
 this.create = function(req, res, next) {

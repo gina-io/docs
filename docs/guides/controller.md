@@ -156,12 +156,16 @@ this.apiStatus = function(req, res, next) {
 };
 ```
 
-If `data` has a `status` or `errno` field with a non-200 value, the HTTP response code
-is set accordingly:
+If `data` carries a `status` key naming a valid non-200 HTTP code, the response is served
+with that code — the `status` key stays in the body, so client-side JavaScript can still
+read it after checking `res.ok`:
 
 ```js
 self.renderJSON({ status: 404, error: 'Not found' });  // HTTP 404
 ```
+
+An `errno` key on its own does not set the response code — always pass `status` when you
+want a non-200 response.
 
 ### `self.renderTEXT(content)`
 
@@ -376,8 +380,12 @@ correlation code (6 uppercase hex characters, e.g. `A1B2C3`) present in **all
 scopes**, production included:
 
 ```json
-{ "status": 404, "error": "Invoice not found", "ref": "A1B2C3" }
+{ "status": 404, "error": "Not Found", "message": "Invoice not found", "ref": "A1B2C3" }
 ```
+
+Note that `error` holds the **status text** for the code, and the text you passed lands
+in `message` — so a client that wants to display your sentence should read `message`,
+not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
 stack is stripped from the wire — see below.) The ref carries no server detail,

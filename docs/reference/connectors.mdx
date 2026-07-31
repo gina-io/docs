@@ -45,6 +45,7 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
 | [ScyllaDB / Cassandra](/guides/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
+| [DuckDB](/guides/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
 
 ---
 
@@ -109,6 +110,9 @@ no cost) and switch to a cloud provider by updating `connectors.json`.
 | Single pod, production | SQLite — fine if you never scale horizontally |
 | Multiple pods / K8s | Redis — shared state across all pods |
 | Already using Redis for caching | Redis — reuse the same instance |
+| Already running Couchbase | Couchbase — server-side per-document expiry |
+| Already running MongoDB | MongoDB — expiry reaped by a TTL index |
+| Already running ScyllaDB / Cassandra | ScyllaDB — native CQL `USING TTL` |
 
 ### Quick comparison — relational connectors
 
@@ -479,6 +483,11 @@ The entry must be named `session` — the `SessionStore` factory resolves it fro
 `express-session`'s function name, which is read-only (see the
 [Sessions guide](../guides/sessions#configuring-the-store)).
 
+**Redis** and **SQLite** are the recommended defaults and are documented first;
+**Couchbase**, **MongoDB** and **ScyllaDB** follow, for teams already running one of
+those datastores who would rather not add a second one just for sessions. All five
+back the same `express-session` interface, so the choice is operational, not functional.
+
 ### Redis
 
 Redis is the recommended session store for **multi-pod and Kubernetes deployments**.
@@ -609,6 +618,219 @@ single-pod production where a shared Redis instance is not available.
 | `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | string | `"sess:"` | Key prefix stored in the sessions table |
 | `cleanupInterval` | number | `900` | Seconds between background purges of expired sessions. Set `0` to disable |
+
+---
+
+### Couchbase {#couchbase-session-store}
+
+Choose Couchbase when you **already run a Couchbase cluster** and want sessions to
+live alongside it. Expiry is handled server-side by Couchbase itself, per document.
+
+Requires the `couchbase` SDK installed in your project:
+
+```bash
+npm install couchbase@^4
+```
+
+The pinned major decides which store implementation loads: the connector reads
+`dependencies.couchbase` from your project's `package.json` and selects the SDK v3 or
+v4 store. With no pin it defaults to **v3**; SDK v2 and older are refused at load with
+an explicit upgrade message.
+
+:::warning Configured differently from every other session store
+Redis, SQLite, MongoDB and ScyllaDB all configure themselves *from* the
+`connectors.json` entry. Couchbase splits the job in two: the entry configures the
+**model layer**, which opens the bucket at boot, and the store receives that
+already-open handle through its **required `db` constructor option**. A `ttl` or
+`prefix` key placed in the `connectors.json` entry is **silently ignored** — this
+store reads nothing from that file.
+:::
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector": "couchbase",
+    "protocol" : "couchbase://",
+    "host"     : "127.0.0.1",
+    "database" : "sessions",
+    "username" : "appuser",
+    "password" : "${COUCHBASE_PASSWORD}"
+  }
+}
+```
+
+**Connection fields** — read by the model layer, not by the store:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"couchbase"` | — | Selects the Couchbase connector |
+| `protocol` | string | `"couchbase://"` | Use `couchbases://` for TLS (Capella, Couchbase Cloud) |
+| `host` | string | — | Cluster hostname(s), comma-separated for multi-node |
+| `database` | string | — | Bucket name. The field is `database` — **not** `bucket` |
+| `username` | string | — | Bucket / RBAC user |
+| `password` | string | — | RBAC password. Supports `${ENV_VAR}` substitution |
+
+**Store options** — passed to the `CouchbaseStore` constructor:
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `db` | object | — (**required**) | The open bucket for the `session` entry: `getModel('session').getConnection()`. Construction throws if absent or not a bucket handle |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Expiry in seconds, stamped per document via Couchbase's `expiry` |
+| `prefix` | string | `"sess:"` | Document key prefix, combined with the session id (`sess:<sid>`) |
+| `connectionTimeout` | number | `10000` | Connect-time timeout in ms |
+| `operationTimeout` | number | `10000` | Per-operation timeout in ms |
+
+See the [Couchbase ORM guide](../guides/couchbase-orm) for the bucket-handle wiring and
+the TTL strategy, and the [Sessions guide](../guides/sessions#configuring-the-store) for
+the surrounding `express-session` setup.
+
+---
+
+### MongoDB {#mongodb-session-store}
+
+Choose MongoDB when you **already run MongoDB** and want a shared, persistent session
+layer without introducing Redis. Expired sessions are reaped by a TTL index.
+
+Requires the `mongodb` driver installed in your project:
+
+```bash
+npm install mongodb
+```
+
+See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring instructions.
+
+<Tabs>
+  <TabItem value="uri" label="Connection URI (recommended)">
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector" : "mongodb",
+    "uri"       : "${MONGODB_URI}",
+    "database"  : "app",
+    "collection": "sessions",
+    "ttl"       : 86400
+  }
+}
+```
+
+A `mongodb+srv://` URI works as-is — use it for Atlas and any SRV-discovered replica set.
+
+  </TabItem>
+  <TabItem value="fields" label="Decomposed fields">
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector" : "mongodb",
+    "host"      : "127.0.0.1",
+    "port"      : 27017,
+    "database"  : "app",
+    "username"  : "appuser",
+    "password"  : "${MONGODB_PASSWORD}",
+    "authSource": "admin",
+    "collection": "sessions",
+    "ttl"       : 86400
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"mongodb"` | — | Selects the MongoDB connector |
+| `uri` | string | — | Full `mongodb://` or `mongodb+srv://` URI. When present, the decomposed host/port/auth fields are not used |
+| `host` | string | `"127.0.0.1"` | Host (used when `uri` is absent) |
+| `port` | number | `27017` | Port (used when `uri` is absent) |
+| `database` | string | — (**required**) | Database name. Construction throws without it — including when `uri` is supplied, so set it in both cases |
+| `username` | string | — | Auth username |
+| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `authSource` | string | — | Authentication database, typically `"admin"` |
+| `replicaSet` | string | — | Replica set name |
+| `ssl` | boolean \| object | — | TLS configuration |
+| `collection` | string | `"sessions"` | Collection holding the session documents |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
+
+Every field above may also be passed directly to the `MongodbStore` constructor, which
+takes precedence over the `connectors.json` entry. See the
+[MongoDB connector guide](../guides/connectors-mongodb).
+
+---
+
+### ScyllaDB {#scylladb-session-store}
+
+Choose ScyllaDB (or Cassandra) when you **already run a CQL cluster** and want sessions
+distributed across it. Expiry uses CQL's native `USING TTL`, so rows self-remove.
+
+Requires the `cassandra-driver` installed in your project:
+
+```bash
+npm install cassandra-driver
+```
+
+See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring instructions.
+
+<Tabs>
+  <TabItem value="cluster" label="Contact points (cluster)">
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector"      : "scylladb",
+    "contactPoints"  : ["node1.scylla.internal", "node2.scylla.internal"],
+    "localDataCenter": "datacenter1",
+    "keyspace"       : "app",
+    "username"       : "appuser",
+    "password"       : "${SCYLLA_PASSWORD}",
+    "table"          : "sessions",
+    "ttl"            : 86400
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="single" label="Single host (dev)">
+
+```json title="src/api/config/connectors.json"
+{
+  "session": {
+    "connector": "scylladb",
+    "host"     : "127.0.0.1",
+    "port"     : 9042,
+    "keyspace" : "app",
+    "table"    : "sessions",
+    "ttl"      : 86400
+  }
+}
+```
+
+  </TabItem>
+</Tabs>
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"scylladb"` | — | Selects the ScyllaDB connector |
+| `contactPoints` | array \| string | — | Cluster contact points, as an array or a comma-separated string. When present, `host` and `port` are not used |
+| `host` | string | — | Single host (used when `contactPoints` is absent). With neither set, the store falls back to `127.0.0.1:9042` |
+| `port` | number | `9042` | CQL port |
+| `localDataCenter` | string | `"datacenter1"` | Data center name passed to the driver |
+| `keyspace` | string | (falls back to `database`) | CQL keyspace holding the sessions table |
+| `username` | string | — | Auth username |
+| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `credentials` | object | — | `{ username, password }` — an alternative to the flat pair above |
+| `ssl` | object | — | `sslOptions` passed through to the driver |
+| `table` | string | `"sessions"` | Table holding the session rows |
+| `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds, applied as CQL `USING TTL` |
+
+Every field above may also be passed directly to the `ScylladbStore` constructor, which
+takes precedence over the `connectors.json` entry. See the
+[ScyllaDB ORM guide](../guides/scylladb-orm).
 
 ---
 
