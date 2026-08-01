@@ -633,6 +633,42 @@ default path, not as proof that a retry is pointless.
 The two fields are purely additive — nothing else about the error changes — so
 existing code that ignores them behaves exactly as before.
 
+### Rendering transients as 503 + Retry-After (opt-in)
+
+*New in 0.6.2.* The example above hand-rolls the retry response. If you would
+rather have the framework do it, opt in per bundle in `settings.json`:
+
+```js
+"server": {
+    "transientErrors": {
+        "enabled": true,        // strict boolean — anything else leaves it off
+        "retryAfter": 30,       // Retry-After delta-seconds, integer 1..86400 (default 30)
+        "message": "Store temporarily unavailable — please retry."  // default: "Service Unavailable"
+    }
+}
+```
+
+With the opt-in on, a stamped-transient error that would have rendered as
+HTTP 500 through `self.throwError()` renders as **503** with a
+**`Retry-After`** header instead — on JSON/XHR responses and HTML error pages
+alike, over HTTP/1.1 and HTTP/2. The user-facing `error` field carries your
+configured `message` (or the standard 503 status text) instead of the raw
+datastore error; the full error detail still lands in the server-side log,
+paired with the incident `ref` the response carries.
+
+What is deliberately **not** upgraded:
+
+- an **explicit non-500 status** — `self.throwError(404, err)` stays 404;
+- a **permanent** error (`isTransient` is `false` or absent) — stays 500;
+- anything when the opt-in is off — the default behaviour is unchanged.
+
+A malformed `transientErrors` block (a string `"true"`, an out-of-range
+`retryAfter`, an empty `message`) is reported by a boot-time warning naming the
+ignored key, and the feature stays off — it never refuses a boot. If you also
+configure a custom error page for `503` (or `5xx`) via `templates.json`'s
+`_common.errorFiles`, it receives the cleaned-up `error` text in its template
+data.
+
 ---
 
 ## Scope-based data isolation

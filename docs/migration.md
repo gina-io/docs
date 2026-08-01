@@ -19,6 +19,22 @@ upward to the target version.
 
 ---
 
+## 0.6.1 → 0.6.2
+
+### Added — Opt-in 503 + Retry-After for transient datastore failures
+
+With `server.transientErrors.enabled: true` in a bundle's `settings.json`, a
+connector error stamped `isTransient` that would render as HTTP 500 through
+`throwError` renders as **503** with a `Retry-After` header
+(`retryAfter`, integer seconds, default 30) and a clean user-facing message
+(`message`, default: the standard 503 status text) — on JSON and HTML error
+surfaces, over HTTP/1.1 and HTTP/2. Explicit non-500 statuses and permanent
+errors are never upgraded. **No action required**: the setting defaults to
+off and the default behaviour is byte-identical to 0.6.1. A malformed
+`transientErrors` block warns at boot and leaves the feature off — it never
+refuses a boot. See
+[Models → Rendering transients as 503 + Retry-After](/guides/models#rendering-transients-as-503--retry-after-opt-in).
+
 ## 0.6.0 → 0.6.1
 
 ### Added — SQLite works under the Bun runtime

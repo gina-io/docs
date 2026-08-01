@@ -946,7 +946,9 @@ module.exports = Controller;
 
 A datastore error — whether it rejects an `await` or reaches an `.onComplete()`
 callback — carries `err.isTransient` and `err.transientReason`, so you can
-answer a self-healing failure with a retry response instead of a generic 500.
+answer a self-healing failure with a retry response instead of a generic 500 —
+or let the framework do it for you: the opt-in `server.transientErrors` setting
+renders stamped-transient failures as 503 + `Retry-After` automatically.
 See [Models → Transient vs permanent errors](/guides/models#transient-vs-permanent-errors).
 This is specific to the model layer; the `self.query()` error shape documented
 above is a different contract and does not carry those fields.
