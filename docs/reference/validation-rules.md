@@ -422,7 +422,12 @@ behaviours are load-bearing:
 **`isRequired` should come first.** An empty value is adjudicated by `isRequired`
 alone: every other rule passes on a blank field, so an optional one is never
 flagged, and a required one reports a single *Cannot be left empty* instead of a
-pile of *"…is not valid"* messages stacked on top of it. Whether the **form** is
+pile of *"…is not valid"* messages stacked on top of it. "Empty" means the
+**literal empty string** (and, for a browser field, an unfilled input — whose
+value is exactly that). It does **not** mean falsy: since 0.6.3 the values `0`,
+`false` and `[]` are validated like any other input rather than being mistaken
+for blank — see the
+[migration note](/migration#fixed--the-rule-engine-no-longer-treats-0-false-or--as-empty). Whether the **form** is
 valid does not depend on the order — but each rule keeps its own per-field
 `valid` flag consistent with a surviving `isRequired` error, and that flag is
 only correct at every step when `isRequired` ran first.

@@ -403,6 +403,17 @@ Generate an [OpenAPI 3.1.0](https://spec.openapis.org/oas/v3.1.0) specification 
 
 Since 0.5.25, the spec also carries the bundle's **authorization contract**: routes gated with [`requireAuth` / `roles` / `policy`](/guides/route-authorization) get a `401` response entry (plus a `403` when roles or a policy apply), and when [machine-caller auth](/guides/route-authorization#machine-callers) is configured the spec declares a `bearerAuth` security scheme (`http`/`bearer`) and marks each gated operation with `security: [{ "bearerAuth": [] }]`. Role and policy names are never emitted into the spec.
 
+An inline `validator::{ … }` [routing requirement](/guides/routing) is
+un-collapsed into a real parameter schema (`isEmail` → `format: email`,
+`isString` bounds → `minLength`/`maxLength` — the scalar form included since
+0.6.3 — `isInList` → `enum`). [`isInteger` / `isNumber` digit
+bounds](/reference/validation-rules#isinteger) constrain the length of the
+value's **string form**, not its range, so rather than being mapped to
+`minimum`/`maximum` (which would be wrong for negative values) they annotate
+the parameter with a human-readable `description` and a machine-readable
+`x-gina-digitBounds` extension (since 0.6.3; the same applies to
+`bundle:mcp` tool input schemas).
+
 ```bash
 gina bundle:openapi <bundle> @<project>
 ```

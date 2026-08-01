@@ -68,13 +68,41 @@ Two details worth knowing before you re-check fixtures:
 
 - A **negative** number counts its minus sign toward the length (`-123` is 4),
   exactly as it already did when the same value arrived as a string.
-- The number `0` is still skipped by the bound check (an empty-value gate treats
-  it as blank). This is unchanged, shared with `isNumber`, and was deliberately
-  left alone here.
+- The number `0` is **also bound-checked in 0.6.3** — see the next section: the
+  empty-value gate that used to treat `0` as blank was fixed in the same
+  release.
 
 If server-side rejection of out-of-range values is a change you are not ready
 for, drop the bound from the rule and enforce the range in your action until you
 are — do not rely on it being ignored.
+
+### Fixed — The rule engine no longer treats `0`, `false` or `[]` as "empty"
+
+An empty value is adjudicated by `isRequired` alone — every other rule passes on
+a blank field. Five rule-engine sites tested that emptiness with **loose
+equality** against the empty string, and since `0`, `-0`, `false` and `[]` all
+compare loosely equal to `""`, those values rode the empty-value bypass:
+
+- **`isEmail`, `isJsonWebToken` and `isFloat` reported them VALID outright.** A
+  JSON body carrying `{"email": 0}` passed email validation with no error and
+  no warning.
+- **The `isInteger` / `isNumber` digit bounds skipped the number zero** (for
+  `isNumber` even the string `"0"`, which its entry cast turns into a number
+  before the gate).
+
+All five sites now compare **strictly**, so only the literal empty string
+bypasses — which is all the designed contract ever meant. An empty string
+behaves exactly as before on every rule, ordering conventions are unchanged,
+and `isString`, `isInList`, `isDate` and the `is` condition rule are untouched.
+
+**Action required — this tightens enforcement.** Review fields whose rules
+declare `isEmail`, `isJsonWebToken` or `isFloat` and whose value can
+legitimately arrive as a number or boolean from a JSON body, and
+bounds-carrying `isInteger`/`isNumber` fields that can receive zero. Such
+values validated silently before and are rejected now. If a field genuinely
+accepts "0 or an email", express that in the rule set (e.g. a [conditional
+`is`](/reference/validation-rules#is) case) rather than relying on the old
+conflation.
 
 ### Fixed — Custom-error renders no longer misreport correct routing rules
 
