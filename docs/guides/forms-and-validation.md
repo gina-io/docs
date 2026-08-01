@@ -372,6 +372,12 @@ executed, measure that it did — read the form's state off its handle
 validation requests that followed a keystroke — and treat that measurement as
 a precondition of the test rather than as part of its result.
 
+If you read the handle, capture its state before the action as well as
+after: a submit that ran and was released and one that never happened can
+settle to the same resting state, so only the before/after transition is
+conclusive. The request count needs no such care — it is the internals-free
+route.
+
 :::warning
 Do not work around this by removing `aria-disabled` from the element. A
 trigger with the attribute stripped is not the control your users get, and a
