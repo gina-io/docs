@@ -156,8 +156,11 @@ See [Rotation](#rotation) below.
 
 ### One flat environment per process
 
-The resolver reads the **single, flat `process.env` of the bundle's own
-process** — there is no per-bundle and no per-scope secret namespace. Two
+The resolver reads the **single, flat environment of the bundle's own
+process** — there is no per-bundle and no per-scope secret namespace. (That
+environment is `process.env`, plus the framework's own environment for
+`GINA_`-prefixed names — see
+[`GINA_`-prefixed key names](#gina_-prefixed-key-names) below.) Two
 consequences worth knowing:
 
 - **Per bundle.** The canonical deployment runs one bundle per container
@@ -187,8 +190,25 @@ consequences worth knowing:
 
 Differentiating secrets by bundle or scope is the **deployment layer's**
 job (per-container environment, `NODE_SCOPE` set per deployment) — not the
-resolver's. The resolver only reads `process.env`, which is what keeps the
-framework out of storing or namespacing secrets.
+resolver's. The resolver only reads the process environment, which is what
+keeps the framework out of storing or namespacing secrets.
+
+### `GINA_`-prefixed key names
+
+The CLI keeps its own environment — `process.gina`, read through the
+`getEnvVar()` global — and on start it **moves** every `GINA_*`, `USER_*` and
+`VENDOR_*` variable there out of `process.env`. So in a CLI process a
+`GINA_`-prefixed name is no longer in `process.env` by the time config loads.
+
+Since `0.6.3` the resolver reads **the framework environment first, then
+`process.env`**, so `${secret:GINA_MCP_AUTH_TOKEN}` and friends resolve in both
+kinds of process. Two things follow:
+
+- **You do not need to avoid `GINA_` prefixes.** Earlier releases effectively
+  required it — a `GINA_`-named placeholder failed closed under any CLI-loaded
+  config (`gina bundle:mcp-start`, `gina audit:verify`, the connector commands).
+- **Nothing else changes.** A non-`GINA_` name is untouched by the move and
+  resolves from `process.env` exactly as before.
 
 ---
 
@@ -482,7 +502,7 @@ Three framework surfaces participate in the placeholder story today:
 | ------- | ------------------------------ |
 | Bundle JSON configs under `<bundle>/config/*.json` and `shared/config/*.json` | Resolved by `core/config.js::loadBundleConfig` after the per-bundle merge. Every read via `getConfig` / `self.getConfig(...)` / `Config#getInstance` sees resolved values. |
 | `gina.plugins.Csrf()` HMAC secret | Reads from `settings.json > csrf.secret` first (placeholder-compatible — `lib/secrets` fills the placeholder at config-load time), with fallback to `process.env.GINA_CSRF_SECRET` for back-compat. See [CSRF Protection](/guides/csrf). |
-| `mcp.json > server.authToken` for `gina bundle:mcp-start` | The cmd handler reads `mcp.json` outside the bundle-config load path, so it explicitly calls `secrets.resolve(mcpDoc)` after the parse. `${secret:KEY}` placeholders in `mcp.json` get filled before downstream readers pick them up. Fallback to `process.env.GINA_MCP_AUTH_TOKEN` stays in place. |
+| `mcp.json > server.authToken` for `gina bundle:mcp-start` | The cmd handler reads `mcp.json` outside the bundle-config load path, so it explicitly calls `secrets.resolve(mcpDoc)` after the parse. `${secret:KEY}` placeholders in `mcp.json` get filled before downstream readers pick them up. Fallback to `process.env.GINA_MCP_AUTH_TOKEN` stays in place. Since `0.6.3` the `GINA_`-prefixed placeholder resolves here too — this is a CLI process, so before then it always failed closed. |
 
 Bundle-author code that consumes secrets via `self.getConfig(...)` is
 covered automatically — whatever JSON file you put the placeholder in

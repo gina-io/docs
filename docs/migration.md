@@ -97,6 +97,51 @@ unchanged, and this applies to both extraction paths (SDK profile and the
 silence the banner on a query that intersects two indexes, it may be worth
 re-checking whether that index is redundant.
 
+### Fixed — `${secret:GINA_*}` placeholders now resolve in CLI commands
+
+A `${secret:VAR}` placeholder whose variable name was `GINA_`-prefixed never
+resolved when the config was loaded by a **CLI process**, because the CLI moves
+every `GINA_*` variable out of `process.env` into the framework environment
+before handlers run — and the resolver only ever read `process.env`. The
+documented `mcp.json` example (`"authToken": "${secret:GINA_MCP_AUTH_TOKEN}"`)
+was the most visible casualty: it failed closed at `gina bundle:mcp-start` even
+with the variable exported. The env backend, the `audit:verify` placeholder
+branch, and the CSRF plugin's `GINA_CSRF_SECRET` tier now read the framework
+environment **first**, then fall back to `process.env`.
+
+**No action required, and nothing that worked before changes** — non-`GINA_`
+names resolve exactly as they did. If you worked around this by renaming a
+secret to drop its `GINA_` prefix, that rename is still fine; you can revert it
+once every environment you deploy to runs `0.6.3` or later. The fail-closed
+contract (unset **or** empty means the boot refuses) is unchanged on both tiers.
+
+### Fixed — `GINA_*` variables now take effect on the command that sets them
+
+`GINA_HOMEDIR=/some/home gina env:list` — and the same shape for `GINA_PORT`,
+`GINA_BIND_HOST`, `GINA_HOST_V4` — used to affect only the *next* invocation.
+The CLI imported the OS environment after it had already resolved the home
+directory, settings file and host, so the value reached disk through the
+settings rewrite and was picked up one command late. The import now happens
+before that resolution.
+
+**Check any script that relied on the one-command delay.** Precedence is
+otherwise unchanged by design: the import is a copy, and the later move keeps
+its original position, so a variable written during bootstrap still loses to the
+shell-exported one exactly as before. Two related resolutions ride along: a
+fresh home is no longer seeded with a null-laden `settings.json`, and the MQ
+speaker and file logger containers now honour `GINA_HOMEDIR` instead of always
+reading the invoking user's home.
+
+### Fixed — a sub-directory in the run directory no longer fails every command
+
+Any `gina` command could abort with `EISDIR: illegal operation on a directory,
+read` when the configured run directory contained a sub-directory: the
+`framework:init` pid cleanup read every entry as a pidfile with no guard, so one
+unreadable entry threw out of the loop and failed the command that triggered it.
+Unreadable entries are now skipped — and deliberately never pruned, since
+removing a stale pidfile is only safe for entries whose contents were actually
+read. **No action required.**
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
