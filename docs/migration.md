@@ -19,6 +19,23 @@ upward to the target version.
 
 ---
 
+## 0.6.2 → 0.6.3
+
+### Fixed — Custom error pages are served with their real status code
+
+A custom error page (`templates/html/errors/<code>.html`) rendered by the
+**nunjucks** engine — or by either async-loader delegate — was served as
+`200 OK` with the error page as the body. The swig engine already served the
+configured status. Every engine now stamps the real code (`404.html` goes out
+as HTTP 404), matching the JSON error surface, and a transient-upgraded 503
+crossing a custom page now pairs meaningfully with its `Retry-After` header.
+
+**Check your monitoring** if anything keyed on the old
+`200 + error-page-body` combination from nunjucks bundles — those responses
+now carry the real 4xx/5xx. The full contract (file naming, family fallbacks,
+template data) is documented in the new
+[Custom error pages](/guides/error-pages) guide.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures

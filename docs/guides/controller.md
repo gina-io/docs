@@ -360,7 +360,7 @@ target action; never trust them for authorization decisions.
 ### `self.throwError(res, code, err)`
 
 Sends an error response. For XHR/API requests the response is JSON. For HTML requests,
-the framework renders a custom error page if one is configured.
+the framework renders a [custom error page](/guides/error-pages) if one is configured.
 
 ```js
 // Explicit form

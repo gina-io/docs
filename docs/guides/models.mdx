@@ -665,9 +665,8 @@ What is deliberately **not** upgraded:
 A malformed `transientErrors` block (a string `"true"`, an out-of-range
 `retryAfter`, an empty `message`) is reported by a boot-time warning naming the
 ignored key, and the feature stays off — it never refuses a boot. If you also
-configure a custom error page for `503` (or `5xx`) via `templates.json`'s
-`_common.errorFiles`, it receives the cleaned-up `error` text in its template
-data.
+configure a [custom error page](/guides/error-pages) for `503` (or `5xx`), it
+receives the cleaned-up `error` text in its template data.
 
 ---
 
