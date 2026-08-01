@@ -309,32 +309,74 @@ gated — so give every validated form a `<button type="submit">` or an
 To override the HTTP method a submit link uses, add
 `data-gina-form-submit-method` (e.g. `"PUT"`).
 
-:::note Driving this state from an automated browser test
-Because the control is `aria-disabled` rather than natively disabled, some
-browser drivers will refuse to click it. Playwright's actionability check
-counts `aria-disabled="true"` as **not enabled**, so `locator.click()` waits
-for it to become enabled and then times out — **without ever dispatching a
-click**. Selenium and Cypress apply their own interactability rules and may
-differ.
+### Automated testing: a gated submit trigger and click delivery
 
-The failure is quiet and easy to misread: no click is delivered, so nothing in
-the page changes, which looks exactly like the framework ignoring the click.
-If you are asserting on what happens when a user clicks an invalid form's
-submit control, deliver the click explicitly:
+The disabled state described above is expressed with `aria-disabled="true"`
+and `.gina-form-submit-disabled`, never with the native `disabled` property.
+That is deliberate — see the rationale above — but it has one consequence
+worth knowing before you write a test, because the failure it produces does
+not look like a tooling problem.
+
+A browser-automation driver whose actionability model treats
+`aria-disabled="true"` as "not enabled" will wait for the element to become
+enabled and then fail the step, **without ever dispatching a click** —
+Playwright's `locator.click()` is a measured instance; Selenium and Cypress
+apply their own interactability rules. Nothing in the page runs. There is no
+console error, no request, no state change — and the driver's own message
+names the element you targeted, which reads as though the element were at
+fault.
+
+The reason this is worth a note rather than a footnote: "I clicked it and
+nothing happened" and "the click was never delivered" produce identical
+evidence, and only the second is a fact about the harness. The first is the
+more interesting-sounding of the two, so it tends to win by default — and it
+is the reading that gets reported as a validator or binding defect.
+
+Confirm the click was dispatched before concluding anything about the
+framework. Any of these will deliver it:
 
 ```js
-// Playwright — bypass the actionability check
-await page.locator('#my-submit').dispatchEvent('click');
-// or
-await page.locator('#my-submit').click({ force: true });
-// or, in page context
-await page.locator('#my-submit').evaluate(function(el) { el.click(); });
+// (a) in-page click, with the event observed — proves a click existed
+//     rather than assuming
+var delivered = await page.evaluate(function () {
+    var el = document.getElementById('my-submit-trigger');
+    var seen = false;
+    function spy() { seen = true; }
+    el.addEventListener('click', spy, true);
+    el.click();
+    el.removeEventListener('click', spy, true);
+    return seen;
+});
+
+// (b) bypass the driver's actionability check
+await page.locator('#my-submit-trigger').click({ force: true });
+
+// (c) dispatch the event directly, in page context
+await page.evaluate(function () {
+    document.getElementById('my-submit-trigger')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+});
 ```
 
-A delivered click behaves as described above: validation runs, invalid fields
-are revealed, focus moves to the first one, and the send stays blocked. If a
-click appears to do nothing, confirm it was dispatched before treating it as a
-framework issue.
+Prefer (a) when the question you are asking is "did the handler run?" — (b)
+and (c) deliver the click, but (a) is the only one that reports back whether
+an event actually existed, which is precisely the thing you were unsure
+about.
+
+Then assert the state change, not the absence of an error. A run in which
+nothing was ever triggered looks exactly like a run in which everything
+passed: both are quiet. If your test depends on the submit path having
+executed, measure that it did — read the form's state off its handle
+(`gina.validator.$forms[formId]`, see
+[Programmatic API and events](#programmatic-api-and-events)), or count the
+validation requests that followed a keystroke — and treat that measurement as
+a precondition of the test rather than as part of its result.
+
+:::warning
+Do not work around this by removing `aria-disabled` from the element. A
+trigger with the attribute stripped is not the control your users get, and a
+natively disabled button would leave the tab order and stop emitting events
+entirely — so neither substitute exercises the shipped behaviour.
 :::
 
 ---
