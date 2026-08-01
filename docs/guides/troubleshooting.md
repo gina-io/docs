@@ -43,6 +43,98 @@ node node_modules/gina/script/pre_install.js -g
 node node_modules/gina/script/post_install.js -g
 ```
 
+### The bundle refuses to start and names `env.json`
+
+```
+[ myBundle ][ prod ] no configuration block for this bundle/env in
+/path/to/project/env.json (file NOT FOUND) — every bundle must be declared
+there for the env it starts in; refusing to start
+```
+
+Every bundle needs a block in the project's `env.json` for the environment it
+starts in. Gina refuses to boot without one rather than starting on guessed
+host and port values. The parenthesis tells you which of the two cases you are
+in:
+
+| Message | Cause | Fix |
+|---|---|---|
+| `file NOT FOUND` | The project has no `env.json` at all | Restore it, or scaffold a fresh project and copy its `env.json` shape |
+| ``the file declares no `<bundle>.<env>` block`` | `env.json` exists but has no entry for this bundle and environment | Add the missing `"<bundle>": { "<env>": { … } }` block |
+
+The second case also covers an `env.json` that only declares *other* bundles —
+the message always names the bundle that was being **started**, not the ones it
+found. The process exits `1`, so a container restart policy or orchestrator
+liveness check retries automatically while a release tree finishes deploying.
+
+*(A clearer refusal since `0.6.2`. Earlier versions crashed here with an opaque
+`Cannot read properties of undefined` error that named neither the file nor the
+bundle.)*
+
+:::note
+Deleting `env.json` does not make it stay deleted — the next `gina` command of
+any kind recreates it as an empty `{}` and warns `Project env.json not found.
+Trying to fix it ...`. A boot then reports the *second* case above (the file
+declares no block), not `file NOT FOUND`. Nothing about `env.json` is copied
+into the built release tree, so the project file is read fresh on every boot.
+:::
+
+A bundle declared in `env.json` but **not for the environment you are starting**
+falls under the second case above and refuses with the same message. Before
+`0.6.2` this shape failed earlier and far more opaquely, with `Cannot set
+properties of undefined (setting 'bundlesPath')` and exit code `143`; the remedy
+is unchanged — add the missing `"<env>"` block for that bundle.
+
+Only the bundle you are **starting** refuses. A *different* bundle declared in
+the same `env.json` with no block for this environment is skipped, and the boot
+continues without it:
+
+```
+[CONFIG][<bundle>][<env>] no `<env>` block in the project env.json — skipping this bundle for this environment
+```
+
+Watch for that warning if a bundle you expected to be served is missing. Before
+`0.6.2` this was not survivable: one bundle missing its block for the current
+environment crashed the boot of *any* bundle in that project, because every
+declared bundle is walked while the environment configuration is assembled.
+
+### The certificate path contains a literal `${host}`
+
+```
+ENOENT: no such file or directory, open
+'/home/you/.gina/certificates/scopes/local/${host}/private.key'
+```
+
+An https or HTTP/2 bundle stops with a "secured server without sufficient
+credentials" error, and the path it names still contains `${host}` verbatim. The
+unsubstituted token is the tell: the bundle's block in the project `env.json`
+does not declare `host`, and that block is the only place a project supplies it.
+The error points at your server settings, but the credentials are fine — the
+host is what is missing.
+
+Add it to the block for the environment you are starting:
+
+```json
+{
+  "myBundle": {
+    "prod": {
+      "host": "localhost"
+    }
+  }
+}
+```
+
+Since `0.6.2` the framework carries `localhost` as a default, so a block that
+sets only a subset of keys — say just `server.cache` — resolves on its own, and
+an omitted declaration is reported instead of applied silently:
+
+```
+[CONFIG][myBundle][prod] no `host` declared in the project env.json — defaulting to `localhost`
+```
+
+Declare `host` explicitly for any bundle not reached on `localhost`: it is the
+value substituted into every `${host}` token, including the TLS credentials
+paths above.
+
 ### After a crash
 
 A stale process may be left running. Find and kill it:

@@ -19,6 +19,106 @@ upward to the target version.
 
 ---
 
+## 0.6.1 → 0.6.2
+
+### Added — Opt-in 503 + Retry-After for transient datastore failures
+
+With `server.transientErrors.enabled: true` in a bundle's `settings.json`, a
+connector error stamped `isTransient` that would render as HTTP 500 through
+`throwError` renders as **503** with a `Retry-After` header
+(`retryAfter`, integer seconds, default 30) and a clean user-facing message
+(`message`, default: the standard 503 status text) — on JSON and HTML error
+surfaces, over HTTP/1.1 and HTTP/2. Explicit non-500 statuses and permanent
+errors are never upgraded. **No action required**: the setting defaults to
+off and the default behaviour is byte-identical to 0.6.1. A malformed
+`transientErrors` block warns at boot and leaves the feature off — it never
+refuses a boot. See
+[Models → Rendering transients as 503 + Retry-After](/guides/models#rendering-transients-as-503--retry-after-opt-in).
+
+### Changed — Render and request-path CPU overhead sharply reduced
+
+Every render was deep-copying the request options twice — once for the
+template-filter configuration and once for the render envelope — and
+re-resolving the request locale from scratch. Those copies are now passed by
+reference (each one's write surface was measured empty first), the locale
+lookups are memoized per culture with the request-local copy materialized
+lazily on first read, and the id generator sizes its entropy batch to the
+length actually requested, so a 16-character id costs one webcrypto call
+instead of three.
+
+Measured on the profiling harness: **4.4× render throughput** on the baseline
+workload (10.7 → 2.4 ms per render), deep-clone CPU share 50.31% → 1.81%, and
+GC time down roughly 18×.
+
+**Action required — rebuild, not just restart.** There is no API change, but
+the browser bundle changed: the id-generator half of this work is
+browser-bundled. A restart alone picks up the server-side gains only. Run
+`gina bundle:build` for each bundle to pick up the rest. Nothing breaks if you
+only restart — you just leave part of the speedup unclaimed.
+
+### Fixed — An `env.json` block that omits `host` no longer breaks HTTPS/HTTP2
+
+`host` was the only value the per-bundle configuration reads that had no
+framework-side default. It was written solely by the CLI into the project
+`env.json`, so a hand-written or partial block never received one — and the
+`${host}` token was then left unsubstituted inside the TLS credentials paths.
+An https or HTTP/2 bundle refused to start with an `ENOENT` naming a literal
+`${host}` path segment, under an error message pointing at the server settings
+rather than at the missing key.
+
+The framework env template now carries the same `localhost` default the CLI
+already writes, so a block that sets only a subset of keys resolves correctly.
+A bundle whose project `env.json` omits `host` now logs a warning naming the
+bundle and env instead of defaulting silently.
+
+**No action required** if your project declares `host` — those projects are
+unaffected. If you see the new warning, add `host` to that env block to make
+the value explicit.
+
+### Fixed — A bundle whose `env.json` has no block for its environment says so
+
+Starting a bundle in an environment its project `env.json` does not cover
+previously died with an opaque `Cannot read properties of undefined` crash
+that named neither the bundle, the environment, nor the file. The boot now
+refuses with all of them, plus the resolved `env.json` path and whether the
+file was found at all. All three shapes that produced the same failure are
+covered: an `env.json` that is absent entirely, one that is empty, and one
+that declares only bundles the project manifest does not list.
+
+The refusal exits **1**, through the same path as the missing `routing.json`
+refusal, so an external supervisor can retry while a release tree settles.
+
+**No action required.** A configuration that boots today is unaffected — the
+check can only fire where the boot already crashed.
+
+### Fixed — Starting a bundle in an env its `env.json` block does not cover
+
+This previously surfaced as `TypeError: Cannot set properties of undefined
+(setting 'bundlesPath')` at **exit 143**, naming neither the file nor the
+bundle. It now refuses cleanly at **exit 1**, naming the bundle, the
+environment and the resolved `env.json` path.
+
+Separately, a bundle that *is* declared for other environments but not the one
+being started is now reported as skipped and the project boots on. Previously
+it took every sibling bundle in the project down with it.
+
+**Check your supervisor config** if it keys off the old exit 143 for this
+failure — the code is now 1, matching the framework's other boot refusals.
+Otherwise no action required.
+
+### Fixed — Dead process records removed under the right key in `procs.json`
+
+`removeRunningProc()` located the entry to drop by pid but deleted it under
+the constructing bundle's key. Self-removal worked by accident; a
+non-coinciding dismissal rewrote the dead `gina-*` record straight back to
+disk — accumulating stale entries, a documented cause of daemon and boot
+confusion — and could destroy a live record instead, degrading `gina stop`,
+whose graceful-kill path locates the daemon through this registry.
+
+**Optional one-time cleanup.** Pre-existing stale entries are not cleaned
+retroactively. With the daemon stopped, clearing `~/.gina/procs.json` once is
+safe — it is rebuilt as bundles start.
+
 ## 0.6.0 → 0.6.1
 
 ### Added — SQLite works under the Bun runtime
