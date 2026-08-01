@@ -77,6 +77,26 @@ failed submit, or reloaded the page to recover is now redundant and can be
 removed. This fix is in the **browser bundle**, so rebuild your bundles at
 pickup — a server restart alone will not deliver it.
 
+### Fixed — Inspector no longer reports multi-index Couchbase plans as unindexed
+
+The Query tab's index badge is extracted from the query's execution plan. The
+plan walker followed only the generic child containers, while the multi-index
+operators — `IntersectScan`, `UnionScan`, `OrderedIntersectScan`, and
+`DistinctScan` — nest their child scans under dedicated containers, so any
+query the planner served with **more than one index** reported an empty index
+list: the red *"no index — full bucket scan"* badge and the *"N queries
+without index"* banner fired for queries that were already fully indexed.
+
+That failure pointed in the expensive direction — the natural response to the
+banner is building another index, with its cluster-wide build cost and
+permanent write amplification, for a query that never needed it. Such plans
+now report every index they use (one badge chip per index, as SQL connectors
+already do). Single-index, primary-scan, and `USE KEYS` reporting are
+unchanged, and this applies to both extraction paths (SDK profile and the
+`EXPLAIN` fallback). **No action required** — but if you added an index to
+silence the banner on a query that intersects two indexes, it may be worth
+re-checking whether that index is redundant.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
