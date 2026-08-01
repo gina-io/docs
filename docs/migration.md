@@ -36,6 +36,19 @@ now carry the real 4xx/5xx. The full contract (file naming, family fallbacks,
 template data) is documented in the new
 [Custom error pages](/guides/error-pages) guide.
 
+### Fixed — Custom-error renders no longer misreport correct routing rules
+
+When a page render failed on a bundle with custom error pages configured, the
+error renderer could lose its resolved template and try to open a bare
+filename derived from the route that failed — surfacing an upstream outage as
+`could not open "<file>.html"` plus a *check your routing.json* dump naming a
+rule that was correct all along. The resolved template now always reaches the
+error render, the dispatch no longer mutates shared routing configuration,
+and a custom error template that genuinely cannot be opened falls back to the
+built-in error page with a message naming the template. **No action
+required** — end users saw an error page throughout; only the server-side
+diagnostics change.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
