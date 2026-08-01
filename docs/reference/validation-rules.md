@@ -20,7 +20,9 @@ These rules are the shared grammar used in two places:
   (see [Routing → Validator requirements](/guides/routing#validator-requirements)).
 
 The same engine runs in the browser (for live feedback) and on the server (for
-trust), so a rule behaves identically in both.
+trust), so a **built-in** rule behaves identically in both.
+[Custom validators](#custom-validators) are the exception — they apply in the
+browser only.
 
 ## Reading this page
 
@@ -49,9 +51,11 @@ Data rules check a value and record an error if it fails.
 
 `isRequired(isApplicable)` · JSON: `"isRequired": true`
 
-Requires a non-empty value. Fails on `undefined`, `null`, `""`, or a
-whitespace-only string. Passing `false` (`"isRequired": false`) marks the field
-optional and short-circuits the check.
+Requires a non-empty value. Fails on `undefined`, `null`, `""`, and on any value
+that *starts* with whitespace — `"   "` fails, and so does `" john"`. Pair it
+with [`trim`](#trim) when a stray leading space should be cleaned up rather than
+rejected. Passing `false` (`"isRequired": false`) marks the field optional and
+short-circuits the check.
 
 - **Default message:** *Cannot be left empty*
 - **Must come first** — see [Chaining and ordering](#chaining-and-ordering).
@@ -67,7 +71,8 @@ optional and short-circuits the check.
 Checks a syntactically valid email address. The value is lowercased.
 
 - **Default message:** *A valid email is required*
-- Empty values pass unless `isRequired` is also set.
+- An empty value is left to [`isRequired`](#isrequired) alone — `isEmail` adds no
+  message of its own to a blank field, whether or not the field is required.
 
 ```json
 "email": { "isRequired": true, "isEmail": true }
@@ -83,8 +88,9 @@ Checks that the value is a string, with optional length bounds.
 |---|---|
 | `true` | any string |
 | `8` | at least 8 characters |
+| `[8]` | at least 8 characters — a one-element array supplies only the minimum, so this is identical to `8` |
 | `[8, 72]` | between 8 and 72 characters |
-| `[8]` | exactly 8 characters |
+| `[8, 8]` | exactly 8 characters — an exact length needs both bounds |
 
 - **Default messages:** *Must be a string* · *Should be at least %s characters*
   · *Should not be more than %s characters* · *Must have %s characters* (exact).
@@ -95,11 +101,14 @@ Checks that the value is a string, with optional length bounds.
 
 ### isInteger
 
-`isInteger()` · JSON: `"isInteger": true`
+`isInteger(minLength, maxLength)` · JSON: `"isInteger": true | N | [min, max]`
 
-Checks for a whole number. The value is coerced to a `Number`.
+Checks for a whole number. The value is coerced to a `Number`. Optional bounds
+constrain the number of **digits**, following the same shape as
+[`isString`](#isstring) — `[5]` is a minimum, `[5, 5]` an exact length.
 
-- **Default message:** *Must be an integer*
+- **Default messages:** *Must be an integer* · *Should be at least %s characters*
+  · *Should not be more than %s characters* · *Must have %s characters* (exact)
 
 ```json
 "quantity": { "isRequired": true, "isInteger": true }
@@ -143,9 +152,14 @@ follows the mask — so `"dd/mm/yyyy"` accepts `15/06/2023`. Impossible dates
 (e.g. `2023-02-30`) are rejected.
 
 - **Default message:** *Must be a valid Date*
-- **Returns a `Date`** on success, not the field object — chain
-  [`.format()`](#format) after it, or capture the field separately. See
-  [Chaining and ordering](#chaining-and-ordering).
+- **Returns the field object**, so it chains like any other rule. The parsed
+  `Date` becomes the field's value, which is what [`format`](#format) consumes.
+
+:::note Changed in 0.5.4
+Earlier versions returned the parsed `Date` instead of the field, which ended any
+chain continuing past it. On 0.5.3 and below, follow `isDate` with
+[`.format()`](#format) or capture the field separately.
+:::
 
 ```json
 "birthdate": { "isRequired": true, "isDate": "dd/mm/yyyy" }
@@ -302,7 +316,13 @@ validating a value directly.
 
 `set(value)` · JSON: `"set": <value>`
 
-Sets the field's value (and, in the browser, the element's `value` attribute).
+Sets the field's value and writes it to the element's `value` attribute.
+
+:::warning Browser-only
+`set` always writes to the DOM element, so it runs **only in the browser** and
+throws on the server, where a field has no element behind it — the same
+constraint as [`toFloat`](#tofloat).
+:::
 
 ### setLabel
 
@@ -368,16 +388,18 @@ When rules are written as a fluent chain — inside a
 each rule normally returns the field object so the next rule can run. Two
 behaviours are load-bearing:
 
-**`isRequired` must come first.** A field that is *not* required and is empty
-passes the other rules (so optional fields are not flagged for being blank).
-That bypass works by checking whether `isRequired` has already recorded an
-error, so `isRequired` has to be evaluated before the rules that rely on it.
+**`isRequired` should come first.** An empty value is adjudicated by `isRequired`
+alone: every other rule passes on a blank field, so an optional one is never
+flagged, and a required one reports a single *Cannot be left empty* instead of a
+pile of *"…is not valid"* messages stacked on top of it. Whether the **form** is
+valid does not depend on the order — but each rule keeps its own per-field
+`valid` flag consistent with a surviving `isRequired` error, and that flag is
+only correct at every step when `isRequired` ran first.
 
 **Some methods do not return the field — they end a chain:**
 
 | Method | Returns | Consequence |
 |---|---|---|
-| [`isDate`](#isdate) | the parsed `Date` (on success) | follow it with [`.format()`](#format), or capture the field separately — do not chain another field rule after it |
 | [`format`](#format) | the formatted string | terminal |
 | [`trim`](#trim) | the field **only** when called with `true` | always pass `true` |
 | [`query`](#query) | async (browser) / a `Promise` (server) | put it last |
@@ -454,9 +476,10 @@ Override messages three ways:
 | `isJsonWebToken` | Must be a valid JSON Web Token |
 | `isInList` | Must be one of: %s |
 | `query` | Must be a valid response |
-| length (min) | Should be at least %s characters |
-| length (max) | Should not be more than %s characters |
-| length (exact) | Must have %s characters |
+| length (min) — `isString` / `isInteger` / `isNumber` | Should be at least %s characters |
+| length (max) — `isString` / `isInteger` / `isNumber` | Should not be more than %s characters |
+| length (exact) — `isString` / `isInteger` | Must have %s characters |
+| length (exact) — `isNumber` | Must contain %s characters |
 | `toInteger` | Could not be converted to integer |
 | `toFloat` | Could not be converted to float / Value must be a valid number |
 
@@ -474,6 +497,15 @@ It becomes a chainable rule named `<name>` that you can use like any other
 (`"<name>": ...` in a rule file). Inside, reach the engine through
 `this.getValidationContext()` to read sibling fields and set errors. Custom
 validators get a default message of *Condition not satisfied*.
+
+:::caution Browser-side only — not a server-side guarantee
+A custom validator is applied in the browser, but it is **not** enforced on the
+server: the server-side registration path is not wired, and the engine silently
+skips a rule name it does not recognise. A rule file that leans on a custom
+validator therefore gets live feedback and nothing more — re-check that
+constraint in your action, or express it with built-in rules, before you trust or
+persist the value.
+:::
 
 :::warning Trust boundary
 Custom validator source is loaded from disk at bundle start and never from
