@@ -49,6 +49,34 @@ built-in error page with a message naming the template. **No action
 required** — end users saw an error page throughout; only the server-side
 diagnostics change.
 
+### Fixed — Live checking survives a rejected submit
+
+Attempting to submit an invalid form — pressing `Enter` in a field, or
+clicking the gated submit control — rendered the field errors and sent nothing,
+as designed. But it also left an internal "submitting" latch set: that latch is
+what keeps live checking quiet while a request is genuinely in flight, and only
+the XHR settling cleared it. A rejected submit never sends, so the latch stayed
+set for the rest of the page's life.
+
+The visible result was a form that went quiet: typing a valid value never
+re-ran the live check, and the submit control kept `aria-disabled="true"` and
+the `gina-form-submit-disabled` class until the page was reloaded — so keyboard
+and assistive-technology users were hard-blocked, while mouse users saw a
+disabled-looking control that still submitted. Rebinding the form did not help,
+because the latch lives on the form instance rather than on its listeners.
+
+The rejected branch now releases the latch, so the behaviour described in
+[Forms and validation](/guides/forms-and-validation) — the marker and class
+being *"cleared as soon as the form validates"* — holds after a failed submit
+attempt too. A real in-flight submit still suppresses live checking exactly as
+before.
+
+**Action required if you worked around this.** Anything that manually stripped
+`aria-disabled` / `gina-form-submit-disabled`, forced a `reBind()` after a
+failed submit, or reloaded the page to recover is now redundant and can be
+removed. This fix is in the **browser bundle**, so rebuild your bundles at
+pickup — a server restart alone will not deliver it.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
