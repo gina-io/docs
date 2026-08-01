@@ -309,6 +309,34 @@ gated — so give every validated form a `<button type="submit">` or an
 To override the HTTP method a submit link uses, add
 `data-gina-form-submit-method` (e.g. `"PUT"`).
 
+:::note Driving this state from an automated browser test
+Because the control is `aria-disabled` rather than natively disabled, some
+browser drivers will refuse to click it. Playwright's actionability check
+counts `aria-disabled="true"` as **not enabled**, so `locator.click()` waits
+for it to become enabled and then times out — **without ever dispatching a
+click**. Selenium and Cypress apply their own interactability rules and may
+differ.
+
+The failure is quiet and easy to misread: no click is delivered, so nothing in
+the page changes, which looks exactly like the framework ignoring the click.
+If you are asserting on what happens when a user clicks an invalid form's
+submit control, deliver the click explicitly:
+
+```js
+// Playwright — bypass the actionability check
+await page.locator('#my-submit').dispatchEvent('click');
+// or
+await page.locator('#my-submit').click({ force: true });
+// or, in page context
+await page.locator('#my-submit').evaluate(function(el) { el.click(); });
+```
+
+A delivered click behaves as described above: validation runs, invalid fields
+are revealed, focus moves to the first one, and the send stays blocked. If a
+click appears to do nothing, confirm it was dispatched before treating it as a
+framework issue.
+:::
+
 ---
 
 ## Submission is always AJAX
