@@ -36,6 +36,46 @@ now carry the real 4xx/5xx. The full contract (file naming, family fallbacks,
 template data) is documented in the new
 [Custom error pages](/guides/error-pages) guide.
 
+### Fixed — `isInteger` digit bounds are enforced on numeric values
+
+The optional bounds on the `isInteger` validation rule (`"isInteger": N` or
+`"isInteger": [min, max]`) were silently ignored whenever the value reached the
+rule as a real number rather than a string — no error was recorded, no warning
+was emitted, and the field was reported **valid**. The sibling `isNumber` rule
+was never affected. Values arrive as real numbers from:
+
+- **JSON request bodies**, including a `validator::{}` routing requirement, which
+  merges the parsed body into the data it validates;
+- **a preceding `toInteger`**, which leaves `Math.round()`'s number on the value
+  — so a `toInteger` → `isInteger` chain was affected in the browser too, where
+  every other value is a string.
+
+The bounds now measure the value's string form, as `isNumber` has always done.
+
+**Action required — this tightens enforcement.** Input that previously slipped
+past a declared bound now correctly fails validation. Review any rule file or
+`validator::{}` requirement declaring a bound on `isInteger`:
+
+```bash
+grep -rn 'isInteger' <your-bundle>/config/ <your-bundle>/forms/
+```
+
+A declaration of the bare `"isInteger": true` form is unaffected — there is no
+bound to enforce. Only the `N` and `[min, max]` forms change behaviour, and only
+for values that arrive numerically.
+
+Two details worth knowing before you re-check fixtures:
+
+- A **negative** number counts its minus sign toward the length (`-123` is 4),
+  exactly as it already did when the same value arrived as a string.
+- The number `0` is still skipped by the bound check (an empty-value gate treats
+  it as blank). This is unchanged, shared with `isNumber`, and was deliberately
+  left alone here.
+
+If server-side rejection of out-of-range values is a change you are not ready
+for, drop the bound from the rule and enforce the range in your action until you
+are — do not rely on it being ignored.
+
 ### Fixed — Custom-error renders no longer misreport correct routing rules
 
 When a page render failed on a bundle with custom error pages configured, the

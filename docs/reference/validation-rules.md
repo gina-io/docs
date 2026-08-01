@@ -38,8 +38,20 @@ argument:
 Each entry below shows the **JSON form** (what you write in a rule file or
 requirement) and the **fluent signature** (how the rule is called when you write
 a [custom validator](#custom-validators) or chain rules by hand). Inputs reach
-every rule as **strings** (browser field values and URL-encoded bodies are
-always strings), so rules coerce as needed.
+every rule as **strings** on the declarative paths (browser field values and
+URL-encoded bodies are always strings), so rules coerce as needed.
+
+:::note Not every path delivers a string
+Two paths hand a rule a **real JavaScript value** rather than a string, so a
+rule must be correct for both:
+
+- **JSON request bodies** keep their parsed types — a numeric field arrives as a
+  `Number`, including when a `validator::{}` [routing requirement](/guides/routing)
+  validates it, since the parsed body is merged into the validated data.
+- **A preceding transform** — [`toInteger`](#tointeger) and
+  [`toFloat`](#tofloat) leave a real number on the value, so every rule chained
+  *after* one of them receives a number even in the browser.
+:::
 
 ---
 
@@ -104,8 +116,20 @@ Checks that the value is a string, with optional length bounds.
 `isInteger(minLength, maxLength)` · JSON: `"isInteger": true | N | [min, max]`
 
 Checks for a whole number. The value is coerced to a `Number`. Optional bounds
-constrain the number of **digits**, following the same shape as
-[`isString`](#isstring) — `[5]` is a minimum, `[5, 5]` an exact length.
+constrain the **length of the value's string form**, following the same shape as
+[`isString`](#isstring) — `[5]` is a minimum, `[5, 5]` an exact length. For a
+positive value that is its digit count; a **negative** value counts its minus
+sign too (`-123` is 4), consistent with the same value arriving as a string.
+
+:::caution Bounds are enforced on numeric values since 0.6.3
+Before 0.6.3 these bounds were silently ignored whenever the value reached the
+rule as a real number rather than a string — no error, no warning, and the field
+reported valid. If you declare `"isInteger": N` or `"isInteger": [min, max]` on a
+field that can carry a numeric value (a JSON body, or anything chained after
+[`toInteger`](#tointeger)), the bound starts being enforced at 0.6.3 and input
+that used to pass may now fail. See the
+[migration note](/migration#fixed--isinteger-digit-bounds-are-enforced-on-numeric-values).
+:::
 
 - **Default messages:** *Must be an integer* · *Should be at least %s characters*
   · *Should not be more than %s characters* · *Must have %s characters* (exact)
@@ -262,6 +286,13 @@ Rounds the value to the nearest integer (`Math.round`). A falsy value is left
 untouched.
 
 - **Default message:** *Could not be converted to integer*
+
+`toInteger` leaves a **real number** on the value, not a string — so every rule
+chained after it receives a number, in the browser as well as on the server.
+Rules that inspect the value's text (such as the [`isInteger`](#isinteger)
+length bounds) operate on its string form; this works correctly from 0.6.3
+onward, and the bounds were silently skipped in a `toInteger` → `isInteger`
+chain before then.
 
 ### toFloat
 
