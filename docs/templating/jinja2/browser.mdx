@@ -143,7 +143,7 @@ The loader contract is identical across frontends — see [Loaders](../swig/load
 
 ## AOT pre-compilation
 
-If bundle size or cold-render latency matters, pre-compile Jinja2 templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + prime + render](../swig/browser#pre-compile--prime--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
+If bundle size or cold-render latency matters, pre-compile Jinja2 templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + register + render](../swig/browser#pre-compile--register--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
 
 ## Bundle size
 

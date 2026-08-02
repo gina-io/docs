@@ -341,6 +341,42 @@ Do not pass untrusted input to `run` — see [Security](./security#swig-run-is-n
 
 ---
 
+## register
+
+```js
+swig.register(path, fn)
+```
+
+Register a pre-compiled template function under a template path. Later `include` lookups and [`compileFile`](#compilefile) / [`renderFile`](#renderfile) calls are served from the template cache without compiling. Added in v2.8.0.
+
+The path is normalized through the active loader's `resolve`, so registering `'partials/nav.html'` and writing `{% include "partials/nav.html" %}` agree on the cache key. The entry is stored as a locals-binding wrapper — the call shape `include` expects — so registered partials may use variables, filters, and extensions freely. (Priming via `run` stores the raw compiled function instead, which crashes such partials — prefer `register`.)
+
+```js
+swig.register('partials/nav.html', navTpl);
+swig.render('{% include "partials/nav.html" %}', {
+  filename: '/page.html',
+  locals: { user: 'Jane' }
+});
+```
+
+Throws when the instance has caching disabled (`cache: false`) — the registry is the template cache.
+
+---
+
+## registerBundle
+
+```js
+swig.registerBundle(map)
+```
+
+Register a map of pre-compiled template functions in one call — the shape a [`swig compile --recursive`](./cli#aot-bundle--compile-a-directory) bundle exports. Added in v2.8.0. Bundles emitted with `--register` call this themselves when a global `swig` is present.
+
+```js
+swig.registerBundle(require('./dist/templates.js'));
+```
+
+---
+
 ## setFilter
 
 ```js
