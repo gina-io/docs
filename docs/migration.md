@@ -76,6 +76,20 @@ the key. In the same change, a session write whose *resolved* ttl is `<= 0`
 redis, Couchbase and ScyllaDB stores stored such a record **without any
 expiry**, leaving an immortal session row for an already-expired session.
 
+### Fixed — `/_gina/assets/routing.json` now serves under the express engine
+
+The browser fetches `/_gina/assets/routing.json` at boot to populate the client
+routing table (what client-side `getRoute()` / `toUrl()` read). That asset was
+built and served by the default isaac engine only: a bundle running
+`"engine": "express"` answered the framework 404 page for it instead — and
+since the client does not check the response status before parsing, the 404
+JSON body ended up installed as the routing table, so client-side URL building
+failed from there. The maps (the full one and the host-stripped variant served
+to proxied clients) are now built once, engine-agnostically, and served with
+identical headers and byte-identical content under every engine. No action
+required — isaac bundles are byte-for-byte unaffected; express bundles pick
+the fix up on restart.
+
 ### Fixed — the dev Inspector follows the monitored tab across bundles
 
 In a proxy-routed multi-bundle project, the Inspector's Flow and Query tabs
