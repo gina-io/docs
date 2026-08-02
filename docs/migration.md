@@ -258,10 +258,16 @@ inputs previously all collapsed to the checksum of the empty string (the
 serializer returned `''` for every array) and were sorted in place; arrays now
 produce a real order-insensitive content checksum (the hash of the JSON of a
 sorted copy) without mutating your array — if you stored array checksums, they
-were the degenerate constant and **will change**. The file probe still fires
-only for dot+3-lowercase tails: a path like `file.js` or `file.json` is hashed
-as a path string, never read from disk — pass file contents (or a
-dot+3-lowercase path) when you mean the file.
+were the degenerate constant and **will change**. And the file probe now
+accepts any real extension shape (a dot plus 1-10 alphanumerics — `.js`,
+`.json`, `.TXT`, `.c`, ...), still stat-gated: previously only dot+3-lowercase
+tails fired, so a path like `file.js` or `file.json` was hashed as a **path
+string** — such checksums now hash the file bytes, so stored sums for those
+paths change (they never tracked content). A data string that exactly names an
+existing file with an extension-shaped tail now hashes that file — an
+ambiguity that already existed for dot+3-lowercase names. Extension-less paths
+(`Makefile`, `LICENSE`) are still hashed as data strings — pass file contents
+when you mean such a file.
 
 ## 0.6.1 → 0.6.2
 
