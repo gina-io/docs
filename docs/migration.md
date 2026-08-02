@@ -4133,7 +4133,7 @@ Opt-in via `app.json`:
 }
 ```
 
-Install `prom-client` as a peer dependency in your project
+Install `prom-client` in your project
 (`npm install prom-client`). Default metrics include Node.js process state
 (heap, GC, event loop lag) plus per-request HTTP counter and duration
 histogram. Route labels come from `req.routing.rule` (cardinality-safe);
@@ -4166,7 +4166,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 ) WITH default_time_to_live = 86400;
 ```
 
-Install `cassandra-driver` as a peer dependency in your project
+Install `cassandra-driver` in your project
 (`npm install cassandra-driver`) and declare a `connectors.json` entry
 with `"connector": "scylladb"`. Requires Node `>=20`.
 
@@ -4188,7 +4188,7 @@ The session store creates a TTL index on the first `set()` call (deferred so
 ORM-only setups never run DDL) and filters `get` / `length` / `all` on
 `expiresAt > now` to cover the 60-second TTL-monitor lag.
 
-Install `mongodb` as a peer dependency in your project
+Install `mongodb` in your project
 (`npm install mongodb`) and declare a `connectors.json` entry with
 `"connector": "mongodb"`.
 

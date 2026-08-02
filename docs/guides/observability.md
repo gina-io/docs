@@ -66,9 +66,9 @@ Three steps:
 npm install prom-client
 ```
 
-`prom-client` is a peer dependency — Gina does not bundle it. The framework
-loads it from your project's `node_modules` directory using the same
-convention as `mysql2`, `ioredis`, and the AI SDKs.
+`prom-client` is provided by your project — Gina neither bundles nor depends
+on it. The framework loads it from your project's `node_modules` directory
+using the same convention as `mysql2`, `ioredis`, and the AI SDKs.
 
 ### 2. Opt in via `app.json`
 
