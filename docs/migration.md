@@ -167,12 +167,24 @@ rendered literal `:key` template paths as a 500 — typically surfacing on the
 `requireAuth` login replay, once per visitor, on query-bearing deep links.
 
 With a live session the replay (plain, XHR and popin flavors alike) now redirects to
-the byte-exact halted URL, query string included. Snapshots taken before the upgrade
-replay correctly too (`pauseRequest()` has always stored the full URL), and the
-session key `haltedRequestUrlResumed` now records that exact URL. Replays into a
-custom `requestStorage` with **no** live session keep the recomposed URL, where the
-composed query params remain the halted data's only travel channel. **No action
-required.**
+the byte-exact halted URL, query string included. Two fixes compose to make that
+true: the replay reads the snapshotted URL instead of recomposing it, and
+`pauseRequest()` now snapshots the engine-preserved full URL (`req.originalUrl`,
+falling back to `req.url`) — the default (isaac) engine strips the query string
+from `req.url` before controllers run, so the snapshot itself used to be path-only
+there. The session key `haltedRequestUrlResumed` records the exact replayed URL,
+query string included. Snapshots taken before the upgrade replay exactly as they
+were captured. Replays into a custom `requestStorage` with **no** live session keep
+the recomposed URL, where the composed query params remain the halted data's only
+travel channel.
+
+**Action required only if** one of your middlewares compares
+`haltedRequestUrlResumed` to `req.url` by equality (a common way to let the
+replayed request through a gate): on the default engine `req.url` is path-only, so
+query-bearing replays no longer match that comparison — compare against
+`req.originalUrl || req.url` instead. Everything else needs no action; flows that
+worked before are byte-identical, and only the replays that previously failed gain
+their query back.
 
 ### Fixed — `/_gina/assets/routing.json` now serves under the express engine
 

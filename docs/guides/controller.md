@@ -721,7 +721,7 @@ sequenceDiagram
 
 | Method | What it does |
 |---|---|
-| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. `requestStorage` defaults to `req.session`. Returns the storage object. |
+| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. The `url` is the byte-exact incoming URL, query string included (`req.originalUrl` when the engine preserves it, else `req.url`). `requestStorage` defaults to `req.session`. Returns the storage object. |
 | `self.isHaltedRequest([session])` | `true` when the session (or the passed object) holds a `haltedRequest`. Defaults to `req.session` / `req.session.user`. |
 | `self.resumeRequest([requestStorage])` | Replays the snapshot — restores the original url / method / data / params onto the live request and re-dispatches it, then clears the snapshot. |
 
@@ -770,6 +770,10 @@ this.login = function(req, res, next) {
   different namespace.
 
 Either way, the `haltedRequest` snapshot is cleared from storage once it has been consumed.
+After a **GET** replay the storage additionally records the replayed url — byte-exact,
+query string included — under `haltedRequestUrlResumed`, which a gate middleware can read
+(and delete) to recognise the replayed request; compare it against
+`req.originalUrl || req.url`, since the default engine's `req.url` is path-only.
 
 On a **GET** replay the redirect target is the paused request's own url — path and
 query string alike — so query-driven routes (a `param` binding sourced from the query,
