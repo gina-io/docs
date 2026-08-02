@@ -334,6 +334,70 @@ subsequent requests).
 
 ---
 
+## Soaking an SDK bump candidate
+
+*New in 0.6.3.*
+
+The framework ships a connector-level soak harness for screening a Couchbase
+Node SDK candidate (an SDK bump under evaluation) against your Couchbase
+Server **before** your project adopts it:
+
+```bash
+node "$(npm root -g)/gina/script/soak/couchbase-soak.js" \
+  --host=127.0.0.1 --database=soak_scratch \
+  --username=Administrator --password=secret \
+  --sdk=4.6.1 --duration=15m
+```
+
+The harness scaffolds a fully isolated throwaway gina project (your real
+`~/.gina` and your real projects are never touched), installs the candidate
+SDK **into that project** — the install is the version selector, because the
+connector resolves `couchbase` from the project's `node_modules` — builds and
+boots the bundle for the prod env, then drives the three connector surfaces
+under sustained concurrent load:
+
+| Arm | What it exercises |
+|---|---|
+| `query` | N1QL entity methods through the connector's real dispatch (`adhoc: false`, positional params, `$scope` substitution), alternating in a `request_plus` scan-consistency arm |
+| `kv` | KV through the entity `getConnection()` collection handle, in both the promise form and the 4-arg optional-callback form (`coll.insert(key, doc, opts, cb)`), plus an `UPDATE … USE KEYS` query-path mutation |
+| `session` | The couchbase express-session store — set/get/touch/destroy churn through real HTTP requests with rotating cookie jars |
+
+**Pass criteria** — aimed at the silent-death class, where a process under
+sustained SDK load exits cleanly with no JS stack:
+
+1. the bundle process must **survive the full duration** — any premature exit,
+   explicitly *including a clean exit 0*, fails the run;
+2. RSS growth must stay bounded (`--rss-slope`, `--rss-floor`);
+3. the error rate must not drift (`--drift-factor`, `--drift-min`), with
+   errors classified through the connector's `err.isTransient` stamp;
+4. every requested arm must complete real work.
+
+Exit codes: `0` pass, `1` fail, `2` harness/setup error. Reports land in
+`tmp/couchbase-soak-<stamp>/` (`report.json`, `report.txt`, `samples.ndjson`,
+`boot.log`).
+
+**Recommended usage — two runs.** Soak your *current known-good* SDK first:
+that is your baseline, and it calibrates the RSS/drift thresholds on your
+hardware. Then soak the candidate. Point the harness at a **scratch bucket**,
+never a production one — it creates a primary index
+(`CREATE PRIMARY INDEX IF NOT EXISTS`) and writes expiry-bounded soak
+documents (`--kv-expiry`, default one hour).
+
+:::caution A screen, not proof
+The harness exercises the connector's real code paths under load — not your
+application's workload shape. Treat a green soak as the *first* filter on an
+SDK-bump candidate, with your own workload-shaped soak as the second gate.
+:::
+
+Other options: `--arms=query,kv,session` (subset selection), `--concurrency=8`,
+`--durability=majority` (adds `DurabilityLevel.Majority` to the callback-form
+insert; off by default — cluster-topology dependent), `--session-database=`
+(separate session bucket), `--sdk-path=<dir>` (symlink an existing SDK install
+instead of an npm download), `--keep` (preserve the throwaway scene for
+forensics), `--skip-preflight`.
+
+---
+
 ## Accessing the underlying SDK Cluster
 
 The entity layer wraps the operations most applications need -- N1QL queries,

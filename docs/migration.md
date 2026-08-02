@@ -21,6 +21,17 @@ upward to the target version.
 
 ## 0.6.2 → 0.6.3
 
+### Added — a Couchbase SDK soak harness
+
+`script/soak/couchbase-soak.js` screens a Couchbase Node SDK candidate against
+a caller-chosen Couchbase Server before your project adopts it: an isolated
+throwaway project, the candidate SDK installed into it, and the connector's
+query / KV / session-store surfaces driven under sustained load, failing on
+premature process exit (a clean exit 0 counts as failure), unbounded RSS
+growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
+"Soaking an SDK bump candidate" section. Purely additive tooling — nothing
+changes at runtime.
+
 ### Fixed — the dev Inspector follows the monitored tab across bundles
 
 In a proxy-routed multi-bundle project, the Inspector's Flow and Query tabs
