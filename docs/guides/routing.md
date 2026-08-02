@@ -120,6 +120,7 @@ unique across the project.
 | `scopes` | — | `[current scope]` | Scopes where this route is active |
 | `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests made from this route's controller action via `self.query()`. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |
 | `cache` | — | — | Response cache strategy. See [Caching](./caching.md) for the full field reference. |
+| `negotiate` | — | `false` | Serve this route as a layoutless fragment when the request asks for one. See [Content negotiation](#content-negotiation) |
 | `_comment`, `_sample` | — | — | Developer notes, ignored by the framework |
 
 ---
@@ -483,6 +484,72 @@ Routes can be restricted to specific [scopes](../concepts/scopes). A route with
 
 If `scopes` is omitted, the route defaults to the scope that was active when the
 bundle started.
+
+---
+
+## Content negotiation
+
+A page and the fragment inside it are usually the same content rendered two ways. Rather than
+declaring a second route for the fragment — with its own URL, its own controller action, and a
+copy of the same logic — mark the route `negotiate` and let the **request** choose the shape.
+
+```json
+"dashboard": {
+  "url": "/dashboard",
+  "method": "GET",
+  "negotiate": true,
+  "param": { "control": "index" }
+}
+```
+
+Requests are unchanged by default. A request that asks for a fragment gets one:
+
+```js
+// Full page — exactly as before
+fetch('/dashboard');
+
+// Just the content region, no layout
+fetch('/dashboard', { headers: { 'X-Gina-Navigate': 'fragment' } });
+```
+
+The `fragment` response is the same body the route would produce through
+`self.renderWithoutLayout()` — your template's content, without the surrounding layout. Your
+controller action does not change: it still calls `self.render(data)`, and the framework decides
+the shape.
+
+```mermaid
+flowchart LR
+    A["GET /dashboard"] --> B{"route declares<br/>negotiate: true ?"}
+    B -- no --> C["full page<br/>(unchanged)"]
+    B -- yes --> D{"X-Gina-Navigate:<br/>fragment ?"}
+    D -- no / other value --> C
+    D -- yes --> E["layoutless body"]
+    C --> F["Vary: X-Gina-Navigate"]
+    E --> F
+```
+
+Three behaviours worth knowing:
+
+**Unknown values render the full page.** Only `fragment` changes the shape. Anything else — a
+future token, a typo, an empty value — falls through to the normal render, so the vocabulary can
+grow later without breaking clients that already send a header.
+
+**`Vary: X-Gina-Navigate` is always sent** on a negotiable route, including on responses that did
+*not* vary. That is what tells a shared cache or CDN that the URL has more than one representation;
+without it, a proxy could hand a cached full page to a client asking for a fragment. Gina appends
+to any existing `Vary` rather than replacing it.
+
+**A negotiable route is never stored in the response cache.** Gina's cache key is built from the
+URL, not from the shape, and the cache is consulted before the shape is resolved — so a cached
+entry could replay a fragment to a browser asking for a full page. Declaring both `negotiate` and
+`cache` therefore keeps the route out of the cache rather than risking the wrong body. If a route
+is cache-critical, keep it a normal route and declare a separate fragment route instead.
+
+:::note
+The signal is a dedicated header, not `X-Requested-With`. Gina's popin, link and validator plugins
+already send `X-Requested-With` and the framework already varies some behaviour on it, so
+negotiation uses its own header to avoid changing what those plugins do.
+:::
 
 ---
 

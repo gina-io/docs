@@ -32,6 +32,39 @@ growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
 "Soaking an SDK bump candidate" section. Purely additive tooling — nothing
 changes at runtime.
 
+### Added — opt-in content negotiation on the render path
+
+A route can now serve the same URL as either a full page or a layoutless fragment,
+chosen by the request. Declare `"negotiate": true` on the route and send
+`X-Gina-Navigate: fragment` to get the content region without its layout:
+
+```json
+"dashboard": {
+  "url": "/dashboard",
+  "method": "GET",
+  "negotiate": true,
+  "param": { "control": "index" }
+}
+```
+
+**No action required.** This is additive: a route that does not declare `negotiate`
+behaves exactly as before — no new response header, no change to rendering, no cache
+impact. Your controller action does not change either; it still calls `self.render(data)`
+and the framework decides the shape.
+
+Two things to know if you adopt it. A negotiable route always sends
+`Vary: X-Gina-Navigate` (appended to any existing `Vary`), so shared caches and CDNs
+know the URL has more than one representation. And a negotiable route is deliberately
+**not** stored in the response cache — the cache key is built from the URL rather than
+the shape, and the cache is consulted before the shape is resolved, so a cached entry
+could otherwise replay a fragment to a browser asking for a full page. If a route needs
+caching more than it needs negotiation, leave it a normal route and declare a separate
+fragment route instead.
+
+Only the exact value `fragment` changes the shape; any other value renders the full
+page, so the vocabulary can be extended in a later release without breaking clients
+that already send the header. See [Content negotiation](/guides/routing#content-negotiation).
+
 ### Changed — a non-positive session-store `ttl` is refused at bundle init
 
 A session store configured with `ttl: 0` (or any negative value) — via store
