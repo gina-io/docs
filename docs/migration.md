@@ -21,6 +21,18 @@ upward to the target version.
 
 ## 0.6.2 → 0.6.3
 
+### Fixed — the dev Inspector follows the monitored tab across bundles
+
+In a proxy-routed multi-bundle project, the Inspector's Flow and Query tabs
+stayed empty ("No timeline data for this request.") for every page served by a
+bundle the Inspector window was not opened from, and the Logs tab kept
+streaming the open-time bundle's server logs. The Inspector now re-points its
+server-side channels at the bundle actually serving the page you are viewing,
+which also activates that bundle's dev capture. No action required — reopen
+any Inspector window after upgrading. Note the first page rendered on a
+newly-visited bundle still predates capture activation: its own timeline is
+absent, and entries appear from the next render on.
+
 ### Fixed — Custom error pages are served with their real status code
 
 A custom error page (`templates/html/errors/<code>.html`) rendered by the
