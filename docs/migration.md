@@ -32,6 +32,17 @@ growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
 "Soaking an SDK bump candidate" section. Purely additive tooling — nothing
 changes at runtime.
 
+### Changed — a non-positive session-store `ttl` is refused at bundle init
+
+A session store configured with `ttl: 0` (or any negative value) — via store
+options or the `connectors.json` session entry — now refuses to boot, naming
+the offending channel. `ttl: 0` previously behaved as **unset** (the record
+fell back to the cookie's `maxAge`, then one day): if you meant that, remove
+the key. In the same change, a session write whose *resolved* ttl is `<= 0`
+(an already-expired cookie) is now a no-op in every store — previously the
+redis, Couchbase and ScyllaDB stores stored such a record **without any
+expiry**, leaving an immortal session row for an already-expired session.
+
 ### Fixed — the dev Inspector follows the monitored tab across bundles
 
 In a proxy-routed multi-bundle project, the Inspector's Flow and Query tabs
