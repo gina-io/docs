@@ -66,59 +66,91 @@ those into N1QL queries, manages the connection, and handles result mapping.
 
 ## Defining an entity
 
-Entities are defined as JavaScript classes in the `models/` directory of a bundle.
-The naming convention is `{entityName}.js`:
+Entities live under `models/<database>/entities/` in a bundle — one file per
+entity, where `<database>` is the `database` value (the bucket name) from the
+connector's `connectors.json` entry. The file name is the entity name: the
+connector capitalises its first letter to form the class name (`invoice.js` →
+`Invoice`) and exposes the instance on the model object in lower-camel form
+(`db.invoice`).
+
+An entity file exports a **plain constructor function**. The framework wraps
+it with the EventEmitter-based `EntitySuper` base class at startup — you do
+not `require` or extend anything yourself:
 
 ```javascript
-// models/invoice.js
-var EntitySuper = require('gina').entities;
+// models/myBucket/entities/invoice.js
 
+/**
+ * Invoice entity.
+ *
+ * N1QL-backed methods (find, findByCustomer, ...) are NOT written here --
+ * they are generated from the entity's `.sql` files (next section). Write a
+ * custom method only for work the generated methods do not cover, such as
+ * key-value access through the SDK collection handle.
+ */
 function Invoice(conn, caller) {
-    // Call parent constructor
-    EntitySuper.call(this, conn, caller);
-
     var self = this;
 
     /**
-     * Custom method: find invoices by customer
-     * @param {string} customerId
-     * @fires Invoice#event:invoicesByCustomer
+     * Custom KV method. `getConnection()` returns the bucket's default
+     * SDK Collection handle.
+     * @param {string} key
+     * @callback cb - (err)
      */
-    this.findByCustomer = function(customerId) {
-        self.emit('invoice#findByCustomer', customerId);
+    this.archiveByKey = function(key, cb) {
+        self.getConnection().remove(key)
+            .then(function() { cb(null) })
+            .catch(cb);
     };
 }
-
-// Inherit from EntitySuper (EventEmitter-based)
-Invoice.prototype = Object.create(EntitySuper.prototype);
-Invoice.prototype.constructor = Invoice;
 
 module.exports = Invoice;
 ```
 
-The connector automatically generates standard CRUD methods based on the entity
-name and the N1QL queries defined in `.sql` files.
+:::caution Instance methods only
+Custom methods must be **instance methods assigned in the constructor**
+(`this.archiveByKey = function ...`). Prototype-level methods do not survive
+the connector's `inherits()` wrapping, and wiring the prototype chain to a
+base class yourself is unnecessary — the framework does it for you at
+startup.
+:::
 
 ---
 
 ## N1QL query files
 
-Queries are stored as `.sql` files alongside the entity definition:
+Queries are stored as `.sql` files under `models/<database>/n1ql/` — one
+directory per entity (named like the entity file), one file per method:
 
 ```
 models/
-  invoice.js
-  invoice/
-    find.sql
-    findByCustomer.sql
-    save.sql
-    remove.sql
+  myBucket/
+    entities/
+      invoice.js
+    n1ql/
+      invoice/
+        find.sql
+        findByCustomer.sql
+        save.sql
+        remove.sql
 ```
+
+Every `.sql` file becomes a method on the entity, named after the file —
+`n1ql/invoice/findByCustomer.sql` is what makes `db.invoice.findByCustomer()`
+exist.
+
+:::note One name, three surfaces
+The connector loads this whole tree from `models/<database>/`, where
+`<database>` is the entry's `database` value — while `getModel()` takes the
+**entry name**. Keep the two identical (entry key == `database` == the
+`models/` directory name, as in this page's `myBucket` examples) so every
+surface points at the same directory.
+:::
 
 Each file contains a single N1QL statement:
 
 ```sql
--- models/invoice/findByCustomer.sql
+-- models/myBucket/n1ql/invoice/findByCustomer.sql
 SELECT i.*
 FROM `myBucket` i
 WHERE i.type = 'invoice'
@@ -194,9 +226,11 @@ delivered through callbacks:
 ```javascript
 // In a controller action (var self = this; declared at constructor top)
 this.showInvoice = function(req, res, next) {
-    var Invoice = self.getModel('invoice');
+    // getModel() is a global -- pass the connectors.json entry name.
+    // Entities are exposed on the model object in lower-camel form.
+    var db = getModel('myBucket');
 
-    Invoice.find(req.routing.param.id).onComplete(function(err, invoice) {
+    db.invoice.find(req.routing.param.id).onComplete(function(err, invoice) {
         if (err) return self.throwError(err);
 
         self.render({ invoice: invoice });
@@ -213,7 +247,7 @@ sequenceDiagram
     participant Conn as Couchbase Connector
     participant CB as Couchbase Server
 
-    Ctrl->>Entity: Invoice.find(id)
+    Ctrl->>Entity: db.invoice.find(id)
     Entity->>Entity: emit('invoice#find', id)
     Entity->>Conn: Execute find.sql with [$1=id]
     Conn->>CB: N1QL query
@@ -231,10 +265,10 @@ use the `onCompleteCall()` global helper:
 ```javascript
 // var self = this; declared at constructor top
 this.showInvoice = async function(req, res, next) {
-    var Invoice = self.getModel('invoice');
+    var db = getModel('myBucket');
 
     try {
-        var invoice = await onCompleteCall(Invoice.find(req.routing.param.id));
+        var invoice = await onCompleteCall(db.invoice.find(req.routing.param.id));
         self.render({ invoice: invoice });
     } catch (err) {
         self.throwError(err);
@@ -261,7 +295,7 @@ include them in your entity or save logic:
 
 ```javascript
 // This is all you need — _createdAt, _updatedAt, _scope are injected
-Invoice.save({
+db.invoice.save({
     type       : 'invoice'
   , customerId : 'cust-123'
   , amount     : 250.00
@@ -310,6 +344,37 @@ Always include `AND _scope = $scope` in your N1QL queries. Omitting it causes th
 query to return documents from all scopes -- a data isolation breach. The
 [Inspector](/guides/inspector) Query tab highlights queries that are missing scope
 filters.
+:::
+
+---
+
+## Named scopes & collections
+
+Couchbase itself organises documents into named *scopes* and *collections*.
+Gina's data model deliberately does not route queries through them: the
+connector works against **one bucket and its default collection**, and
+partitions documents with the `_scope` / `_collection` **document fields**
+stamped on every insert (see [Auto-stamping](#auto-stamping-on-insert) and
+[Multi-tenant isolation](#multi-tenant-isolation-with-scope) above).
+`_collection` plays the role a named collection would — one document type per
+entity — and `_scope` isolates environments.
+
+Two practical notes:
+
+- **Named-collection KV access is available per call.**
+  `entity.getConnection(scope, collection)` returns
+  `bucket.scope(scope).collection(collection)` from the SDK — omit both
+  arguments for the bucket's default collection. This is the supported escape
+  hatch when some of your documents live in a named collection.
+- **`useScopeAndCollections` is accepted but currently inert.** The
+  `connectors.json` key is reserved for a possible future native
+  scope/collection routing mode; setting it changes nothing today.
+
+:::caution Two meanings of "scope"
+Gina's `$scope` / `_scope` is the **environment** scope (`local`, `beta`,
+`production`, `testing`) — it is unrelated to a Couchbase scope, which is a
+namespace layer inside a bucket. `$scope` substitution on this page always
+means the environment.
 :::
 
 ---
@@ -410,10 +475,10 @@ reaching into private connection internals.
 ```javascript
 this.settle = function settle(req, res, next) {
     var self    = this;
-    var Invoice = self.getModel('invoice');
+    var db      = getModel('myBucket');
 
     // getCluster() returns the underlying Couchbase SDK Cluster handle.
-    var cluster = Invoice.getCluster();
+    var cluster = db.invoice.getCluster();
 
     // Use any SDK-level feature directly. Multi-document ACID transactions
     // run through the SDK's own async transaction API:
@@ -491,7 +556,7 @@ The Couchbase connector is configured in `connectors.json`:
 
 ```json
 {
-  "couchbase": {
+  "myBucket": {
     "connector": "couchbase",
     "protocol":  "couchbase://",
     "host":      "localhost",
@@ -506,7 +571,10 @@ The Couchbase connector is configured in `connectors.json`:
 The connector is selected by the `connector` field, and the bucket name is the
 `database` field — the same field names every connector entry uses (see the
 [Connectors reference](/reference/connectors)). The SDK connection string is
-built as `protocol + host`, so `host` carries no scheme.
+built as `protocol + host`, so `host` carries no scheme. Naming the entry
+after the bucket (as here) keeps the `models/<database>/` tree, the entry,
+and `getModel()` on one name — see the note in
+[N1QL query files](#n1ql-query-files).
 
 The `scope` field sets the default `$scope` value for all queries through this
 connector. It can be overridden per environment in `env.json`.
