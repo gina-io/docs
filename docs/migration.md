@@ -244,6 +244,25 @@ Unreadable entries are now skipped — and deliberately never pruned, since
 removing a stale pidfile is only safe for entries whose contents were actually
 read. **No action required.**
 
+### Fixed — `checkSumSync` no longer throws on data with an extension-shaped tail
+
+`lib.math.checkSumSync` routed any input whose last serialized characters
+looked like a filename extension (a dot plus 3 lowercase letters — `.com`,
+`.net`, `.pdf`, ...) to `fs.readFileSync`, so hashing a string or a serialized
+record ending with an email address or URL threw `ENOENT` (or `ENAMETOOLONG`
+for long inputs) instead of returning a checksum. The file branch is now taken
+only when the input actually resolves to an existing regular file; everything
+else is hashed as data. Inputs that previously succeeded return byte-identical
+checksums — **no action required** for those. Two related corrections: **array**
+inputs previously all collapsed to the checksum of the empty string (the
+serializer returned `''` for every array) and were sorted in place; arrays now
+produce a real order-insensitive content checksum (the hash of the JSON of a
+sorted copy) without mutating your array — if you stored array checksums, they
+were the degenerate constant and **will change**. The file probe still fires
+only for dot+3-lowercase tails: a path like `file.js` or `file.json` is hashed
+as a path string, never read from disk — pass file contents (or a
+dot+3-lowercase path) when you mean the file.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
