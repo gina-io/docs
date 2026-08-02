@@ -65,6 +65,35 @@ Only the exact value `fragment` changes the shape; any other value renders the f
 page, so the vocabulary can be extended in a later release without breaking clients
 that already send the header. See [Content negotiation](/guides/routing#content-negotiation).
 
+### Added — an opt-in client-side navigation module (`gina.nav`)
+
+The browser bundle now ships a navigation module that turns negotiation-enabled
+routes into single-page navigations. Mark the swap region once in your layout —
+the first element carrying `data-gina-nav` opts the page in and receives the
+fragments:
+
+```html
+<main data-gina-nav>
+    {% block content %}{% endblock %}
+</main>
+```
+
+Same-origin left-clicks on plain links are then intercepted **only** when the
+URL's first matching route declares `"negotiate": true` and accepts GET: the
+fragment is fetched with `X-Gina-Navigate: fragment`, swapped into the region,
+and history, scroll, focus and `document.title` (from an optional
+`data-gina-nav-title` attribute inside the fragment) are handled, with
+popin-parity rebinding of forms and re-injection of missing scripts. Everything
+else falls back to a normal full-page navigation: links owned by the link or
+popin plugins, `target`/`download`/modified clicks, per-link
+`data-gina-nav="false"` opt-outs, non-negotiable routes, redirects, errors and
+timeouts.
+
+**No action required** — pages without the marker behave byte-identically;
+upgrading changes nothing until you add the attribute. Ships in the browser
+bundle: **rebuild your bundles** to pick it up. Programmatic surface:
+`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`.
+
 ### Changed — a non-positive session-store `ttl` is refused at bundle init
 
 A session store configured with `ttl: 0` (or any negative value) — via store
@@ -106,6 +135,26 @@ browser now checks the response status before installing the table, so a
 transient error during a restart can no longer poison client-side routing —
 this last piece ships in the browser bundle: **rebuild your bundles** to pick
 it up.
+
+### Fixed — negotiated fragments of `{% extends %}` templates render their content
+
+A negotiated fragment of a template using `{% extends %}` (the standard
+full-page idiom) used to arrive with its content missing: the layoutless render
+pointed the template's extends at a shared cached-layout file and then
+overwrote that file with the empty layoutless shell before compiling, so the
+template's blocks extended a block-less parent and were discarded — and one
+fragment request could transiently blank the layout that full-page renders
+compile from (dev; it self-healed on the next full-page render). Fragment
+renders now keep their own cache namespace, primed so the template's blocks
+render, with the fragment's script/input tail intact, and fragment and
+full-page compiles no longer share a compiled-template cache slot.
+
+Full-page renders are byte-identical. A popin pointed at an extends-template
+route changes from empty to content. Server-side only — a restart picks it up,
+no bundle rebuild needed. ⚠️ On the **nunjucks** engine this class is not
+healed: a negotiated fragment there still returns the full page (the layoutless
+flag only filters assets on that engine) — avoid `negotiate: true` on nunjucks
+extends-template routes for now.
 
 ### Fixed — `resumeRequest()` replays the halted GET at its byte-exact URL
 
