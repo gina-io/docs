@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Browser Usage
 sidebar_label: Browser Usage
 sidebar_position: 10
-description: Use Swig in the browser — pre-compile templates with the CLI, load the bundled distribution, and prime the cache so extends/include/import work client-side.
+description: Use Swig in the browser — pre-compile templates with the CLI, load the full or runtime-only bundle, and register templates so include and renderFile work client-side.
 level: intermediate
 prereqs:
   - '[CLI](./cli)'
@@ -14,74 +14,99 @@ prereqs:
 
 Most of Swig works in the browser the same way it does in Node. The only exception: **Swig cannot read files by path from the browser** — the filesystem loader throws if `fs` is unavailable.
 
-If a template uses `{% extends "./myfile.html" %}` or `{% include "./myfile.html" %}`, Swig must already have `./myfile.html` in its cache. The idiomatic flow is to pre-compile every template at build time and prime the cache before rendering.
+If a template uses `{% include "partials/nav.html" %}` at render time, Swig must find that template in its cache or through a loader. The idiomatic flow: pre-compile every template at build time into a self-registering bundle, load it, render.
 
 ```mermaid
 flowchart LR
-  SRC[templates/*.html] -->|build: swig compile| JS[dist/templates.js]
+  SRC[templates/*.html] -->|"build: swig compile -r . --register"| JS[dist/templates.js]
   JS -->|"&lt;script src=...&gt;"| BROWSER[Browser]
-  BROWSER --> PRIME["swig.run(tpl, {}, '/path')"]
-  PRIME --> CACHE[In-memory cache]
-  BROWSER --> RENDER["swig.render(newSrc, {filename, locals})"]
+  BROWSER --> REG["swig.registerBundle(map)"]
+  REG --> CACHE[Template cache]
+  BROWSER --> RENDER["swig.renderFile('page.html', locals)"]
   CACHE --> RENDER
   RENDER --> HTML[Rendered HTML]
 ```
 
-## Pre-compile + prime + render
+## Pre-compile + register + render
 
 1. **Compile each template into a JS file.** `--method-name` assigns a name to the exported function.
 
    ```bash
-   swig compile myfile.html --method-name=myfile > myfile.js
+   swig compile partials/nav.html --method-name=nav > nav.js
    ```
 
 2. **Load Swig and the compiled template in the page.**
 
    ```html
    <script src="swig.min.js"></script>
-   <script src="myfile.js"></script>
+   <script src="nav.js"></script>
    ```
 
-3. **Prime Swig's cache.** `swig.run(tpl, locals, filepath)` evaluates the template and registers it under `filepath`.
+3. **Register the template.** [`swig.register(path, fn)`](./api#register) — added in v2.8.0 — stores it under the loader-resolved path, wrapped in the call shape `include` expects. Registered partials may use variables, filters, and extensions freely.
 
    ```html
    <script>
-     swig.run(myfile, {}, '/myfile.html');
+     swig.register('partials/nav.html', nav);
    </script>
    ```
 
-4. **Render a template that extends the primed file.**
+4. **Render a template that includes it.**
 
    ```html
    <script>
-     var tpl = '{% extends "./myfile.html" %}' +
-               '{% block content %}{{ stuff }}{% endblock %}';
-     var out = swig.render(tpl, {
-       filename: '/tpl',
-       locals: { stuff: 'awesome' }
+     var out = swig.render('{% include "partials/nav.html" %}', {
+       filename: '/page.html',
+       locals: { user: 'Jane' }
      });
      document.querySelector('#foo').innerHTML = out;
    </script>
    ```
 
-## AOT bundle — many templates at once
+## Self-registering AOT bundle — many templates at once
 
-For projects with more than a handful of templates, use `swig compile --recursive` to emit one module instead of one file per template. Added in v1.6.0.
+For projects with more than a handful of templates, compile the whole directory into one bundle. With `--register` (added in v2.8.0) the bundle registers itself against the global `swig` as soon as the script loads — no wiring code:
 
 ```bash
-swig compile --recursive ./views --ext=.html -o ./dist/templates.js
+cd ./views && swig compile -r . --register -o ../dist/templates.js
 ```
 
-Prime the cache from the bundle at startup:
+```html
+<script src="swig.min.js"></script>
+<script src="templates.js"></script>
+<script>
+  document.body.innerHTML = swig.renderFile('page.html', { title: 'Hi' });
+</script>
+```
+
+Run the compile from the template root (`-r .`) so the include paths baked into each compiled template line up with the bundle's registration keys. The bundle still exports the plain `{ "<rel-path>": fn }` map, so Node-side or bundler consumers can register it explicitly:
 
 ```js
-var templates = require('./dist/templates.js');
-Object.keys(templates).forEach(function (key) {
-  swig.cache[key] = templates[key];
-});
+swig.registerBundle(require('./dist/templates.js'));
 ```
 
 See [CLI — AOT bundle](./cli#aot-bundle--compile-a-directory) for the full flag reference and caveats.
+
+## Strict CSP — the runtime-only build
+
+The full bundle compiles templates through `new Function`, so pages using it need `'unsafe-eval'` in their `script-src` Content-Security-Policy — even when every template was pre-compiled, because a cache miss falls through to the compiler.
+
+`dist/swig.runtime.min.js` (added in v2.8.0, ~21 KB minified vs ~81 KB for the full bundle) removes the compiler entirely: no parser ships, the artifact contains zero `new Function`, and any compiling call (`render` on a source string, `compile`, `precompile`) throws a clear "runtime-only build has no compiler" error instead. Pair it with a `--register` bundle for a fully CSP-clean pipeline:
+
+```html
+<script src="swig.runtime.min.js"></script>
+<script src="templates.js"></script>
+<script>
+  document.body.innerHTML = swig.renderFile('page.html', { title: 'Hi' });
+</script>
+```
+
+The runtime build exposes `register`, `registerBundle`, `run`, `compileFile`, `renderFile`, `setFilter`, `setExtension`, `setDefaults`, `setDefaultTZOffset`, and `invalidateCache`, plus a `Swig` constructor for isolated instances. Its default loader is a memory loader rooted at `/`, so include lookups flatten to root-relative keys — exactly the keys a `--register` bundle carries. It is also reachable in Node as `require('@rhinostone/swig/runtime')`.
+
+## Extends in the browser
+
+`{% extends %}` resolves at **compile time**: an AOT-compiled template arrives with its parent chain already flattened into the compiled function, so extending between your build-time templates needs nothing at runtime.
+
+To compile *new* source in the browser that extends a parent, the parent's **source** must be reachable through a loader — use the memory loader below. A registered pre-compiled function cannot serve as an extends parent (the compiled function carries no parse tree for the compiler to merge blocks into).
 
 ## Memory loader instead of pre-compilation
 
@@ -96,16 +121,18 @@ swig.setDefaults({ loader: swig.loaders.memory({
 document.body.innerHTML = swig.renderFile('page.html', { title: 'Hi' });
 ```
 
-See [Loaders — memory](./loaders#swigloadersmemory) for the full contract.
+This path compiles in the browser, so it needs the full bundle (and `'unsafe-eval'` under a strict CSP). See [Loaders — memory](./loaders#swigloadersmemory) for the full contract.
 
 ## Getting the bundled build
 
-The repository produces two files under `dist/`:
+The repository produces four files under `dist/`:
 
 | File | Purpose |
 | --- | --- |
-| `dist/swig.js` | Development bundle. Browserified; includes full source for debugging. |
-| `dist/swig.min.js` | Production bundle. Terser-minified + source-mapped. |
+| `dist/swig.js` | Full development bundle — parser + runtime, full source for debugging. |
+| `dist/swig.min.js` | Full production bundle. Terser-minified + source-mapped. |
+| `dist/swig.runtime.js` | Runtime-only development bundle — executes registered pre-compiled templates; no parser, no `new Function`. Added in v2.8.0. |
+| `dist/swig.runtime.min.js` | Runtime-only production bundle (~21 KB minified). Safe under a strict CSP without `'unsafe-eval'`. Added in v2.8.0. |
 
 Build locally:
 
@@ -113,10 +140,13 @@ Build locally:
 make build
 ```
 
-Consuming via a bundler (Webpack, Rollup, esbuild, Vite) — `require('@rhinostone/swig')` should just work; the `main` entry resolves to `lib/swig.js`, and the filesystem loader guards itself for browser targets.
+Consuming via a bundler (Webpack, Rollup, esbuild, Vite) — `require('@rhinostone/swig')` should just work; the `main` entry resolves to `lib/swig.js`, and the filesystem loader guards itself for browser targets. The runtime-only module is `require('@rhinostone/swig/runtime')`.
 
 ## Gotchas
 
-- **The filesystem loader throws in the browser.** Always set a custom loader (memory or pre-compiled cache) before the first render. Ideally call `swig.setDefaults({ loader: swig.loaders.memory({}) })` at module init time.
+- **The filesystem loader throws in the browser.** With the full bundle, set a custom loader (memory, or rely on registered templates) before the first render. The runtime-only build already defaults to a memory loader rooted at `/`.
+- **Prefer `register` over priming the cache by hand.** Earlier versions of this page recommended `swig.run(tpl, {}, path)` or writing `swig.cache[key]` directly. As of v2.8.0 `run`'s priming stores the same wrapper under the same resolved key that [`register`](./api#register) uses, so it works — but it still renders the template once as a side effect just to register it. Writing `swig.cache[key]` yourself remains wrong: it stores the raw compiled function rather than the call shape `include` lookups use, so an included partial that touches variables or filters crashes, and an extends parent primed that way renders nothing. Use [`register`](./api#register) / [`registerBundle`](./api#registerbundle).
+- **Name include targets from the bundle root.** The runtime build's default loader is rooted at `/`, and a basepath ignores the including template's own directory — so a partial nested at `partials/nav.html` must still refer to its own targets from the root (`{% include "partials/deep/x.html" %}`), not as siblings (`{% include "deep/x.html" %}`). A path that climbs out of the root (`../shared/foot.html`) is rejected with a clear error rather than silently resolving to a different template.
+- **A registered template cannot be an `{% extends %}` parent.** Registration stores an executable function, not a parse tree, so a layout has to remain reachable through the loader for a child compiled in the browser to extend it. Ahead-of-time compilation already inlines `extends` and `import`, so a template compiled by the CLI carries its layout with it and this only affects source compiled at runtime.
 - **`swig run` is not a sandbox.** The function body is evaluated. Do not hand it untrusted input — see [Security](./security#swig-run-is-not-a-sandbox).
-- **Cache persistence.** The in-memory cache lives on the Swig instance. Reloading the page resets it. If you hot-reload the bundle, call [`swig.invalidateCache()`](./api#invalidatecache) before re-priming to avoid stale entries.
+- **Cache persistence.** The in-memory cache lives on the Swig instance. Reloading the page resets it. If you hot-reload a template bundle, call [`swig.invalidateCache()`](./api#invalidatecache) before re-registering to avoid stale entries.

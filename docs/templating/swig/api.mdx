@@ -341,6 +341,46 @@ Do not pass untrusted input to `run` — see [Security](./security#swig-run-is-n
 
 ---
 
+## register
+
+```js
+swig.register(path, fn)
+```
+
+Register a pre-compiled template function under a template path. Later `include` lookups and [`compileFile`](#compilefile) / [`renderFile`](#renderfile) calls are served from the template cache without compiling. Added in v2.8.0.
+
+The path is normalized through the active loader's `resolve`, so registering `'partials/nav.html'` and writing `{% include "partials/nav.html" %}` agree on the cache key. The entry is stored as a locals-binding wrapper — the call shape `include` expects — so registered partials may use variables, filters, and extensions freely. Passing a path to [`run`](#run) registers the same way, but renders the template once as a side effect; prefer `register` when no output is wanted.
+
+A registered template cannot serve as an `{% extends %}` parent: it carries an executable function, not a parse tree, so the parent's source must stay reachable through the loader. Registering a layout does not shadow one the loader can already read.
+
+```js
+swig.register('partials/nav.html', navTpl);
+swig.render('{% include "partials/nav.html" %}', {
+  filename: '/page.html',
+  locals: { user: 'Jane' }
+});
+```
+
+Throws when the instance has caching disabled — the registry is the template cache, so there would be nowhere to keep the registration. For the same reason, [`invalidateCache`](#invalidatecache) drops every registration made against the built-in memory cache.
+
+---
+
+## registerBundle
+
+```js
+swig.registerBundle(map)
+```
+
+Register a map of pre-compiled template functions in one call — the shape a [`swig compile --recursive`](./cli#aot-bundle--compile-a-directory) bundle exports. Added in v2.8.0. Bundles emitted with `--register` call this themselves when swig is already loaded, and warn on the console when no engine is found rather than registering nothing quietly.
+
+Every entry is validated before any is committed, so a malformed bundle leaves the registry untouched instead of half-populated.
+
+```js
+swig.registerBundle(require('./dist/templates.js'));
+```
+
+---
+
 ## setFilter
 
 ```js
