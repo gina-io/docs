@@ -905,7 +905,7 @@ The `version` field is informational at runtime — the driver that actually loa
 - [`connector:list`](/cli/cli-connector#connectorlist) reports the pin in the driver-info column and raises a `[ !! ]` warning when two bundles pin the same driver at different versions (npm resolves one version per project, so the first `npm install` wins).
 - [`connector:add`](/cli/cli-connector#connectoradd) uses the pin to print the exact `npm install <pkg>@"<range>"` command after writing the entry. Set it with `--driver-version=<range>`.
 
-Drivers without a pin fall back to the framework's `peerDependencies` range.
+Drivers without a pin fall back to the range already declared in the project's own `package.json` (if any), then to the framework's connector registry — the built-in range table that `connector:list` / `connector:add` read.
 
 ---
 

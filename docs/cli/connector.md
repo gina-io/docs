@@ -62,7 +62,7 @@ myproject
 [ ok ] session          couchbase    [shared]                 (couchbase@>=3.0.0 4.1.3 installed)
 [ ok ] profile          couchbase    [api]                    (couchbase@>=3.0.0 4.1.3 installed)
 [ ok ] session          couchbase    [api override]           (couchbase@>=3.0.0 4.1.3 installed)
-[ ?! ] mongodb          mongodb      [admin]                  (mongodb@>=5.0.0 — run `npm install mongodb`)
+[ ?! ] mongodb          mongodb      [admin]                  (mongodb@>=7.0.0 — run `npm install mongodb`)
 [ ok ] local            sqlite       [worker]                 (Node.js >= 22.5.0 built-in (node:sqlite))
 ```
 
@@ -74,7 +74,7 @@ myproject
 | **name** | Logical connector key (JSON object key in `connectors.json`) |
 | **connector** | Driver type resolved from `entry.connector` (falls back to the logical key) |
 | **source label** | Where the entry comes from: `[shared]`, `[<bundle>]`, or `[<bundle> override]` |
-| **driver info** | Resolved npm package, `peerDependencies` range, pinned version (if any), install state |
+| **driver info** | Resolved npm package, registry range, pinned version (if any), install state |
 
 **Status flags**
 
@@ -130,7 +130,7 @@ gina connector:list @<project> --format=json
 | `source` | `"shared"`, `"bundle"`, or `"override"` |
 | `driver` | npm package name (null for built-in drivers) |
 | `builtin` | `true` when the driver is Node-builtin (e.g. `node:sqlite`) |
-| `range` | `peerDependencies` range declared by the framework |
+| `range` | Driver range declared by the framework's connector registry |
 | `version` | User-set `version` pin from the connector entry (null if unset) |
 | `installed` / `installedVersion` | Install probe result from `<project>/node_modules/<driver>/package.json` |
 | `note` | Human-readable hint for unresolved or built-in entries |
@@ -138,7 +138,7 @@ gina connector:list @<project> --format=json
 
 ### Driver resolution
 
-Drivers are resolved from the framework's `peerDependencies` declared in `package.json`:
+Drivers are resolved from the framework's built-in connector registry (`lib/connector-registry` — the `DRIVER_MAP` / `AI_DRIVER_MAP` tables), the single range table that `connector:list` and `connector:add` read. Gina itself never depends on the drivers — they are always installed by and loaded from your project's `node_modules`:
 
 | Connector type | npm package | Range |
 |----------------|-------------|-------|
@@ -146,8 +146,9 @@ Drivers are resolved from the framework's `peerDependencies` declared in `packag
 | `redis` | `ioredis` | `>=5.0.0` |
 | `mysql` | `mysql2` | `>=2.0.0` |
 | `postgresql` | `pg` | `>=8.0.0` |
-| `mongodb` | `mongodb` | `>=5.0.0` |
-| `scylladb` | `@scylladb/scylla-driver` | `>=1.0.0` |
+| `mongodb` | `mongodb` | `>=7.0.0` |
+| `scylladb` | `cassandra-driver` | `>=4.0.0` |
+| `duckdb` | `@duckdb/node-api` | `>=1.5.5-r.0 <2` |
 | `sqlite` | *(built-in: `node:sqlite`; `bun:sqlite` under Bun)* | Node ≥ 22.5.0 (Bun ≥ 1.2 from gina 0.6.1) |
 | `ai` | Resolved from `entry.protocol` | See below |
 
@@ -203,7 +204,7 @@ After the write, the exact install command for the matching driver is printed �
 
 | Flag | Description |
 |------|-------------|
-| `--connector=<type>` | Driver type. One of: `couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`. Inferred from `<name>` when `<name>` matches one of those values. |
+| `--connector=<type>` | Driver type. One of: `couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`. Inferred from `<name>` when `<name>` matches one of those values. |
 | `--driver=<type>` | Synonym for `--connector=`. |
 | `--protocol=<uri>` | Connection protocol URI scheme (`couchbase://`, `anthropic://`, etc). Required for `ai` connectors. |
 | `--host=<host>` | Hostname or IP. Comma-separated for clusters (`db1,db2`). |
@@ -295,7 +296,7 @@ The range that follows `@` in the install command is resolved in three tiers, fi
 
 1. **`--driver-version=<range>`** — the pin on the `connector:add` call (if set). Also written to the entry under the `version` key.
 2. **Project `package.json`** — `dependencies` first, then `devDependencies`. If the driver is already declared there (from a previous install), that range is reused so `npm install` doesn't churn the lockfile.
-3. **Framework `peerDependencies`** — the range declared by gina itself (e.g. `ioredis >=5.0.0`, `couchbase >=3.0.0`).
+3. **Framework connector registry** — the built-in range table declared by gina itself (`lib/connector-registry`'s `DRIVER_MAP`, e.g. `ioredis >=5.0.0`, `couchbase >=3.0.0`).
 
 The resolved tier is logged as `(source: entry | project | framework)` so you can see which rung fired.
 
@@ -321,7 +322,7 @@ The resolved tier is logged as `(source: entry | project | framework)` so you ca
 
 ### Version pin — where it applies
 
-The `--driver-version=` pin is written to the entry under the `version` key. At install time, the printed install hint uses that pin (so `--driver-version=^5.0.0` produces `npm install ioredis@"^5.0.0"`). When omitted, the hint falls back to the framework's `peerDependencies` range.
+The `--driver-version=` pin is written to the entry under the `version` key. At install time, the printed install hint uses that pin (so `--driver-version=^5.0.0` produces `npm install ioredis@"^5.0.0"`). When omitted, the hint falls back to the range already declared in the project's own `package.json` (if any), then to the framework's connector-registry range.
 
 Since `npm install` resolves a single version per project, a `version` pin set on one bundle still affects every bundle that uses the same driver. `connector:list` flags conflicting pins with a `[ !! ]` warning — see the [version-pin warnings note](#connectorlist).
 
@@ -348,7 +349,7 @@ Any comment header above the first `{` is preserved byte-for-byte. Mid-body `//`
 | `--scope=` is not one of `local`, `beta`, `production`, `testing` | The framework's scope validation rejects first (before the handler); if it passes, the handler falls back to "Scope \`<value>\` is not valid. Allowed: ..." |
 
 :::tip Inferred type
-If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type.
+If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type.
 
 Example: `gina connector:add redis @myproject --host=127.0.0.1 --connector-port=6379` writes:
 ```json
@@ -512,7 +513,7 @@ Without `--fix`, `connector:migrate` is a **read-only dry run** — nothing is w
 | Check | Severity | Auto-fixable | Description |
 |-------|----------|--------------|-------------|
 | `missing-schema` | info | yes | Top-level `$schema` key is absent. `--fix` injects `"$schema": "https://gina.io/schema/connectors.json"` at the top of the object, preserving the leading comment header and existing key order. |
-| `bare-key-no-connector` | warn | no | An entry has no `connector` field **and** its key is not in the built-in enum (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`). The correct driver cannot be inferred from the key name, so re-declare the entry explicitly via `gina connector:add <name> @<project> --connector=<type> --force`. |
+| `bare-key-no-connector` | warn | no | An entry has no `connector` field **and** its key is not in the built-in enum (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`). The correct driver cannot be inferred from the key name, so re-declare the entry explicitly via `gina connector:add <name> @<project> --connector=<type> --force`. |
 
 ### Example — dry run
 
@@ -526,7 +527,7 @@ gina connector:migrate @myproject
 [dry-run] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
 [dry-run] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 2 issue(s) remaining
     INFO  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
-    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+    WARN  bare-key-no-connector — `mycache` Entry `mycache` has no `connector` field and key `mycache` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai, scylladb, mongodb, duckdb). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mycache @<project> --connector=<type> --force`.
 Re-run with --fix to apply 2 auto-fixable issue(s). 1 issue(s) need manual attention.
 ```
 
@@ -542,7 +543,7 @@ gina connector:migrate @myproject --fix
 [fix] /.../api/config/connectors.json (bundle `api`) — 1 connector(s), no issues
 [fix] /.../admin/config/connectors.json (bundle `admin`) — 2 connector(s), 1 fixed, 1 issue(s) remaining
     FIXED  missing-schema — Top-level `$schema` key missing. Auto-fix adds `"$schema": "https://gina.io/schema/connectors.json"`.
-    WARN  bare-key-no-connector — `mongodb` Entry `mongodb` has no `connector` field and key `mongodb` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mongodb @<project> --connector=<type> --force`.
+    WARN  bare-key-no-connector — `mycache` Entry `mycache` has no `connector` field and key `mycache` is not in the built-in enum (couchbase, mysql, postgresql, sqlite, redis, ai, scylladb, mongodb, duckdb). Add `"connector": "<type>"` by hand, or re-declare via `gina connector:add mycache @<project> --connector=<type> --force`.
 Applied 2 fix(es). 1 issue(s) still need manual attention.
 ```
 
