@@ -107,6 +107,24 @@ transient error during a restart can no longer poison client-side routing —
 this last piece ships in the browser bundle: **rebuild your bundles** to pick
 it up.
 
+### Fixed — `resumeRequest()` replays the halted GET at its byte-exact URL
+
+The GET replay used to recompose its redirect target from the route pattern plus the
+captured url params, which only carry query keys declared in **both** a rule's
+`requirements` and `param` blocks — so a query key bound in `param` only
+(`"mode": ":mode"` with no requirements entry) or an entirely undeclared key
+(`?returnTo=…`) was dropped on the replay. The replayed request still matched and
+rendered literal `:key` template paths as a 500 — typically surfacing on the
+`requireAuth` login replay, once per visitor, on query-bearing deep links.
+
+With a live session the replay (plain, XHR and popin flavors alike) now redirects to
+the byte-exact halted URL, query string included. Snapshots taken before the upgrade
+replay correctly too (`pauseRequest()` has always stored the full URL), and the
+session key `haltedRequestUrlResumed` now records that exact URL. Replays into a
+custom `requestStorage` with **no** live session keep the recomposed URL, where the
+composed query params remain the halted data's only travel channel. **No action
+required.**
+
 ### Fixed — `/_gina/assets/routing.json` now serves under the express engine
 
 The browser fetches `/_gina/assets/routing.json` at boot to populate the client

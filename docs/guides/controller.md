@@ -761,8 +761,9 @@ this.login = function(req, res, next) {
 
 `resumeRequest()` dispatches differently depending on the paused request's method:
 
-- **GET** — replayed by redirecting to the resolved url; the browser re-issues the
-  now-authenticated GET. For an XHR / popin request it returns a JSON redirect instead.
+- **GET** — replayed by redirecting to the **byte-exact url that was halted — query
+  string included** (an XHR / popin request gets a JSON redirect to the same url
+  instead); the browser re-issues the now-authenticated GET.
 - **non-GET** (POST / PUT / …) — re-dispatched **in-process**: the original method, data
   and params are restored onto the live request and the target controller action is invoked
   directly, crossing namespaces via `requireController()` when the paused route lived in a
@@ -770,12 +771,15 @@ this.login = function(req, res, next) {
 
 Either way, the `haltedRequest` snapshot is cleared from storage once it has been consumed.
 
-On a **GET** replay the resolved url carries the paused request's url params, and any
-extra data you snapshotted rides the session — the replayed action reads it from
-`req.get`, one-shot, exactly as described under
+On a **GET** replay the redirect target is the paused request's own url — path and
+query string alike — so query-driven routes (a `param` binding sourced from the query,
+a mode switch, a `returnTo`-style pointer) replay exactly as they were requested. Any
+extra data you snapshotted additionally rides the session — the replayed action reads
+it from `req.get`, one-shot, exactly as described under
 [Carrying request data across the redirect](#redirect-data-carry). Snapshotting into a
-custom `requestStorage` with no live session (below) replays the url without that extra
-data.
+custom `requestStorage` with no live session (below) instead recomposes the url from
+the route pattern and the snapshotted url params, with extra data landing as query
+parameters — without a session, the composed url is the only channel that data has.
 
 :::tip Custom storage
 Pass a second argument to `pauseRequest(data, requestStorage)` (and to
