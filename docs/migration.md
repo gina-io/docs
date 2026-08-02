@@ -76,6 +76,37 @@ the key. In the same change, a session write whose *resolved* ttl is `<= 0`
 redis, Couchbase and ScyllaDB stores stored such a record **without any
 expiry**, leaving an immortal session row for an already-expired session.
 
+### Security — the client routing map is now an allowlist (action possible)
+
+The routing table the browser fetches at boot (`/_gina/assets/routing.json`)
+used to ship almost every key of every route to any anonymous visitor —
+including controller dispatch names (`param.control` / `file` / `path`),
+`cache` configuration with its invalidation event names, `csrfExempt`,
+`scopes`, `namespace` and server-side `validator::` requirement bodies. The
+map is now built from an explicit allowlist carrying only what client-side
+URL building actually reads: `url`, `method`, `webroot`, `bundle`,
+`hostname`/`host` (direct deployments only — proxied clients keep getting the
+host-stripped variant), the `negotiate` flag, plain-regex `requirements`
+entries, URL-placeholder `param` bindings, and a new derived boolean
+`isRedirect` that replaces `param.control` client-side. Future route keys stay
+server-side by default instead of leaking on the next feature.
+
+**No action required for typical apps** — `getRoute()` / `toUrl()` / the
+`getUrl` family, including cross-bundle `'rule@bundle'` references and
+form-rule `query` URLs, work unchanged. **Action required only if** your own
+page scripts read other keys off `gina.config.routing` (for example
+`param.control` or `cache`): that logic must move server-side, where the full
+route table still lives.
+
+Two delivery changes ride along. The asset now answers with a validator tag
+(`ETag`) and `cache-control: no-cache` instead of a 24-hour `max-age`, so each
+page boot revalidates with one conditional request (normally a tiny `304`) and
+a restarted app's new routes reach returning browsers immediately. And the
+browser now checks the response status before installing the table, so a
+transient error during a restart can no longer poison client-side routing —
+this last piece ships in the browser bundle: **rebuild your bundles** to pick
+it up.
+
 ### Fixed — `/_gina/assets/routing.json` now serves under the express engine
 
 The browser fetches `/_gina/assets/routing.json` at boot to populate the client
