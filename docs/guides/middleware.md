@@ -186,7 +186,7 @@ Every middleware gets the same methods as a controller action, injected at load 
 | Method | Description |
 |---|---|
 | `self.getConfig(key)` | Read bundle configuration (`settings.json`, `app.json`, etc.) |
-| `self.getFormsRules(id)` | Load form validation rules |
+| `self.getFormsRules()` | Return the form validation rules the client selected (see [below](#reading-form-validation-rules)) |
 | `self.render(data)` | Render an HTML response and terminate the request |
 | `self.renderJSON(data)` | Render a JSON response and terminate the request |
 | `self.redirect(url, permanent)` | Issue a redirect and terminate the request |
@@ -202,6 +202,32 @@ Every middleware gets the same methods as a controller action, injected at load 
 The `pauseRequest` / `resumeRequest` / `isHaltedRequest` trio is covered in full — with the
 login-replay flow and a worked example — in
 [Pausing and resuming requests](/guides/controller#pausing-resuming-requests).
+
+### Reading form validation rules
+
+`self.getFormsRules()` takes **no arguments**. It returns a rule set from the
+bundle's `forms.rules`, selected by the form id the **client** sent with the
+request — the caller does not choose it:
+
+- The id is read from the `X-Gina-Form-Id` request header, and only when
+  `X-Gina-Form-Rule` is sent as well. `X-Gina-Form-Id` on its own selects
+  nothing.
+- When neither header is sent, the method returns an empty object (`{}`),
+  silently.
+- When the id names a form the bundle has no rules for, it also returns `{}` and
+  logs a warning naming the id it could not resolve. It does not throw in either
+  case.
+- `self.query()` forwards the client's `X-Gina-Form-*` headers on to the bundle
+  it calls, so the same client-sent id also selects rules in the downstream
+  bundle.
+
+Because the selection is client-driven and an unmatched id yields an empty rule
+set, treat the return value as *the rules the client asked for* — not as a gate.
+An empty rule set gives the rule engine nothing to check, so nothing is
+rejected. For re-validating a posted body on the server, see
+[Validating a submitted body in the controller](/guides/forms-and-validation#validating-a-submitted-body-in-the-controller):
+there is no built-in method that re-runs the rule engine against a request body,
+so that check belongs in your action.
 
 ---
 
