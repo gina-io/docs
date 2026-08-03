@@ -32,6 +32,23 @@ growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
 "Soaking an SDK bump candidate" section. Purely additive tooling — nothing
 changes at runtime.
 
+### Added — a configurable `Cache-Status` identifier (`server.cache.name`)
+
+The [RFC 9211 `Cache-Status`](/guides/caching#cache-status-response-header)
+identifier the render/output cache reports is now configurable via
+`server.cache.name` (a sibling of `type` / `store` in the `settings.json`
+`cache` block). The default stays `gina-cache` — **the wire is byte-identical
+when the key is unset**, so existing monitoring keeps matching. Accepted
+values are a letter followed by up to 63 of `[A-Za-z0-9._-]` (a conservative
+RFC 8941 token subset); an invalid value is ignored with a boot warn.
+
+One new boot warn to be aware of: when `server.hidePoweredBy` is `true` and
+the cache is enabled, leaving `name` unset now logs that the wire still names
+the framework. No behavior changes — set any token (e.g. `"cache"`) to close
+the disclosure, or set `"gina-cache"` explicitly to keep the current wire and
+silence the warn. See [the Cache-Status
+identifier](/guides/caching#the-cache-status-identifier).
+
 ### Changed — `self.store()` failure reporting and atomic publish
 
 On a move failure, the `store()` callback (or the `uploaded` event) now receives the
