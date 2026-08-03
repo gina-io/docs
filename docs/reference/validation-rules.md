@@ -254,8 +254,10 @@ rejected.
 
 A confirmation field is typically also **required**. Pairing `is` with
 `isRequired` on the same field is safe — while the field is blank, `isRequired`
-reports it and the cross-field comparison does not error. Use the two-argument
-form to set a message (keep `isRequired` first):
+reports it, and the condition neither errors nor adds a message of its own
+(since 0.6.3; before that a blank required field also collected a second
+*Condition not satisfied*). Use the two-argument form to set a message (keep
+`isRequired` first):
 
 ```json
 "passwordConfirm": {
