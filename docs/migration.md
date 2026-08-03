@@ -336,6 +336,31 @@ failed submit, or reloaded the page to recover is now redundant and can be
 removed. This fix is in the **browser bundle**, so rebuild your bundles at
 pickup — a server restart alone will not deliver it.
 
+### Fixed — Required radio groups are enforced client-side
+
+An unchecked radio group never entered the set of collected fields — every
+collection arm required a checked member, a `true`/`false`-shaped value, or an
+`isBoolean` rule — so a declared `"isRequired": true` on the group never ran.
+Worse, a form whose only named controls were radio groups skipped the whole
+client-side validation pass and submitted its XHR with an empty payload: a
+zero field count reads as nothing-to-validate, on both submit paths.
+
+An unchecked non-boolean radio group whose rule declares `isRequired: true` is
+now collected as an empty value, so the standard required check adjudicates it:
+the submit control gates from page load (under default-on live checking), an
+attempted submit renders the group's message and sends nothing, and picking a
+member re-enables the send, which then posts the picked value.
+
+**Action required — this tightens enforcement.** A form that has been silently
+submitting with nothing picked now genuinely gates on the pick — review
+rule-bound forms containing radio groups whose rule declares `isRequired`.
+Everything else is byte-identical: groups with no rule, `isRequired: false`,
+or an `isBoolean` declaration keep their previous shapes, and checked members
+post exactly as before — the wire only changes for the newly-gated shape,
+whose submits were empty anyway. This fix is in the **browser bundle**:
+rebuild your bundles at pickup — a server restart alone will not deliver it.
+See [Radio groups](/guides/forms-and-validation#radio-groups).
+
 ### Fixed — Inspector no longer reports multi-index Couchbase plans as unindexed
 
 The Query tab's index badge is extracted from the query's execution plan. The

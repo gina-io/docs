@@ -267,6 +267,70 @@ in both directions: a checkbox whose `value` reads `true`/`on` without a
 
 ---
 
+## Radio groups
+
+*Changed in 0.6.3.*
+
+A radio group is **one field**: the members share a `name`, the rule set keys
+the group by that name, and the **checked member decides what is posted**.
+
+```html
+<fieldset>
+  <legend>Plan</legend>
+  <label><input type="radio" name="plan" value="starter"> Starter</label>
+  <label><input type="radio" name="plan" value="team"> Team</label>
+  <label><input type="radio" name="plan" value="enterprise"> Enterprise</label>
+</fieldset>
+```
+
+```json
+{ "plan": { "isRequired": true } }
+```
+
+### What gets posted
+
+- The **checked member's `value`** string — `{ "plan": "team" }` here.
+- A **boolean pair** — members whose `value` reads `true`/`false`, or whose
+  rule declares `isBoolean` — posts a real JSON boolean instead, following the
+  same classification as a [boolean checkbox](#checkboxes).
+- **Nothing checked → the group is absent** from the payload, exactly like a
+  plain HTML form — unless the rule declares `isRequired`, below.
+
+### Required groups gate the submit
+
+Before 0.6.3, `isRequired` on a radio group was never enforced in the browser:
+an unchecked group was not collected at all, so no rule ever ran against it —
+and a form whose only named controls were radio groups skipped client-side
+validation entirely and submitted an empty payload. Since 0.6.3, an unchecked
+**non-boolean** group whose rule declares `"isRequired": true` is collected as
+an **empty value**, and the standard required check adjudicates it:
+
+- at page load the form reads invalid, so under default-on
+  [live checking](#live-checking) the [submit control](#the-submit-control)
+  starts out `aria-disabled` with the `gina-form-submit-disabled` class;
+- an attempted submit renders the group's error message and sends nothing —
+  write a friendly message with
+  [`setFlash`](/reference/validation-rules#setflash), or
+  [translate](#localizing-built-in-error-labels) the built-in `isRequired`
+  label;
+- picking a member clears the error state, re-enables the submit control, and
+  the submit posts the picked value.
+
+Groups with **no rule**, **`isRequired: false`**, or an **`isBoolean`**
+declaration are untouched by the 0.6.3 change — they keep their previous
+shapes byte-identical. If a form of yours has been relying on the silent empty
+submit, see the [migration notes](/migration).
+
+### Group scoping
+
+Membership follows **form ownership**, not the whole page: a group is the
+form's own controls sharing a `name` — children of the `<form>`, plus any
+control tied to it with the HTML `form` attribute. Two forms can each carry a
+group of the same name without interfering; each form validates and posts only
+its own members.
+
+---
+
 ## The submit control
 
 The form's submit control is the element Gina marks while the form is invalid.
