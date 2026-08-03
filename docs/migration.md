@@ -527,6 +527,19 @@ ambiguity that already existed for dot+3-lowercase names. Extension-less paths
 (`Makefile`, `LICENSE`) are still hashed as data strings — pass file contents
 when you mean such a file.
 
+### Fixed — the dev Inspector no longer shows other requests' data when opened without its statusbar link
+
+An Inspector window opened by **direct URL or bookmark** (without the `?ch=` the
+statusbar link appends) used to fall back to bundle-global data channels, so any
+background request to the bundle — session pollers, other tabs — overwrote what the
+data tabs showed within seconds. Most visibly: opening a dialog whose content had been
+preloaded on hover never appeared to update the Query tab. Such a window now
+automatically binds to the most recently active page tab (the same per-tab channel the
+statusbar link provides), and a new footer badge names the active data-source mode —
+`bound`, `agent`, or a warn-tinted `global` when the window genuinely has no page tab
+to bind to. **No action required** — dev tooling only; opening the Inspector via the
+statusbar link behaves exactly as before.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
