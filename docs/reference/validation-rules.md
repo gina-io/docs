@@ -222,6 +222,12 @@ values. The argument **must be an array**; an empty list rejects every value.
 "status": { "isRequired": true, "isString": true, "isInList": ["draft", "pending", "sent", "paid"] }
 ```
 
+List values are **literal text** — a `$` has no reference meaning here
+(`$name` references exist only in [`is`](#is) expressions), so since 0.6.3 a
+value such as `"$100"` validates as its literal (earlier versions threw).
+Avoid a value that coincides with `$` + one of the form's own field names —
+it is currently reinterpreted as a reference and can never match.
+
 ### isJsonWebToken
 
 `isJsonWebToken()` · JSON: `"isJsonWebToken": true`
@@ -246,6 +252,11 @@ A general-purpose condition. `condition` may be:
   against the value;
 - a single **comparison expression** referencing other fields by `$name`, e.g.
   `"$password === $passwordConfirm"`.
+
+`$name` references are an `is`-only grammar: in every **other** rule's
+arguments a `$` is plain literal text (since 0.6.3 — earlier versions threw a
+`TypeError` when an array-form rule's first value carried a `$` that matched no
+field name).
 
 For safety, free-form expressions are restricted to one regex test or one binary
 comparison (`===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`); anything else is
