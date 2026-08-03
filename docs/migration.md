@@ -379,6 +379,27 @@ whose submits were empty anyway. This fix is in the **browser bundle**:
 rebuild your bundles at pickup — a server restart alone will not deliver it.
 See [Radio groups](/guides/forms-and-validation#radio-groups).
 
+### Fixed — `"setFlash": [null, "message"]` keeps its custom message in the browser
+
+The two-argument `setFlash` form the
+[validation reference](/reference/validation-rules#setflash) documents —
+`[null, "message"]`, first argument ignored — silently lost its custom message
+client-side: the browser rendered the built-in label instead, while the server
+rendered the custom message correctly. The deep-merge utility classified a
+`null` array element as an object (the `typeof null` trap) and dropped it
+wherever rules are re-merged on the client (the `data-gina-form-rule` bind
+among others), so the engine received a one-element array and bound the message
+to the ignored first argument. `["", "message"]` was unaffected.
+
+The merge now preserves `null` array elements as values, so the documented form
+works as written. **No action required** — `["", "message"]` keeps working
+byte-identically, and custom messages that silently fell back to the default
+label start rendering. One behavioural note beyond forms: arrays containing
+`null` elements are no longer silently compacted by merges anywhere in the
+framework — code relying on that compaction (unlikely — it was a defect) sees
+the `null` slots preserved. This fix is in the **browser bundle**: rebuild your
+bundles at pickup — a server restart alone will not deliver it.
+
 ### Fixed — Inspector no longer reports multi-index Couchbase plans as unindexed
 
 The Query tab's index badge is extracted from the query's execution plan. The
