@@ -195,9 +195,15 @@ chain continuing past it. On 0.5.3 and below, follow `isDate` with
 
 Accepts `true`/`"true"`/`1` and `false`/`"false"`/`0`, coercing to a real
 boolean. A required `false` is valid (an unchecked-but-required toggle does not
-fail).
+fail). Anything outside that set is rejected — including a checkbox posting the
+HTML default `"on"`, the strings `"1"` and `"0"`, and case variants like
+`"TRUE"`.
 
 - **Default message:** *Must be a valid boolean*
+- An empty value is left to [`isRequired`](#isrequired) alone — `isBoolean` adds
+  no message of its own to a blank field, whether or not the field is required
+  (since 0.6.3; before that a blank field reported *Must be a valid boolean*,
+  and on a required field that message replaced *Cannot be left empty*).
 
 ```json
 "acceptsTerms": { "isRequired": true, "isBoolean": true }

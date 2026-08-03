@@ -362,6 +362,91 @@ the message your server returned — so a project that had overridden or
 translated `isApiError` was already getting no effect from it, and removing it
 changes no rendered text.
 
+### Fixed — `isBoolean` rejects junk instead of silently storing `false`
+
+On the server, a value that is not a boolean was coerced **before** the
+[`isBoolean`](/reference/validation-rules#isboolean) rule could judge it:
+anything that did not match `true` (case-insensitively) became `false`. So a
+field declared `"isBoolean": true` accepted junk without complaint and stored
+the opposite of what was sent. Concretely, `"nope"` validated cleanly and
+persisted as `false`; a checkbox posting the HTML default `"on"` — a **ticked**
+box — stored as unticked; and the strings `"1"` and `"0"`, and case variants
+like `"TRUE"`, all landed as `false`. The rule engine is now the single judge on
+every surface, which is the behaviour the
+[route requirements](/guides/routing#validator-requirements) already enforced
+and this reference already described.
+
+**Behaviour changes in both directions.** Values that used to be accepted and
+silently stored as `false` are now rejected with *Must be a valid boolean*. In
+the other direction, the **number** `1` — which the documented accept-set has
+always included — used to be stored as `false` on a verdict that was already
+valid; it now correctly stores `true`. Everything in the documented set
+(`true`/`"true"`/`1` and `false`/`"false"`/`0`) is unaffected in both value and
+verdict.
+
+**Action required — this tightens enforcement, and one stored value changes.**
+Sweep the rule files for boolean fields, and check what your clients actually
+send for them:
+
+```bash
+grep -rn 'isBoolean' <your-bundle>/config/ <your-bundle>/forms/
+```
+
+A plain HTML checkbox posts `"on"` when ticked and sends nothing when unticked,
+so a checkbox validated with `isBoolean` needs its value normalised to
+`true`/`false` before it reaches validation. If any field currently relies on
+"anything unrecognised means `false`", make that explicit. And if a field can
+receive the number `1`, note that rows written before this release may hold
+`false` where `true` was meant.
+
+This fix is in the **browser bundle**: rebuild your bundles at pickup — a server
+restart alone will not deliver it.
+
+### Fixed — A blank field with `isBoolean` reports one message, not the wrong one
+
+`isBoolean` was the last data rule outside the empty-value contract every other
+rule follows — an empty value is adjudicated by
+[`isRequired`](/reference/validation-rules#isrequired) alone. A blank field
+carrying `isBoolean` reported *Must be a valid boolean*, and on a **required**
+field that message **replaced** *Cannot be left empty*, so the user was told
+their empty field held an invalid boolean rather than that it was empty. An
+**optional** blank field was flagged too, where every other rule leaves it
+alone. Both now behave like the rest of the contract: a required blank field
+reports *Cannot be left empty* and nothing else, and an optional blank field
+passes.
+
+**No action required unless** your UI asserts on the exact message text for a
+blank boolean field — a test fixture, a snapshot, or copy that reads "must be a
+valid boolean". A required blank field was invalid before and stays invalid; an
+optional blank field is the one verdict that changes, from invalid to valid,
+which is what the contract always specified. A recognised `false` or `0` still
+satisfies a required toggle, exactly as before.
+
+See [Chaining and ordering](/reference/validation-rules#chaining-and-ordering).
+
+### Fixed — Server-side rule sets no longer crash on a `$` the fields do not resolve
+
+Validating a rule set on the server threw a `TypeError` before any rule ran when
+the rules still contained a `$` after field references were substituted. Three
+shapes hit it: a regex end-anchor inside an
+[`is`](/reference/validation-rules#is) condition (`"/^(alpha|beta)$/"`), a `$`
+inside a human-readable message (`"cost is 5$ max"`), and a `$` anywhere in a
+rule's argument list after the first entry. The substitution has a second pass
+that reads each field from the live page, which the server does not have; it now
+skips that pass instead of failing, matching what the browser does once the
+first pass has resolved every known field. Ordinary cross-field comparisons like
+`"$password === $passwordConfirm"` were never affected — the first pass already
+resolves those.
+
+**No action required.** Rule sets that already validated are unchanged in both
+verdict and substituted values; the fix turns a crash into the result the rule
+set should always have produced.
+
+**One shape still throws:** a `$` token in the **first** argument of a rule that
+takes a list, where the token names no field — for example
+`"isInList": ["$100", "$200"]`. Quote such values differently or avoid a leading
+`$` in list membership until that is addressed.
+
 ### Fixed — Custom-error renders no longer misreport correct routing rules
 
 When a page render failed on a bundle with custom error pages configured, the
