@@ -302,7 +302,10 @@ compare loosely equal to `""`, those values rode the empty-value bypass:
 All five sites now compare **strictly**, so only the literal empty string
 bypasses — which is all the designed contract ever meant. An empty string
 behaves exactly as before on every rule, ordering conventions are unchanged,
-and `isString`, `isInList`, `isDate` and the `is` condition rule are untouched.
+and `isString`, `isInList` and `isDate` are untouched. The `is` condition rule
+was untouched by *this* change, but gains an empty bypass of its own in the
+same release — see "An empty required field with an `is` rule shows one
+message, not two" below.
 
 **Action required — this tightens enforcement.** Review fields whose rules
 declare `isEmail`, `isJsonWebToken` or `isFloat` and whose value can
@@ -312,6 +315,35 @@ values validated silently before and are rejected now. If a field genuinely
 accepts "0 or an email", express that in the rule set (e.g. a [conditional
 `is`](/reference/validation-rules#is) case) rather than relying on the old
 conflation.
+
+### Fixed — An empty required field with an `is` rule shows one message, not two
+
+A field that is required and also carries an
+[`is`](/reference/validation-rules#is) condition reported **two** errors when
+left empty: `Cannot be left empty` from `isRequired`, plus a second
+`Condition not satisfied` from the condition being evaluated against the blank
+value. `is` was the last rule outside the empty-value contract every other data
+rule follows — an empty value is adjudicated by `isRequired` alone — and it now
+joins that contract, so a required, empty field records one message.
+
+**Form validity is unchanged in both directions.** An empty required field was
+invalid and stays invalid; an optional empty field was valid and stays valid.
+Nothing that used to submit now fails, and nothing that used to fail now
+submits — only the list of messages shown for that one state changes.
+Consistent with the strict empty test above, only the literal empty string
+bypasses the condition: `0`, `false` and `null` remain real values and are
+still evaluated by it.
+
+**Action required only if** your UI renders *every* message for a field and
+something asserts on that list — a test fixture, a snapshot, or copy that reads
+"two problems". A UI that renders only the first message is unaffected, and no
+request payload changes.
+
+Also in this release, the unused `isApiError` entry was removed from the
+built-in error-label catalogue. Nothing ever consulted it — an API error renders
+the message your server returned — so a project that had overridden or
+translated `isApiError` was already getting no effect from it, and removing it
+changes no rendered text.
 
 ### Fixed — Custom-error renders no longer misreport correct routing rules
 
@@ -569,6 +601,17 @@ statusbar link provides), and a new footer badge names the active data-source mo
 `bound`, `agent`, or a warn-tinted `global` when the window genuinely has no page tab
 to bind to. **No action required** — dev tooling only; opening the Inspector via the
 statusbar link behaves exactly as before.
+
+### Added — restore a single hidden Inspector tab
+
+In the Inspector's **Custom** tab layout, tabs removed with the `×` button could
+previously only be brought back all at once via the **Reset** link. Each removed tab's
+dimmed, struck-through preview pill is now itself the restore control: it shows a
+leading `+` glyph (amber on hover) and a `Restore <Tab> tab` tooltip, and clicking it
+brings just that tab back — at the end of the tab bar, without switching to it (you
+are mid-layout-editing; drag it into place from there). The Reset link is unchanged
+and still restores everything at once. **No action required** — dev tooling only,
+purely additive.
 
 ## 0.6.1 → 0.6.2
 
