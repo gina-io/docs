@@ -379,6 +379,43 @@ whose submits were empty anyway. This fix is in the **browser bundle**:
 rebuild your bundles at pickup — a server restart alone will not deliver it.
 See [Radio groups](/guides/forms-and-validation#radio-groups).
 
+### Fixed — A field that drives its own conditional rule is validated
+
+A rule set can key a conditional block on a field it also gives rules to:
+
+```json
+{
+  "plan": { "isRequired": true },
+  "_case_plan": {
+    "conditions": [
+      { "case": "team", "rules": { "seats": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+In the browser, `plan`'s own `isRequired` never ran. The per-field loop skipped
+any field that a `_case_` block is keyed on — and it skipped the field's own
+rules along with the conditional handling — on every whole-form pass: at bind,
+during live checking, and at submit. A form built on this shape did not gate,
+its submit control stayed enabled with nothing picked, and an empty submit went
+to the server with no client-side validation at all.
+
+The field's own rules are now checked before the conditional block is skipped,
+and the value it was collected with is preserved across that check, so the case
+it drives still resolves from what the user actually picked. Which conditions
+apply is unchanged. The fix is order-independent: a driver declared *before*
+another `_case_` block was already being checked, so every such field is now
+covered regardless of declaration order.
+
+**Action required — this tightens enforcement.** A form built on this shape
+starts gating where it silently submitted before: its required fields must now
+be filled for the submit to send. Review rule sets that give rules to a field
+they also key a `_case_` block on. Forms without that shape are unaffected, and
+server-side form-body validation is unchanged (conditional rules were already
+unsupported there). This fix is in the **browser bundle**: rebuild your bundles
+at pickup — a server restart alone will not deliver it.
+
 ### Fixed — `"setFlash": [null, "message"]` keeps its custom message in the browser
 
 The two-argument `setFlash` form the
