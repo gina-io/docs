@@ -32,6 +32,24 @@ growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
 "Soaking an SDK bump candidate" section. Purely additive tooling — nothing
 changes at runtime.
 
+### Changed — `self.store()` failure reporting and atomic publish
+
+On a move failure, the `store()` callback (or the `uploaded` event) now receives the
+**real filesystem `Error`** — `err.code` intact (`EACCES`, `ENOSPC`, `ENOENT`, …) —
+instead of the fabricated `No file to upload` that previously masked every failure
+cause. The literal `No file to upload` message is now reserved for the genuinely-empty
+case (calling `store()` with nothing to store).
+
+**Action required only if** your code matches the literal `No file to upload` message
+to detect *failures*: real move failures no longer carry it. Code that just checks
+`if (err)` — the documented pattern — is unaffected.
+
+Also hardened, no action required: each file is now published atomically (streamed to
+a temporary sibling, then renamed into place), so a concurrent reader can no longer
+observe a partially-written file under the final name; a failed move no longer deletes
+the staged source file or a pre-existing destination; and a source-file read error no
+longer crashes the bundle process.
+
 ### Added — opt-in content negotiation on the render path
 
 A route can now serve the same URL as either a full page or a layoutless fragment,

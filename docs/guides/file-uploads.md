@@ -124,6 +124,15 @@ On success `err` is `false` and `files` is an array describing what was stored:
 | `type` | The MIME type. |
 | `encoding` | The part's transfer encoding. |
 
+On failure `err` is the real filesystem `Error` with its `code` intact (`EACCES`,
+`ENOSPC`, `ENOENT`, …); the literal `No file to upload` message is reserved for the
+genuinely-empty case — calling `store()` with nothing to store. Each file is published
+atomically: the content streams to a temporary sibling and is renamed into place, so a
+concurrent reader never observes a partially-written file under the final name, and a
+failed move leaves both the staged source file and any pre-existing destination intact.
+(Before 0.6.3, every failure surfaced as `No file to upload` and files were written
+directly to their final name.)
+
 :::note `store()` moves; it does not validate
 `self.store()` does no size, extension, or count checking — it just relocates
 the temp files. Those constraints are enforced earlier, at parse time, from your
