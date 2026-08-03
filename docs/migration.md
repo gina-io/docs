@@ -416,6 +416,36 @@ server-side form-body validation is unchanged (conditional rules were already
 unsupported there). This fix is in the **browser bundle**: rebuild your bundles
 at pickup — a server restart alone will not deliver it.
 
+### Fixed — A conditional driver's value survives its own validation
+
+A field can both carry rules of its own and key a `_case_` block. During a
+whole-form pass, checking a field's own rules removes its collected value from
+the pass's working set — and for every such driver except the last-declared
+one, that removal was never undone. Later readers then fell back to the DOM:
+for a radio group, the first member's value, regardless of which member the
+user picked.
+
+Two symptoms followed. Conditions evaluated after the driver's own check
+matched a choice the user never made — spuriously requiring the other flow's
+fields (a correctly-completed form could refuse to submit), or, with condition
+rules that exclude, under-validating the flow the user actually picked. And
+the driver's own conditional block, evaluated in the same pass, saw no value
+at all, so its conditions matched nothing.
+
+The collected value is now preserved across the driver's own check, in every
+declaration position and also inside condition recursions. Conditions resolve
+from what the user actually picked, consistently. Fields that do not drive a
+`_case_` block are untouched, as are drivers that carry no rules of their own.
+
+**Behaviour changes in both directions.** Requirements that only fired because
+of the misread value stop firing — a form that could not be completed on a
+correctly-filled flow starts submitting — and the driver's own conditional
+block starts matching the collected value, so its rules now apply where they
+silently did not. Review rule sets in which a field with rules of its own also
+keys a `_case_` block that is not the last one declared. This fix is in the
+**browser bundle**: rebuild your bundles at pickup — a server restart alone
+will not deliver it.
+
 ### Fixed — `"setFlash": [null, "message"]` keeps its custom message in the browser
 
 The two-argument `setFlash` form the
