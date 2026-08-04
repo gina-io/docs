@@ -196,7 +196,14 @@ Error rendering is wired for assistive technology out of the box:
 - each error message is linked to its field with `aria-errormessage` (Gina does
   not override an `aria-errormessage` you set yourself);
 - a visually-hidden `role="status" aria-live="polite"` region announces
-  blur-time errors;
+  blur-time errors. Gina appends this region to the `<form>` when the form is
+  bound, so it is already in the page before any error occurs — a live region
+  that is created and filled in the same moment is often skipped by screen
+  readers, which is why it is not created on demand. It stays inside the form
+  on purpose: a form shown in a popin lives inside a modal `<dialog>`, and
+  everything outside that dialog is inert, so a region placed elsewhere in the
+  page would go unannounced there. Expect one extra hidden `<div>` per bound
+  form if you inspect the DOM or write structural CSS selectors;
 - on a failed submit, focus moves to the **first invalid field in document
   order**, so screen readers announce it immediately.
 
