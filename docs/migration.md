@@ -424,6 +424,36 @@ satisfies a required toggle, exactly as before.
 
 See [Chaining and ordering](/reference/validation-rules#chaining-and-ordering).
 
+### Fixed — Rules on bracket-notation and nested keys now enforce server-side
+
+Server-side form-body validation silently skipped any rule authored on a
+bracket-notation key (`account[username]`) or as a nested rule tree
+(`account: { username: { ... } }`): the rule parser canonicalizes such keys to
+dotted paths while the fields map kept the raw posted keys, so the lookup never
+joined and the field passed with no warning — whatever the wire shape (a flat
+`account[username]` key posted as JSON, or the nested object the multipart and
+urlencoded parsers produce). **Every rule-keyed directive was affected**: checks
+(`isRequired`, `isEmail`, …) never ran, `exclude` never dropped the field from
+the validated output, and transforms (`trim`, …) never applied.
+
+These rules now enforce, on both wire shapes, with the same behaviour the
+client-side path has always had for the same rule set:
+
+- **Error keys** come back under the bracket form (`account[username]`), the
+  addressing the client-side error rendering looks up.
+- **The validated data output** keeps its shape, with exclusions and transforms
+  applied. A parent object emptied by an exclusion is removed; an empty object
+  you posted yourself is kept.
+- **Cross-field `$` references** to bracket-named fields keep resolving exactly
+  as before, and payloads with only flat field names behave identically.
+- The no-rules path still returns the payload verbatim.
+
+**Action required only if** a form relied on the old silent skip: a
+bracket-keyed or nested-authored rule that never fired before now rejects,
+drops, or transforms those fields. Audit rule sets whose keys use bracket
+notation — most authors wrote them expecting exactly the enforcement that now
+happens, but a stale rule kept "because it never did anything" will wake up.
+
 ### Fixed — Server-side rule sets no longer crash on a `$` the fields do not resolve
 
 Validating a rule set on the server threw a `TypeError` before any rule ran when
