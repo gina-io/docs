@@ -54,6 +54,7 @@ flowchart LR
 | `--minify` | `-m` | — | Minify compiled output with `terser`. |
 | `--recursive <dir>` | `-r` | — | Compile every template under `<dir>` into a single CommonJS bundle. Added in v1.6.0. Conflicts with positional file arguments, `--method-name`, `--wrap-start`, `--wrap-end`. |
 | `--ext <list>` | — | — | Comma-separated file extensions to include when using `--recursive` (e.g. `.html,.swig`). Added in v1.6.0. Defaults to no filter. |
+| `--register` | — | — | With `--recursive`: emit a self-registering bundle — it calls `swig.registerBundle(map)` when a global `swig` is present, and still exports the plain map. Added in v2.8.0. |
 | `--filters <file>` | — | — | CommonJS module of custom filters. Each export becomes a filter. |
 | `--tags <file>` | — | — | CommonJS module of custom tags. Each export must have `parse`, `compile`, optional `ends`, `block`. |
 | `--options <file>` | — | — | CommonJS module of options — passed to `swig.setDefaults`. |
@@ -130,23 +131,27 @@ module.exports = {
 };
 ```
 
-Prime Swig's cache from the bundle at startup so `extends` / `include` / `import` resolve against the compiled functions:
+Register the bundle at startup so `include` lookups and `compileFile` / `renderFile` calls resolve to the compiled functions:
 
 ```js
 var swig = require('@rhinostone/swig');
-var templates = require('./dist/templates.js');
-
-Object.keys(templates).forEach(function (key) {
-  swig.cache[key] = templates[key];
-});
+swig.registerBundle(require('./dist/templates.js'));
 ```
 
+Or emit a **self-registering** bundle with `--register` (added in v2.8.0) — in a browser page that has already loaded the swig bundle, no wiring code is needed at all:
+
+```bash
+cd ./views && swig compile -r . --register -o ../dist/templates.js
+```
+
+Run the command from the template root (`-r .`) so the include paths baked into each compiled template line up with the bundle's registration keys. Do not copy raw functions into `swig.cache` by hand — the raw compiled function is not the call shape `include` uses, and partials that touch variables or filters will crash (see [Browser Usage](./browser)).
+
 :::note
-`--recursive` is incompatible with positional file arguments, `--method-name`, `--wrap-start`, and `--wrap-end` — the CLI exits with an error if any of those are combined with `-r`.
+`--recursive` is incompatible with positional file arguments, `--method-name`, `--wrap-start`, and `--wrap-end` — the CLI exits with an error if any of those are combined with `-r`. `--register` is the inverse: it *requires* `--recursive`.
 :::
 
 :::caution
-`extends` / `include` / `import` still resolve at render time through the consumer's loader. The AOT bundle compiles each template in isolation — it does not inline parent templates or includes. Your loader must return a resolved key that matches the bundle's map (typically the relative path you passed to `--recursive`).
+`extends` and `import` resolve at **compile time** and are inlined — an AOT-compiled template carries its flattened parent chain and imported macros with it. `include` still resolves at **render time** through the loader: register the bundle (or point your loader at keys matching the bundle's map — the relative paths under the directory you passed to `--recursive`) so included templates are found.
 :::
 
 ## Security notes

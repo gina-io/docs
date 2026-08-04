@@ -96,6 +96,12 @@ the session cookie's `maxAge`; one day (`86400` seconds) is the last resort
 when the cookie has none either. The `ttl` values in the examples below are
 therefore optional — set one only when the record's lifetime should be
 decoupled from the cookie's.
+
+Since 0.6.3, a configured `ttl` must be a **positive** number of seconds —
+`ttl: 0` and negative values are refused at bundle init, naming the offending
+channel (they previously behaved as unset). And a write whose *resolved* ttl
+is `<= 0` (an already-expired cookie) is a no-op: a session record is never
+stored without an expiry.
 :::
 
 ---

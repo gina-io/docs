@@ -252,7 +252,7 @@ the plugin. See the [CSRF guide](../guides/csrf) for the full reference.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `secret` | string | — | HMAC secret used to sign and verify CSRF tokens. Accepts a `${secret:KEY}` [placeholder](../guides/secrets) that resolves from `process.env[KEY]` at config-load time. Falls back to `process.env.GINA_CSRF_SECRET` when absent. The factory throws at bundle startup when none of the three sources (`opts.secret` > `settings.csrf.secret` > env var) resolves to a non-empty value |
+| `secret` | string | — | HMAC secret used to sign and verify CSRF tokens. Accepts a `${secret:KEY}` [placeholder](../guides/secrets) resolved at config-load time from the framework environment first, then `process.env[KEY]`. Falls back to `GINA_CSRF_SECRET` when absent. The factory throws at bundle startup when none of the three sources (`opts.secret` > `settings.csrf.secret` > env var) resolves to a non-empty value |
 | `cookieName` | string | `"gina-csrf-token"` | Name of the signed token cookie issued on safe-method requests |
 | `headerName` | string | `"X-Gina-CSRF-Token"` | Request header the middleware reads on mutating requests (POST / PUT / PATCH / DELETE) |
 | `fieldName` | string | `"_csrf"` | Form field the middleware accepts as a fallback when the header is absent |
@@ -264,7 +264,7 @@ the plugin. See the [CSRF guide](../guides/csrf) for the full reference.
 
 1. `opts.secret` passed to `gina.plugins.Csrf({ secret: ... })` — test override
 2. `settings.csrf.secret` — placeholder-resolved at config-load time
-3. `process.env.GINA_CSRF_SECRET` — back-compat fallback for bundles that adopted CSRF in `0.3.7`
+3. `GINA_CSRF_SECRET` — back-compat fallback for bundles that adopted CSRF in `0.3.7`. Read from the framework environment first, then `process.env` (since `0.6.3`; before then only `process.env` was consulted, so this tier was unreachable from a CLI process)
 
 :::tip Generate a strong secret
 ```bash

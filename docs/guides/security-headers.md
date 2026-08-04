@@ -590,6 +590,26 @@ To check which engine your bundle uses, look at `bundles/<name>/config/settings.
 | User middleware sets `X-Powered-By` AFTER this plugin runs           | Re-added; mount `HidePoweredBy` LAST in the chain to prevent                      |
 | Response already sent (`res.headersSent === true`)                   | Node's `removeHeader` no-ops; request resumes                                    |
 
+### What `hidePoweredBy` does not cover
+
+`server.hidePoweredBy` suppresses the `X-Powered-By` header — nothing else.
+Two other response surfaces can still name the framework:
+
+- **The `Cache-Status` identifier.** With the [render/output
+  cache](/guides/caching#cache-status-response-header) enabled, every GET
+  carries `Cache-Status: gina-cache; …` by default. The identifier never
+  changes implicitly (it is a documented-stable wire value); instead, a boot
+  warn fires when `hidePoweredBy` is `true`, the cache is enabled, and no
+  [`server.cache.name`](/guides/caching#the-cache-status-identifier) is set.
+  Set any RFC 8941 token there (for example `"cache"`) to close the
+  disclosure, or set `"gina-cache"` explicitly to keep the wire and silence
+  the warn.
+- **`Vary: X-Gina-Navigate`.** Routes with `negotiate: true` emit it so
+  shared caches key fragment and full-page responses separately. This is
+  caching-correctness metadata, not a banner — suppressing or renaming it
+  would corrupt intermediary caches and break the client contract, so it is
+  not configurable. Routes without `negotiate` never emit it.
+
 ## X-DNS-Prefetch-Control (`#HDR9`)
 
 `gina.plugins.XDnsPrefetchControl({ value })` emits the `X-DNS-Prefetch-Control` response header on every response, controlling whether the browser proactively resolves DNS for links, images, CSS, and JavaScript referenced by the page.

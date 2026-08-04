@@ -19,6 +19,826 @@ upward to the target version.
 
 ---
 
+## 0.6.2 → 0.6.3
+
+### Added — a Couchbase SDK soak harness
+
+`script/soak/couchbase-soak.js` screens a Couchbase Node SDK candidate against
+a caller-chosen Couchbase Server before your project adopts it: an isolated
+throwaway project, the candidate SDK installed into it, and the connector's
+query / KV / session-store surfaces driven under sustained load, failing on
+premature process exit (a clean exit 0 counts as failure), unbounded RSS
+growth, error-rate drift, or a dead arm. See the Couchbase ORM guide's
+"Soaking an SDK bump candidate" section. Purely additive tooling — nothing
+changes at runtime.
+
+### Added — a configurable `Cache-Status` identifier (`server.cache.name`)
+
+The [RFC 9211 `Cache-Status`](/guides/caching#cache-status-response-header)
+identifier the render/output cache reports is now configurable via
+`server.cache.name` (a sibling of `type` / `store` in the `settings.json`
+`cache` block). The default stays `gina-cache` — **the wire is byte-identical
+when the key is unset**, so existing monitoring keeps matching. Accepted
+values are a letter followed by up to 63 of `[A-Za-z0-9._-]` (a conservative
+RFC 8941 token subset); an invalid value is ignored with a boot warn.
+
+One new boot warn to be aware of: when `server.hidePoweredBy` is `true` and
+the cache is enabled, leaving `name` unset now logs that the wire still names
+the framework. No behavior changes — set any token (e.g. `"cache"`) to close
+the disclosure, or set `"gina-cache"` explicitly to keep the current wire and
+silence the warn. See [the Cache-Status
+identifier](/guides/caching#the-cache-status-identifier).
+
+### Changed — `self.store()` failure reporting and atomic publish
+
+On a move failure, the `store()` callback (or the `uploaded` event) now receives the
+**real filesystem `Error`** — `err.code` intact (`EACCES`, `ENOSPC`, `ENOENT`, …) —
+instead of the fabricated `No file to upload` that previously masked every failure
+cause. The literal `No file to upload` message is now reserved for the genuinely-empty
+case (calling `store()` with nothing to store).
+
+**Action required only if** your code matches the literal `No file to upload` message
+to detect *failures*: real move failures no longer carry it. Code that just checks
+`if (err)` — the documented pattern — is unaffected.
+
+Also hardened, no action required: each file is now published atomically (streamed to
+a temporary sibling, then renamed into place), so a concurrent reader can no longer
+observe a partially-written file under the final name; a failed move no longer deletes
+the staged source file or a pre-existing destination; and a source-file read error no
+longer crashes the bundle process.
+
+### Added — opt-in content negotiation on the render path
+
+A route can now serve the same URL as either a full page or a layoutless fragment,
+chosen by the request. Declare `"negotiate": true` on the route and send
+`X-Gina-Navigate: fragment` to get the content region without its layout:
+
+```json
+"dashboard": {
+  "url": "/dashboard",
+  "method": "GET",
+  "negotiate": true,
+  "param": { "control": "index" }
+}
+```
+
+**No action required.** This is additive: a route that does not declare `negotiate`
+behaves exactly as before — no new response header, no change to rendering, no cache
+impact. Your controller action does not change either; it still calls `self.render(data)`
+and the framework decides the shape.
+
+Two things to know if you adopt it. A negotiable route always sends
+`Vary: X-Gina-Navigate` (appended to any existing `Vary`), so shared caches and CDNs
+know the URL has more than one representation. And a negotiable route is deliberately
+**not** stored in the response cache — the cache key is built from the URL rather than
+the shape, and the cache is consulted before the shape is resolved, so a cached entry
+could otherwise replay a fragment to a browser asking for a full page. If a route needs
+caching more than it needs negotiation, leave it a normal route and declare a separate
+fragment route instead.
+
+Only the exact value `fragment` changes the shape; any other value renders the full
+page, so the vocabulary can be extended in a later release without breaking clients
+that already send the header. See [Content negotiation](/guides/routing#content-negotiation).
+
+### Added — an opt-in client-side navigation module (`gina.nav`)
+
+The browser bundle now ships a navigation module that turns negotiation-enabled
+routes into single-page navigations. Mark the swap region once in your layout —
+the first element carrying `data-gina-nav` opts the page in and receives the
+fragments:
+
+```html
+<main data-gina-nav>
+    {% block content %}{% endblock %}
+</main>
+```
+
+Same-origin left-clicks on plain links are then intercepted **only** when the
+URL's first matching route declares `"negotiate": true` and accepts GET: the
+fragment is fetched with `X-Gina-Navigate: fragment`, swapped into the region,
+and history, scroll, focus and `document.title` (from an optional
+`data-gina-nav-title` attribute inside the fragment) are handled, with
+popin-parity rebinding of forms and re-injection of missing scripts. Everything
+else falls back to a normal full-page navigation: links owned by the link or
+popin plugins, `target`/`download`/modified clicks, per-link
+`data-gina-nav="false"` opt-outs, non-negotiable routes, redirects, errors and
+timeouts.
+
+**No action required** — pages without the marker behave byte-identically;
+upgrading changes nothing until you add the attribute. Ships in the browser
+bundle: **rebuild your bundles** to pick it up. Programmatic surface:
+`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`.
+
+### Changed — a non-positive session-store `ttl` is refused at bundle init
+
+A session store configured with `ttl: 0` (or any negative value) — via store
+options or the `connectors.json` session entry — now refuses to boot, naming
+the offending channel. `ttl: 0` previously behaved as **unset** (the record
+fell back to the cookie's `maxAge`, then one day): if you meant that, remove
+the key. In the same change, a session write whose *resolved* ttl is `<= 0`
+(an already-expired cookie) is now a no-op in every store — previously the
+redis, Couchbase and ScyllaDB stores stored such a record **without any
+expiry**, leaving an immortal session row for an already-expired session.
+
+### Security — the client routing map is now an allowlist (action possible)
+
+The routing table the browser fetches at boot (`/_gina/assets/routing.json`)
+used to ship almost every key of every route to any anonymous visitor —
+including controller dispatch names (`param.control` / `file` / `path`),
+`cache` configuration with its invalidation event names, `csrfExempt`,
+`scopes`, `namespace` and server-side `validator::` requirement bodies. The
+map is now built from an explicit allowlist carrying only what client-side
+URL building actually reads: `url`, `method`, `webroot`, `bundle`,
+`hostname`/`host` (direct deployments only — proxied clients keep getting the
+host-stripped variant), the `negotiate` flag, plain-regex `requirements`
+entries, URL-placeholder `param` bindings, and a new derived boolean
+`isRedirect` that replaces `param.control` client-side. Future route keys stay
+server-side by default instead of leaking on the next feature.
+
+**No action required for typical apps** — `getRoute()` / `toUrl()` / the
+`getUrl` family, including cross-bundle `'rule@bundle'` references and
+form-rule `query` URLs, work unchanged. **Action required only if** your own
+page scripts read other keys off `gina.config.routing` (for example
+`param.control` or `cache`): that logic must move server-side, where the full
+route table still lives.
+
+Two delivery changes ride along. The asset now answers with a validator tag
+(`ETag`) and `cache-control: no-cache` instead of a 24-hour `max-age`, so each
+page boot revalidates with one conditional request (normally a tiny `304`) and
+a restarted app's new routes reach returning browsers immediately. And the
+browser now checks the response status before installing the table, so a
+transient error during a restart can no longer poison client-side routing —
+this last piece ships in the browser bundle: **rebuild your bundles** to pick
+it up.
+
+### Fixed — negotiated fragments of `{% extends %}` templates render their content
+
+A negotiated fragment of a template using `{% extends %}` (the standard
+full-page idiom) used to arrive with its content missing: the layoutless render
+pointed the template's extends at a shared cached-layout file and then
+overwrote that file with the empty layoutless shell before compiling, so the
+template's blocks extended a block-less parent and were discarded — and one
+fragment request could transiently blank the layout that full-page renders
+compile from (dev; it self-healed on the next full-page render). Fragment
+renders now keep their own cache namespace, primed so the template's blocks
+render, with the fragment's script/input tail intact, and fragment and
+full-page compiles no longer share a compiled-template cache slot.
+
+Full-page renders are byte-identical. A popin pointed at an extends-template
+route changes from empty to content. Server-side only — a restart picks it up,
+no bundle rebuild needed. ⚠️ On the **nunjucks** engine this class is not
+healed: a negotiated fragment there still returns the full page (the layoutless
+flag only filters assets on that engine) — avoid `negotiate: true` on nunjucks
+extends-template routes for now.
+
+### Fixed — `resumeRequest()` replays the halted GET at its byte-exact URL
+
+The GET replay used to recompose its redirect target from the route pattern plus the
+captured url params, which only carry query keys declared in **both** a rule's
+`requirements` and `param` blocks — so a query key bound in `param` only
+(`"mode": ":mode"` with no requirements entry) or an entirely undeclared key
+(`?returnTo=…`) was dropped on the replay. The replayed request still matched and
+rendered literal `:key` template paths as a 500 — typically surfacing on the
+`requireAuth` login replay, once per visitor, on query-bearing deep links.
+
+With a live session the replay (plain, XHR and popin flavors alike) now redirects to
+the byte-exact halted URL, query string included. Two fixes compose to make that
+true: the replay reads the snapshotted URL instead of recomposing it, and
+`pauseRequest()` now snapshots the engine-preserved full URL (`req.originalUrl`,
+falling back to `req.url`) — the default (isaac) engine strips the query string
+from `req.url` before controllers run, so the snapshot itself used to be path-only
+there. The session key `haltedRequestUrlResumed` records the exact replayed URL,
+query string included. Snapshots taken before the upgrade replay exactly as they
+were captured. Replays into a custom `requestStorage` with **no** live session keep
+the recomposed URL, where the composed query params remain the halted data's only
+travel channel.
+
+**Action required only if** one of your middlewares compares
+`haltedRequestUrlResumed` to `req.url` by equality (a common way to let the
+replayed request through a gate): on the default engine `req.url` is path-only, so
+query-bearing replays no longer match that comparison — compare against
+`req.originalUrl || req.url` instead. Everything else needs no action; flows that
+worked before are byte-identical, and only the replays that previously failed gain
+their query back.
+
+### Fixed — `/_gina/assets/routing.json` now serves under the express engine
+
+The browser fetches `/_gina/assets/routing.json` at boot to populate the client
+routing table (what client-side `getRoute()` / `toUrl()` read). That asset was
+built and served by the default isaac engine only: a bundle running
+`"engine": "express"` answered the framework 404 page for it instead — and
+since the client does not check the response status before parsing, the 404
+JSON body ended up installed as the routing table, so client-side URL building
+failed from there. The maps (the full one and the host-stripped variant served
+to proxied clients) are now built once, engine-agnostically, and served with
+identical headers and byte-identical content under every engine. No action
+required — isaac bundles are byte-for-byte unaffected; express bundles pick
+the fix up on restart.
+
+### Fixed — the dev Inspector follows the monitored tab across bundles
+
+In a proxy-routed multi-bundle project, the Inspector's Flow and Query tabs
+stayed empty ("No timeline data for this request.") for every page served by a
+bundle the Inspector window was not opened from, and the Logs tab kept
+streaming the open-time bundle's server logs. The Inspector now re-points its
+server-side channels at the bundle actually serving the page you are viewing,
+which also activates that bundle's dev capture. No action required — reopen
+any Inspector window after upgrading. Note the first page rendered on a
+newly-visited bundle still predates capture activation: its own timeline is
+absent, and entries appear from the next render on.
+
+### Fixed — Custom error pages are served with their real status code
+
+A custom error page (`templates/html/errors/<code>.html`) rendered by the
+**nunjucks** engine — or by either async-loader delegate — was served as
+`200 OK` with the error page as the body. The swig engine already served the
+configured status. Every engine now stamps the real code (`404.html` goes out
+as HTTP 404), matching the JSON error surface, and a transient-upgraded 503
+crossing a custom page now pairs meaningfully with its `Retry-After` header.
+
+**Check your monitoring** if anything keyed on the old
+`200 + error-page-body` combination from nunjucks bundles — those responses
+now carry the real 4xx/5xx. The full contract (file naming, family fallbacks,
+template data) is documented in the new
+[Custom error pages](/guides/error-pages) guide.
+
+### Fixed — `isInteger` digit bounds are enforced on numeric values
+
+The optional bounds on the `isInteger` validation rule (`"isInteger": N` or
+`"isInteger": [min, max]`) were silently ignored whenever the value reached the
+rule as a real number rather than a string — no error was recorded, no warning
+was emitted, and the field was reported **valid**. The sibling `isNumber` rule
+was never affected. Values arrive as real numbers from:
+
+- **JSON request bodies**, including a `validator::{}` routing requirement, which
+  merges the parsed body into the data it validates;
+- **a preceding `toInteger`**, which leaves `Math.round()`'s number on the value
+  — so a `toInteger` → `isInteger` chain was affected in the browser too, where
+  every other value is a string.
+
+The bounds now measure the value's string form, as `isNumber` has always done.
+
+**Action required — this tightens enforcement.** Input that previously slipped
+past a declared bound now correctly fails validation. Review any rule file or
+`validator::{}` requirement declaring a bound on `isInteger`:
+
+```bash
+grep -rn 'isInteger' <your-bundle>/config/ <your-bundle>/forms/
+```
+
+A declaration of the bare `"isInteger": true` form is unaffected — there is no
+bound to enforce. Only the `N` and `[min, max]` forms change behaviour, and only
+for values that arrive numerically.
+
+Two details worth knowing before you re-check fixtures:
+
+- A **negative** number counts its minus sign toward the length (`-123` is 4),
+  exactly as it already did when the same value arrived as a string.
+- The number `0` is **also bound-checked in 0.6.3** — see the next section: the
+  empty-value gate that used to treat `0` as blank was fixed in the same
+  release.
+
+If server-side rejection of out-of-range values is a change you are not ready
+for, drop the bound from the rule and enforce the range in your action until you
+are — do not rely on it being ignored.
+
+### Fixed — The rule engine no longer treats `0`, `false` or `[]` as "empty"
+
+An empty value is adjudicated by `isRequired` alone — every other rule passes on
+a blank field. Five rule-engine sites tested that emptiness with **loose
+equality** against the empty string, and since `0`, `-0`, `false` and `[]` all
+compare loosely equal to `""`, those values rode the empty-value bypass:
+
+- **`isEmail`, `isJsonWebToken` and `isFloat` reported them VALID outright.** A
+  JSON body carrying `{"email": 0}` passed email validation with no error and
+  no warning.
+- **The `isInteger` / `isNumber` digit bounds skipped the number zero** (for
+  `isNumber` even the string `"0"`, which its entry cast turns into a number
+  before the gate).
+
+All five sites now compare **strictly**, so only the literal empty string
+bypasses — which is all the designed contract ever meant. An empty string
+behaves exactly as before on every rule, ordering conventions are unchanged,
+and `isString`, `isInList` and `isDate` are untouched. The `is` condition rule
+was untouched by *this* change, but gains an empty bypass of its own in the
+same release — see "An empty required field with an `is` rule shows one
+message, not two" below.
+
+**Action required — this tightens enforcement.** Review fields whose rules
+declare `isEmail`, `isJsonWebToken` or `isFloat` and whose value can
+legitimately arrive as a number or boolean from a JSON body, and
+bounds-carrying `isInteger`/`isNumber` fields that can receive zero. Such
+values validated silently before and are rejected now. If a field genuinely
+accepts "0 or an email", express that in the rule set (e.g. a [conditional
+`is`](/reference/validation-rules#is) case) rather than relying on the old
+conflation.
+
+### Fixed — An empty required field with an `is` rule shows one message, not two
+
+A field that is required and also carries an
+[`is`](/reference/validation-rules#is) condition reported **two** errors when
+left empty: `Cannot be left empty` from `isRequired`, plus a second
+`Condition not satisfied` from the condition being evaluated against the blank
+value. `is` was the last rule outside the empty-value contract every other data
+rule follows — an empty value is adjudicated by `isRequired` alone — and it now
+joins that contract, so a required, empty field records one message.
+
+**Form validity is unchanged in both directions.** An empty required field was
+invalid and stays invalid; an optional empty field was valid and stays valid.
+Nothing that used to submit now fails, and nothing that used to fail now
+submits — only the list of messages shown for that one state changes.
+Consistent with the strict empty test above, only the literal empty string
+bypasses the condition: `0`, `false` and `null` remain real values and are
+still evaluated by it.
+
+**Action required only if** your UI renders *every* message for a field and
+something asserts on that list — a test fixture, a snapshot, or copy that reads
+"two problems". A UI that renders only the first message is unaffected, and no
+request payload changes.
+
+Also in this release, the unused `isApiError` entry was removed from the
+built-in error-label catalogue. Nothing ever consulted it — an API error renders
+the message your server returned — so a project that had overridden or
+translated `isApiError` was already getting no effect from it, and removing it
+changes no rendered text.
+
+### Fixed — `isBoolean` rejects junk instead of silently storing `false`
+
+On the server, a value that is not a boolean was coerced **before** the
+[`isBoolean`](/reference/validation-rules#isboolean) rule could judge it:
+anything that did not match `true` (case-insensitively) became `false`. So a
+field declared `"isBoolean": true` accepted junk without complaint and stored
+the opposite of what was sent. Concretely, `"nope"` validated cleanly and
+persisted as `false`; a checkbox posting the HTML default `"on"` — a **ticked**
+box — stored as unticked; and the strings `"1"` and `"0"`, and case variants
+like `"TRUE"`, all landed as `false`. The rule engine is now the single judge on
+every surface, which is the behaviour the
+[route requirements](/guides/routing#validator-requirements) already enforced
+and this reference already described.
+
+**Behaviour changes in both directions.** Values that used to be accepted and
+silently stored as `false` are now rejected with *Must be a valid boolean*. In
+the other direction, the **number** `1` — which the documented accept-set has
+always included — used to be stored as `false` on a verdict that was already
+valid; it now correctly stores `true`. Everything in the documented set
+(`true`/`"true"`/`1` and `false`/`"false"`/`0`) is unaffected in both value and
+verdict.
+
+**Action required — this tightens enforcement, and one stored value changes.**
+Sweep the rule files for boolean fields, and check what your clients actually
+send for them:
+
+```bash
+grep -rn 'isBoolean' <your-bundle>/config/ <your-bundle>/forms/
+```
+
+A plain HTML checkbox posts `"on"` when ticked and sends nothing when unticked,
+so a checkbox validated with `isBoolean` needs its value normalised to
+`true`/`false` before it reaches validation. If any field currently relies on
+"anything unrecognised means `false`", make that explicit. And if a field can
+receive the number `1`, note that rows written before this release may hold
+`false` where `true` was meant.
+
+This fix is in the **browser bundle**: rebuild your bundles at pickup — a server
+restart alone will not deliver it.
+
+### Fixed — A blank field with `isBoolean` reports one message, not the wrong one
+
+`isBoolean` was the last data rule outside the empty-value contract every other
+rule follows — an empty value is adjudicated by
+[`isRequired`](/reference/validation-rules#isrequired) alone. A blank field
+carrying `isBoolean` reported *Must be a valid boolean*, and on a **required**
+field that message **replaced** *Cannot be left empty*, so the user was told
+their empty field held an invalid boolean rather than that it was empty. An
+**optional** blank field was flagged too, where every other rule leaves it
+alone. Both now behave like the rest of the contract: a required blank field
+reports *Cannot be left empty* and nothing else, and an optional blank field
+passes.
+
+**No action required unless** your UI asserts on the exact message text for a
+blank boolean field — a test fixture, a snapshot, or copy that reads "must be a
+valid boolean". A required blank field was invalid before and stays invalid; an
+optional blank field is the one verdict that changes, from invalid to valid,
+which is what the contract always specified. A recognised `false` or `0` still
+satisfies a required toggle, exactly as before.
+
+See [Chaining and ordering](/reference/validation-rules#chaining-and-ordering).
+
+### Fixed — Rules on bracket-notation and nested keys now enforce server-side
+
+Server-side form-body validation silently skipped any rule authored on a
+bracket-notation key (`account[username]`) or as a nested rule tree
+(`account: { username: { ... } }`): the rule parser canonicalizes such keys to
+dotted paths while the fields map kept the raw posted keys, so the lookup never
+joined and the field passed with no warning — whatever the wire shape (a flat
+`account[username]` key posted as JSON, or the nested object the multipart and
+urlencoded parsers produce). **Every rule-keyed directive was affected**: checks
+(`isRequired`, `isEmail`, …) never ran, `exclude` never dropped the field from
+the validated output, and transforms (`trim`, …) never applied.
+
+These rules now enforce, on both wire shapes, with the same behaviour the
+client-side path has always had for the same rule set:
+
+- **Error keys** come back under the bracket form (`account[username]`), the
+  addressing the client-side error rendering looks up.
+- **The validated data output** keeps its shape, with exclusions and transforms
+  applied. A parent object emptied by an exclusion is removed; an empty object
+  you posted yourself is kept.
+- **Cross-field `$` references** to bracket-named fields keep resolving exactly
+  as before, and payloads with only flat field names behave identically.
+- The no-rules path still returns the payload verbatim.
+
+**Action required only if** a form relied on the old silent skip: a
+bracket-keyed or nested-authored rule that never fired before now rejects,
+drops, or transforms those fields. Audit rule sets whose keys use bracket
+notation — most authors wrote them expecting exactly the enforcement that now
+happens, but a stale rule kept "because it never did anything" will wake up.
+
+### Fixed — Server-side rule sets no longer crash on a `$` the fields do not resolve
+
+Validating a rule set on the server threw a `TypeError` before any rule ran when
+the rules still contained a `$` after field references were substituted. Three
+shapes hit it: a regex end-anchor inside an
+[`is`](/reference/validation-rules#is) condition (`"/^(alpha|beta)$/"`), a `$`
+inside a human-readable message (`"cost is 5$ max"`), and a `$` anywhere in a
+rule's argument list after the first entry. The substitution has a second pass
+that reads each field from the live page, which the server does not have; it now
+skips that pass instead of failing, matching what the browser does once the
+first pass has resolved every known field. Ordinary cross-field comparisons like
+`"$password === $passwordConfirm"` were never affected — the first pass already
+resolves those.
+
+**No action required.** Rule sets that already validated are unchanged in both
+verdict and substituted values; the fix turns a crash into the result the rule
+set should always have produced.
+
+**One shape still throws:** a `$` token in the **first** argument of a rule that
+takes a list, where the token names no field — for example
+`"isInList": ["$100", "$200"]`. Quote such values differently or avoid a leading
+`$` in list membership until that is addressed.
+
+### Fixed — Custom-error renders no longer misreport correct routing rules
+
+When a page render failed on a bundle with custom error pages configured, the
+error renderer could lose its resolved template and try to open a bare
+filename derived from the route that failed — surfacing an upstream outage as
+`could not open "<file>.html"` plus a *check your routing.json* dump naming a
+rule that was correct all along. The resolved template now always reaches the
+error render, the dispatch no longer mutates shared routing configuration,
+and a custom error template that genuinely cannot be opened falls back to the
+built-in error page with a message naming the template. **No action
+required** — end users saw an error page throughout; only the server-side
+diagnostics change.
+
+### Fixed — Live checking survives a rejected submit
+
+Attempting to submit an invalid form — pressing `Enter` in a field, or
+clicking the gated submit control — rendered the field errors and sent nothing,
+as designed. But it also left an internal "submitting" latch set: that latch is
+what keeps live checking quiet while a request is genuinely in flight, and only
+the XHR settling cleared it. A rejected submit never sends, so the latch stayed
+set for the rest of the page's life.
+
+The visible result was a form that went quiet: typing a valid value never
+re-ran the live check, and the submit control kept `aria-disabled="true"` and
+the `gina-form-submit-disabled` class until the page was reloaded — so keyboard
+and assistive-technology users were hard-blocked, while mouse users saw a
+disabled-looking control that still submitted. Rebinding the form did not help,
+because the latch lives on the form instance rather than on its listeners.
+
+The rejected branch now releases the latch, so the behaviour described in
+[Forms and validation](/guides/forms-and-validation) — the marker and class
+being *"cleared as soon as the form validates"* — holds after a failed submit
+attempt too. A real in-flight submit still suppresses live checking exactly as
+before.
+
+**Action required if you worked around this.** Anything that manually stripped
+`aria-disabled` / `gina-form-submit-disabled`, forced a `reBind()` after a
+failed submit, or reloaded the page to recover is now redundant and can be
+removed. This fix is in the **browser bundle**, so rebuild your bundles at
+pickup — a server restart alone will not deliver it.
+
+### Fixed — Required radio groups are enforced client-side
+
+An unchecked radio group never entered the set of collected fields — every
+collection arm required a checked member, a `true`/`false`-shaped value, or an
+`isBoolean` rule — so a declared `"isRequired": true` on the group never ran.
+Worse, a form whose only named controls were radio groups skipped the whole
+client-side validation pass and submitted its XHR with an empty payload: a
+zero field count reads as nothing-to-validate, on both submit paths.
+
+An unchecked non-boolean radio group whose rule declares `isRequired: true` is
+now collected as an empty value, so the standard required check adjudicates it:
+the submit control gates from page load (under default-on live checking), an
+attempted submit renders the group's message and sends nothing, and picking a
+member re-enables the send, which then posts the picked value.
+
+**Action required — this tightens enforcement.** A form that has been silently
+submitting with nothing picked now genuinely gates on the pick — review
+rule-bound forms containing radio groups whose rule declares `isRequired`.
+Everything else is byte-identical: groups with no rule, `isRequired: false`,
+or an `isBoolean` declaration keep their previous shapes, and checked members
+post exactly as before — the wire only changes for the newly-gated shape,
+whose submits were empty anyway. This fix is in the **browser bundle**:
+rebuild your bundles at pickup — a server restart alone will not deliver it.
+See [Radio groups](/guides/forms-and-validation#radio-groups).
+
+### Fixed — A field that drives its own conditional rule is validated
+
+A rule set can key a conditional block on a field it also gives rules to:
+
+```json
+{
+  "plan": { "isRequired": true },
+  "_case_plan": {
+    "conditions": [
+      { "case": "team", "rules": { "seats": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+In the browser, `plan`'s own `isRequired` never ran. The per-field loop skipped
+any field that a `_case_` block is keyed on — and it skipped the field's own
+rules along with the conditional handling — on every whole-form pass: at bind,
+during live checking, and at submit. A form built on this shape did not gate,
+its submit control stayed enabled with nothing picked, and an empty submit went
+to the server with no client-side validation at all.
+
+The field's own rules are now checked before the conditional block is skipped,
+and the value it was collected with is preserved across that check, so the case
+it drives still resolves from what the user actually picked. Which conditions
+apply is unchanged. The fix is order-independent: a driver declared *before*
+another `_case_` block was already being checked, so every such field is now
+covered regardless of declaration order.
+
+**Action required — this tightens enforcement.** A form built on this shape
+starts gating where it silently submitted before: its required fields must now
+be filled for the submit to send. Review rule sets that give rules to a field
+they also key a `_case_` block on. Forms without that shape are unaffected, and
+server-side form-body validation is unchanged (conditional rules were already
+unsupported there). This fix is in the **browser bundle**: rebuild your bundles
+at pickup — a server restart alone will not deliver it.
+
+### Fixed — A conditional driver's value survives its own validation
+
+A field can both carry rules of its own and key a `_case_` block. During a
+whole-form pass, checking a field's own rules removes its collected value from
+the pass's working set — and for every such driver except the last-declared
+one, that removal was never undone. Later readers then fell back to the DOM:
+for a radio group, the first member's value, regardless of which member the
+user picked.
+
+Two symptoms followed. Conditions evaluated after the driver's own check
+matched a choice the user never made — spuriously requiring the other flow's
+fields (a correctly-completed form could refuse to submit), or, with condition
+rules that exclude, under-validating the flow the user actually picked. And
+the driver's own conditional block, evaluated in the same pass, saw no value
+at all, so its conditions matched nothing.
+
+The collected value is now preserved across the driver's own check, in every
+declaration position and also inside condition recursions. Conditions resolve
+from what the user actually picked, consistently. Fields that do not drive a
+`_case_` block are untouched, as are drivers that carry no rules of their own.
+
+**Behaviour changes in both directions.** Requirements that only fired because
+of the misread value stop firing — a form that could not be completed on a
+correctly-filled flow starts submitting — and the driver's own conditional
+block starts matching the collected value, so its rules now apply where they
+silently did not. Review rule sets in which a field with rules of its own also
+keys a `_case_` block that is not the last one declared. This fix is in the
+**browser bundle**: rebuild your bundles at pickup — a server restart alone
+will not deliver it.
+
+### Fixed — `"setFlash": [null, "message"]` keeps its custom message in the browser
+
+The two-argument `setFlash` form the
+[validation reference](/reference/validation-rules#setflash) documents —
+`[null, "message"]`, first argument ignored — silently lost its custom message
+client-side: the browser rendered the built-in label instead, while the server
+rendered the custom message correctly. The deep-merge utility classified a
+`null` array element as an object (the `typeof null` trap) and dropped it
+wherever rules are re-merged on the client (the `data-gina-form-rule` bind
+among others), so the engine received a one-element array and bound the message
+to the ignored first argument. `["", "message"]` was unaffected.
+
+The merge now preserves `null` array elements as values, so the documented form
+works as written. **No action required** — `["", "message"]` keeps working
+byte-identically, and custom messages that silently fell back to the default
+label start rendering. One behavioural note beyond forms: arrays containing
+`null` elements are no longer silently compacted by merges anywhere in the
+framework — code relying on that compaction (unlikely — it was a defect) sees
+the `null` slots preserved. This fix is in the **browser bundle**: rebuild your
+bundles at pickup — a server restart alone will not deliver it.
+
+### Fixed — Inspector no longer reports multi-index Couchbase plans as unindexed
+
+The Query tab's index badge is extracted from the query's execution plan. The
+plan walker followed only the generic child containers, while the multi-index
+operators — `IntersectScan`, `UnionScan`, `OrderedIntersectScan`, and
+`DistinctScan` — nest their child scans under dedicated containers, so any
+query the planner served with **more than one index** reported an empty index
+list: the red *"no index — full bucket scan"* badge and the *"N queries
+without index"* banner fired for queries that were already fully indexed.
+
+That failure pointed in the expensive direction — the natural response to the
+banner is building another index, with its cluster-wide build cost and
+permanent write amplification, for a query that never needed it. Such plans
+now report every index they use (one badge chip per index, as SQL connectors
+already do). Single-index, primary-scan, and `USE KEYS` reporting are
+unchanged, and this applies to both extraction paths (SDK profile and the
+`EXPLAIN` fallback). **No action required** — but if you added an index to
+silence the banner on a query that intersects two indexes, it may be worth
+re-checking whether that index is redundant.
+
+### Fixed — `${secret:GINA_*}` placeholders now resolve in CLI commands
+
+A `${secret:VAR}` placeholder whose variable name was `GINA_`-prefixed never
+resolved when the config was loaded by a **CLI process**, because the CLI moves
+every `GINA_*` variable out of `process.env` into the framework environment
+before handlers run — and the resolver only ever read `process.env`. The
+documented `mcp.json` example (`"authToken": "${secret:GINA_MCP_AUTH_TOKEN}"`)
+was the most visible casualty: it failed closed at `gina bundle:mcp-start` even
+with the variable exported. The env backend, the `audit:verify` placeholder
+branch, and the CSRF plugin's `GINA_CSRF_SECRET` tier now read the framework
+environment **first**, then fall back to `process.env`.
+
+**No action required, and nothing that worked before changes** — non-`GINA_`
+names resolve exactly as they did. If you worked around this by renaming a
+secret to drop its `GINA_` prefix, that rename is still fine; you can revert it
+once every environment you deploy to runs `0.6.3` or later. The fail-closed
+contract (unset **or** empty means the boot refuses) is unchanged on both tiers.
+
+### Fixed — `GINA_*` variables now take effect on the command that sets them
+
+`GINA_HOMEDIR=/some/home gina env:list` — and the same shape for `GINA_PORT`,
+`GINA_BIND_HOST`, `GINA_HOST_V4` — used to affect only the *next* invocation.
+The CLI imported the OS environment after it had already resolved the home
+directory, settings file and host, so the value reached disk through the
+settings rewrite and was picked up one command late. The import now happens
+before that resolution.
+
+**Check any script that relied on the one-command delay.** Precedence is
+otherwise unchanged by design: the import is a copy, and the later move keeps
+its original position, so a variable written during bootstrap still loses to the
+shell-exported one exactly as before. Two related resolutions ride along: a
+fresh home is no longer seeded with a null-laden `settings.json`, and the MQ
+speaker and file logger containers now honour `GINA_HOMEDIR` instead of always
+reading the invoking user's home.
+
+### Fixed — a sub-directory in the run directory no longer fails every command
+
+Any `gina` command could abort with `EISDIR: illegal operation on a directory,
+read` when the configured run directory contained a sub-directory: the
+`framework:init` pid cleanup read every entry as a pidfile with no guard, so one
+unreadable entry threw out of the loop and failed the command that triggered it.
+Unreadable entries are now skipped — and deliberately never pruned, since
+removing a stale pidfile is only safe for entries whose contents were actually
+read. **No action required.**
+
+### Fixed — `checkSumSync` no longer throws on data with an extension-shaped tail
+
+`lib.math.checkSumSync` routed any input whose last serialized characters
+looked like a filename extension (a dot plus 3 lowercase letters — `.com`,
+`.net`, `.pdf`, ...) to `fs.readFileSync`, so hashing a string or a serialized
+record ending with an email address or URL threw `ENOENT` (or `ENAMETOOLONG`
+for long inputs) instead of returning a checksum. The file branch is now taken
+only when the input actually resolves to an existing regular file; everything
+else is hashed as data. Inputs that previously succeeded return byte-identical
+checksums — **no action required** for those. Two related corrections: **array**
+inputs previously all collapsed to the checksum of the empty string (the
+serializer returned `''` for every array) and were sorted in place; arrays now
+produce a real order-insensitive content checksum (the hash of the JSON of a
+sorted copy) without mutating your array — if you stored array checksums, they
+were the degenerate constant and **will change**. And the file probe now
+accepts any real extension shape (a dot plus 1-10 alphanumerics — `.js`,
+`.json`, `.TXT`, `.c`, ...), still stat-gated: previously only dot+3-lowercase
+tails fired, so a path like `file.js` or `file.json` was hashed as a **path
+string** — such checksums now hash the file bytes, so stored sums for those
+paths change (they never tracked content). A data string that exactly names an
+existing file with an extension-shaped tail now hashes that file — an
+ambiguity that already existed for dot+3-lowercase names. Extension-less paths
+(`Makefile`, `LICENSE`) are still hashed as data strings — pass file contents
+when you mean such a file.
+
+### Fixed — the dev Inspector no longer shows other requests' data when opened without its statusbar link
+
+An Inspector window opened by **direct URL or bookmark** (without the `?ch=` the
+statusbar link appends) used to fall back to bundle-global data channels, so any
+background request to the bundle — session pollers, other tabs — overwrote what the
+data tabs showed within seconds. Most visibly: opening a dialog whose content had been
+preloaded on hover never appeared to update the Query tab. Such a window now
+automatically binds to the most recently active page tab (the same per-tab channel the
+statusbar link provides), and a new footer badge names the active data-source mode —
+`bound`, `agent`, or a warn-tinted `global` when the window genuinely has no page tab
+to bind to. **No action required** — dev tooling only; opening the Inspector via the
+statusbar link behaves exactly as before.
+
+### Added — restore a single hidden Inspector tab
+
+In the Inspector's **Custom** tab layout, tabs removed with the `×` button could
+previously only be brought back all at once via the **Reset** link. Each removed tab's
+dimmed, struck-through preview pill is now itself the restore control: it shows a
+leading `+` glyph (amber on hover) and a `Restore <Tab> tab` tooltip, and clicking it
+brings just that tab back — at the end of the tab bar, without switching to it (you
+are mid-layout-editing; drag it into place from there). The Reset link is unchanged
+and still restores everything at once. **No action required** — dev tooling only,
+purely additive.
+
+### Changed — the transitive `object-assign` dependency is overridden
+
+`engine.io` → `cors` → `object-assign@4.1.1` (unmaintained since 2017) is replaced by `@socketregistry/object-assign`, a maintained two-line re-export of the native `Object.assign`, via an npm `overrides` entry. **Runtime behaviour is unchanged** — the replaced package already delegated to the native implementation at require time on any modern runtime.
+
+**Scope — this does not reach your install.** npm and bun alike honour `overrides` only in a project's **own root** manifest, so the entry cleans gina's own tree and its supply-chain reports; a project that depends on gina still resolves `object-assign@4.x` beneath `cors`, exactly as before. To get the same substitution in your tree, add the entry to your own root `package.json`:
+
+```json
+{
+  "overrides": {
+    "object-assign": "npm:@socketregistry/object-assign@^1"
+  }
+}
+```
+
+The consumer-reaching fix is upstream ([expressjs/cors#430](https://github.com/expressjs/cors/pull/430), filed). **Nothing to do** unless you want the override locally.
+
+### Fixed — the scaffolded bundle template no longer teaches an impossible session-store selection
+
+`bundle:add` emitted a template that selected its session backend by re-naming the store factory:
+
+```js
+expressSession.name = 'myRedis';   // never worked
+```
+
+`Function.prototype.name` is read-only, so the assignment silently no-ops (or throws under strict mode) and the factory always resolved the literal `"session"` entry — meaning the template's own `"myRedis"` / `"myDb"` example entries could never be found, and a bundle following the template failed to boot with `[SessionStore] Could not be loaded`. The template now shows the documented shape: **one `connectors.json` entry named `"session"`, whose `connector` field selects the backend.**
+
+```json
+{
+  "session": { "connector": "redis", "host": "127.0.0.1", "port": 6379 }
+}
+```
+
+**Action:** only if you copied the old template's re-key idiom — replace it with a `"session"` entry as above. Existing bundles that already use the documented shape are unaffected. The four store factories' JSDoc no longer teaches the re-key either.
+
+### Fixed — Couchbase SDK range pins resolve instead of refusing to boot
+
+The couchbase connector and session store derive the SDK major from your project's dependency pin. A **range** pin mangled: `~4.5.0` became `~4`, `>=4.5` became `>=4`, neither parsed as a major, and the boot refused with a misdirecting `supported couchbase SDK majors are 3 and 4` — naming majors that were, in fact, exactly what you had pinned. The major is now taken as the pin's first integer, so range pins resolve.
+
+Two related refusals are now explicit rather than confusing: a digit-less pin (`*`, `latest`) refuses with an error naming the pin, and a project `package.json` with no `dependencies` key no longer crashes the resolver.
+
+**Action:** none if your pin was exact (`4.5.0`). If you pinned a range and worked around the refusal by pinning exactly, you can restore the range.
+
+### Fixed — an unserializable Couchbase query parameter no longer kills the bundle
+
+A N1QL query parameter the SDK cannot serialize — a bare `undefined`, a function, or a Symbol — used to **abort the whole bundle process**, not fail the request. The SDK maps `JSON.stringify` over the parameter list; for those values it yields no string at all, the native driver coerces the result to an empty string, fails to parse it as JSON on an internal thread, and calls `abort()`. No `try`/`catch`, `uncaughtException` or `unhandledRejection` handler can intercept that, so the process died outright where a 500 was expected.
+
+The most reachable case needed no misuse of the driver — a query method called one argument short with a trailing callback puts the **callback itself** into a parameter slot:
+
+```js
+// one argument short: the callback lands in a parameter slot
+self.getModel('MyEntity').query('findByStatus', function(err, res) { /* … */ });
+```
+
+The arity check could not catch this, because it only fires when the last argument is *not* a function. The connector now refuses an unserializable parameter **before dispatch** and surfaces a `TypeError` with code `GINA_COUCHBASE_UNSERIALIZABLE_PARAM`, naming the offending position and the likely cause — routed through the query callback when there is one, thrown otherwise.
+
+**Action:** none. Serializable values are untouched — `null`, `0`, empty strings, `false`, and objects carrying `undefined` properties all still reach the SDK unchanged. If your bundle has been dying without a JS stack under query load, this is a likely cause worth re-testing.
+
+### Fixed — the published `useScopeAndCollections` schema description was wrong
+
+`schema/connectors.json` described the couchbase `useScopeAndCollections` option as *"Enable scope and collection support (SDK v3+)"*. The option is accepted but **currently inert**: the connector partitions data via `_scope` / `_collection` document fields (one bucket, default collection), and named-collection KV access is available per call via `entity.getConnection(scope, collection)`. The option is reserved for a possible future native scope/collection routing mode.
+
+**Action:** none — a description correction only. But if you set the option expecting native routing, note that it never took effect; use `getConnection(scope, collection)` for named-collection access.
+
+### Fixed — the Inspector tab-layout preview no longer renders new tabs as "undefined"
+
+In the Inspector's layout settings, the preview row rendered the two newest tabs (**Stream** and **Events**) as the literal text `undefined` with a broken pill colour: both were added to the layout presets when they shipped, but the preview's label and colour maps were never extended. The maps now cover all eight tabs, and the preview resolves through fallbacks — a future tab missing from the maps renders its capitalised name in a neutral colour instead of `undefined`.
+
+Same stale-roster family, also fixed: the saved custom tab order was validated against a hardcoded six-tab maximum, so with seven or eight tabs visible a drag-reordered custom layout was **silently rejected on the next load** and never survived a reload. The bound now derives from the preset roster itself.
+
+**Action:** none. Dev-tool only — a bundle restart picks it up, no asset rebuild needed. If a custom layout of yours kept reverting, it will now persist.
+
+### Fixed — the Inspector Query pane no longer freezes on the first page without index data
+
+The Query pane and its tab badge froze on the first page whose queries still lacked index data: the live-index refetch re-rendered the tab by replacing the scroll wrapper's children, destroying the `#tree-query` container that every later render targets. Navigating the monitored tab — or any new payload, including the refresh button's forced refetch — then silently kept the **previous** page's queries and count on screen until the Inspector window was reloaded. The refetch now re-renders into `#tree-query` itself.
+
+**Action:** none. Dev-tool only — reopen the Inspector window.
+
+### Fixed — the Inspector footer memory gauge's track is visible again
+
+The unfilled portion of the footer memory gauge shared the footer's own background colour in both themes, so the empty part of the track was invisible and a low fill (say 64 MB of 3.1 GB) read as a floating green dot rather than a gauge. The track now renders as a visible recessed groove — a distinct background plus a theme-scoped inset shadow — in dark and light themes. Gauge geometry and the fill's severity colours are unchanged.
+
+**Action:** none. Dev-tool only — reopen the Inspector window.
+
+### Fixed — `bundle:openapi` and `bundle:mcp` no longer drop three declared bound forms
+
+Un-collapsing a `validator::{}` routing requirement into a parameter schema silently discarded three declared forms:
+
+- the scalar `"isString": N` now maps to **`minLength`** (the engine treats it as a minimum, identically to `[N]`);
+- `isInteger` and `isNumber` digit bounds now reach the generated schema as a human-readable `description` (e.g. `2-4 digits (string-form length; a negative sign counts)`) plus a machine-readable **`x-gina-digitBounds`** extension.
+
+Digit bounds constrain the length of the value's **string form**, not its numeric range, so they are deliberately *not* emitted as `minimum` / `maximum` — wrong for any negative value, whose sign counts toward the length — nor as `minLength` / `maxLength`, which are string-only keywords and inert on numeric types.
+
+**Action:** none, unless a downstream consumer of your generated spec should read the new `x-gina-digitBounds` extension. Schemas generated from bare `true` rules are byte-identical to before.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
@@ -3889,7 +4709,7 @@ Opt-in via `app.json`:
 }
 ```
 
-Install `prom-client` as a peer dependency in your project
+Install `prom-client` in your project
 (`npm install prom-client`). Default metrics include Node.js process state
 (heap, GC, event loop lag) plus per-request HTTP counter and duration
 histogram. Route labels come from `req.routing.rule` (cardinality-safe);
@@ -3922,7 +4742,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 ) WITH default_time_to_live = 86400;
 ```
 
-Install `cassandra-driver` as a peer dependency in your project
+Install `cassandra-driver` in your project
 (`npm install cassandra-driver`) and declare a `connectors.json` entry
 with `"connector": "scylladb"`. Requires Node `>=20`.
 
@@ -3944,7 +4764,7 @@ The session store creates a TTL index on the first `set()` call (deferred so
 ORM-only setups never run DDL) and filters `get` / `length` / `all` on
 `expiresAt > now` to cover the 60-second TTL-monitor lag.
 
-Install `mongodb` as a peer dependency in your project
+Install `mongodb` in your project
 (`npm install mongodb`) and declare a `connectors.json` entry with
 `"connector": "mongodb"`.
 

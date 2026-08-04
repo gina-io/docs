@@ -38,8 +38,20 @@ argument:
 Each entry below shows the **JSON form** (what you write in a rule file or
 requirement) and the **fluent signature** (how the rule is called when you write
 a [custom validator](#custom-validators) or chain rules by hand). Inputs reach
-every rule as **strings** (browser field values and URL-encoded bodies are
-always strings), so rules coerce as needed.
+every rule as **strings** on the declarative paths (browser field values and
+URL-encoded bodies are always strings), so rules coerce as needed.
+
+:::note Not every path delivers a string
+Two paths hand a rule a **real JavaScript value** rather than a string, so a
+rule must be correct for both:
+
+- **JSON request bodies** keep their parsed types — a numeric field arrives as a
+  `Number`, including when a `validator::{}` [routing requirement](/guides/routing)
+  validates it, since the parsed body is merged into the validated data.
+- **A preceding transform** — [`toInteger`](#tointeger) and
+  [`toFloat`](#tofloat) leave a real number on the value, so every rule chained
+  *after* one of them receives a number even in the browser.
+:::
 
 ---
 
@@ -104,8 +116,20 @@ Checks that the value is a string, with optional length bounds.
 `isInteger(minLength, maxLength)` · JSON: `"isInteger": true | N | [min, max]`
 
 Checks for a whole number. The value is coerced to a `Number`. Optional bounds
-constrain the number of **digits**, following the same shape as
-[`isString`](#isstring) — `[5]` is a minimum, `[5, 5]` an exact length.
+constrain the **length of the value's string form**, following the same shape as
+[`isString`](#isstring) — `[5]` is a minimum, `[5, 5]` an exact length. For a
+positive value that is its digit count; a **negative** value counts its minus
+sign too (`-123` is 4), consistent with the same value arriving as a string.
+
+:::caution Bounds are enforced on numeric values since 0.6.3
+Before 0.6.3 these bounds were silently ignored whenever the value reached the
+rule as a real number rather than a string — no error, no warning, and the field
+reported valid. If you declare `"isInteger": N` or `"isInteger": [min, max]` on a
+field that can carry a numeric value (a JSON body, or anything chained after
+[`toInteger`](#tointeger)), the bound starts being enforced at 0.6.3 and input
+that used to pass may now fail. See the
+[migration note](/migration#fixed--isinteger-digit-bounds-are-enforced-on-numeric-values).
+:::
 
 - **Default messages:** *Must be an integer* · *Should be at least %s characters*
   · *Should not be more than %s characters* · *Must have %s characters* (exact)
@@ -171,9 +195,15 @@ chain continuing past it. On 0.5.3 and below, follow `isDate` with
 
 Accepts `true`/`"true"`/`1` and `false`/`"false"`/`0`, coercing to a real
 boolean. A required `false` is valid (an unchecked-but-required toggle does not
-fail).
+fail). Anything outside that set is rejected — including a checkbox posting the
+HTML default `"on"`, the strings `"1"` and `"0"`, and case variants like
+`"TRUE"`.
 
 - **Default message:** *Must be a valid boolean*
+- An empty value is left to [`isRequired`](#isrequired) alone — `isBoolean` adds
+  no message of its own to a blank field, whether or not the field is required
+  (since 0.6.3; before that a blank field reported *Must be a valid boolean*,
+  and on a required field that message replaced *Cannot be left empty*).
 
 ```json
 "acceptsTerms": { "isRequired": true, "isBoolean": true }
@@ -191,6 +221,12 @@ values. The argument **must be an array**; an empty list rejects every value.
 ```json
 "status": { "isRequired": true, "isString": true, "isInList": ["draft", "pending", "sent", "paid"] }
 ```
+
+List values are **literal text** — a `$` has no reference meaning here
+(`$name` references exist only in [`is`](#is) expressions), so since 0.6.3 a
+value such as `"$100"` validates as its literal (earlier versions threw).
+Avoid a value that coincides with `$` + one of the form's own field names —
+it is currently reinterpreted as a reference and can never match.
 
 ### isJsonWebToken
 
@@ -217,6 +253,11 @@ A general-purpose condition. `condition` may be:
 - a single **comparison expression** referencing other fields by `$name`, e.g.
   `"$password === $passwordConfirm"`.
 
+`$name` references are an `is`-only grammar: in every **other** rule's
+arguments a `$` is plain literal text (since 0.6.3 — earlier versions threw a
+`TypeError` when an array-form rule's first value carried a `$` that matched no
+field name).
+
 For safety, free-form expressions are restricted to one regex test or one binary
 comparison (`===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`); anything else is
 rejected.
@@ -230,8 +271,10 @@ rejected.
 
 A confirmation field is typically also **required**. Pairing `is` with
 `isRequired` on the same field is safe — while the field is blank, `isRequired`
-reports it and the cross-field comparison does not error. Use the two-argument
-form to set a message (keep `isRequired` first):
+reports it, and the condition neither errors nor adds a message of its own
+(since 0.6.3; before that a blank required field also collected a second
+*Condition not satisfied*). Use the two-argument form to set a message (keep
+`isRequired` first):
 
 ```json
 "passwordConfirm": {
@@ -262,6 +305,13 @@ Rounds the value to the nearest integer (`Math.round`). A falsy value is left
 untouched.
 
 - **Default message:** *Could not be converted to integer*
+
+`toInteger` leaves a **real number** on the value, not a string — so every rule
+chained after it receives a number, in the browser as well as on the server.
+Rules that inspect the value's text (such as the [`isInteger`](#isinteger)
+length bounds) operate on its string form; this works correctly from 0.6.3
+onward, and the bounds were silently skipped in a `toInteger` → `isInteger`
+chain before then.
 
 ### toFloat
 
@@ -391,7 +441,12 @@ behaviours are load-bearing:
 **`isRequired` should come first.** An empty value is adjudicated by `isRequired`
 alone: every other rule passes on a blank field, so an optional one is never
 flagged, and a required one reports a single *Cannot be left empty* instead of a
-pile of *"…is not valid"* messages stacked on top of it. Whether the **form** is
+pile of *"…is not valid"* messages stacked on top of it. "Empty" means the
+**literal empty string** (and, for a browser field, an unfilled input — whose
+value is exactly that). It does **not** mean falsy: since 0.6.3 the values `0`,
+`false` and `[]` are validated like any other input rather than being mistaken
+for blank — see the
+[migration note](/migration#fixed--the-rule-engine-no-longer-treats-0-false-or--as-empty). Whether the **form** is
 valid does not depend on the order — but each rule keeps its own per-field
 `valid` flag consistent with a surviving `isRequired` error, and that flag is
 only correct at every step when `isRequired` ran first.

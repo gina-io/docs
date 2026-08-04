@@ -399,6 +399,28 @@ Responses that interact with the render cache carry an
 freshness lifetime in seconds, and `fwd=uri-miss` is the RFC miss form — "the
 cache did not contain any responses that matched the request URI".
 
+### The Cache-Status identifier
+
+`gina-cache` is the **default** identifier — RFC 9211 §2 leaves the value to
+the deployment, and `server.cache.name` (a sibling of `type` / `store` in the
+`settings.json` `cache` block) replaces it with an operator-chosen token.
+Every parameter after the identifier is unchanged, and the identifier is
+resolved once at boot and used by every emission on both engines, hit and
+miss — it never varies per route or per request.
+
+Accepted values are a conservative subset of the RFC 8941 token grammar: a
+letter followed by up to 63 of `[A-Za-z0-9._-]`. An invalid value is ignored
+with a boot warn — the framework never rewrites a name you did not choose.
+
+When [`server.hidePoweredBy`](/guides/security-headers#hide-x-powered-by-hdr8)
+is `true` and the cache is enabled, leaving `name` unset logs a boot warn:
+the operator has declared that the wire should not name the stack, but the
+default identifier still does. Set any token (for example `"cache"`) to close
+the disclosure, or set `"gina-cache"` explicitly to keep the current wire and
+silence the warn. The identifier is a documented-stable wire value, so it
+never changes implicitly — monitoring that matches on `gina-cache; hit`
+keeps matching until you configure otherwise.
+
 :::note Which responses carry the header
 With the Isaac engine (the default), every `GET` on a cache-enabled bundle
 carries the header — including the miss form on routes that never opted into
@@ -434,6 +456,7 @@ The `cache` block in `settings.json` controls global cache behavior:
 | `enable` | Master switch. Set to `"true"` to activate caching. Per-route `cache` fields are ignored when this is `"false"`. |
 | `type` | Bundle-wide default storage backend (`"memory"` \| `"fs"` \| `"redis"`), inherited by routes that set `cache` but omit `type`. Defaults to `"memory"`. A per-route `cache.type` always wins. |
 | `store` | **Required for `redis`.** The name of a `connectors.json` redis entry (`{ "<name>": { "connector": "redis", "host": …, "port": … } }`) that provides the shared L2 connection. Ignored by `memory` / `fs`. See [redis](#redis-shared-l2-across-replicas). |
+| `name` | Optional [RFC 9211](https://www.rfc-editor.org/rfc/rfc9211.html) `Cache-Status` identifier reported on the wire (default `gina-cache` — the wire is unchanged when unset). A letter followed by up to 63 of `[A-Za-z0-9._-]` (a conservative RFC 8941 token subset); an invalid value is ignored with a boot warn. See [the Cache-Status identifier](#the-cache-status-identifier). |
 | `path` | Directory for `fs`-type cached files. |
 | `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. |
 | `sliding` | Bundle-wide [sliding-window](#expiration-modes) default, inherited by routes that omit `sliding`. Boolean; defaults to `false`. |

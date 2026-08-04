@@ -360,7 +360,7 @@ target action; never trust them for authorization decisions.
 ### `self.throwError(res, code, err)`
 
 Sends an error response. For XHR/API requests the response is JSON. For HTML requests,
-the framework renders a custom error page if one is configured.
+the framework renders a [custom error page](/guides/error-pages) if one is configured.
 
 ```js
 // Explicit form
@@ -721,7 +721,7 @@ sequenceDiagram
 
 | Method | What it does |
 |---|---|
-| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. `requestStorage` defaults to `req.session`. Returns the storage object. |
+| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. The `url` is the byte-exact incoming URL, query string included (`req.originalUrl` when the engine preserves it, else `req.url`). `requestStorage` defaults to `req.session`. Returns the storage object. |
 | `self.isHaltedRequest([session])` | `true` when the session (or the passed object) holds a `haltedRequest`. Defaults to `req.session` / `req.session.user`. |
 | `self.resumeRequest([requestStorage])` | Replays the snapshot — restores the original url / method / data / params onto the live request and re-dispatches it, then clears the snapshot. |
 
@@ -761,21 +761,29 @@ this.login = function(req, res, next) {
 
 `resumeRequest()` dispatches differently depending on the paused request's method:
 
-- **GET** — replayed by redirecting to the resolved url; the browser re-issues the
-  now-authenticated GET. For an XHR / popin request it returns a JSON redirect instead.
+- **GET** — replayed by redirecting to the **byte-exact url that was halted — query
+  string included** (an XHR / popin request gets a JSON redirect to the same url
+  instead); the browser re-issues the now-authenticated GET.
 - **non-GET** (POST / PUT / …) — re-dispatched **in-process**: the original method, data
   and params are restored onto the live request and the target controller action is invoked
   directly, crossing namespaces via `requireController()` when the paused route lived in a
   different namespace.
 
 Either way, the `haltedRequest` snapshot is cleared from storage once it has been consumed.
+After a **GET** replay the storage additionally records the replayed url — byte-exact,
+query string included — under `haltedRequestUrlResumed`, which a gate middleware can read
+(and delete) to recognise the replayed request; compare it against
+`req.originalUrl || req.url`, since the default engine's `req.url` is path-only.
 
-On a **GET** replay the resolved url carries the paused request's url params, and any
-extra data you snapshotted rides the session — the replayed action reads it from
-`req.get`, one-shot, exactly as described under
+On a **GET** replay the redirect target is the paused request's own url — path and
+query string alike — so query-driven routes (a `param` binding sourced from the query,
+a mode switch, a `returnTo`-style pointer) replay exactly as they were requested. Any
+extra data you snapshotted additionally rides the session — the replayed action reads
+it from `req.get`, one-shot, exactly as described under
 [Carrying request data across the redirect](#redirect-data-carry). Snapshotting into a
-custom `requestStorage` with no live session (below) replays the url without that extra
-data.
+custom `requestStorage` with no live session (below) instead recomposes the url from
+the route pattern and the snapshotted url params, with extra data landing as query
+parameters — without a session, the composed url is the only channel that data has.
 
 :::tip Custom storage
 Pass a second argument to `pauseRequest(data, requestStorage)` (and to

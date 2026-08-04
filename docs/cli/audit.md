@@ -59,9 +59,10 @@ gina audit:verify web @myproject
 The key is resolved the same way as at boot, first match wins:
 
 1. `settings.json > audit.chain.secret` — a literal, or a `${secret:VAR}`
-   placeholder resolved from the shell environment (`VAR` must **not** be
-   `GINA_`-prefixed: the CLI moves every `GINA_*` variable out of the process
-   environment before handlers run).
+   placeholder. `VAR` is read from the framework environment first, then from
+   `process.env`, so a `GINA_`-prefixed name resolves here too. (Before `0.6.3`
+   it did not: the CLI moves every `GINA_*` variable out of `process.env` before
+   handlers run, and the resolver only read `process.env`.)
 2. `GINA_AUDIT_SECRET`.
 
 :::note What an intact chain proves — and what it does not
