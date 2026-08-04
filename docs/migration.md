@@ -745,6 +745,100 @@ are mid-layout-editing; drag it into place from there). The Reset link is unchan
 and still restores everything at once. **No action required** — dev tooling only,
 purely additive.
 
+### Changed — the transitive `object-assign` dependency is overridden
+
+`engine.io` → `cors` → `object-assign@4.1.1` (unmaintained since 2017) is replaced by `@socketregistry/object-assign`, a maintained two-line re-export of the native `Object.assign`, via an npm `overrides` entry. **Runtime behaviour is unchanged** — the replaced package already delegated to the native implementation at require time on any modern runtime.
+
+**Scope — this does not reach your install.** npm and bun alike honour `overrides` only in a project's **own root** manifest, so the entry cleans gina's own tree and its supply-chain reports; a project that depends on gina still resolves `object-assign@4.x` beneath `cors`, exactly as before. To get the same substitution in your tree, add the entry to your own root `package.json`:
+
+```json
+{
+  "overrides": {
+    "object-assign": "npm:@socketregistry/object-assign@^1"
+  }
+}
+```
+
+The consumer-reaching fix is upstream ([expressjs/cors#430](https://github.com/expressjs/cors/pull/430), filed). **Nothing to do** unless you want the override locally.
+
+### Fixed — the scaffolded bundle template no longer teaches an impossible session-store selection
+
+`bundle:add` emitted a template that selected its session backend by re-naming the store factory:
+
+```js
+expressSession.name = 'myRedis';   // never worked
+```
+
+`Function.prototype.name` is read-only, so the assignment silently no-ops (or throws under strict mode) and the factory always resolved the literal `"session"` entry — meaning the template's own `"myRedis"` / `"myDb"` example entries could never be found, and a bundle following the template failed to boot with `[SessionStore] Could not be loaded`. The template now shows the documented shape: **one `connectors.json` entry named `"session"`, whose `connector` field selects the backend.**
+
+```json
+{
+  "session": { "connector": "redis", "host": "127.0.0.1", "port": 6379 }
+}
+```
+
+**Action:** only if you copied the old template's re-key idiom — replace it with a `"session"` entry as above. Existing bundles that already use the documented shape are unaffected. The four store factories' JSDoc no longer teaches the re-key either.
+
+### Fixed — Couchbase SDK range pins resolve instead of refusing to boot
+
+The couchbase connector and session store derive the SDK major from your project's dependency pin. A **range** pin mangled: `~4.5.0` became `~4`, `>=4.5` became `>=4`, neither parsed as a major, and the boot refused with a misdirecting `supported couchbase SDK majors are 3 and 4` — naming majors that were, in fact, exactly what you had pinned. The major is now taken as the pin's first integer, so range pins resolve.
+
+Two related refusals are now explicit rather than confusing: a digit-less pin (`*`, `latest`) refuses with an error naming the pin, and a project `package.json` with no `dependencies` key no longer crashes the resolver.
+
+**Action:** none if your pin was exact (`4.5.0`). If you pinned a range and worked around the refusal by pinning exactly, you can restore the range.
+
+### Fixed — an unserializable Couchbase query parameter no longer kills the bundle
+
+A N1QL query parameter the SDK cannot serialize — a bare `undefined`, a function, or a Symbol — used to **abort the whole bundle process**, not fail the request. The SDK maps `JSON.stringify` over the parameter list; for those values it yields no string at all, the native driver coerces the result to an empty string, fails to parse it as JSON on an internal thread, and calls `abort()`. No `try`/`catch`, `uncaughtException` or `unhandledRejection` handler can intercept that, so the process died outright where a 500 was expected.
+
+The most reachable case needed no misuse of the driver — a query method called one argument short with a trailing callback puts the **callback itself** into a parameter slot:
+
+```js
+// one argument short: the callback lands in a parameter slot
+self.getModel('MyEntity').query('findByStatus', function(err, res) { /* … */ });
+```
+
+The arity check could not catch this, because it only fires when the last argument is *not* a function. The connector now refuses an unserializable parameter **before dispatch** and surfaces a `TypeError` with code `GINA_COUCHBASE_UNSERIALIZABLE_PARAM`, naming the offending position and the likely cause — routed through the query callback when there is one, thrown otherwise.
+
+**Action:** none. Serializable values are untouched — `null`, `0`, empty strings, `false`, and objects carrying `undefined` properties all still reach the SDK unchanged. If your bundle has been dying without a JS stack under query load, this is a likely cause worth re-testing.
+
+### Fixed — the published `useScopeAndCollections` schema description was wrong
+
+`schema/connectors.json` described the couchbase `useScopeAndCollections` option as *"Enable scope and collection support (SDK v3+)"*. The option is accepted but **currently inert**: the connector partitions data via `_scope` / `_collection` document fields (one bucket, default collection), and named-collection KV access is available per call via `entity.getConnection(scope, collection)`. The option is reserved for a possible future native scope/collection routing mode.
+
+**Action:** none — a description correction only. But if you set the option expecting native routing, note that it never took effect; use `getConnection(scope, collection)` for named-collection access.
+
+### Fixed — the Inspector tab-layout preview no longer renders new tabs as "undefined"
+
+In the Inspector's layout settings, the preview row rendered the two newest tabs (**Stream** and **Events**) as the literal text `undefined` with a broken pill colour: both were added to the layout presets when they shipped, but the preview's label and colour maps were never extended. The maps now cover all eight tabs, and the preview resolves through fallbacks — a future tab missing from the maps renders its capitalised name in a neutral colour instead of `undefined`.
+
+Same stale-roster family, also fixed: the saved custom tab order was validated against a hardcoded six-tab maximum, so with seven or eight tabs visible a drag-reordered custom layout was **silently rejected on the next load** and never survived a reload. The bound now derives from the preset roster itself.
+
+**Action:** none. Dev-tool only — a bundle restart picks it up, no asset rebuild needed. If a custom layout of yours kept reverting, it will now persist.
+
+### Fixed — the Inspector Query pane no longer freezes on the first page without index data
+
+The Query pane and its tab badge froze on the first page whose queries still lacked index data: the live-index refetch re-rendered the tab by replacing the scroll wrapper's children, destroying the `#tree-query` container that every later render targets. Navigating the monitored tab — or any new payload, including the refresh button's forced refetch — then silently kept the **previous** page's queries and count on screen until the Inspector window was reloaded. The refetch now re-renders into `#tree-query` itself.
+
+**Action:** none. Dev-tool only — reopen the Inspector window.
+
+### Fixed — the Inspector footer memory gauge's track is visible again
+
+The unfilled portion of the footer memory gauge shared the footer's own background colour in both themes, so the empty part of the track was invisible and a low fill (say 64 MB of 3.1 GB) read as a floating green dot rather than a gauge. The track now renders as a visible recessed groove — a distinct background plus a theme-scoped inset shadow — in dark and light themes. Gauge geometry and the fill's severity colours are unchanged.
+
+**Action:** none. Dev-tool only — reopen the Inspector window.
+
+### Fixed — `bundle:openapi` and `bundle:mcp` no longer drop three declared bound forms
+
+Un-collapsing a `validator::{}` routing requirement into a parameter schema silently discarded three declared forms:
+
+- the scalar `"isString": N` now maps to **`minLength`** (the engine treats it as a minimum, identically to `[N]`);
+- `isInteger` and `isNumber` digit bounds now reach the generated schema as a human-readable `description` (e.g. `2-4 digits (string-form length; a negative sign counts)`) plus a machine-readable **`x-gina-digitBounds`** extension.
+
+Digit bounds constrain the length of the value's **string form**, not its numeric range, so they are deliberately *not* emitted as `minimum` / `maximum` — wrong for any negative value, whose sign counts toward the length — nor as `minLength` / `maxLength`, which are string-only keywords and inert on numeric types.
+
+**Action:** none, unless a downstream consumer of your generated spec should read the new `x-gina-digitBounds` extension. Schemas generated from bare `true` rules are byte-identical to before.
+
 ## 0.6.1 → 0.6.2
 
 ### Added — Opt-in 503 + Retry-After for transient datastore failures
