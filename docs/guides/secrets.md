@@ -251,8 +251,42 @@ behaves exactly as it always has.
 }
 ```
 
+### One chain for the whole project
+
+Declaring it per bundle rarely makes sense — secrets are usually a property of
+the *deployment*, not of one bundle. Put the block in the project's
+`shared/config/settings.json` instead and **every bundle inherits it**:
+
+```json title="shared/config/settings.json"
+{
+  "secrets": {
+    "file": ["${homedir}/credentials/secrets.env"]
+  }
+}
+```
+
+That is the recommended shape. A bundle can still override it, and the rules
+are worth knowing because two of them look alike and mean opposite things:
+
+| The bundle's own `settings.json` | Effective chain |
+| --- | --- |
+| declares its own `secrets.file` | **the bundle's** — it replaces the shared one outright; the arrays do *not* concatenate |
+| declares no `secrets` block | the shared one — inherited |
+| declares `"secrets": {}` | the shared one — an empty block **does not** disable an inherited chain |
+| declares `"secrets": { "file": null }` | **none** — this is the explicit opt-out |
+
+The last two are the pair to be careful with: `{}` inherits, `null` opts out.
+
 Paths are written with the ordinary config tokens and may be a single string
 instead of an array.
+
+:::tip Declaring this for a containerised deployment?
+The multi-entry form assumes a filesystem where both files can sit side by
+side. A Kubernetes `Secret` does not layer, and most pipelines pick the
+artifact by scope before it ever reaches the pod — so the right declaration
+there is usually a single entry, or none at all. See
+[Containers and Kubernetes](#containers-and-kubernetes).
+:::
 
 ### The environment always wins
 
@@ -588,8 +622,81 @@ exec gina-container api @myproject
 see [K8s & Docker](/guides/k8s-docker) for the full container-runtime
 shape.
 
-The framework only cares about what's in `process.env` by the time it
-reads bundle config. Storage layer is fully decoupled.
+The framework reads the environment by the time it loads bundle config —
+and, if the bundle declares one, the file tier beneath it. Storage remains
+fully decoupled either way.
+
+---
+
+## Containers and Kubernetes {#containers-and-kubernetes}
+
+The file tier is designed for a **filesystem-shaped** deployment: a host, a
+VM, a bind-mounted dev tree — somewhere a base file and a per-scope file can
+sit side by side and be layered. Container platforms often are not shaped that
+way, so a chain that is right on a laptop can be the wrong declaration in a
+cluster.
+
+### A Kubernetes Secret does not layer
+
+A `Secret` is a flat key→value map, and `subPath` projects **one key as one
+file**. A nested `credentials/<scope>/secrets.env` layout is not expressible
+from a single Secret, and most pipelines already choose the artifact by scope
+at push time rather than merging two of them.
+
+So in a cluster, prefer a **single-entry chain** — or no chain at all, keeping
+the entrypoint-to-environment route below. The multi-entry form buys nothing
+where the platform has already selected the artifact.
+
+:::caution `subPath` is not optional here
+Without `subPath` the mount is a **directory**, so a guard like
+`[ -f /run/secrets.env ]` silently no-ops and the container starts with
+nothing loaded. That surfaces later as a fail-closed resolution error a long
+way from its cause.
+:::
+
+### Do not materialise a merged file
+
+It is tempting to have the framework (or an init script) merge the layers into
+one file at start. Don't:
+
+- **Secret volumes are read-only**, and bind mounts carrying secrets normally
+  are too — there is nowhere correct to write.
+- On a bind mount, a container writing there puts **plaintext secrets onto the
+  host filesystem**, outside whatever manages them.
+- Services sharing the mount would race to produce the same file at boot.
+- It goes stale the moment a source changes, reintroducing a cache-invalidation
+  problem the resolve-once-per-process contract deliberately avoids.
+- And it makes the framework a secrets **store**, which is precisely what it
+  stays out of.
+
+### Source the layers in order instead — the shell is the merge
+
+Sourcing two files in sequence gives the *same* later-wins precedence as the
+chain, with no intermediate artifact:
+
+```bash title="entrypoint.sh — layered, no merged file"
+#!/bin/sh
+for f in /run/secrets/base.env /run/secrets/"${NODE_SCOPE}".env; do
+    [ -f "$f" ] || continue
+    set -a; . "$f"; set +a
+done
+exec gina-container api @myproject
+```
+
+This works unchanged on Docker or Podman (two bind mounts, or one directory
+mount) and on Kubernetes (two `subPath` mounts, or two keys in one Secret).
+Nothing is written, so read-only mounts are fine.
+
+It also lands the values in the **environment** — the top tier — so they
+outrank any declared file chain and there is never a question about which
+source won.
+
+### If you do want one artifact per scope
+
+Build it **host-side, in the tooling that already decrypts**. That is the
+deployment layer doing its job: it is already scope-aware, runs with the right
+ownership, and lets the container keep a single-file mount. The framework
+never needs to know.
 
 ---
 

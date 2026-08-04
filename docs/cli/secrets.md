@@ -48,7 +48,9 @@ $ gina secrets:scan @myproject
 
 ## `secrets:check`
 
-Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then any file the bundle declares in [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile) — marking each required key `SET` or `UNSET`. **Exits non-zero when any required key is unset**, so it can gate a CI / pre-deploy step.
+Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then any file declared in [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile) — marking each required key `SET` or `UNSET`. **Exits non-zero when any required key is unset**, so it can gate a CI / pre-deploy step.
+
+The declaration is read the same way the loader reads it: the project's `shared/config/settings.json` first, with the bundle's own `settings.json` on top, so a project-wide chain is picked up for every bundle and a bundle-level one replaces it.
 
 ```bash
 gina secrets:check                      # every registered project
@@ -94,7 +96,7 @@ When a bundle declares `settings.secrets.file`, the report lists the resolved ch
     (3 required: 2 set, 1 unset)
 ```
 
-`${scope}` and `${env}` inside a declared path are set by whatever **launches** the bundle, so this process cannot read them; the report names the values it assumed (`--scope` / `--env` override them). A path whose tokens cannot be resolved is reported and its tier skipped rather than opened blindly — that can only make the gate stricter than the runtime, never laxer.
+`${scope}` and `${env}` inside a declared path are set by whatever **launches** the bundle, so this process cannot read them. Both fall back to the project's defaults, and the report **names the values it assumed** — pass `--scope` / `--env` to override. `${projectVersion}` and `${projectVersionMajor}` come from the project manifest, as they do at runtime. A path whose tokens cannot be resolved is reported and its tier skipped rather than opened blindly — that can only make the gate stricter than the runtime, never laxer.
 
 ---
 
@@ -134,7 +136,7 @@ $ gina secrets:check @myproject --scope=production --env-file=/run/secrets.env
 $ echo $?   # 0 if every required key is set, non-zero otherwise
 ```
 
-`--scope` deep-merges each `config_<scope>/<name>.json` over the base `config/<name>.json` (scope wins on conflicting keys; base values the scope doesn't redefine are preserved) and reports the keys of the *effective* result. The two flags work on **separate axes**: `--scope` selects which config to inspect (and therefore which keys are required), while `--env-file` supplies the environment-tier values to check them against — a single encrypted secrets store is fine here, because scope drives config selection, not which secrets file you decrypt. The framework's runtime config loader stays scope-agnostic **about config directories** — it never reads a `config_<scope>/` sibling, so per-scope config selection remains your deploy's responsibility and this command only inspects it. (`--scope` does one further thing since the file tier shipped: it supplies the `${scope}` token when resolving a declared `settings.secrets.file` path, which the runtime takes from `NODE_SCOPE`.)
+`--scope` deep-merges each `config_<scope>/<name>.json` over the base `config/<name>.json` (scope wins on conflicting keys; base values the scope doesn't redefine are preserved) and reports the keys of the *effective* result. The two flags work on **separate axes**: `--scope` selects which config to inspect (and therefore which keys are required), while `--env-file` supplies the environment-tier values to check them against — a single encrypted secrets store is fine here, because scope drives config selection, not which secrets file you decrypt. The framework's runtime config loader stays scope-agnostic **about config directories** — it never reads a `config_<scope>/` sibling, so per-scope config selection remains your deploy's responsibility and this command only inspects it. (`--scope` does one further thing since the file tier shipped: it supplies the `${scope}` token when resolving a declared `settings.secrets.file` path, which the runtime takes from `NODE_SCOPE`. That token alone falls back to the project's default scope, so a scope-templated chain resolves without the flag — the `config_<scope>/` overlay above still requires it explicitly and is never applied by default.)
 
 ---
 
