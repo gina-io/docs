@@ -175,6 +175,35 @@ Couchbase. This ensures scope isolation is enforced at the data layer, not in
 application code.
 :::
 
+:::caution Positional parameters must be JSON-serializable
+Every argument bound to a `$1`, `$2`, ... placeholder is serialized with
+`JSON.stringify` before it reaches the driver. Three values produce no JSON at
+all -- `undefined`, a **function**, and a `Symbol` -- and the Couchbase SDK
+cannot represent them.
+
+Gina refuses such a parameter before the query is dispatched, raising a
+`TypeError` with the code `GINA_COUCHBASE_UNSERIALIZABLE_PARAM` that names the
+offending position. It is delivered to your query callback when you passed one,
+and thrown otherwise.
+
+The usual cause is a call that is **one argument short**: the trailing callback
+slides into the last placeholder's slot.
+
+```javascript
+// findByCustomer.sql declares $1 and $2
+invoice.findByCustomer(customerId, function (err, rows) { /* ... */ });
+//                                 ^ becomes $2 -- refused with a TypeError
+
+invoice.findByCustomer(customerId, status, function (err, rows) { /* ... */ });
+// correct: every declared parameter precedes the callback
+```
+
+Pass `null` for a parameter you intend to leave empty -- `null` serializes
+correctly and reaches the query. Values such as `0`, `''`, `false`, and objects
+that merely *contain* `undefined` properties are all serializable and are passed
+through unchanged.
+:::
+
 ---
 
 ## `@options` annotations
