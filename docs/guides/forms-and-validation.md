@@ -509,6 +509,95 @@ entirely — so neither substitute exercises the shipped behaviour.
 
 ---
 
+## Loading state
+
+While an action is running, Gina marks the control that started it with
+`data-gina-loading="true"`, and flips it to `"false"` the moment that action
+settles or is interrupted. Style the attribute to show a busy affordance.
+
+It is written on:
+
+- the form's submit control, for a validated submit;
+- an `<a data-gina-link>`, for a link-plugin request.
+
+### Match the value, never the presence
+
+On release Gina writes the string `"false"` rather than removing the attribute.
+A presence selector therefore also matches a control that has already finished,
+and pins the busy style on permanently:
+
+```css
+/* correct */
+[data-gina-loading="true"] { /* ... */ }
+
+/* wrong — also matches a released control, which still carries "false" */
+[data-gina-loading] { /* ... */ }
+```
+
+Read it the same way in JavaScript: compare against `"true"` rather than testing
+whether the attribute is there.
+
+### When it is released
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Loading: click, or a programmatic call
+    Loading --> Idle: settled (any status)
+    Loading --> Idle: network failure
+    Loading --> Idle: superseded or aborted
+    Loading --> Idle: validation refused the submit
+    Loading --> Idle: refused by the send rate limit
+```
+
+The last two are the reason this exists. A submit refused by validation, or by
+the send rate limit, never reaches the network at all — so nothing in the
+request lifecycle can release it, and only the framework knows the submit was
+refused. That is the case that used to leave a project's own loading state stuck
+on indefinitely.
+
+:::warning A hanging link request never releases
+Link requests carry no deadline, so a request that never terminates never
+settles and its anchor stays in the loading state. Every other outcome —
+success, error, abort, network failure — releases it.
+:::
+
+### The default look, and how to replace it
+
+Gina ships a deliberately minimal default: a `progress` cursor plus a gentle
+opacity pulse, with the pulse gated on `prefers-reduced-motion: no-preference`
+and a static dim for anyone who has asked for reduced motion.
+
+The selector is a single attribute, so any class of your own overrides it:
+
+```css
+.btn[data-gina-loading="true"] {
+    animation: none;   /* drop just the motion */
+    opacity: 1;
+}
+```
+
+Two things it deliberately does not do. It injects no spinner pseudo-element —
+that would stack with a spinner you already ship, and would force
+`position: relative` onto a control Gina does not own. And it does not set
+`pointer-events: none`, because a link accepts a second click while a request is
+in flight and supersedes the first; blocking clicks would change that behaviour.
+
+### Already using `data-loading`?
+
+Rename the attribute instead of migrating your CSS:
+
+```js
+gina.setOptions({ loadingAttribute: 'data-loading' });
+```
+
+Gina then writes `data-loading`. There is no auto-detection — the attribute only
+exists while something is running, so there is nothing to sniff at rest — and
+renaming also opts you out of the default stylesheet above, which is keyed on
+the default name.
+
+---
+
 ## Submission is always AJAX
 
 For a validator-bound form, Gina **always cancels the native submit** and sends
@@ -931,6 +1020,12 @@ anything that must be true before you act on the data.
 |---|---|
 | `data-gina-form-submit` | Marks an `<a>` as a submit control (anchors are not native form controls). |
 | `data-gina-form-submit-method` | Overrides the HTTP method a submit link uses. |
+
+### Loading
+
+| Attribute | Effect |
+|---|---|
+| `data-gina-loading` | Written by Gina on the control that started an action: `"true"` while it runs, `"false"` once it settles. Style `[data-gina-loading="true"]`, never the bare attribute. Rename it with `gina.setOptions({ loadingAttribute: '…' })`. See [Loading state](#loading-state). |
 
 ---
 
