@@ -359,6 +359,13 @@ and appends it to the container — wrapped in an `<li>` when the container is a
 `<ul>`. Cap the rendered width with a `data-preview-max-width` attribute on the
 container.
 
+The image carries an `alt` set to the file's original filename, so assistive
+technology announces which file is staged instead of reading the temporary URI
+aloud. When the response describes a separate preview variant, the `alt` still
+names the file the user chose rather than the server-generated variant. If no
+original name is available the `alt` is empty, which marks the image decorative
+rather than announcing a placeholder.
+
 Each preview gets a **Reset** link. Clicking it sends a removal request to the
 reset (staged) or delete (saved) action URL, then removes the preview image,
 its reset link, and the generated hidden fields, and restores the file input's
