@@ -379,6 +379,39 @@ shell concatenates to `ab`. Neither is worth writing deliberately — quote any
 value whose meaning could depend on shell word-splitting.
 :::
 
+#### Checking files written before this rule
+
+Earlier releases kept a trailing comment as part of the value, so a file
+written against them can change meaning on upgrade. The case worth finding is
+`KEY= # comment`: it now resolves **empty**, and an empty value counts as
+unset — so the placeholder fails closed at bundle start and `secrets:check`
+reports the key `UNSET` where it previously reported `SET`.
+
+Run this against every file you declare in `secrets.file`, and anything you
+pass to `secrets:check --env-file`:
+
+```sh
+grep -nE '^[[:space:]]*(export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=.*[[:space:]]#' <file>
+```
+
+Reading the result:
+
+- **No hits — nothing to do.**
+- **A hit is not automatically a break.** It also flags values whose hash is
+  quoted (`KEY="a # b"`) or that carry both a hash and a comment
+  (`KEY=abc#def # note`), and those parse identically before and after. Check
+  whether the hash is quoted (safe) or bare (its value changes).
+- If a value genuinely contains ` #`, **quote it** — that is the supported
+  form, not a workaround.
+
+:::tip Use this pattern as written
+A narrower variant using `[^#]*` in place of `.*` looks equivalent and is not:
+it silently misses values containing a double quote on some `grep` builds
+(measured: `ugrep` skips `KEY="abc" # note`, which GNU and BSD `grep` both
+find). For a check whose whole purpose is to be trusted when it returns
+nothing, the broader pattern is the safe one.
+:::
+
 ---
 
 ## Fail-closed semantics
