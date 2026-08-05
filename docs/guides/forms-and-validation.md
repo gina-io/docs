@@ -250,13 +250,29 @@ overridden through `gina.config.a11y`:
 ```javascript
 // once at boot, typically keyed off the negotiated culture
 gina.config.a11y = {
-    submitting: 'Envoi…'
+    submitting     : 'Envoi…',
+    // staged uploads — see the File uploads guide
+    uploadStarted  : 'Envoi du fichier commencé',
+    uploadComplete : 'Fichier envoyé',
+    fileRemoved    : '%s supprimé'
 };
 ```
 
 Anything you do not translate keeps its English default. These are separate
 from rule error labels, which are keyed by rule name and set with
 [`setErrorLabels`](#overriding-a-label-at-runtime).
+
+`fileRemoved` takes a `%s` placeholder, replaced with the file name — keep it
+in your translation, and put it wherever the sentence needs it.
+
+| Key | Default | Announced when |
+| --- | --- | --- |
+| `submitting` | `Submitting…` | a form submit request starts |
+| `uploadStarted` | `Upload started` | files are selected and staging begins |
+| `uploadComplete` | `Upload complete` | the staging request succeeds |
+| `fileRemoved` | `%s removed` | a staged file's reset/delete control removes it |
+
+*The three upload keys are new in 0.6.4.*
 
 ---
 

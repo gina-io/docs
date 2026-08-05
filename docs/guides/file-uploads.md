@@ -344,7 +344,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
 | `data-gina-form-upload-on-progress` | Bare name of a `window` callback run on each staging transfer-progress frame. *New in 0.5.24.* |
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
-| `data-gina-form-upload-reset-label` | Text of the auto-generated reset link. Defaults to `Reset`. |
+| `data-gina-form-upload-reset-label` | Visible text of the auto-generated reset control, and the prefix of its accessible name (`<label> <filename>`). Defaults to `Reset`. |
 | `data-gina-form-upload-reset-action` | URL/route for removing a *staged* (not-yet-saved) file. Defaults to the route `upload-delete-from-tmp-xml`. |
 | `data-gina-form-upload-delete-action` | URL/route for removing an *already-saved* file. **No framework default** (unlike `-reset-action`) — removing an already-saved file needs an application-specific endpoint Gina cannot supply, so the URL is required only when a delete is actually triggered, not at bind. Omitting the attribute is quiet at bind time. *Quiet-at-bind since 0.5.25.* |
 | `data-gina-form-upload-reset-trigger` / `-delete-trigger` | Id override for the reset/delete trigger element. |
@@ -366,13 +366,30 @@ names the file the user chose rather than the server-generated variant. If no
 original name is available the `alt` is empty, which marks the image decorative
 rather than announcing a placeholder.
 
-Each preview gets a **Reset** link. Clicking it sends a removal request to the
-reset (staged) or delete (saved) action URL, then removes the preview image,
-its reset link, and the generated hidden fields, and restores the file input's
-add-affordance. If your markup hides the input (or its wrapper) with a CSS
-class rather than an inline style, name that class in
+Each preview gets a **Reset** control. Activating it sends a removal request to
+the reset (staged) or delete (saved) action URL, then removes the preview image,
+the control itself, and the generated hidden fields, and restores the file
+input's add-affordance. If your markup hides the input (or its wrapper) with a
+CSS class rather than an inline style, name that class in
 `data-gina-form-upload-hidden-class` — the restore removes it from the input
 and its parent; without the attribute, the inline `display` restore applies.
+
+*Changed in 0.6.4.* Gina generates that control as an `<a>`, so it now carries
+`role="button"` and answers **Space** as well as Enter — an anchor natively
+responds to Enter only, and a control announced as a button has to behave like
+one. Its accessible name is the visible label followed by the file name
+(`Reset avatar.png`), because otherwise every staged file contributes an
+identical "Reset" to the page. The visible label stays the prefix, so the name
+still contains what is on screen. If you supply your own control through
+`data-gina-form-upload-reset-trigger` and it is a real `<button>`, Gina leaves
+its semantics alone.
+
+Because the control is removed from the page as part of the removal, focus would
+otherwise fall to the document and the keyboard user would lose their place —
+so Gina moves focus to the file input first, and announces the removal through
+the same live region it uses for form status (`fileRemoved`, see
+[Translating the status announcements](/guides/forms-and-validation#translating-the-status-announcements)).
+If something else has already claimed focus, Gina leaves it alone.
 
 To run your own logic after a removal, set `data-gina-form-upload-on-reset`
 and/or `data-gina-form-upload-on-delete` to the bare name of a function
@@ -415,8 +432,30 @@ indeterminate animation while the length is unknown); any other element gets the
 integer percentage as text. Every target also carries two attributes you can
 style against — `data-gina-upload-progress` (the percent, absent while
 indeterminate) and `data-gina-upload-progress-state` (`preparing`, `uploading`,
-`indeterminate`, `processing`, `complete`, `error`). No wording is hardcoded:
-labels are yours, via CSS on the state attribute.
+`indeterminate`, `processing`, `complete`, `error`). Visible wording on the
+indicator itself is yours, via CSS on the state attribute.
+
+*Changed in 0.6.4.* An indicator that is **not** a native `<progress>` now also
+carries `role="progressbar"` with `aria-valuemin="0"`, `aria-valuemax="100"` and
+`aria-valuenow` — without them it is unlabelled text to assistive technology.
+`aria-valuenow` tracks `data-gina-upload-progress` exactly, which means it is
+**absent** while the upload is indeterminate and on error: an absent value is
+how a progressbar reports "unknown", whereas a stale or zeroed one would be read
+as real progress that has stalled. A native `<progress>` is left untouched — it
+already exposes all of this, and an explicit role could override the implicit
+one.
+
+:::note
+A progressbar is generally only read when it is focused or polled, so the role
+alone does not tell a screen-reader user that anything happened. Gina therefore
+also announces the **transitions** — once when staging begins and once when it
+succeeds — through the live region described in
+[Translating the status announcements](/guides/forms-and-validation#translating-the-status-announcements).
+Per-frame progress is deliberately never announced: a polite live region
+coalesces but does not throttle, so announcing every frame would bury everything
+else on the page. A failed upload announces the server's own error message
+instead of a generic one.
+:::
 
 ```html
 <input
