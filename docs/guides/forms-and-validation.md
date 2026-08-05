@@ -196,9 +196,83 @@ Error rendering is wired for assistive technology out of the box:
 - each error message is linked to its field with `aria-errormessage` (Gina does
   not override an `aria-errormessage` you set yourself);
 - a visually-hidden `role="status" aria-live="polite"` region announces
-  blur-time errors;
+  blur-time errors. Gina appends this region to the `<form>` when the form is
+  bound, so it is already in the page before any error occurs — a live region
+  that is created and filled in the same moment is often skipped by screen
+  readers, which is why it is not created on demand. It stays inside the form
+  on purpose: a form shown in a popin lives inside a modal `<dialog>`, and
+  everything outside that dialog is inert, so a region placed elsewhere in the
+  page would go unannounced there. Expect one extra hidden `<div>` per bound
+  form if you inspect the DOM or write structural CSS selectors;
 - on a failed submit, focus moves to the **first invalid field in document
-  order**, so screen readers announce it immediately.
+  order**, so screen readers announce it immediately. A field that cannot
+  actually take focus — a custom element with neither `tabindex` nor
+  `delegatesFocus`, whose `focus()` does nothing — is skipped rather than
+  ending the search;
+- while a field is being edited, its committed error message is hidden from
+  view but **not** from assistive technology. The message keeps
+  `aria-invalid="true"` pointing at it, so returning to the field still
+  announces the reason. If you write structural CSS, note that such a message
+  carries the `hidden` class *and* inline positioning that keeps it rendered
+  at 1×1 rather than `display: none`;
+- re-triggering the **same** error announces it again. A polite live region is
+  only announced when its content changes, so Gina appends a no-break space to
+  an otherwise identical message; the announced text is unchanged.
+
+#### While a form is submitting
+
+Gina disables the submit control for the duration of the request. Because a
+disabled control cannot hold focus, the browser moves focus to the document
+body — so Gina returns focus to that control once the request settles. It does
+this only if nothing else claimed focus in the meantime, so if your response
+opens a popin, redirects, or focuses a field of its own, that decision wins.
+
+While the request is in flight the trigger carries `aria-busy="true"`, and the
+live region announces the start once. Completion is deliberately silent: an
+errored response already announces its field errors, and a second announcement
+in the same moment can cut those off. A submit rejected by client-side
+validation never announces anything, because no request was made.
+
+:::note
+`aria-busy` is set on the **trigger**, not on the `<form>`. The live region lives
+inside the form, and an ancestor marked busy *may* be treated by assistive
+technology as a reason to defer announcements in that subtree — which would
+silence the very region used to announce. ARIA does not specify this either way,
+so the placement is a precaution rather than a requirement; VoiceOver on Chrome
+was measured announcing normally from inside a busy ancestor.
+:::
+
+#### Translating the status announcements
+
+The strings Gina announces on its own behalf default to English and are
+overridden through `gina.config.a11y`:
+
+```javascript
+// once at boot, typically keyed off the negotiated culture
+gina.config.a11y = {
+    submitting     : 'Envoi…',
+    // staged uploads — see the File uploads guide
+    uploadStarted  : 'Envoi du fichier commencé',
+    uploadComplete : 'Fichier envoyé',
+    fileRemoved    : '%s supprimé'
+};
+```
+
+Anything you do not translate keeps its English default. These are separate
+from rule error labels, which are keyed by rule name and set with
+[`setErrorLabels`](#overriding-a-label-at-runtime).
+
+`fileRemoved` takes a `%s` placeholder, replaced with the file name — keep it
+in your translation, and put it wherever the sentence needs it.
+
+| Key | Default | Announced when |
+| --- | --- | --- |
+| `submitting` | `Submitting…` | a form submit request starts |
+| `uploadStarted` | `Upload started` | files are selected and staging begins |
+| `uploadComplete` | `Upload complete` | the staging request succeeds |
+| `fileRemoved` | `%s removed` | a staged file's reset/delete control removes it |
+
+*The three upload keys are new in 0.6.4.*
 
 ---
 
@@ -448,6 +522,108 @@ trigger with the attribute stripped is not the control your users get, and a
 natively disabled button would leave the tab order and stop emitting events
 entirely — so neither substitute exercises the shipped behaviour.
 :::
+
+---
+
+## Loading state
+
+While an action is running, Gina marks the control that started it with
+`data-gina-loading="true"`, and flips it to `"false"` the moment that action
+settles or is interrupted. Style the attribute to show a busy affordance.
+
+It is written on:
+
+- the form's submit control, for a validated submit;
+- an `<a data-gina-link>`, for a link-plugin request;
+- the control that opened a popin, for a popin load.
+
+:::note A popin marks two different elements
+The popin container also carries its own `data-gina-popin-loading` while it
+fills. That is not the same signal and neither replaces the other: the container
+attribute says *this popin is filling*, `data-gina-loading` on the trigger says
+*this control is busy*. Style whichever you mean — the trigger attribute is the
+one shared with submits and links, so a single rule covers every busy control on
+the page.
+
+A popin opened from a hover or focus preload that is still in flight does not
+mark its trigger yet; the click shows no busy state until the content lands.
+:::
+
+### Match the value, never the presence
+
+On release Gina writes the string `"false"` rather than removing the attribute.
+A presence selector therefore also matches a control that has already finished,
+and pins the busy style on permanently:
+
+```css
+/* correct */
+[data-gina-loading="true"] { /* ... */ }
+
+/* wrong — also matches a released control, which still carries "false" */
+[data-gina-loading] { /* ... */ }
+```
+
+Read it the same way in JavaScript: compare against `"true"` rather than testing
+whether the attribute is there.
+
+### When it is released
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Loading: click, or a programmatic call
+    Loading --> Idle: settled (any status)
+    Loading --> Idle: network failure
+    Loading --> Idle: superseded or aborted
+    Loading --> Idle: validation refused the submit
+    Loading --> Idle: refused by the send rate limit
+```
+
+The last two are the reason this exists. A submit refused by validation, or by
+the send rate limit, never reaches the network at all — so nothing in the
+request lifecycle can release it, and only the framework knows the submit was
+refused. That is the case that used to leave a project's own loading state stuck
+on indefinitely.
+
+:::warning A hanging link request never releases
+Link requests carry no deadline, so a request that never terminates never
+settles and its anchor stays in the loading state. Every other outcome —
+success, error, abort, network failure — releases it.
+:::
+
+### The default look, and how to replace it
+
+Gina ships a deliberately minimal default: a `progress` cursor plus a gentle
+opacity pulse, with the pulse gated on `prefers-reduced-motion: no-preference`
+and a static dim for anyone who has asked for reduced motion.
+
+The selector is a single attribute, so any class of your own overrides it:
+
+```css
+.btn[data-gina-loading="true"] {
+    animation: none;   /* drop just the motion */
+    opacity: 1;
+}
+```
+
+Two things it deliberately does not do. It injects no spinner pseudo-element —
+that would stack with a spinner you already ship, and would force
+`position: relative` onto a control Gina does not own. And it does not set
+`pointer-events: none`, because a link accepts a second click while a request is
+in flight and supersedes the first; blocking clicks would change that behaviour.
+
+### Already using `data-loading`?
+
+Rename the attribute instead of migrating your CSS:
+
+```js
+gina.setOptions({ loadingAttribute: 'data-loading' });
+```
+
+Gina then writes `data-loading`. There is no auto-detection — the attribute only
+exists while something is running, so there is nothing to sniff at rest — and
+renaming also opts you out of the default stylesheet above, which is keyed on
+the default name.
 
 ---
 
@@ -873,6 +1049,12 @@ anything that must be true before you act on the data.
 |---|---|
 | `data-gina-form-submit` | Marks an `<a>` as a submit control (anchors are not native form controls). |
 | `data-gina-form-submit-method` | Overrides the HTTP method a submit link uses. |
+
+### Loading
+
+| Attribute | Effect |
+|---|---|
+| `data-gina-loading` | Written by Gina on the control that started an action: `"true"` while it runs, `"false"` once it settles. Style `[data-gina-loading="true"]`, never the bare attribute. Rename it with `gina.setOptions({ loadingAttribute: '…' })`. See [Loading state](#loading-state). |
 
 ---
 

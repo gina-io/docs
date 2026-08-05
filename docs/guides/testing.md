@@ -16,6 +16,47 @@ Gina provides two purpose-built APIs for unit testing without a running server:
 **`createTestInstance`** for controller tests.
 Both mechanisms use Node's native `node:test` runner with zero external dependencies, letting you verify entity logic against mock connectors and controller actions against mock request/response objects.
 
+:::warning `require('gina')` needs a bundle context
+
+The framework bootstrap expects the context the CLI sets up when it starts a
+bundle. A plain `node` process — a test runner, a one-off script, a codegen or
+lint pass — does not have it, so `require('gina')` (and `require('gina/gna')`)
+throws:
+
+```text
+gina must be required from within a bundle context. The framework bootstrap
+could not resolve GINA_HOMEDIR, which the CLI sets on `process.gina` when it
+starts a bundle (`process.env` is not consulted).
+```
+
+Setting `GINA_HOMEDIR` in your shell does **not** help: the framework reads its
+own environment store (`process.gina`), which only the CLI populates.
+
+This is why the two APIs on this page are reached **directly** rather than
+through the framework entry point — never `require('gina')` at the top of a
+test file.
+
+The same constraint applies to the code under test. If one of your own modules
+calls `require('gina')` at module scope — to reach `require('gina').lib`,
+`require('gina').plugins`, or `require('gina').dto` — then *that* module cannot
+be loaded by a test runner either, and the failure will look like it comes from
+your test rather than from the require. Two ways out:
+
+- **Move the call inside the function that needs it**, so importing the module
+  for a test does not trigger the bootstrap.
+- **Inject the dependency**, the way entities already accept `injected` — see
+  [Entity testing](#entity-testing--constructor-injection) below.
+
+Note the limit honestly: this constraint is why the controller example further
+down uses source inspection and a minimal controller simulation rather than
+loading a real controller module. `createTestInstance` gives you an isolated
+instance and a clean `deps` seam, but it does not make an arbitrary
+framework-coupled module loadable outside a bundle. Code written to be tested
+— thin controllers, logic extracted into plain modules with no module-scope
+`require('gina')` — is what makes the difference.
+
+:::
+
 ---
 
 ## Entity testing — constructor injection

@@ -630,6 +630,20 @@ env:
         key: redis-password
 ```
 
+This is the recommended route: `secretKeyRef` populates the environment, and
+the [`${secret:KEY}` resolver](/guides/secrets) reads the environment **first**
+of all its sources — so nothing else has to be configured.
+
+A bundle may additionally declare
+[`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile),
+a file tier that sits *beneath* the environment. It is aimed at
+filesystem-shaped deployments and does not fit a Secret cleanly — a `Secret` is
+a flat key→value map and does not layer. If you use it here, prefer a
+single-entry chain and read
+[Containers and Kubernetes](/guides/secrets#containers-and-kubernetes) first,
+particularly the note on why a merged file should not be materialised into a
+read-only mount.
+
 ### Managed Redis providers
 
 | Provider | `host` | `tls` | Notes |
