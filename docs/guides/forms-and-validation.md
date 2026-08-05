@@ -205,7 +205,56 @@ Error rendering is wired for assistive technology out of the box:
   page would go unannounced there. Expect one extra hidden `<div>` per bound
   form if you inspect the DOM or write structural CSS selectors;
 - on a failed submit, focus moves to the **first invalid field in document
-  order**, so screen readers announce it immediately.
+  order**, so screen readers announce it immediately. A field that cannot
+  actually take focus — a custom element with neither `tabindex` nor
+  `delegatesFocus`, whose `focus()` does nothing — is skipped rather than
+  ending the search;
+- while a field is being edited, its committed error message is hidden from
+  view but **not** from assistive technology. The message keeps
+  `aria-invalid="true"` pointing at it, so returning to the field still
+  announces the reason. If you write structural CSS, note that such a message
+  carries the `hidden` class *and* inline positioning that keeps it rendered
+  at 1×1 rather than `display: none`;
+- re-triggering the **same** error announces it again. A polite live region is
+  only announced when its content changes, so Gina appends a no-break space to
+  an otherwise identical message; the announced text is unchanged.
+
+#### While a form is submitting
+
+Gina disables the submit control for the duration of the request. Because a
+disabled control cannot hold focus, the browser moves focus to the document
+body — so Gina returns focus to that control once the request settles. It does
+this only if nothing else claimed focus in the meantime, so if your response
+opens a popin, redirects, or focuses a field of its own, that decision wins.
+
+While the request is in flight the trigger carries `aria-busy="true"`, and the
+live region announces the start once. Completion is deliberately silent: an
+errored response already announces its field errors, and a second announcement
+in the same moment can cut those off. A submit rejected by client-side
+validation never announces anything, because no request was made.
+
+:::note
+`aria-busy` is set on the **trigger**, not on the `<form>`. The live region
+lives inside the form, and assistive technology commonly defers announcements
+inside an `aria-busy` subtree — which would silence the very region used to
+announce.
+:::
+
+#### Translating the status announcements
+
+The strings Gina announces on its own behalf default to English and are
+overridden through `gina.config.a11y`:
+
+```javascript
+// once at boot, typically keyed off the negotiated culture
+gina.config.a11y = {
+    submitting: 'Envoi…'
+};
+```
+
+Anything you do not translate keeps its English default. These are separate
+from rule error labels, which are keyed by rule name and set with
+[`setErrorLabels`](#overriding-a-label-at-runtime).
 
 ---
 
