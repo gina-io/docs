@@ -345,6 +345,40 @@ it there is what keeps a KMS call off the boot path.
   scaffolded `.gitignore` matches `*secrets*.env` and `.env*`; verify your
   own before committing.
 
+#### The file syntax
+
+A declared file is read the way a POSIX shell would `source` it — the same
+file the container-entrypoint pattern (`set -a; . secrets.env; set +a`) feeds
+into the environment. That is the point: one file, one meaning, whichever
+route it arrives by.
+
+```sh
+# a whole-line comment
+export DB_PASSWORD=s3cret        # a trailing comment is not part of the value
+API_KEY="quoted value"
+HASH_IN_VALUE=abc#def            # no space before '#', so this hash IS the value
+SPACED_HASH="abc # def"          # quote it when the value contains ' #'
+```
+
+The rules, in the order they bite:
+
+- A `#` starts a comment **only when preceded by whitespace and not inside
+  quotes.** `abc#def` keeps its hash; `abc # note` does not.
+- **Quoting is the escape hatch.** If a secret legitimately contains ` #`,
+  wrap the value in single or double quotes and it is preserved intact.
+- `KEY= # comment` is therefore an **empty** value — and an empty value counts
+  as unset, so the placeholder fails closed and `secrets:check` reports the
+  key `UNSET`.
+- A leading `export ` is ignored, the key is everything before the first `=`,
+  and a later duplicate key wins.
+
+:::caution Two shapes where this is *not* a shell
+`KEY = value` (spaces around the `=`) is accepted here and trimmed, while a
+shell would try to execute `KEY`. And `KEY="a"b"` yields `a"b` here where a
+shell concatenates to `ab`. Neither is worth writing deliberately — quote any
+value whose meaning could depend on shell word-splitting.
+:::
+
 ---
 
 ## Fail-closed semantics
