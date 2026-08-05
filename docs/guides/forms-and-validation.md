@@ -234,10 +234,12 @@ in the same moment can cut those off. A submit rejected by client-side
 validation never announces anything, because no request was made.
 
 :::note
-`aria-busy` is set on the **trigger**, not on the `<form>`. The live region
-lives inside the form, and assistive technology commonly defers announcements
-inside an `aria-busy` subtree — which would silence the very region used to
-announce.
+`aria-busy` is set on the **trigger**, not on the `<form>`. The live region lives
+inside the form, and an ancestor marked busy *may* be treated by assistive
+technology as a reason to defer announcements in that subtree — which would
+silence the very region used to announce. ARIA does not specify this either way,
+so the placement is a precaution rather than a requirement; VoiceOver on Chrome
+was measured announcing normally from inside a busy ancestor.
 :::
 
 #### Translating the status announcements
