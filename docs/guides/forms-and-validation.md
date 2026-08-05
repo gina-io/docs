@@ -518,7 +518,20 @@ settles or is interrupted. Style the attribute to show a busy affordance.
 It is written on:
 
 - the form's submit control, for a validated submit;
-- an `<a data-gina-link>`, for a link-plugin request.
+- an `<a data-gina-link>`, for a link-plugin request;
+- the control that opened a popin, for a popin load.
+
+:::note A popin marks two different elements
+The popin container also carries its own `data-gina-popin-loading` while it
+fills. That is not the same signal and neither replaces the other: the container
+attribute says *this popin is filling*, `data-gina-loading` on the trigger says
+*this control is busy*. Style whichever you mean — the trigger attribute is the
+one shared with submits and links, so a single rule covers every busy control on
+the page.
+
+A popin opened from a hover or focus preload that is still in flight does not
+mark its trigger yet; the click shows no busy state until the content lands.
+:::
 
 ### Match the value, never the presence
 
