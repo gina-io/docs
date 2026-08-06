@@ -433,15 +433,28 @@ The framework ships no CSS for this state, so style it yourself:
 }
 ```
 
-:::warning The gate is validity, not the attribute
-`aria-disabled` and `gina-form-submit-disabled` are presentation and
-assistive-technology signals — on their own they do not prevent submission. What
-actually blocks an invalid form is Gina's validity check at submit time, and
-that runs whether or not a submit control was discovered. There is no "block
-submit" data attribute. If a form has no discoverable submit control Gina logs a
-console warning and you lose the invalid-state affordance, but the form is still
-gated — so give every validated form a `<button type="submit">` or an
-`<a data-gina-form-submit="true">` for the affordance, not for the gate.
+:::warning The marker gates clicks; the validity check gates everything else
+Since 0.6.4 these markers are no longer purely presentational. Gina intercepts
+clicks on the submit control and refuses the click outright while
+`aria-disabled="true"` is set: the invalid fields are revealed and the first is
+focused, but the send is never reached. On the click path, the marker really
+does prevent submission.
+
+Every other route into submit ignores it — Enter inside a field,
+`form.requestSubmit()`, `gina.validator.$forms[formId].submit()`, and a click
+that lands on markup nested inside the button, such as
+`<button type="submit"><span>Save</span></button>`. Those reach the form's own
+submit handler, which inspects a detached copy of the form and therefore sees
+neither the marker nor a `disabled` property set from JavaScript. What blocks
+them is Gina's validity check at submit time, and that check runs whether or not
+a submit control was ever discovered.
+
+So treat the markers as the affordance and the validity check as the guarantee.
+There is no "block submit" data attribute. If a form has no discoverable submit
+control Gina logs a console warning and you lose the invalid-state affordance,
+but the form is still gated — so give every validated form a
+`<button type="submit">` or an `<a data-gina-form-submit="true">` for the
+affordance, not for the gate.
 :::
 
 To override the HTTP method a submit link uses, add
