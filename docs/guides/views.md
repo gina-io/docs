@@ -114,6 +114,11 @@ Swig supports [layout inheritance](/templating/swig/syntax#template-inheritance)
 {% endblock %}
 ```
 
+With layouts in place, one attribute on the layout's content wrapper
+(`<main data-gina-nav>`) upgrades the site to SPA-style fragment navigation with zero
+client JavaScript — see
+[Single-Page Apps Without a Frontend Framework](/guides/client-navigation).
+
 ---
 
 ## Using a different template engine

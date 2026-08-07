@@ -589,7 +589,8 @@ timeouts.
 **No action required** — pages without the marker behave byte-identically;
 upgrading changes nothing until you add the attribute. Ships in the browser
 bundle: **rebuild your bundles** to pick it up. Programmatic surface:
-`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`.
+`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`. Full guide:
+[Single-Page Apps Without a Frontend Framework](/guides/client-navigation).
 
 ### Changed — a non-positive session-store `ttl` is refused at bundle init
 

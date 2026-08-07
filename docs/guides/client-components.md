@@ -163,7 +163,7 @@ flowchart LR
 
 **"Bi-directional" is two unidirectional links** — each direction its own event-to-attribute wire. A shared two-way-bound observed model is the classic feedback-loop footgun (cycle guards, batching, digest problems); if a screen genuinely needs coordinated client state, the on-philosophy answer is more server round-trips, not a client state layer.
 
-A component inside a swapped fragment needs no observer at all — `connectedCallback` / `disconnectedCallback` **are** its fragment-change notifications. `MutationObserver` is sanctioned only over a component's own subtree; observing another component's internals couples you to markup you don't own.
+A component inside a swapped fragment needs no observer at all — `connectedCallback` / `disconnectedCallback` **are** its fragment-change notifications. Whole-page fragment swaps — [SPA Navigation](/guides/client-navigation) — rely on exactly this: components in the old content disconnect, components in the new content upgrade and connect, no wiring needed. `MutationObserver` is sanctioned only over a component's own subtree; observing another component's internals couples you to markup you don't own.
 
 ## Form participation
 
