@@ -133,6 +133,7 @@ const config = {
   projectName: 'docs',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   i18n: {
     defaultLocale: 'en',

@@ -672,6 +672,17 @@ ignored key, and the feature stays off — it never refuses a boot. If you also
 configure a [custom error page](/guides/error-pages) for `503` (or `5xx`), it
 receives the cleaned-up `error` text in its template data.
 
+### Transactions
+
+There is no transaction annotation in the SQL-file layer — transactions are a
+driver-level feature. When you need one, ask the entity for the underlying driver
+handle: every data-connector entity exposes `getConnection()`, and for the SQL
+connectors what it returns **is** the driver pool / database handle, so you start
+the transaction on it directly. Couchbase and MongoDB return a narrower handle and
+add `getCluster()` / `getClient()` for the level above. See
+[Reaching the underlying driver handle](/reference/connectors#reaching-the-underlying-driver-handle)
+for the per-connector table.
+
 ---
 
 ## Scope-based data isolation

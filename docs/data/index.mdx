@@ -32,7 +32,7 @@ section goes deep on individual stores.
 | [MySQL / MariaDB](/reference/connectors#mysql) | Relational | Primary application data | ⚠️ Single server by default |
 | [PostgreSQL](/reference/connectors#postgresql) | Relational | Primary application data | ⚠️ Single server by default |
 | [Redis](/reference/connectors#redis) | Key-value store | Session store | ✅ Cluster / Sentinel |
-| [SQLite](/reference/connectors#sqlite) | Embedded relational | Session store — dev, staging | ❌ File-based, single process |
+| [SQLite](/reference/connectors#sqlite-data-connector) | Embedded relational | Application data & sessions — dev, staging | ❌ File-based, single process |
 | [DuckDB](/data/duckdb-analytics) | Embedded analytical (OLAP) | In-process analytics & reporting | ❌ Embedded file; read-only sharing |
 | [AI / LLM](/guides/ai) | LLM provider | Generative AI in controllers | — Stateless API calls |
 
@@ -83,5 +83,7 @@ Inspector shows every query a request ran, whichever connector executed it.
   for every connector.
 - [Sessions](/guides/sessions) — the session-store side of Redis, SQLite,
   Couchbase, ScyllaDB and MongoDB.
+- [Link Shortener tutorial](/tutorials/link-shortener) — build a complete app
+  on the SQLite ORM: entities, query files, a schema migration, async actions.
 - [AI connector](/guides/ai) — LLM providers through the same connector
   discipline.
