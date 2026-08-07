@@ -175,6 +175,9 @@ db.orderEntity      // OrderEntity instance
 db._connection      // raw database connection (avoid using directly)
 ```
 
+A bare-name alias without the `Entity` suffix is registered for every entity —
+`db.user` and `db.userEntity` are the same object; use whichever reads better.
+
 For cross-bundle access, pass the bundle name as the second argument:
 
 ```js

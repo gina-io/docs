@@ -349,6 +349,10 @@ npm install mysql2
 | `connectionLimit` | number | `10` | Maximum number of connections in the pool |
 | `ssl` | object | — | SSL options passed directly to `mysql2`. See [mysql2 SSL docs](https://github.com/sidorares/node-mysql2#ssl-options) |
 
+For the full ORM workflow — entity classes, SQL files with `?` placeholders,
+`@param`/`@return` annotations, pooling and transactions — see the
+[MySQL ORM guide](/data/mysql-orm).
+
 ---
 
 ### PostgreSQL
@@ -414,6 +418,10 @@ npm install pg
 | `connectionTimeout` | number | `2000` | Milliseconds to wait for a connection before timing out (`connectionTimeoutMillis`) |
 | `ssl` | object | — | SSL options passed directly to `pg`. See [node-postgres SSL docs](https://node-postgres.com/features/ssl) |
 
+For the full ORM workflow — entity classes, SQL files with `$1`, `$2`, …
+placeholders, `@param`/`@return` annotations, pool tuning and transactions —
+see the [PostgreSQL ORM guide](/data/postgresql-orm).
+
 ---
 
 ### SQLite {#sqlite-data-connector}
@@ -435,9 +443,9 @@ the same one the other relational connectors use.
 }
 ```
 
-With only `database` set, the file lives in the gina home directory at
-`~/.gina/<database>.sqlite` — outside your project, and not versioned. Add a `file`
-key to place it explicitly:
+With only `database` set, the file lives in the per-version gina home at
+`~/.gina/<version>/<database>.sqlite` — outside your project, and not under version
+control. Add a `file` key to place it explicitly:
 
 ```json title="src/api/config/connectors.json"
 {
@@ -454,17 +462,17 @@ key to place it explicitly:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `connector` | `"sqlite"` | — | Selects the SQLite connector |
-| `database` | string | — | Database name. Also names the model directory (`models/<database>/`) and, when `file` is absent, the default file location |
-| `file` | string | `~/.gina/<database>.sqlite` | Path to the SQLite database file |
+| `database` | string | — | Database name — a logical name, never a path. Also names the model directory (`models/<database>/`) and, when `file` is absent, the default file location |
+| `file` | string | `~/.gina/<version>/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
 
 Entities and `.sql` query files work over SQLite exactly like the other relational
 connectors — `?` positional placeholders, `@param` casting, `@return` shapes — with
 statements pre-compiled at startup via `conn.prepare()`. That boot-time compile means
 your tables must exist **before** the bundle starts: a statement naming a missing
 table fails to compile, and the failure is remembered for the life of the process.
-See the [Models guide](/guides/models) for the query-file workflow and the
-[Link Shortener tutorial](/tutorials/link-shortener) for a complete SQLite ORM
-walkthrough, including a schema-migration script.
+For the full ORM workflow, see the [SQLite ORM guide](/data/sqlite-orm); the
+[Link Shortener tutorial](/tutorials/link-shortener) is a complete walkthrough,
+including a schema-migration script.
 
 The same connector also backs the **SQLite session store** — see the
 [session store section below](#sqlite). Note the two roles read the config
