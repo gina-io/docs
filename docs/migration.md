@@ -42,6 +42,16 @@ styled nothing, note that 0.6.5 ships a modest default look for the state
 (`cursor: not-allowed` plus a dim; deliberately no `pointer-events`) — override
 it if it clashes with your design.
 
+**While you are restyling:** the not-ready state is deliberately not a
+*disabled* state. Disabling a submit control until the form validates is the
+common pattern, but it leaves the user no route to discover what is blocking
+them; Gina keeps the control operable and answers a click with the error
+reveal. So if you are reaching for `pointer-events: none` or the native
+`disabled` property to make the new marker feel more "disabled", that is the
+pattern to avoid — it would swallow the click the error reveal answers. See
+[The submit control](/guides/forms-and-validation#the-submit-control) and
+[Don't Disable Form Controls](https://adrianroselli.com/2024/02/dont-disable-form-controls.html).
+
 **Authored `aria-disabled`:** an `aria-disabled="true"` you set yourself on a
 submit control was previously cleared by Gina as soon as the form validated. It
 is now yours: Gina enforces it (clicks are refused and answered with the error

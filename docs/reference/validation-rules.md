@@ -24,6 +24,12 @@ trust), so a **built-in** rule behaves identically in both.
 [Custom validators](#custom-validators) are the exception — they apply in the
 browser only.
 
+How the resulting valid/invalid state is *presented* — the submit control's
+`data-gina-form-submit-gated` marker, the `.gina-form-submit-disabled` class,
+and why Gina does not disable the control while the form is invalid — is not a
+rule concern and lives in
+[Forms and Validation → The submit control](/guides/forms-and-validation#the-submit-control).
+
 ## Reading this page
 
 Most rules are used **declaratively** in JSON — you name the rule and give it an

@@ -408,6 +408,24 @@ its own members.
 
 ## The submit control
 
+Gina deliberately does **not** disable the submit control while the form is
+invalid. Disabling it until the form validates is the most widespread approach
+in the wild, but it tells the user *no* without telling them *why* and offers
+no route to find out — which is why the accessibility literature now treats
+disable-until-valid as an anti-pattern: a natively disabled control is skipped
+in the tab order, so a keyboard or screen-reader user can lose track of it
+entirely, and disabled styling routinely fails contrast. Gina keeps the control
+operable and answers an activation by revealing every invalid field and moving
+focus to the first one — the pattern that literature recommends instead.
+
+Further reading:
+[Don't Disable Form Controls](https://adrianroselli.com/2024/02/dont-disable-form-controls.html)
+(Adrian Roselli),
+[Disabled Buttons UX](https://smart-interface-design-patterns.com/articles/disabled-buttons/)
+(Smart Interface Design Patterns), and
+[Making Disabled Buttons More Inclusive](https://css-tricks.com/making-disabled-buttons-more-inclusive/)
+(CSS-Tricks).
+
 The form's submit control is the element Gina marks while the form is invalid.
 Gina discovers it automatically:
 
