@@ -149,7 +149,7 @@ else is deliberately left alone:
   attribute, cross-origin URLs, `#hash`-only and in-page hash moves. Open in
   new tab, save as, and friends all keep working.
 - **Plugin-owned** — links driven by the [link](/guides/forms-and-validation),
-  dialog or popin plugins (`data-gina-link*`,
+  dialog or [popin](/guides/popin) plugins (`data-gina-link*`,
   `data-gina-dialog*`, `data-gina-popin-*`) keep their own handlers.
 - **Opted out** — `data-gina-nav="false"` on the link.
 - **Route-level** — no matching route, a first match without
@@ -177,7 +177,7 @@ A successful fragment swap does more than set `innerHTML`:
 - **Forms** — id-bearing forms in the new content are rebound through the live
   [validator](/guides/forms-and-validation), so validation rules keyed by form
   id keep working. Id-less forms are skipped (no rule can target them).
-- **Popins** — an open popin is closed: a real navigation
+- **Popins** — an open [popin](/guides/popin) is closed: a real navigation
   would have unloaded it, and after a swap it would sit over content it no
   longer belongs to.
 - **History** — a `pushState` entry per navigation. Back/Forward re-fetch the
@@ -267,7 +267,7 @@ Honest differences, so you can pick the right tool:
   per-element swap strategies; `gina/nav` swaps one region. For finer-grained
   server-driven updates inside a page, Gina's answer is
   [Web Components that refetch their own fragment](/guides/client-components)
-  and the popin pattern.
+  and the [popin pattern](/guides/popin).
 - **GET navigation only.** htmx issues any verb from any element; in Gina,
   forms go through the [validator's XHR submit](/guides/forms-and-validation)
   with its own lifecycle.

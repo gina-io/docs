@@ -171,6 +171,9 @@ A component can act as a form control. Declare `static formAssociated = true`, a
 
 ## Components in popins and XHR-injected content
 
+For the popin plugin itself — attributes, preloading, modal modes and the
+`gina.popin` API — see the [Popins and Dialogs guide](/guides/popin).
+
 Custom elements inside a popin-injected body **upgrade automatically** — the platform handles it on DOM insertion, whatever template engine rendered the fragment server-side. The reference component's e2e coverage drives this against the real built bundle.
 
 A popin body may even carry its **own external definition script**: the popin open path re-creates external `<script src>` tags in `<head>` with a global dedup guard, so the definition loads once and already-inserted elements upgrade retroactively.

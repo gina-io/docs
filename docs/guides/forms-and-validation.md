@@ -564,6 +564,9 @@ native `disabled` on other controls, plus `data-gina-loading="true"` — and
 releases it when the preload settles, success or failure alike. An open served
 instantly from an already-cached preload never flashes a busy state: there is
 no wait to show.
+
+The popin side of all this — preloading, modal modes and the full attribute
+reference — is the [Popins and Dialogs guide](/guides/popin).
 :::
 
 :::note Link anchors need the link plugin activated
