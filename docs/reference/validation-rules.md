@@ -63,11 +63,11 @@ Data rules check a value and record an error if it fails.
 
 `isRequired(isApplicable)` · JSON: `"isRequired": true`
 
-Requires a non-empty value. Fails on `undefined`, `null`, `""`, and on any value
-that *starts* with whitespace — `"   "` fails, and so does `" john"`. Pair it
-with [`trim`](#trim) when a stray leading space should be cleaned up rather than
-rejected. Passing `false` (`"isRequired": false`) marks the field optional and
-short-circuits the check.
+Requires a non-empty value. Fails on `undefined`, `null`, `""`, and
+whitespace-only values — `"   "` fails; `" john"` passes (before 0.6.5 any
+*leading* whitespace failed too). Pair it with [`trim`](#trim) to clean stray
+padding off the stored value. Passing `false` (`"isRequired": false`) marks the
+field optional and short-circuits the check.
 
 - **Default message:** *Cannot be left empty*
 - **Must come first** — see [Chaining and ordering](#chaining-and-ordering).

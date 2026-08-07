@@ -54,6 +54,25 @@ path. A mid-flight click can still be refused by the driver while the in-flight
 lock is on — wait for `data-gina-loading` to flip to `"false"` instead. See
 [Automated testing: a gated submit trigger and click delivery](/guides/forms-and-validation#automated-testing-a-gated-submit-trigger-and-click-delivery).
 
+### Fixed — required fields accept padded input; `trim` strips both sides
+
+`isRequired` treated any value *starting* with whitespace as empty, so a
+leading-padded non-empty value (`" john"`) was rejected with *Cannot be left
+empty* — and when the rule set also declared `trim` (in the documented
+isRequired-first order), the same validation pass then trimmed the stored value
+after recording the error. `isRequired` now fails only on `undefined`, `null`,
+the empty string, and whitespace-only values; the `isRequired` + `trim` pairing
+accepts padded input and stores it trimmed. Trailing-padded values were always
+accepted, so only the leading-whitespace case changes.
+
+`trim` also previously rewrote only the first whitespace run it found, so a
+value padded on both sides kept its trailing run (`"  x  "` came back as
+`"x  "`). It now strips both ends.
+
+No action needed unless something of yours relied on leading-whitespace input
+being rejected — enforce that explicitly (a custom validator, or a server-side
+check of your own) if so.
+
 ## 0.6.3 → 0.6.4
 
 ### Added — a framework-owned loading state for submit-like triggers
