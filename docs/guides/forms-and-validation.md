@@ -558,8 +558,12 @@ attribute says *this popin is filling*, `data-gina-loading` on the trigger says
 one shared with submits and links, so a single rule covers every busy control on
 the page.
 
-A popin opened from a hover or focus preload that is still in flight does not
-mark its trigger yet; the click shows no busy state until the content lands.
+A popin opened from a hover or focus preload that is still in flight arms its
+trigger for that wait exactly like a cold load — `aria-disabled` on a link,
+native `disabled` on other controls, plus `data-gina-loading="true"` — and
+releases it when the preload settles, success or failure alike. An open served
+instantly from an already-cached preload never flashes a busy state: there is
+no wait to show.
 :::
 
 :::note Link anchors need the link plugin activated
