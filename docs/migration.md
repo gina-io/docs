@@ -19,6 +19,41 @@ upward to the target version.
 
 ---
 
+## 0.6.4 → 0.6.5
+
+### Changed — the not-ready submit-trigger marker is `data-gina-form-submit-gated`, no longer `aria-disabled` (action may be required)
+
+While live checking reports a form invalid, the submit control is now marked
+`data-gina-form-submit-gated="true"` alongside the (unchanged)
+`gina-form-submit-disabled` class. It no longer carries `aria-disabled="true"`:
+that attribute announces "not operable" to assistive technology, while Gina
+deliberately answers a click on the control — errors are revealed and focus
+moves to the first invalid field. Announcing one thing and doing another was
+the contradiction; the behaviour is unchanged, and the vocabulary now matches
+it. The in-flight lock is untouched: while a request runs, an `<a>` trigger
+still carries `aria-disabled` and other controls native `disabled`, released
+when the request settles.
+
+**CSS:** a selector like `[aria-disabled="true"]` scoped to submit triggers no
+longer matches the not-ready state. Restyle on
+`[data-gina-form-submit-gated="true"]`, or keep using the
+`.gina-form-submit-disabled` class, which is unchanged across versions. If you
+styled nothing, note that 0.6.5 ships a modest default look for the state
+(`cursor: not-allowed` plus a dim; deliberately no `pointer-events`) — override
+it if it clashes with your design.
+
+**Authored `aria-disabled`:** an `aria-disabled="true"` you set yourself on a
+submit control was previously cleared by Gina as soon as the form validated. It
+is now yours: Gina enforces it (clicks are refused and answered with the error
+reveal) and never auto-clears it. If your code relied on the auto-clear, remove
+the attribute yourself when you re-enable the control.
+
+**Automated tests:** a not-ready trigger no longer trips driver actionability
+checks, so `force: true` / in-page-dispatch workarounds are unnecessary on that
+path. A mid-flight click can still be refused by the driver while the in-flight
+lock is on — wait for `data-gina-loading` to flip to `"false"` instead. See
+[Automated testing: a gated submit trigger and click delivery](/guides/forms-and-validation#automated-testing-a-gated-submit-trigger-and-click-delivery).
+
 ## 0.6.3 → 0.6.4
 
 ### Added — a framework-owned loading state for submit-like triggers

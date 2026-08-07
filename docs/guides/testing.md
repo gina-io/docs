@@ -236,6 +236,6 @@ node --test test/core/
 
 ## See also
 
-- [Automated testing: a gated submit trigger and click delivery](./forms-and-validation#automated-testing-a-gated-submit-trigger-and-click-delivery) — why a browser driver may refuse to click an `aria-disabled` submit control, and how to deliver the click
+- [Automated testing: a gated submit trigger and click delivery](./forms-and-validation#automated-testing-a-gated-submit-trigger-and-click-delivery) — why a browser driver may refuse to click during the in-flight lock window, and how to confirm a click was actually delivered
 - [Controllers guide](./controller) — Singleton pattern, request lifecycle
 - [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) — `_scope` and test data isolation
