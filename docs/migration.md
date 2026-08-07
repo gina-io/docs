@@ -1445,7 +1445,7 @@ The SQLite ORM connector, the SQLite session store, the SQLite async-job store a
 
 ### Added — DuckDB connector
 
-New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/guides/duckdb-analytics).
+New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/data/duckdb-analytics).
 
 ### Fixed — Bun: a bundle declaring any connector boots again
 
@@ -1475,7 +1475,7 @@ startup warning naming the file and suggesting a rename (for example
 file matching a method your entity class itself defines still skips silently
 (your code wins, by design). If a warning appears on upgrade, it points at a
 query file that has never worked — rename it. See
-[reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
+[reserved method names](/data/duckdb-analytics#reserved-method-names--count-cannot-be-used).
 
 ### Fixed — form submits no longer strand a sibling form's submit button
 
@@ -1701,7 +1701,7 @@ zone-less local-time string (`2026-07-26T21:04:11`), which a browser re-parses
 in *its own* timezone — so the countdown skewed by the offset between server and
 visitor. It is now an ISO 8601 UTC string (`2026-07-26T20:04:11.000Z`), matching
 the redis, sqlite, mongodb and scylladb stores and the shape already shown in
-the [Couchbase guide](/guides/couchbase-orm#document-shape).
+the [Couchbase guide](/data/couchbase-orm#document-shape).
 
 No action is required. Sessions written before the upgrade keep their old stamp
 until their next `touch()`, at which point they pick up the new format; nothing
@@ -4344,11 +4344,11 @@ When structured (JSON) logging is on, Gina now tags every log line emitted durin
 
 ### Also new — public SDK Cluster accessor on Couchbase entities
 
-Couchbase entities now expose a public `getCluster()` method that returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document ACID transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x); **no migration action required.** See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster).
+Couchbase entities now expose a public `getCluster()` method that returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document ACID transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x); **no migration action required.** See [Accessing the underlying SDK Cluster](/data/couchbase-orm#accessing-the-underlying-sdk-cluster).
 
 ### Also new — public MongoClient accessor on MongoDB entities
 
-MongoDB entities now expose a public `getClient()` method that returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs; **no migration action required.** See [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+MongoDB entities now expose a public `getClient()` method that returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs; **no migration action required.** See [Accessing the underlying MongoClient](/data/connectors-mongodb#accessing-the-underlying-mongoclient).
 
 ---
 
@@ -5244,7 +5244,7 @@ Install `cassandra-driver` in your project
 (`npm install cassandra-driver`) and declare a `connectors.json` entry
 with `"connector": "scylladb"`. Requires Node `>=20`.
 
-See [ScyllaDB ORM guide](/guides/scylladb-orm) for adoption.
+See [ScyllaDB ORM guide](/data/scylladb-orm) for adoption.
 
 ### What's available — MongoDB connector (#CN6)
 
@@ -5266,7 +5266,7 @@ Install `mongodb` in your project
 (`npm install mongodb`) and declare a `connectors.json` entry with
 `"connector": "mongodb"`.
 
-See [MongoDB ORM guide](/guides/connectors-mongodb) for adoption.
+See [MongoDB ORM guide](/data/connectors-mongodb) for adoption.
 
 ---
 

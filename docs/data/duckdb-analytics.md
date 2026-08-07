@@ -1,7 +1,8 @@
 ---
+displayed_sidebar: dataSidebar
 title: DuckDB Analytics for Node.js
 sidebar_label: DuckDB analytics
-sidebar_position: 26
+sidebar_position: 5
 description: Gina provides an embedded DuckDB ORM for in-process analytics — entity classes with SQL files, CTE-aware row detection, direct Parquet / CSV / JSON querying, read-only multi-process sharing, and @param/@return annotations.
 level: intermediate
 prereqs:

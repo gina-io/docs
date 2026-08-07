@@ -1,7 +1,8 @@
 ---
+displayed_sidebar: dataSidebar
 title: MongoDB ORM for Node.js
 sidebar_label: MongoDB ORM
-sidebar_position: 25
+sidebar_position: 4
 description: Gina provides a MongoDB Node.js ORM via the official mongodb driver — entity classes with JSON pipeline files, @param BSON type casting, ObjectId placeholders, and a session store using a TTL index for automatic expiry.
 level: intermediate
 prereqs:
@@ -586,8 +587,8 @@ sessions, and vice versa.
 If your workload is heavily relational, prefer
 [PostgreSQL](/guides/models) or [MySQL](/guides/models). If you need
 N1QL and per-document scope isolation, prefer
-[Couchbase](/guides/couchbase-orm). For high-throughput wide-column workloads,
-prefer [ScyllaDB](/guides/scylladb-orm).
+[Couchbase](/data/couchbase-orm). For high-throughput wide-column workloads,
+prefer [ScyllaDB](/data/scylladb-orm).
 
 ---
 

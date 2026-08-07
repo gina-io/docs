@@ -1,7 +1,8 @@
 ---
+displayed_sidebar: dataSidebar
 title: Couchbase ORM for Node.js
 sidebar_label: Couchbase ORM
-sidebar_position: 23
+sidebar_position: 2
 description: Gina provides a Couchbase Node.js ORM with an EventEmitter-based entity system, N1QL query files, $scope multi-tenant isolation, auto-stamping, and dev-mode query instrumentation.
 level: intermediate
 prereqs:

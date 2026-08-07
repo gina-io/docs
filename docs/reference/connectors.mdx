@@ -44,8 +44,8 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [Redis](#redis) | Key-value store | Session store | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
 | [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
-| [ScyllaDB / Cassandra](/guides/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
-| [DuckDB](/guides/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
+| [ScyllaDB / Cassandra](/data/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
+| [DuckDB](/data/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
 
 ---
 
@@ -281,7 +281,7 @@ For the full ORM workflow — JSON pipeline files at
 annotations, BSON type casting, and the eleven supported operations
 (`findOne` / `find` / `aggregate` / `countDocuments` / `insertOne` /
 `insertMany` / `updateOne` / `updateMany` / `replaceOne` / `deleteOne` /
-`deleteMany`) — see the [MongoDB ORM guide](/guides/connectors-mongodb).
+`deleteMany`) — see the [MongoDB ORM guide](/data/connectors-mongodb).
 
 The same connector also backs the **MongoDB session store** — TTL index
 auto-created on first `set()`, with `expiresAt > now` filtering on reads to
@@ -680,7 +680,7 @@ store reads nothing from that file.
 | `connectionTimeout` | number | `10000` | Connect-time timeout in ms |
 | `operationTimeout` | number | `10000` | Per-operation timeout in ms |
 
-See the [Couchbase ORM guide](../guides/couchbase-orm) for the bucket-handle wiring and
+See the [Couchbase ORM guide](../data/couchbase-orm) for the bucket-handle wiring and
 the TTL strategy, and the [Sessions guide](../guides/sessions#configuring-the-store) for
 the surrounding `express-session` setup.
 
@@ -757,7 +757,7 @@ A `mongodb+srv://` URI works as-is — use it for Atlas and any SRV-discovered r
 
 Every field above may also be passed directly to the `MongodbStore` constructor, which
 takes precedence over the `connectors.json` entry. See the
-[MongoDB connector guide](../guides/connectors-mongodb).
+[MongoDB connector guide](../data/connectors-mongodb).
 
 ---
 
@@ -830,7 +830,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 Every field above may also be passed directly to the `ScylladbStore` constructor, which
 takes precedence over the `connectors.json` entry. See the
-[ScyllaDB ORM guide](../guides/scylladb-orm).
+[ScyllaDB ORM guide](../data/scylladb-orm).
 
 ---
 
@@ -878,8 +878,8 @@ driver handle, so there is nothing extra to reach — start a transaction (or an
 driver-level operation) on it directly. Couchbase and MongoDB are the only two
 whose `getConnection()` returns a narrower handle than transactions need, so they
 add `getCluster()` / `getClient()` to resolve the level above without reaching
-into private internals. See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster)
-and [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+into private internals. See [Accessing the underlying SDK Cluster](/data/couchbase-orm#accessing-the-underlying-sdk-cluster)
+and [Accessing the underlying MongoClient](/data/connectors-mongodb#accessing-the-underlying-mongoclient).
 
 ---
 

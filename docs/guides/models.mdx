@@ -20,6 +20,10 @@ The model layer is where database interaction lives in a Gina bundle. It is buil
 framework automatically wires up as callable methods. Controllers never touch a database
 connection directly: they call entity methods and `await` the result.
 
+This guide teaches the entity model itself, which is the same over every store. For the
+per-store deep-dives — Couchbase, ScyllaDB, MongoDB, DuckDB — and a comparison of all
+supported connectors, see the [Data section](/data/).
+
 ---
 
 ## How it works
@@ -414,7 +418,7 @@ The braces are required, and any other key (`adhoc`, `profile`, `timeout`, …) 
 only when `consistency` is present alongside it — `@options { adhoc: true }` on its own is
 ignored (silently before 0.5.26; with a logged warning from 0.5.26). Always include an
 explicit `consistency`. See
-[Couchbase ORM → `@options` annotations](/guides/couchbase-orm) for the full table.
+[Couchbase ORM → `@options` annotations](/data/couchbase-orm) for the full table.
 
 **`@include` — sub-file composition**
 

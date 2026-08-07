@@ -502,7 +502,7 @@ inherit that constraint.
 :::caution `length()`, `clear()`, `all()` are full-table operations
 `length()` runs `SELECT COUNT(*)`, `clear()` runs `TRUNCATE` (a heavy cluster
 operation), and `all()` runs a full scan. Avoid in hot paths — use them only
-from admin tooling. See the [ScyllaDB ORM guide](/guides/scylladb-orm#session-store-via-cql-using-ttl)
+from admin tooling. See the [ScyllaDB ORM guide](/data/scylladb-orm#session-store-via-cql-using-ttl)
 for the full API mapping and document shape.
 :::
 
@@ -593,7 +593,7 @@ myapp.start();
 MongoDB's TTL monitor runs on a 60-second tick, so a recently-expired document
 can linger up to a minute. The store filters `get()` / `length()` / `all()` on
 `expiresAt > now` to never return an expired session — the filter cost is one
-indexed range scan against the existing TTL index. See the [MongoDB ORM guide](/guides/connectors-mongodb#session-store-via-ttl-index)
+indexed range scan against the existing TTL index. See the [MongoDB ORM guide](/data/connectors-mongodb#session-store-via-ttl-index)
 for the full API mapping and document shape.
 :::
 
@@ -608,9 +608,9 @@ For the full ORM context of each database-native session store — entity
 wiring, query / pipeline files, scope-based data isolation, dev-mode query
 instrumentation — see each connector's dedicated guide:
 
-- [Couchbase ORM](/guides/couchbase-orm) — N1QL, document scope isolation, multi-node cluster
-- [ScyllaDB ORM](/guides/scylladb-orm) — CQL, prepared statements, lightweight transactions
-- [MongoDB ORM](/guides/connectors-mongodb) — JSON pipeline files, BSON type casting, aggregation
+- [Couchbase ORM](/data/couchbase-orm) — N1QL, document scope isolation, multi-node cluster
+- [ScyllaDB ORM](/data/scylladb-orm) — CQL, prepared statements, lightweight transactions
+- [MongoDB ORM](/data/connectors-mongodb) — JSON pipeline files, BSON type casting, aggregation
 - [SQL connectors](/guides/models) — MySQL, PostgreSQL, SQLite
 
 ---

@@ -111,6 +111,16 @@ const config = {
           {from: '/cli/secrets',   to: '/cli/cli-secrets'},
           {from: '/cli/service',   to: '/cli/cli-service'},
           {from: '/cli/view',      to: '/cli/cli-view'},
+          // ORM / database guide pages re-homed under /data/ (2026-08-07 Data
+          // umbrella, mirroring the Templating restructure). Paired with
+          // Cloudflare Worker 301s (infra/cloudflare/worker.js §
+          // DATA_REDIRECTS) so indexed backlinks resolve via HTTP 301 at the
+          // edge; this meta-refresh layer is the fallback for direct Vercel
+          // access.
+          {from: '/guides/couchbase-orm',      to: '/data/couchbase-orm'},
+          {from: '/guides/scylladb-orm',       to: '/data/scylladb-orm'},
+          {from: '/guides/connectors-mongodb', to: '/data/connectors-mongodb'},
+          {from: '/guides/duckdb-analytics',   to: '/data/duckdb-analytics'},
         ],
       },
     ],
@@ -213,6 +223,13 @@ const config = {
             position: 'left',
             label: 'Templating',
             className: 'navbar-templating-link',
+          },
+          {
+            type: 'docSidebar',
+            sidebarId: 'dataSidebar',
+            position: 'left',
+            label: 'Data',
+            className: 'navbar-data-link',
           },
           {
             type: 'docSidebar',
