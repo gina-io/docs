@@ -562,6 +562,21 @@ A popin opened from a hover or focus preload that is still in flight does not
 mark its trigger yet; the click shows no busy state until the content lands.
 :::
 
+:::note Link anchors need the link plugin activated
+Unlike validated forms and popin triggers, `<a data-gina-link>` anchors are not
+bound automatically on page load — the link plugin has no auto-boot. The
+attribute stays inert until the page activates the handler once:
+
+```js
+require(['gina/link'], function (LinkHandler) {
+    new LinkHandler({}).on('ready', function () {});
+});
+```
+
+On a page that never activates it, clicking such an anchor starts no request —
+and no `data-gina-loading` is ever written on it.
+:::
+
 ### Match the value, never the presence
 
 On release Gina writes the string `"false"` rather than removing the attribute.
