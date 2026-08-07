@@ -214,6 +214,9 @@ generated values back with a separate SELECT-shaped query.
 `@options` and `@include` are **not** available for PostgreSQL — they are
 Couchbase-only annotations.
 
+SQL files are read once at load — a changed `.sql` file needs a bundle restart
+to apply, in dev mode too.
+
 ---
 
 ## No `$scope` substitution

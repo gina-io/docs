@@ -206,6 +206,9 @@ other SELECT it silently falls back to the default all-rows shape.
 `@options` and `@include` are **not** available for MySQL — they are
 Couchbase-only annotations.
 
+SQL files are read once at load — a changed `.sql` file needs a bundle restart
+to apply, in dev mode too.
+
 ---
 
 ## No `$scope` substitution

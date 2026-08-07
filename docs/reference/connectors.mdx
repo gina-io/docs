@@ -443,8 +443,8 @@ the same one the other relational connectors use.
 }
 ```
 
-With only `database` set, the file lives in the per-version gina home at
-`~/.gina/<version>/<database>.sqlite` — outside your project, and not under version
+With only `database` set, the file lives in the gina home directory at
+`~/.gina/<database>.sqlite` — outside your project, and not under version
 control. Add a `file` key to place it explicitly:
 
 ```json title="src/api/config/connectors.json"
@@ -463,7 +463,7 @@ control. Add a `file` key to place it explicitly:
 |---|---|---|---|
 | `connector` | `"sqlite"` | — | Selects the SQLite connector |
 | `database` | string | — | Database name — a logical name, never a path. Also names the model directory (`models/<database>/`) and, when `file` is absent, the default file location |
-| `file` | string | `~/.gina/<version>/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
+| `file` | string | `~/.gina/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
 
 Entities and `.sql` query files work over SQLite exactly like the other relational
 connectors — `?` positional placeholders, `@param` casting, `@return` shapes — with

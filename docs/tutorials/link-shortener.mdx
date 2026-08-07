@@ -159,7 +159,7 @@ Open `src/api/config/connectors.json` and replace its contents:
 
 The key `"shortener"` is the model name you'll pass to `getModel()` in the controller. It also names the `models/` subdirectory the entity and its SQL live in.
 
-Gina stores the database file under the per-version gina home at `~/.gina/<version>/shortener.sqlite` — that is `<gina home>/<database>.sqlite`, outside your project and not under version control. Add a `"file"` key if you would rather keep the database somewhere else:
+Gina stores the database file at `~/.gina/shortener.sqlite` — that is `<gina home>/<database>.sqlite`, outside your project and not under version control. Add a `"file"` key if you would rather keep the database somewhere else:
 
 ```json
 "shortener": {

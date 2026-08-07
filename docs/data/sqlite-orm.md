@@ -99,9 +99,9 @@ flowchart TD
 }
 ```
 
-With only `database` set, the file lives in the per-version gina home at
-`~/.gina/<version>/<database>.sqlite` — outside your project, and not under
-version control. Add a `file` key to place it explicitly:
+With only `database` set, the file lives in the gina home directory at
+`~/.gina/<database>.sqlite` — outside your project, and not under version
+control. Add a `file` key to place it explicitly:
 
 ```json title="src/api/config/connectors.json"
 {
@@ -117,15 +117,15 @@ version control. Add a `file` key to place it explicitly:
 |---|---|---|
 | `connector` | — | `"sqlite"` selects the connector |
 | `database` | (required) | Database name — a logical name, never a path. Names the model directory (`models/<database>/`) and the default file |
-| `file` | `~/.gina/<version>/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
+| `file` | `~/.gina/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
 
 The entry key (`"mydb"` above) is the model name you pass to `getModel()` in
 controllers, and it names the `models/` subdirectory the entities and SQL live
 in.
 
 Don't put a file path in `database` — it is a logical name, and a path there is
-silently expanded to `~/.gina/<version>/<that path>.sqlite` instead of the file
-you meant. The path key is `file`.
+silently expanded to `~/.gina/<that path>.sqlite` instead of the file you
+meant. The path key is `file`.
 
 At open, the connector applies three PRAGMAs: `journal_mode=WAL` (concurrent
 readers never block the writer), `synchronous=NORMAL` (safe in WAL mode), and
