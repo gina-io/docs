@@ -159,6 +159,7 @@ const config = {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support' || item.id === 'download-offline')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
               if (item.type === 'category' && item.label === 'Templating') return false;
+              if (item.type === 'category' && item.label === 'Data') return false;
               return true;
             });
           },
