@@ -312,6 +312,40 @@ deferring to it instead of carrying divergent copies. Also added
 `npm run test:coverage`, and a `pretest:e2e` step that installs the matching
 Chromium build so `npm run test:e2e` works from a clean checkout.
 
+### Fixed — an unreachable MQ log host no longer stalls every gina process
+
+With the default `mq` log flow configured and the log host unreachable — a
+powered-off peer, a firewalled segment, or a stale `host_v4` left behind by a
+DHCP reassignment — any fresh gina process, including a bare `require()` of
+framework code, hung for the OS connect timeout (about 75 seconds on macOS)
+before doing anything. A *refused* connection was always handled — the peer's
+reset closes the handle — it was the host that answers *nothing at all* that
+held the process open: the speaker's socket was unref'd, but a still-pending
+dial is a live request that keeps the event loop alive on its own. The dial now
+carries its own bounded, unref'd deadline and gives up quickly, degrading
+through the same error path as a refused connection. Logging stays best-effort,
+never load-bearing. No action needed; this fix is server-side, so a bundle
+restart delivers it (no rebuild). (#B318)
+
+### Fixed — a refused submit keeps its error message visible
+
+When a submit is refused — a click on a gated trigger, or an enabled trigger
+whose validation fails — Gina renders the first invalid field's error message
+and moves focus to that field so the refusal explains itself. That focus move
+was re-entering the live-check suppression that hides a message while its field
+is being edited, so the message was visually hidden the instant it was rendered
+(clipped, still resolvable by assistive technology): a refused submit looked
+like a dead click to sighted users. The framework's own answer focus is now
+exempt from the suppression, one-shot: the message stays visible with the hard
+`form-item-error` styling and the field focused, exactly as
+[Forms & Validation](/guides/forms-and-validation) has always described the
+committed state. The first keystroke afterwards re-engages the normal
+while-editing suppression unchanged, as does clicking into an errored field
+yourself. No action needed. One scene is deliberately unchanged: submitting
+with Enter while focused *inside* the invalid field you are editing still keeps
+that field's message hidden until blur — that is the while-editing contract
+(focus never moves, so the answer path is not involved). (#B319)
+
 ## 0.6.3 → 0.6.4
 
 ### Added — a framework-owned loading state for submit-like triggers
