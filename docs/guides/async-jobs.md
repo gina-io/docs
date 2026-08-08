@@ -227,7 +227,7 @@ With MongoDB the records live on a `mongod` every pod can reach: a job created o
 }
 ```
 
-The entry takes the same keys as any [MongoDB connector](/guides/connectors-mongodb): a full `uri` when you have one, or `host` / `port` / `username` / `password` / `database` (plus `authSource`, `replicaSet`, `ssl`). `database` is required — for MongoDB it is a database *name*, so the model-layer caveat above does not apply. The collection defaults to `jobs`; override it with `collection`.
+The entry takes the same keys as any [MongoDB connector](/data/connectors-mongodb): a full `uri` when you have one, or `host` / `port` / `username` / `password` / `database` (plus `authSource`, `replicaSet`, `ssl`). `database` is required — for MongoDB it is a database *name*, so the model-layer caveat above does not apply. The collection defaults to `jobs`; override it with `collection`.
 
 ### Redis — multiple pods
 

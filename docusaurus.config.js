@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → npm registry → node_modules.
-const ginaVersion = '0.6.4';
+const ginaVersion = '0.6.5';
 const swigVersion = '2.8.0';
 const twigVersion = '2.8.0';
 const jinjaVersion = '2.8.0';
@@ -111,6 +111,16 @@ const config = {
           {from: '/cli/secrets',   to: '/cli/cli-secrets'},
           {from: '/cli/service',   to: '/cli/cli-service'},
           {from: '/cli/view',      to: '/cli/cli-view'},
+          // ORM / database guide pages re-homed under /data/ (2026-08-07 Data
+          // umbrella, mirroring the Templating restructure). Paired with
+          // Cloudflare Worker 301s (infra/cloudflare/worker.js §
+          // DATA_REDIRECTS) so indexed backlinks resolve via HTTP 301 at the
+          // edge; this meta-refresh layer is the fallback for direct Vercel
+          // access.
+          {from: '/guides/couchbase-orm',      to: '/data/couchbase-orm'},
+          {from: '/guides/scylladb-orm',       to: '/data/scylladb-orm'},
+          {from: '/guides/connectors-mongodb', to: '/data/connectors-mongodb'},
+          {from: '/guides/duckdb-analytics',   to: '/data/duckdb-analytics'},
         ],
       },
     ],
@@ -123,6 +133,7 @@ const config = {
   projectName: 'docs',
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   i18n: {
     defaultLocale: 'en',
@@ -148,6 +159,7 @@ const config = {
               if (item.type === 'doc' && (item.id === 'roadmap' || item.id === 'support' || item.id === 'download-offline')) return false;
               if (item.type === 'category' && item.label === 'Tutorials') return false;
               if (item.type === 'category' && item.label === 'Templating') return false;
+              if (item.type === 'category' && item.label === 'Data') return false;
               return true;
             });
           },
@@ -213,6 +225,13 @@ const config = {
             position: 'left',
             label: 'Templating',
             className: 'navbar-templating-link',
+          },
+          {
+            type: 'docSidebar',
+            sidebarId: 'dataSidebar',
+            position: 'left',
+            label: 'Data',
+            className: 'navbar-data-link',
           },
           {
             type: 'docSidebar',

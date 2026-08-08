@@ -19,6 +19,333 @@ upward to the target version.
 
 ---
 
+## 0.6.4 → 0.6.5
+
+### Changed — the not-ready submit-trigger marker is `data-gina-form-submit-gated`, no longer `aria-disabled` (action may be required)
+
+While live checking reports a form invalid, the submit control is now marked
+`data-gina-form-submit-gated="true"` alongside the (unchanged)
+`gina-form-submit-disabled` class. It no longer carries `aria-disabled="true"`:
+that attribute announces "not operable" to assistive technology, while Gina
+deliberately answers a click on the control — errors are revealed and focus
+moves to the first invalid field. Announcing one thing and doing another was
+the contradiction; the behaviour is unchanged, and the vocabulary now matches
+it. The in-flight lock is untouched: while a request runs, an `<a>` trigger
+still carries `aria-disabled` and other controls native `disabled`, released
+when the request settles.
+
+**CSS:** a selector like `[aria-disabled="true"]` scoped to submit triggers no
+longer matches the not-ready state. Restyle on
+`[data-gina-form-submit-gated="true"]`, or keep using the
+`.gina-form-submit-disabled` class, which is unchanged across versions. If you
+styled nothing, note that 0.6.5 ships a modest default look for the state
+(`cursor: not-allowed` plus a dim; deliberately no `pointer-events`) — override
+it if it clashes with your design.
+
+**While you are restyling:** the not-ready state is deliberately not a
+*disabled* state. Disabling a submit control until the form validates is the
+common pattern, but it leaves the user no route to discover what is blocking
+them; Gina keeps the control operable and answers a click with the error
+reveal. So if you are reaching for `pointer-events: none` or the native
+`disabled` property to make the new marker feel more "disabled", that is the
+pattern to avoid — it would swallow the click the error reveal answers. See
+[The submit control](/guides/forms-and-validation#the-submit-control) and
+[Don't Disable Form Controls](https://adrianroselli.com/2024/02/dont-disable-form-controls.html).
+
+**Authored `aria-disabled`:** an `aria-disabled="true"` you set yourself on a
+submit control was previously cleared by Gina as soon as the form validated. It
+is now yours: Gina enforces it (clicks are refused and answered with the error
+reveal) and never auto-clears it. If your code relied on the auto-clear, remove
+the attribute yourself when you re-enable the control.
+
+**Automated tests:** a not-ready trigger no longer trips driver actionability
+checks, so `force: true` / in-page-dispatch workarounds are unnecessary on that
+path. A mid-flight click can still be refused by the driver while the in-flight
+lock is on — wait for `data-gina-loading` to flip to `"false"` instead. See
+[Automated testing: a gated submit trigger and click delivery](/guides/forms-and-validation#automated-testing-a-gated-submit-trigger-and-click-delivery).
+
+### Fixed — required fields accept padded input; `trim` strips both sides
+
+`isRequired` treated any value *starting* with whitespace as empty, so a
+leading-padded non-empty value (`" john"`) was rejected with *Cannot be left
+empty* — and when the rule set also declared `trim` (in the documented
+isRequired-first order), the same validation pass then trimmed the stored value
+after recording the error. `isRequired` now fails only on `undefined`, `null`,
+the empty string, and whitespace-only values; the `isRequired` + `trim` pairing
+accepts padded input and stores it trimmed. Trailing-padded values were always
+accepted, so only the leading-whitespace case changes.
+
+`trim` also previously rewrote only the first whitespace run it found, so a
+value padded on both sides kept its trailing run (`"  x  "` came back as
+`"x  "`). It now strips both ends.
+
+No action needed unless something of yours relied on leading-whitespace input
+being rejected — enforce that explicitly (a custom validator, or a server-side
+check of your own) if so.
+
+### Fixed — a double-submit guard no longer kills the submit
+
+A form's submit trigger stopped responding to clicks when your own code set the
+native `disabled` attribute on it *during* the click — the shape the common
+double-submit guard uses, where a click handler disables the button to block a
+second submit. Since 0.6.4 the trigger's disabled check accepted that attribute,
+so the click was cancelled before anything was sent; because your handler then
+cleared the attribute again, the button looked perfectly normal and every
+further click was swallowed just as silently.
+
+The native attribute is now honoured only on elements where the browser does not
+already enforce it (anchors, custom elements). On a real form control the browser
+suppresses the click itself, so the check was never what protected you there.
+Forms gated by gina's own not-ready marker are unaffected and still cannot be
+submitted while invalid.
+
+### Fixed — a submit button keeps working after its DOM node is replaced
+
+A submit button went permanently and silently dead once the page replaced its
+node — the shape an AJAX update or a popin re-render produces when it swaps in
+fresh markup. Clicking produced no request, no navigation and no error, while
+submitting the same form with Enter or `submit()` still worked. Click handling is
+delegated to the form and survived the swap, but the step that actually runs the
+submit was attached to the original button; the replacement inherited every
+attribute except that binding. Gina now recognises a replaced trigger the first
+time it is clicked and re-binds it. Validation is unaffected — a replaced trigger
+on an invalid form still refuses to submit.
+
+### Fixed — an async `query` rule no longer leaves a valid form blocked
+
+A form whose last rule is an async `query` — the uniqueness check a registration
+form typically carries — stayed marked invalid after that check came back clean.
+The async completion path decided the form's validity from a single field's
+result, and its update step ran only when that field *failed*, so a form that had
+just become valid was never re-examined: the submit trigger kept its marker and
+`gina.validator.$forms[id].errors` kept listing the field. Until 0.6.4 that was
+invisible, because nothing read the marker; once the submit gate began reading
+it, the first click after the query settled was silently swallowed and only a
+second got through. The verdict now comes from a fresh whole-form pass. A form
+with another field still invalid stays correctly blocked.
+
+### Fixed — Enter and wrapped-label clicks respect the submit gate
+
+The form's submit proxy enforced its disabled gate against a `DOMParser` copy of
+the form that could only see native `disabled`. A gated submit trigger therefore
+ran the full validation cycle and **sent** from trusted gestures — a click landing
+on markup wrapped inside the button, or Enter on a form whose trigger is not a
+native submit button — while a native `disabled` written mid-dispatch by a
+double-submit guard could kill the submit outright. Trusted gestures now hit the
+live registered trigger with the same predicate and the same answer as the click
+path: the send is cancelled, errors are revealed, and focus moves to the first
+invalid field. Programmatic `$forms[id].submit()` deliberately keeps the
+fresh-validate path and is not gated by the marker.
+
+### Fixed — an anchor submit trigger's in-flight lock survives a second click
+
+On an `<a data-gina-form-submit>` trigger the validity gate and the in-flight
+lock both wrote `aria-disabled`, with opposite lifecycles, and each could erase
+the other. A form invalidated mid-flight settled with the gate's class present but
+the attribute gone — marked to the framework, operable to assistive technology;
+and a second click during a live request ran the validation reveal, whose
+valid-form heal stripped the lock's attribute mid-request, announcing the control
+operable while the send was still running and re-running validation (async
+`query` rules included) on every extra click. With the not-ready state moved to
+its own attribute, the lock owns `aria-disabled` exclusively and survives
+mid-flight clicks. Button triggers were never affected — their lock is native
+`disabled`.
+
+### Fixed — a popin holding several forms tears all of them down
+
+A popin with more than one form released only every other one when it closed: the
+teardown walked its list of forms while removing entries from that same list.
+The skipped forms kept stale records pointing at markup the popin had already
+discarded, so on the next open the validator handed back the stale record instead
+of binding the fresh markup and the form — its submit control included — came up
+silently inert. Only popins given a validator explicitly are affected; the ones
+gina wires up for you never reached this path. Teardown is also no longer
+all-or-nothing: a failure releasing one form is reported and the rest are still
+torn down.
+
+### Fixed — a popin trigger shows its busy state when it adopts a preload
+
+Popin triggers showed no busy state when their open adopted a still-in-flight
+hover/focus preload — the common path when warm-on-intent preloading is on. The
+trigger is now armed for the adopted wait exactly like a cold click-time load
+(`aria-disabled` on links, native `disabled` on other controls, plus the shared
+`data-gina-loading` marker) and released when the preload settles, success or
+failure alike. An instant open from an already-cached preload never flashes a busy
+state, and a second click during the wait is refused by the existing trigger
+gates.
+
+### Fixed — a popin trigger disabled by your own handler still opens
+
+The same double-submit guard shape broke popins: your handler disabled the
+control inside the very click being handled, gina read the attribute and silently
+refused to open — no popin, no error, and a control that looked completely normal
+once your handler cleared the attribute again. Gina now trusts the native
+`disabled` attribute only where the browser does not enforce it itself, so markup
+relying on `<a disabled>` is unchanged. The fix also covers the legacy popin
+dispatch path and in-popin close buttons, where a capture-phase guard could leave
+a popin stuck open. Gina's own behaviour of disabling a trigger while its popin
+loads is unaffected.
+
+### Fixed — a legacy popin trigger cannot start a second load
+
+An anchor using the older `data-gina-popin-name` markup was marked
+`aria-disabled` while its popin loaded, but the code dispatching its clicks
+tested only the plain `disabled` attribute, which an anchor never carries here —
+so a second click during a slow load issued a second request. In practice this
+reached triggers that opt out of preloading with
+`data-gina-dialog-preload="false"`, the setting used for links whose request has
+side effects on the server, so the duplicate could cost more than bandwidth.
+Clicks landing on an icon nested inside the trigger are covered too. Buttons and
+other real form controls were never affected.
+
+### Fixed — a popin close button works with your own id and with nested markup
+
+Two close-button shapes were silently inert. Giving the button your own id — for
+styling, a test hook or an aria reference — stopped it working, because gina
+recognised its close buttons by an id it had assigned itself and yours replaced
+it. More commonly, putting an icon inside the button broke it too: a click
+landing on the inner `svg` or `span` rather than the button's own edge was not
+recognised. Neither case reported an error, and because gina suppresses the
+button's default action either way, nothing at all happened on click. A close
+button that also triggers another popin is unaffected.
+
+### Fixed — `data-gina-link` leaves native affordances to the browser
+
+A `data-gina-link` anchor no longer swallows clicks the browser should handle.
+Four cases are now left alone — three properties of the anchor: one carrying
+`download` saves natively instead of being buffered in memory, one carrying
+`target` opens its window or tab again, and one pointing at a bare `#` fragment
+moves within the page instead of requesting the literal fragment text; and one
+property of the click: holding ctrl, cmd, shift or alt opens the new tab or
+window the browser would normally open. Previously all four were intercepted, so
+the click either did nothing visible or produced the wrong result. The anchor
+tests run against the *resolved* target, so the documented placeholder form (an
+empty or `#` href paired with `data-gina-link-url`) keeps working, and the
+modifier test covers clicks landing on nested elements. Cross-origin links are
+unaffected.
+
+### Fixed — a `data-gina-link` with your own id dispatches again
+
+Giving a `data-gina-link` anchor your own id stopped it working: gina kept the id
+you wrote but dispatched only the links whose id it had generated itself, so
+`<a id="my-link" data-gina-link>Open</a>` registered normally and was then
+silently ignored on every click — and because gina had already suppressed the
+default action, nothing happened at all. Links left without an id were
+unaffected, as were links wrapping a `span` or an image, whose clicks reach the
+plugin by a different route — which is why this could sit unnoticed. Your id is
+preserved rather than overwritten.
+
+### Fixed — disabled links are refused
+
+`data-gina-link` anchors had no disabled gate at all: an anchor marked
+`aria-disabled="true"` (or carrying the native attribute, which an anchor never
+enforces) still fired its XHR on click, from both the direct-click and the
+nested-element dispatch paths. Both sites now refuse the click with the same
+trigger-disabled predicate the popin and validator gates use, while still
+suppressing the default navigation. Programmatic `gina.link.request()`
+deliberately stays ungated.
+
+**Action:** this is an enforcement tightening. If any of your markup carries
+`aria-disabled="true"` on a link you still expect to fire, remove the attribute.
+
+### Fixed — blob-download filenames parse correctly
+
+The client-side blob-download filename parse (both the shared XHR handler and the
+validator's copy) threw mid-download on a `Content-Disposition` carrying no
+`filename` parameter — the browser now derives a name instead. An RFC 6266
+quoted-string filename is unquoted and unescaped rather than saved with its
+surrounding quotes, and a trailing extended parameter is no longer folded into
+the name.
+
+### Fixed — `Content-Disposition` filenames are emitted as quoted-strings
+
+Both server emitters (`downloadFromURL`'s attachment upgrade and
+`downloadFromLocal`) now emit the filename as an RFC 6266 quoted-string with `"`
+and `\` escaped, so a filename containing spaces, `;` or `,` produces a
+conformant header instead of a bare token an intermediary may truncate or split.
+
+### Fixed — `gina.setOptions()` writes the config the framework actually reads
+
+`gina.setOptions()` merged its options into an orphan object nothing ever read,
+and was therefore silently ignored for every key since it shipped — the
+documented `loadingAttribute` rename could not work. It now merges into the
+exposed `gina.config` in place, with override semantics: a top-level scalar
+replaces, a top-level object merges one level deep, and keys absent from your
+options are never removed. An identity guard keeps the framework boot's own call
+a no-op, so page-load behaviour is unchanged.
+
+**Action:** anything your project was already passing to `setOptions()` and
+silently having ignored **will now take effect**. Review those calls before
+upgrading. The `data-gina-config` script-tag attribute, documented alongside the
+rename but parsed by nothing, is no longer documented.
+
+### Fixed — the Inspector's standalone window reports its source mode
+
+The dev Inspector's footer source-mode badge never appeared when the Inspector
+ran as a standalone window opened from a `?target=` URL. The badge names where the
+window's data comes from (`bound`, `agent`, or a warn-tinted `global`), but it was
+painted only from the data-poll timer — which standalone mode deliberately never
+starts, since its data is pushed over the stream. The same `agent` mode *did* show
+up when the window was reached through the "No source" connect form, so the
+badge's presence depended on how the Inspector had been opened rather than on the
+mode it was in. Standalone windows now report their source mode on both entry
+paths and for both agent transports. Polling is still not started there,
+deliberately: it would repaint the active tab on every tick and disturb scrolling,
+expanded nodes and text selection.
+
+### Fixed — the documented SQLite and DuckDB default database path
+
+The SQLite and DuckDB connector JSDoc and the `connectors.json` schema described
+the default database-file location as version-segmented
+(`~/.gina/{version}/{database}.sqlite` or `.duckdb`). The framework resolves the
+gina home without a version segment, so the documented default now matches the
+real path: `~/.gina/{database}.sqlite` and `~/.gina/{database}.duckdb`. Behaviour
+is unchanged — only the documentation was wrong.
+
+### Fixed — `npm test` runs the suite
+
+The `npm test` script pointed at a glob matching no files: it reported 0 tests and
+exited 0, a silent green that could pass for a healthy run. It now runs the full
+suite — the same set CI gates on — with `package.json` as the single source of
+truth for that file list, and the Tests workflow and `CONTRIBUTING.md` both
+deferring to it instead of carrying divergent copies. Also added
+`npm run test:coverage`, and a `pretest:e2e` step that installs the matching
+Chromium build so `npm run test:e2e` works from a clean checkout.
+
+### Fixed — an unreachable MQ log host no longer stalls every gina process
+
+With the default `mq` log flow configured and the log host unreachable — a
+powered-off peer, a firewalled segment, or a stale `host_v4` left behind by a
+DHCP reassignment — any fresh gina process, including a bare `require()` of
+framework code, hung for the OS connect timeout (about 75 seconds on macOS)
+before doing anything. A *refused* connection was always handled — the peer's
+reset closes the handle — it was the host that answers *nothing at all* that
+held the process open: the speaker's socket was unref'd, but a still-pending
+dial is a live request that keeps the event loop alive on its own. The dial now
+carries its own bounded, unref'd deadline and gives up quickly, degrading
+through the same error path as a refused connection. Logging stays best-effort,
+never load-bearing. No action needed; this fix is server-side, so a bundle
+restart delivers it (no rebuild). (#B318)
+
+### Fixed — a refused submit keeps its error message visible
+
+When a submit is refused — a click on a gated trigger, or an enabled trigger
+whose validation fails — Gina renders the first invalid field's error message
+and moves focus to that field so the refusal explains itself. That focus move
+was re-entering the live-check suppression that hides a message while its field
+is being edited, so the message was visually hidden the instant it was rendered
+(clipped, still resolvable by assistive technology): a refused submit looked
+like a dead click to sighted users. The framework's own answer focus is now
+exempt from the suppression, one-shot: the message stays visible with the hard
+`form-item-error` styling and the field focused, exactly as
+[Forms & Validation](/guides/forms-and-validation) has always described the
+committed state. The first keystroke afterwards re-engages the normal
+while-editing suppression unchanged, as does clicking into an errored field
+yourself. No action needed. One scene is deliberately unchanged: submitting
+with Enter while focused *inside* the invalid field you are editing still keeps
+that field's message hidden until blur — that is the while-editing contract
+(focus never moves, so the answer path is not involved). (#B319)
+
 ## 0.6.3 → 0.6.4
 
 ### Added — a framework-owned loading state for submit-like triggers
@@ -589,7 +916,8 @@ timeouts.
 **No action required** — pages without the marker behave byte-identically;
 upgrading changes nothing until you add the attribute. Ships in the browser
 bundle: **rebuild your bundles** to pick it up. Programmatic surface:
-`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`.
+`gina.nav.navigate(url)` and `gina.nav.matchUrl(pathname)`. Full guide:
+[Single-Page Apps Without a Frontend Framework](/guides/client-navigation).
 
 ### Changed — a non-positive session-store `ttl` is refused at bundle init
 
@@ -1409,7 +1737,7 @@ The SQLite ORM connector, the SQLite session store, the SQLite async-job store a
 
 ### Added — DuckDB connector
 
-New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/guides/duckdb-analytics).
+New embedded **analytical** (columnar / OLAP) connector: declare `"connector": "duckdb"` in `connectors.json` and write entity SQL the same way as with MySQL / PostgreSQL — including `WITH` CTEs, `SUMMARIZE`, `PIVOT`, and direct Parquet / CSV / JSON file querying without an ETL step. The `@duckdb/node-api` driver installs in your project, `readOnly` lets any number of processes share one database file, and big numeric types (BIGINT / DECIMAL / dates) arrive as JSON-safe strings. Additive — no action required. See the [DuckDB analytics guide](/data/duckdb-analytics).
 
 ### Fixed — Bun: a bundle declaring any connector boots again
 
@@ -1439,7 +1767,7 @@ startup warning naming the file and suggesting a rename (for example
 file matching a method your entity class itself defines still skips silently
 (your code wins, by design). If a warning appears on upgrade, it points at a
 query file that has never worked — rename it. See
-[reserved method names](/guides/duckdb-analytics#reserved-method-names--count-cannot-be-used).
+[reserved method names](/data/duckdb-analytics#reserved-method-names--count-cannot-be-used).
 
 ### Fixed — form submits no longer strand a sibling form's submit button
 
@@ -1665,7 +1993,7 @@ zone-less local-time string (`2026-07-26T21:04:11`), which a browser re-parses
 in *its own* timezone — so the countdown skewed by the offset between server and
 visitor. It is now an ISO 8601 UTC string (`2026-07-26T20:04:11.000Z`), matching
 the redis, sqlite, mongodb and scylladb stores and the shape already shown in
-the [Couchbase guide](/guides/couchbase-orm#document-shape).
+the [Couchbase guide](/data/couchbase-orm#document-shape).
 
 No action is required. Sessions written before the upgrade keep their old stamp
 until their next `touch()`, at which point they pick up the new format; nothing
@@ -4308,11 +4636,11 @@ When structured (JSON) logging is on, Gina now tags every log line emitted durin
 
 ### Also new — public SDK Cluster accessor on Couchbase entities
 
-Couchbase entities now expose a public `getCluster()` method that returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document ACID transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x); **no migration action required.** See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster).
+Couchbase entities now expose a public `getCluster()` method that returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document ACID transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x); **no migration action required.** See [Accessing the underlying SDK Cluster](/data/couchbase-orm#accessing-the-underlying-sdk-cluster).
 
 ### Also new — public MongoClient accessor on MongoDB entities
 
-MongoDB entities now expose a public `getClient()` method that returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs; **no migration action required.** See [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+MongoDB entities now expose a public `getClient()` method that returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs; **no migration action required.** See [Accessing the underlying MongoClient](/data/connectors-mongodb#accessing-the-underlying-mongoclient).
 
 ---
 
@@ -5208,7 +5536,7 @@ Install `cassandra-driver` in your project
 (`npm install cassandra-driver`) and declare a `connectors.json` entry
 with `"connector": "scylladb"`. Requires Node `>=20`.
 
-See [ScyllaDB ORM guide](/guides/scylladb-orm) for adoption.
+See [ScyllaDB ORM guide](/data/scylladb-orm) for adoption.
 
 ### What's available — MongoDB connector (#CN6)
 
@@ -5230,7 +5558,7 @@ Install `mongodb` in your project
 (`npm install mongodb`) and declare a `connectors.json` entry with
 `"connector": "mongodb"`.
 
-See [MongoDB ORM guide](/guides/connectors-mongodb) for adoption.
+See [MongoDB ORM guide](/data/connectors-mongodb) for adoption.
 
 ---
 

@@ -551,6 +551,16 @@ already send `X-Requested-With` and the framework already varies some behaviour 
 negotiation uses its own header to avoid changing what those plugins do.
 :::
 
+:::warning Nunjucks
+On the [nunjucks](/templating/nunjucks) engine a negotiated request currently returns the
+**full page** — the layoutless flag only filters assets there. Avoid `negotiate: true` on nunjucks
+`{% extends %}` routes for now; swig, the default engine, is the fully working path.
+:::
+
+The browser half of this — link interception, the swap region, history, focus and the full-page
+fallbacks — is the [SPA Navigation guide](/guides/client-navigation): SPA-style navigation with
+zero client-side framework.
+
 ---
 
 ## Per-route query timeout

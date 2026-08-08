@@ -88,7 +88,7 @@ internally, so `"home"` becomes `"home@frontend"` and is unique across the proje
 | `scopes` | — | current scope | Scopes where this route is active |
 | `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests (`self.query()`) made within this route's controller action. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |
 | `cache` | — | — | Response caching. See [Caching guide](../guides/caching) for the full field reference |
-| `negotiate` | — | `false` | Opt this route into content negotiation. A request carrying `X-Gina-Navigate: fragment` receives the route rendered **without its layout**; any other value — or no header — renders the full page as before. The response always advertises `Vary: X-Gina-Navigate`. Cannot be combined usefully with `cache` (a negotiable route is never cached). See [Content negotiation](../guides/routing.md#content-negotiation) |
+| `negotiate` | — | `false` | Opt this route into content negotiation. A request carrying `X-Gina-Navigate: fragment` receives the route rendered **without its layout**; any other value — or no header — renders the full page as before. The response always advertises `Vary: X-Gina-Navigate`. Cannot be combined usefully with `cache` (a negotiable route is never cached). See [Content negotiation](../guides/routing.md#content-negotiation); the browser half is the [SPA Navigation guide](../guides/client-navigation.md) |
 | `_comment` | — | — | Developer note, ignored by the framework |
 
 :::note

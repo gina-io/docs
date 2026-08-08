@@ -163,13 +163,16 @@ flowchart LR
 
 **"Bi-directional" is two unidirectional links** — each direction its own event-to-attribute wire. A shared two-way-bound observed model is the classic feedback-loop footgun (cycle guards, batching, digest problems); if a screen genuinely needs coordinated client state, the on-philosophy answer is more server round-trips, not a client state layer.
 
-A component inside a swapped fragment needs no observer at all — `connectedCallback` / `disconnectedCallback` **are** its fragment-change notifications. `MutationObserver` is sanctioned only over a component's own subtree; observing another component's internals couples you to markup you don't own.
+A component inside a swapped fragment needs no observer at all — `connectedCallback` / `disconnectedCallback` **are** its fragment-change notifications. Whole-page fragment swaps — [SPA Navigation](/guides/client-navigation) — rely on exactly this: components in the old content disconnect, components in the new content upgrade and connect, no wiring needed. `MutationObserver` is sanctioned only over a component's own subtree; observing another component's internals couples you to markup you don't own.
 
 ## Form participation
 
 A component can act as a form control. Declare `static formAssociated = true`, attach `ElementInternals` in the constructor (`this.internals_ = this.attachInternals()`), and call `internals.setFormValue(value)` on commit — the element then rides the form's submission and participates in gina's [FormValidator](/guides/forms-and-validation#form-associated-custom-elements) like a native input: collected, validated, serialized, and error-rendered by its field `name`. Give it a `name`, expose a `.value` getter, and dispatch a composed, bubbling `change` on commit; reflect validity through `internals.setValidity(...)` / `internals.ariaInvalid`. A named component rides the submission even without a rule, so validate it server-side like any other field.
 
 ## Components in popins and XHR-injected content
+
+For the popin plugin itself — attributes, preloading, modal modes and the
+`gina.popin` API — see the [Popins and Dialogs guide](/guides/popin).
 
 Custom elements inside a popin-injected body **upgrade automatically** — the platform handles it on DOM insertion, whatever template engine rendered the fragment server-side. The reference component's e2e coverage drives this against the real built bundle.
 

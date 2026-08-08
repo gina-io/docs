@@ -144,7 +144,7 @@ page loads, Gina:
 1. finds the form, resolves the `signup` rule set, and binds each named field;
 2. turns **live checking on** (it is on by default for any rule-bound form);
 3. tracks the `<button type="submit">` as the form's **submit control** and
-   marks it `aria-disabled` while the form is invalid;
+   marks it `data-gina-form-submit-gated` while the form is invalid;
 4. publishes the running instance as `window.gina.validator`.
 
 :::note Binding by form id
@@ -381,7 +381,8 @@ an **empty value**, and the standard required check adjudicates it:
 
 - at page load the form reads invalid, so under default-on
   [live checking](#live-checking) the [submit control](#the-submit-control)
-  starts out `aria-disabled` with the `gina-form-submit-disabled` class;
+  starts out marked `data-gina-form-submit-gated` with the
+  `gina-form-submit-disabled` class;
 - an attempted submit renders the group's error message and sends nothing —
   write a friendly message with
   [`setFlash`](/reference/validation-rules#setflash), or
@@ -407,6 +408,24 @@ its own members.
 
 ## The submit control
 
+Gina deliberately does **not** disable the submit control while the form is
+invalid. Disabling it until the form validates is the most widespread approach
+in the wild, but it tells the user *no* without telling them *why* and offers
+no route to find out — which is why the accessibility literature now treats
+disable-until-valid as an anti-pattern: a natively disabled control is skipped
+in the tab order, so a keyboard or screen-reader user can lose track of it
+entirely, and disabled styling routinely fails contrast. Gina keeps the control
+operable and answers an activation by revealing every invalid field and moving
+focus to the first one — the pattern that literature recommends instead.
+
+Further reading:
+[Don't Disable Form Controls](https://adrianroselli.com/2024/02/dont-disable-form-controls.html)
+(Adrian Roselli),
+[Disabled Buttons UX](https://smart-interface-design-patterns.com/articles/disabled-buttons/)
+(Smart Interface Design Patterns), and
+[Making Disabled Buttons More Inclusive](https://css-tricks.com/making-disabled-buttons-more-inclusive/)
+(CSS-Tricks).
+
 The form's submit control is the element Gina marks while the form is invalid.
 Gina discovers it automatically:
 
@@ -417,31 +436,66 @@ Gina discovers it automatically:
 You do not need to give the button an `id` — Gina assigns one if it is missing.
 
 While the form is invalid and live checking is on, Gina sets
-`aria-disabled="true"` on the control and adds the class
-`gina-form-submit-disabled`; both are cleared as soon as the form validates. It
-deliberately does **not** set the native `disabled` property — a natively
+`data-gina-form-submit-gated="true"` on the control and adds the class
+`gina-form-submit-disabled`; both are removed as soon as the form validates. It
+deliberately sets **neither** the native `disabled` property — a natively
 disabled button emits no click event, so clicking it would give the user no
-feedback at all. Left operable, a click still runs validation, revealing every
-invalid field and moving focus to the first one, while the send stays blocked.
+feedback at all — **nor** `aria-disabled`, which announces the control as not
+operable to assistive technology while Gina deliberately answers a click here:
+validation runs, every invalid field is revealed, and focus moves to the first
+one, while the send stays blocked. Before 0.6.5 this state was expressed with
+`aria-disabled="true"`; if your CSS or tests select on that attribute, see the
+[migration notes](/migration).
 
-The framework ships no CSS for this state, so style it yourself:
+Since 0.6.5 the framework ships a modest default look for the state —
+`cursor: not-allowed` plus `opacity: 0.7` on
+`[data-gina-form-submit-gated="true"]` — deliberately without
+`pointer-events: none`, which would swallow the very click the error reveal
+answers. The selector is a single attribute (specificity 0,1,0), so any class
+of your own wins:
 
 ```css
+[data-gina-form-submit-gated="true"] {
+    opacity: .55;
+}
+
+/* or the class hook, unchanged across versions */
 .gina-form-submit-disabled {
-    opacity: .5;
-    cursor: not-allowed;
+    outline: 2px dashed currentColor;
 }
 ```
 
-:::warning The gate is validity, not the attribute
-`aria-disabled` and `gina-form-submit-disabled` are presentation and
-assistive-technology signals — on their own they do not prevent submission. What
-actually blocks an invalid form is Gina's validity check at submit time, and
-that runs whether or not a submit control was discovered. There is no "block
-submit" data attribute. If a form has no discoverable submit control Gina logs a
-console warning and you lose the invalid-state affordance, but the form is still
-gated — so give every validated form a `<button type="submit">` or an
-`<a data-gina-form-submit="true">` for the affordance, not for the gate.
+Because the trigger is genuinely operable (not `aria-disabled`),
+disabled-control contrast exemptions do **not** apply — keep the dimmed style
+readable.
+
+:::warning The marker gates trusted gestures; the validity check gates everything else
+Since 0.6.4 these markers are no longer purely presentational: Gina refuses a
+click on a marked submit control outright — the invalid fields are revealed and
+the first is focused, but the send is never reached. Since 0.6.5 the same gate
+covers every **trusted gesture** into submit, read off the form's live
+registered trigger: Enter inside a field, and a click that lands on markup
+nested inside the button, such as
+`<button type="submit"><span>Save</span></button>`, are refused the same way
+while the trigger is marked.
+
+Programmatic routes — `form.requestSubmit()` and
+`gina.validator.$forms[formId].submit()` — are not gestures and are
+deliberately not gated by the marker. What blocks them is Gina's validity check
+at submit time, and that check runs whether or not a submit control was ever
+discovered.
+
+The gate also honours a disabled state you author yourself: a submit control
+you mark `aria-disabled="true"` (or natively `disabled`, where the browser does
+not already enforce it) is refused the same way — and since 0.6.5 Gina never
+auto-clears an `aria-disabled` you authored. It is yours until you remove it.
+
+So treat the markers as the affordance and the validity check as the guarantee.
+There is no "block submit" data attribute. If a form has no discoverable submit
+control Gina logs a console warning and you lose the invalid-state affordance,
+but the form is still gated — so give every validated form a
+`<button type="submit">` or an `<a data-gina-form-submit="true">` for the
+affordance, not for the gate.
 :::
 
 To override the HTTP method a submit link uses, add
@@ -449,20 +503,30 @@ To override the HTTP method a submit link uses, add
 
 ### Automated testing: a gated submit trigger and click delivery
 
-The disabled state described above is expressed with `aria-disabled="true"`
-and `.gina-form-submit-disabled`, never with the native `disabled` property.
-That is deliberate — see the rationale above — but it has one consequence
-worth knowing before you write a test, because the failure it produces does
-not look like a tooling problem.
+The not-ready state described above is expressed with
+`data-gina-form-submit-gated="true"` and `.gina-form-submit-disabled` — never
+with the native `disabled` property, and since 0.6.5 never with
+`aria-disabled`. For automated tests that is good news: driver actionability
+models key on native `disabled` and on `aria-disabled`, so a not-ready trigger
+is as clickable to Playwright, Selenium or Cypress as it is to a user — the
+click is delivered and answered with the error reveal, which is exactly the
+shipped behaviour a test wants to exercise. (Before 0.6.5 this state carried
+`aria-disabled="true"` and a driver could refuse the click as "not enabled";
+if a test of yours works around that with `force: true` or an in-page
+dispatch, the workaround is no longer needed here — it is harmless, but it
+also bypasses the actionability signal that would catch a genuinely stuck
+control.)
 
-A browser-automation driver whose actionability model treats
-`aria-disabled="true"` as "not enabled" will wait for the element to become
-enabled and then fail the step, **without ever dispatching a click** —
-Playwright's `locator.click()` is a measured instance; Selenium and Cypress
-apply their own interactability rules. Nothing in the page runs. There is no
-console error, no request, no state change — and the driver's own message
-names the element you targeted, which reads as though the element were at
-fault.
+One window still refuses clicks: **while a submit is in flight**, the trigger
+is genuinely locked — an `<a data-gina-form-submit="true">` carries
+`aria-disabled="true"` for the request's duration, other controls are natively
+`disabled`, and `data-gina-loading="true"` is set alongside. A driver that
+clicks inside that window waits for actionability and fails the step,
+**without ever dispatching a click** — Playwright's `locator.click()` is a
+measured instance; Selenium and Cypress apply their own interactability rules.
+Nothing in the page runs. There is no console error, no request, no state
+change — and the driver's own message names the element you targeted, which
+reads as though the element were at fault.
 
 The reason this is worth a note rather than a footnote: "I clicked it and
 nothing happened" and "the click was never delivered" produce identical
@@ -517,10 +581,11 @@ conclusive. The request count needs no such care — it is the internals-free
 route.
 
 :::warning
-Do not work around this by removing `aria-disabled` from the element. A
-trigger with the attribute stripped is not the control your users get, and a
-natively disabled button would leave the tab order and stop emitting events
-entirely — so neither substitute exercises the shipped behaviour.
+Do not work around a refused in-flight click by stripping `aria-disabled` or
+`disabled` from the locked trigger — a trigger with the lock removed is not
+the control your users get. Wait for the release instead:
+`data-gina-loading` flips to `"false"` the moment the request settles, and the
+lock attributes are removed with it.
 :::
 
 ---
@@ -545,8 +610,30 @@ attribute says *this popin is filling*, `data-gina-loading` on the trigger says
 one shared with submits and links, so a single rule covers every busy control on
 the page.
 
-A popin opened from a hover or focus preload that is still in flight does not
-mark its trigger yet; the click shows no busy state until the content lands.
+A popin opened from a hover or focus preload that is still in flight arms its
+trigger for that wait exactly like a cold load — `aria-disabled` on a link,
+native `disabled` on other controls, plus `data-gina-loading="true"` — and
+releases it when the preload settles, success or failure alike. An open served
+instantly from an already-cached preload never flashes a busy state: there is
+no wait to show.
+
+The popin side of all this — preloading, modal modes and the full attribute
+reference — is the [Popins and Dialogs guide](/guides/popin).
+:::
+
+:::note Link anchors need the link plugin activated
+Unlike validated forms and popin triggers, `<a data-gina-link>` anchors are not
+bound automatically on page load — the link plugin has no auto-boot. The
+attribute stays inert until the page activates the handler once:
+
+```js
+require(['gina/link'], function (LinkHandler) {
+    new LinkHandler({}).on('ready', function () {});
+});
+```
+
+On a page that never activates it, clicking such an anchor starts no request —
+and no `data-gina-loading` is ever written on it.
 :::
 
 ### Match the value, never the presence
@@ -1049,6 +1136,7 @@ anything that must be true before you act on the data.
 |---|---|
 | `data-gina-form-submit` | Marks an `<a>` as a submit control (anchors are not native form controls). |
 | `data-gina-form-submit-method` | Overrides the HTTP method a submit link uses. |
+| `data-gina-form-submit-gated` | Written by Gina on the submit control: `"true"` while the form is invalid under live checking, removed when it validates. Pairs with the `gina-form-submit-disabled` class; carries a default look since 0.6.5. Style `[data-gina-form-submit-gated="true"]`. See [The submit control](#the-submit-control). |
 
 ### Loading
 

@@ -143,6 +143,17 @@ Production bundles short-circuit the mtime probe entirely — load-once semantic
 
 `self.render({ user: { name: 'anya' } })` in a controller action then renders `home.njk` with the data merged into the page context.
 
+## Content negotiation (`negotiate: true`)
+
+:::warning Not supported on nunjucks yet
+A route declaring [`negotiate: true`](/guides/routing#content-negotiation) on a nunjucks bundle
+currently answers a fragment request (`X-Gina-Navigate: fragment`) with the **full page** — the
+layoutless flag only filters the asset list on this engine, and native `{% extends %}` resolves
+the real layout regardless. [SPA navigation](/guides/client-navigation) would swap an entire
+nested page into the region. Avoid `negotiate: true` on nunjucks `{% extends %}` routes until
+this is resolved; swig — the default engine — is the fully working path.
+:::
+
 ## Registering custom filters
 
 **Since `0.3.7-alpha.4` Gina's built-in filter registry is automatically registered on the nunjucks environment on every request.** The seven public filters are the same as on the swig path: `getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`. You can use them directly in templates without any setup:

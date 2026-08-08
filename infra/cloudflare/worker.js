@@ -215,6 +215,20 @@ export default {
       return Response.redirect('https://gina.io' + TEMPLATING_REDIRECTS[trimmed] + url.search, 301);
     }
 
+    // 301 redirects for the ORM / database guide pages re-homed under /data/
+    // (2026-08-07 Data umbrella, mirroring the Templating restructure above).
+    // Edge 301s preserve SEO equity; paired with meta-refresh redirects in
+    // docusaurus.config.js as a fallback for direct-to-Vercel access.
+    const DATA_REDIRECTS = {
+      '/docs/guides/couchbase-orm':      '/docs/data/couchbase-orm',
+      '/docs/guides/scylladb-orm':       '/docs/data/scylladb-orm',
+      '/docs/guides/connectors-mongodb': '/docs/data/connectors-mongodb',
+      '/docs/guides/duckdb-analytics':   '/docs/data/duckdb-analytics',
+    };
+    if (DATA_REDIRECTS[trimmed]) {
+      return Response.redirect('https://gina.io' + DATA_REDIRECTS[trimmed] + url.search, 301);
+    }
+
     // 301 redirects for CLI reference pages served under id-form URLs. Each
     // `docs/cli/<file>.md` has `id: cli-<file>` frontmatter which Docusaurus
     // uses as the URL slug, so the canonical URL is `/docs/cli/cli-<file>`.

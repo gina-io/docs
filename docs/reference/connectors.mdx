@@ -42,10 +42,10 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [MySQL / MariaDB](#mysql) | Relational | Primary application data | ⚠️ Partial — single server by default; Galera Cluster or managed service for multi-node | ✅ Available (v0.3.0) |
 | [PostgreSQL](#postgresql) | Relational | Primary application data | ⚠️ Partial — single server by default; Patroni or managed service for multi-node | ✅ Available (v0.3.0) |
 | [Redis](#redis) | Key-value store | Session store | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
-| [SQLite](#sqlite) | Embedded relational | Session store — dev, staging | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
+| [SQLite](#sqlite-data-connector) | Embedded relational | Application data & sessions — dev, staging, single-pod | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
-| [ScyllaDB / Cassandra](/guides/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
-| [DuckDB](/guides/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
+| [ScyllaDB / Cassandra](/data/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |
+| [DuckDB](/data/duckdb-analytics) | Embedded analytical (columnar / OLAP) | In-process analytics & reporting | ❌ No — embedded file; single writer across processes (read-only sharing supported) | ✅ Available (v0.6.1) |
 
 ---
 
@@ -281,7 +281,7 @@ For the full ORM workflow — JSON pipeline files at
 annotations, BSON type casting, and the eleven supported operations
 (`findOne` / `find` / `aggregate` / `countDocuments` / `insertOne` /
 `insertMany` / `updateOne` / `updateMany` / `replaceOne` / `deleteOne` /
-`deleteMany`) — see the [MongoDB ORM guide](/guides/connectors-mongodb).
+`deleteMany`) — see the [MongoDB ORM guide](/data/connectors-mongodb).
 
 The same connector also backs the **MongoDB session store** — TTL index
 auto-created on first `set()`, with `expiresAt > now` filtering on reads to
@@ -349,6 +349,10 @@ npm install mysql2
 | `connectionLimit` | number | `10` | Maximum number of connections in the pool |
 | `ssl` | object | — | SSL options passed directly to `mysql2`. See [mysql2 SSL docs](https://github.com/sidorares/node-mysql2#ssl-options) |
 
+For the full ORM workflow — entity classes, SQL files with `?` placeholders,
+`@param`/`@return` annotations, pooling and transactions — see the
+[MySQL ORM guide](/data/mysql-orm).
+
 ---
 
 ### PostgreSQL
@@ -414,6 +418,68 @@ npm install pg
 | `connectionTimeout` | number | `2000` | Milliseconds to wait for a connection before timing out (`connectionTimeoutMillis`) |
 | `ssl` | object | — | SSL options passed directly to `pg`. See [node-postgres SSL docs](https://node-postgres.com/features/ssl) |
 
+For the full ORM workflow — entity classes, SQL files with `$1`, `$2`, …
+placeholders, `@param`/`@return` annotations, pool tuning and transactions —
+see the [PostgreSQL ORM guide](/data/postgresql-orm).
+
+---
+
+### SQLite {#sqlite-data-connector}
+
+Gina's SQLite data connector uses the Node.js built-in `node:sqlite` module — zero npm
+dependencies. Requires Node.js ≥ 22.5.0.
+
+Use SQLite for local development, staging, and single-pod production data. It is an
+embedded file (one process at a time), so it cannot be shared across pods — but it
+needs no server, no credentials, and no setup, and the entity/ORM layer over it is
+the same one the other relational connectors use.
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector": "sqlite",
+    "database" : "mydb"
+  }
+}
+```
+
+With only `database` set, the file lives in the gina home directory at
+`~/.gina/<database>.sqlite` — outside your project, and not under version
+control. Add a `file` key to place it explicitly:
+
+```json title="src/api/config/connectors.json"
+{
+  "mydb": {
+    "connector": "sqlite",
+    "database" : "mydb",
+    "file"     : "/app/data/mydb.sqlite"
+  }
+}
+```
+
+**Field reference**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connector` | `"sqlite"` | — | Selects the SQLite connector |
+| `database` | string | — | Database name — a logical name, never a path. Also names the model directory (`models/<database>/`) and, when `file` is absent, the default file location |
+| `file` | string | `~/.gina/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
+
+Entities and `.sql` query files work over SQLite exactly like the other relational
+connectors — `?` positional placeholders, `@param` casting, `@return` shapes — with
+statements pre-compiled at startup via `conn.prepare()`. That boot-time compile means
+your tables must exist **before** the bundle starts: a statement naming a missing
+table fails to compile, and the failure is remembered for the life of the process.
+For the full ORM workflow, see the [SQLite ORM guide](/data/sqlite-orm); the
+[Link Shortener tutorial](/tutorials/link-shortener) is a complete walkthrough,
+including a schema-migration script.
+
+The same connector also backs the **SQLite session store** — see the
+[session store section below](#sqlite). Note the two roles read the config
+differently: in a `session` entry, `database` is the SQLite file path itself
+(or `":memory:"`), while in a data entry `database` is the model/database name
+and the optional `file` key carries the path.
+
 ---
 
 ## AI / LLM connectors {#ai}
@@ -477,8 +543,13 @@ controller examples. Field reference below.
 
 ## Session store connectors
 
-Session store connectors back Gina's session layer. They do not expose an ORM and are
-not used directly by model entities. Choose one based on your deployment topology.
+Session store connectors back Gina's session layer. This section documents each store
+in its **session role only** — a `session` entry is not used by model entities, and it
+is independent of any data-connector entry pointing at the same store. The stores
+themselves are not session-only: of the five below, Redis is the only one without an
+ORM. SQLite ([above](#sqlite-data-connector)), Couchbase, MongoDB and ScyllaDB are
+all full data connectors with their own entity/ORM layer. Choose one based on your
+deployment topology.
 The entry must be named `session` — the `SessionStore` factory resolves it from
 `express-session`'s function name, which is read-only (see the
 [Sessions guide](../guides/sessions#configuring-the-store)).
@@ -680,7 +751,7 @@ store reads nothing from that file.
 | `connectionTimeout` | number | `10000` | Connect-time timeout in ms |
 | `operationTimeout` | number | `10000` | Per-operation timeout in ms |
 
-See the [Couchbase ORM guide](../guides/couchbase-orm) for the bucket-handle wiring and
+See the [Couchbase ORM guide](../data/couchbase-orm) for the bucket-handle wiring and
 the TTL strategy, and the [Sessions guide](../guides/sessions#configuring-the-store) for
 the surrounding `express-session` setup.
 
@@ -757,7 +828,7 @@ A `mongodb+srv://` URI works as-is — use it for Atlas and any SRV-discovered r
 
 Every field above may also be passed directly to the `MongodbStore` constructor, which
 takes precedence over the `connectors.json` entry. See the
-[MongoDB connector guide](../guides/connectors-mongodb).
+[MongoDB connector guide](../data/connectors-mongodb).
 
 ---
 
@@ -830,7 +901,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 
 Every field above may also be passed directly to the `ScylladbStore` constructor, which
 takes precedence over the `connectors.json` entry. See the
-[ScyllaDB ORM guide](../guides/scylladb-orm).
+[ScyllaDB ORM guide](../data/scylladb-orm).
 
 ---
 
@@ -878,8 +949,8 @@ driver handle, so there is nothing extra to reach — start a transaction (or an
 driver-level operation) on it directly. Couchbase and MongoDB are the only two
 whose `getConnection()` returns a narrower handle than transactions need, so they
 add `getCluster()` / `getClient()` to resolve the level above without reaching
-into private internals. See [Accessing the underlying SDK Cluster](/guides/couchbase-orm#accessing-the-underlying-sdk-cluster)
-and [Accessing the underlying MongoClient](/guides/connectors-mongodb#accessing-the-underlying-mongoclient).
+into private internals. See [Accessing the underlying SDK Cluster](/data/couchbase-orm#accessing-the-underlying-sdk-cluster)
+and [Accessing the underlying MongoClient](/data/connectors-mongodb#accessing-the-underlying-mongoclient).
 
 ---
 

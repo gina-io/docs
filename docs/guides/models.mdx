@@ -20,6 +20,10 @@ The model layer is where database interaction lives in a Gina bundle. It is buil
 framework automatically wires up as callable methods. Controllers never touch a database
 connection directly: they call entity methods and `await` the result.
 
+This guide teaches the entity model itself, which is the same over every store. For the
+per-store deep-dives — Couchbase, ScyllaDB, MongoDB, DuckDB — and a comparison of all
+supported connectors, see the [Data section](/data/).
+
 ---
 
 ## How it works
@@ -170,6 +174,9 @@ db.userEntity       // UserEntity instance
 db.orderEntity      // OrderEntity instance
 db._connection      // raw database connection (avoid using directly)
 ```
+
+A bare-name alias without the `Entity` suffix is registered for every entity —
+`db.user` and `db.userEntity` are the same object; use whichever reads better.
 
 For cross-bundle access, pass the bundle name as the second argument:
 
@@ -414,7 +421,7 @@ The braces are required, and any other key (`adhoc`, `profile`, `timeout`, …) 
 only when `consistency` is present alongside it — `@options { adhoc: true }` on its own is
 ignored (silently before 0.5.26; with a logged warning from 0.5.26). Always include an
 explicit `consistency`. See
-[Couchbase ORM → `@options` annotations](/guides/couchbase-orm) for the full table.
+[Couchbase ORM → `@options` annotations](/data/couchbase-orm) for the full table.
 
 **`@include` — sub-file composition**
 
@@ -667,6 +674,17 @@ A malformed `transientErrors` block (a string `"true"`, an out-of-range
 ignored key, and the feature stays off — it never refuses a boot. If you also
 configure a [custom error page](/guides/error-pages) for `503` (or `5xx`), it
 receives the cleaned-up `error` text in its template data.
+
+### Transactions
+
+There is no transaction annotation in the SQL-file layer — transactions are a
+driver-level feature. When you need one, ask the entity for the underlying driver
+handle: every data-connector entity exposes `getConnection()`, and for the SQL
+connectors what it returns **is** the driver pool / database handle, so you start
+the transaction on it directly. Couchbase and MongoDB return a narrower handle and
+add `getCluster()` / `getClient()` for the level above. See
+[Reaching the underlying driver handle](/reference/connectors#reaching-the-underlying-driver-handle)
+for the per-connector table.
 
 ---
 

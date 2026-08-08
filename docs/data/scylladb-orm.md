@@ -1,7 +1,8 @@
 ---
+displayed_sidebar: dataSidebar
 title: ScyllaDB / Cassandra ORM for Node.js
 sidebar_label: ScyllaDB ORM
-sidebar_position: 24
+sidebar_position: 3
 description: Gina provides a ScyllaDB / Cassandra Node.js ORM via cassandra-driver — entity classes with CQL prepared statements, @param type casting, LWT [applied] handling, and a session store using CQL USING TTL.
 level: intermediate
 prereqs:
@@ -350,8 +351,8 @@ tables. Avoid in hot paths.
 
 If your workload is heavily relational, prefer
 [PostgreSQL](/guides/models) or [MySQL](/guides/models). If you need a
-document store, prefer [Couchbase](/guides/couchbase-orm) or
-[MongoDB](/guides/connectors-mongodb).
+document store, prefer [Couchbase](/data/couchbase-orm) or
+[MongoDB](/data/connectors-mongodb).
 
 ---
 

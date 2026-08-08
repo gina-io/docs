@@ -1,0 +1,90 @@
+---
+displayed_sidebar: dataSidebar
+title: Data
+sidebar_label: Overview
+sidebar_position: 1
+description: Gina's data layer at a glance — one entity/ORM model over nine connectors. Compare Couchbase, MongoDB, MySQL, PostgreSQL, ScyllaDB, Redis, SQLite, DuckDB and the AI connector, then go deep on the store you picked.
+level: beginner
+prereqs:
+  - '[Models and entities](/guides/models)'
+  - '[connectors.json reference](/reference/connectors)'
+---
+
+import DocMeta from '@site/src/components/DocMeta';
+
+<DocMeta />
+
+# Data
+
+Gina talks to databases through **one entity model**: you declare a connection
+in `connectors.json`, write entity classes with query files next to them, and
+call them from controllers — the same shape whatever the store. The
+[Models and entities guide](/guides/models) teaches that model once; this
+section goes deep on individual stores.
+
+## Supported connectors
+
+| Connector | Type | Primary use | Distributed |
+|---|---|---|---|
+| [Couchbase](/data/couchbase-orm) | Document store (N1QL) | Primary application data | ✅ Multi-node cluster, automatic failover |
+| [MongoDB](/data/connectors-mongodb) | Document store | Primary application data | ✅ Replica sets, sharding |
+| [ScyllaDB / Cassandra](/data/scylladb-orm) | Wide-column | High-throughput application data | ✅ Distributed by design |
+| [MySQL / MariaDB](/data/mysql-orm) | Relational | Primary application data | ⚠️ Single server by default |
+| [PostgreSQL](/data/postgresql-orm) | Relational | Primary application data | ⚠️ Single server by default |
+| [Redis](/reference/connectors#redis) | Key-value store | Session store | ✅ Cluster / Sentinel |
+| [SQLite](/data/sqlite-orm) | Embedded relational | Application data & sessions — dev, staging | ❌ File-based, single process |
+| [DuckDB](/data/duckdb-analytics) | Embedded analytical (OLAP) | In-process analytics & reporting | ❌ Embedded file; read-only sharing |
+| [AI / LLM](/guides/ai) | LLM provider | Generative AI in controllers | — Stateless API calls |
+
+Seven stores have a dedicated deep-dive in this section; Redis — a session
+store, not an ORM — is covered by the
+[connectors.json reference](/reference/connectors#redis) and the
+[Sessions guide](/guides/sessions). The reference documents every connection
+key for all of them.
+
+## Choosing a store
+
+The most important question is your **deployment model** — one process, or
+many? SQLite and DuckDB are in-process files; everything else supports
+concurrent access from multiple bundles or pods. The
+[connectors.json reference](/reference/connectors#choosing-the-right-connector)
+walks the decision tree.
+
+Two rules of thumb on top of it:
+
+- **Primary application data** → Couchbase, MongoDB, MySQL/MariaDB, PostgreSQL,
+  or ScyllaDB. Pick by data shape (documents vs relations vs wide rows), not by
+  framework fit — the entity layer is the same over all of them.
+- **A store can serve double duty.** Couchbase, ScyllaDB, MongoDB, Redis and
+  SQLite can all back [sessions](/guides/sessions); DuckDB reads your Parquet /
+  CSV exports without an ETL step.
+
+## The shape you write, whatever the store
+
+```js
+// entities/user.js — identical structure over any connector
+UserEntity = function(conn) {
+    var self = this;
+    // queries live in files next to the entity:
+    //   Couchbase → N1QL, ScyllaDB → CQL, MongoDB → JSON pipelines,
+    //   MySQL / PostgreSQL / DuckDB → SQL
+    self.onReady = function(err, user) { /* … */ };
+};
+```
+
+Entities are EventEmitters; queries are files, not strings in code; `$scope`
+gives multi-tenant isolation on the stores that support it; and the dev-mode
+Inspector shows every query a request ran, whichever connector executed it.
+
+## Related
+
+- [Models and entities](/guides/models) — the entity system itself: lifecycle,
+  triggers, scopes, transients.
+- [connectors.json reference](/reference/connectors) — every connection key,
+  for every connector.
+- [Sessions](/guides/sessions) — the session-store side of Redis, SQLite,
+  Couchbase, ScyllaDB and MongoDB.
+- [Link Shortener tutorial](/tutorials/link-shortener) — build a complete app
+  on the SQLite ORM: entities, query files, a schema migration, async actions.
+- [AI connector](/guides/ai) — LLM providers through the same connector
+  discipline.
