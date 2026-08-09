@@ -103,6 +103,24 @@ stdout.
 **Action required:** none. If you pinned to an earlier release, or set
 `GINA_LOG_STDOUT=true` purely to work around missing logs, you can lift both.
 
+### Fixed — a link request belongs to the anchor you clicked (no action required)
+
+Two `<a data-gina-link>` anchors sharing one url no longer collapse onto
+whichever appeared first in the document. Up to 0.6.5 the plugin resolved the
+request's anchor from the url — first registration wins — so clicking the
+second same-url anchor armed the **first** one's `data-gina-loading`, read the
+first one's `data-gina-link-event-on-*` attributes, and fired the first one's
+XHR events. The clicked anchor now owns all of it, on both dispatch paths (a
+direct click on the anchor, and a click on a nested child element). The
+programmatic `gina.link.request(url)` call keeps resolving the first
+registration matching the url — a bare url is all it has.
+
+Also fixed in the same release: constructing the link handler a second time no
+longer merges the second instance into the live published `gina.link`. The
+first activated instance is published once — matching how the popin and nav
+plugins already publish — and pages constructing a single handler, the common
+case, behave identically.
+
 ---
 
 ## 0.6.4 → 0.6.5
