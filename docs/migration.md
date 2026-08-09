@@ -60,6 +60,49 @@ For containerized deployments, `bin/gina-container` with
 `GINA_LOG_STDOUT=true` remains the recommended shape — it writes JSON lines
 straight to container stdout and skips the MQ transport entirely.
 
+### Fixed — a slow boot no longer silences logging, and the log transport reconnects (no action required)
+
+Two defects in the MQ log speaker, one of them a regression introduced in
+0.6.5.
+
+**A slow boot could silence a bundle's logs permanently.** 0.6.5 added a
+two-second deadline so that an unreachable MQ host could not stall a process
+(see the 0.6.4 → 0.6.5 notes below). That deadline checked the socket's
+`connecting` flag from a *timer* — but Node clears that flag in the **poll**
+phase, which runs *after* timers within the same loop iteration:
+
+```mermaid
+flowchart LR
+    T["timers phase<br/>(the deadline fires here)"] --> P["poll phase<br/>(the connect completes here,<br/>clearing 'connecting')"]
+    P --> C["check phase<br/>(setImmediate)"]
+    C --> T
+```
+
+So a boot that blocked the event loop for longer than the deadline — a
+container start, or a bundle mounting off a network filesystem — resumed, ran
+the now-overdue deadline **first**, read a flag that had not been updated yet,
+and destroyed a connection the kernel had already established. Because the
+speaker dialled only once, the bundle then logged nowhere for the rest of its
+life: no error after the first, and every boot line before it still reading
+healthy. The deadline now reaches its verdict one phase later, after poll has
+had its turn, so it can no longer cancel a connection that completed — while a
+genuinely unreachable host is still given up on just as promptly.
+
+**The log transport now reconnects.** The speaker previously dialled the MQ
+listener exactly once, ever, so anything that ended that connection — a daemon
+restart, an out-of-memory kill of the listener, a container probe — left the
+bundle logging nowhere with nothing to say so. It now redials when the
+connection closes, backing off exponentially to a 30-second ceiling and
+logging a `reconnected` notice when it recovers; a failure is reported once
+per outage rather than once per attempt. Short-lived CLI processes still exit
+immediately (the retry timer never holds the event loop open), and frames
+emitted while the transport is down are dropped rather than queued, so a long
+outage cannot grow memory — the `default` flow still carries those lines to
+stdout.
+
+**Action required:** none. If you pinned to an earlier release, or set
+`GINA_LOG_STDOUT=true` purely to work around missing logs, you can lift both.
+
 ---
 
 ## 0.6.4 → 0.6.5
