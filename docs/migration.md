@@ -121,6 +121,34 @@ first activated instance is published once — matching how the popin and nav
 plugins already publish — and pages constructing a single handler, the common
 case, behave identically.
 
+### Fixed — the popin `success` event fires (action may be required)
+
+A popin whose JSON response carried neither a `location` redirect nor a
+`reload` instruction raised `error` instead of `success` — and because the
+error branch replaces its payload with the parsed response body, that error
+arrived with an HTTP `422` status carrying the *successful* response itself.
+It read as a server-side validation failure that had never happened, while
+subscribers to `success` received nothing at all.
+
+Every popin JSON load taking that branch was affected, so the event has been
+unreachable rather than intermittently broken.
+
+**Action required if** you worked around this by subscribing to `error` and
+inspecting its payload to detect success. Move that handler to `success`:
+
+```js
+// Before — the workaround
+gina.popin.on('error', function (e, res) {
+    if (res.status === 422 && looksLikeSuccess(res)) { /* … */ }
+});
+
+// After
+gina.popin.on('success', function (e, res) { /* … */ });
+```
+
+The `progress` and `click` events remain registered but still never fire;
+their disposition is tracked separately.
+
 ---
 
 ## 0.6.4 → 0.6.5
