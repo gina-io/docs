@@ -19,6 +19,138 @@ upward to the target version.
 
 ---
 
+## 0.6.5 → 0.6.6
+
+### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)
+
+The MQ speaker and the file log container — the transports that carry every
+runtime log line from a bundle process to the framework daemon's MQ listener —
+no longer dial `host_v4`. Their listener runs on the same machine by
+construction (it is started by the same install's `gina` daemon), while
+`host_v4` describes the address *external* clients use to reach the machine.
+On a framework home (`~/.gina`) shared across hosts — where every host
+rewrites `settings.json` at boot with its own address — or after a stale
+address was left behind, `host_v4` could name *another* machine, and up to
+0.6.5 the transports dialled it verbatim: every application log line was
+silently shipped off-host (the connect succeeds, so every boot line reads
+healthy), leaving `gina tail`, the file sink, and container logs with boot
+output only.
+
+Both transports now resolve their dial from the bind side only:
+`GINA_BIND_HOST` (env), then `settings.bind_host`. A concrete, non-wildcard
+address of the local machine is dialled; anything else — wildcard, absent,
+foreign, or a hostname — stays on loopback.
+
+**Action required only if** you deliberately pointed `host_v4` (or
+`GINA_HOST_V4`) at a remote machine to ship logs cross-host. That was never a
+supported topology (the MQ listener binds loopback by default), and it no
+longer has any effect on these two transports. Use structured stdout logging
+(`GINA_LOG_FORMAT=json`) with a log collector, or the Inspector agent
+endpoint for authenticated remote log streaming.
+
+**Unchanged:** `gina tail` and the CLI command socket keep the 0.6.0 dial
+resolution, including the ability to reach a genuinely remote daemon — remote
+administration is unaffected. The bind side (`bind_host`) is untouched.
+
+**Deployment note — the framework home is per-host state.** Do not share one
+`~/.gina` across hosts or container replicas: `settings.json` carries
+per-host values (`host_v4`, ports) and every boot rewrites it, so replicas
+race each other's state. Give each host or replica its own `GINA_HOMEDIR`.
+For containerized deployments, `bin/gina-container` with
+`GINA_LOG_STDOUT=true` remains the recommended shape — it writes JSON lines
+straight to container stdout and skips the MQ transport entirely.
+
+### Fixed — a slow boot no longer silences logging, and the log transport reconnects (no action required)
+
+Two defects in the MQ log speaker, one of them a regression introduced in
+0.6.5.
+
+**A slow boot could silence a bundle's logs permanently.** 0.6.5 added a
+two-second deadline so that an unreachable MQ host could not stall a process
+(see the 0.6.4 → 0.6.5 notes below). That deadline checked the socket's
+`connecting` flag from a *timer* — but Node clears that flag in the **poll**
+phase, which runs *after* timers within the same loop iteration:
+
+```mermaid
+flowchart LR
+    T["timers phase<br/>(the deadline fires here)"] --> P["poll phase<br/>(the connect completes here,<br/>clearing 'connecting')"]
+    P --> C["check phase<br/>(setImmediate)"]
+    C --> T
+```
+
+So a boot that blocked the event loop for longer than the deadline — a
+container start, or a bundle mounting off a network filesystem — resumed, ran
+the now-overdue deadline **first**, read a flag that had not been updated yet,
+and destroyed a connection the kernel had already established. Because the
+speaker dialled only once, the bundle then logged nowhere for the rest of its
+life: no error after the first, and every boot line before it still reading
+healthy. The deadline now reaches its verdict one phase later, after poll has
+had its turn, so it can no longer cancel a connection that completed — while a
+genuinely unreachable host is still given up on just as promptly.
+
+**The log transport now reconnects.** The speaker previously dialled the MQ
+listener exactly once, ever, so anything that ended that connection — a daemon
+restart, an out-of-memory kill of the listener, a container probe — left the
+bundle logging nowhere with nothing to say so. It now redials when the
+connection closes, backing off exponentially to a 30-second ceiling and
+logging a `reconnected` notice when it recovers; a failure is reported once
+per outage rather than once per attempt. Short-lived CLI processes still exit
+immediately (the retry timer never holds the event loop open), and frames
+emitted while the transport is down are dropped rather than queued, so a long
+outage cannot grow memory — the `default` flow still carries those lines to
+stdout.
+
+**Action required:** none. If you pinned to an earlier release, or set
+`GINA_LOG_STDOUT=true` purely to work around missing logs, you can lift both.
+
+### Fixed — a link request belongs to the anchor you clicked (no action required)
+
+Two `<a data-gina-link>` anchors sharing one url no longer collapse onto
+whichever appeared first in the document. Up to 0.6.5 the plugin resolved the
+request's anchor from the url — first registration wins — so clicking the
+second same-url anchor armed the **first** one's `data-gina-loading`, read the
+first one's `data-gina-link-event-on-*` attributes, and fired the first one's
+XHR events. The clicked anchor now owns all of it, on both dispatch paths (a
+direct click on the anchor, and a click on a nested child element). The
+programmatic `gina.link.request(url)` call keeps resolving the first
+registration matching the url — a bare url is all it has.
+
+Also fixed in the same release: constructing the link handler a second time no
+longer merges the second instance into the live published `gina.link`. The
+first activated instance is published once — matching how the popin and nav
+plugins already publish — and pages constructing a single handler, the common
+case, behave identically.
+
+### Fixed — the popin `success` event fires (action may be required)
+
+A popin whose JSON response carried neither a `location` redirect nor a
+`reload` instruction raised `error` instead of `success` — and because the
+error branch replaces its payload with the parsed response body, that error
+arrived with an HTTP `422` status carrying the *successful* response itself.
+It read as a server-side validation failure that had never happened, while
+subscribers to `success` received nothing at all.
+
+Every popin JSON load taking that branch was affected, so the event has been
+unreachable rather than intermittently broken.
+
+**Action required if** you worked around this by subscribing to `error` and
+inspecting its payload to detect success. Move that handler to `success`:
+
+```js
+// Before — the workaround
+gina.popin.on('error', function (e, res) {
+    if (res.status === 422 && looksLikeSuccess(res)) { /* … */ }
+});
+
+// After
+gina.popin.on('success', function (e, res) { /* … */ });
+```
+
+The `progress` and `click` events remain registered but still never fire;
+their disposition is tracked separately.
+
+---
+
 ## 0.6.4 → 0.6.5
 
 ### Changed — the not-ready submit-trigger marker is `data-gina-form-submit-gated`, no longer `aria-disabled` (action may be required)
