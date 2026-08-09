@@ -19,6 +19,49 @@ upward to the target version.
 
 ---
 
+## 0.6.5 → 0.6.6
+
+### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)
+
+The MQ speaker and the file log container — the transports that carry every
+runtime log line from a bundle process to the framework daemon's MQ listener —
+no longer dial `host_v4`. Their listener runs on the same machine by
+construction (it is started by the same install's `gina` daemon), while
+`host_v4` describes the address *external* clients use to reach the machine.
+On a framework home (`~/.gina`) shared across hosts — where every host
+rewrites `settings.json` at boot with its own address — or after a stale
+address was left behind, `host_v4` could name *another* machine, and up to
+0.6.5 the transports dialled it verbatim: every application log line was
+silently shipped off-host (the connect succeeds, so every boot line reads
+healthy), leaving `gina tail`, the file sink, and container logs with boot
+output only.
+
+Both transports now resolve their dial from the bind side only:
+`GINA_BIND_HOST` (env), then `settings.bind_host`. A concrete, non-wildcard
+address of the local machine is dialled; anything else — wildcard, absent,
+foreign, or a hostname — stays on loopback.
+
+**Action required only if** you deliberately pointed `host_v4` (or
+`GINA_HOST_V4`) at a remote machine to ship logs cross-host. That was never a
+supported topology (the MQ listener binds loopback by default), and it no
+longer has any effect on these two transports. Use structured stdout logging
+(`GINA_LOG_FORMAT=json`) with a log collector, or the Inspector agent
+endpoint for authenticated remote log streaming.
+
+**Unchanged:** `gina tail` and the CLI command socket keep the 0.6.0 dial
+resolution, including the ability to reach a genuinely remote daemon — remote
+administration is unaffected. The bind side (`bind_host`) is untouched.
+
+**Deployment note — the framework home is per-host state.** Do not share one
+`~/.gina` across hosts or container replicas: `settings.json` carries
+per-host values (`host_v4`, ports) and every boot rewrites it, so replicas
+race each other's state. Give each host or replica its own `GINA_HOMEDIR`.
+For containerized deployments, `bin/gina-container` with
+`GINA_LOG_STDOUT=true` remains the recommended shape — it writes JSON lines
+straight to container stdout and skips the MQ transport entirely.
+
+---
+
 ## 0.6.4 → 0.6.5
 
 ### Changed — the not-ready submit-trigger marker is `data-gina-form-submit-gated`, no longer `aria-disabled` (action may be required)
