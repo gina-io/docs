@@ -19,6 +19,39 @@ upward to the target version.
 
 ---
 
+## 0.6.6 → 0.6.7
+
+### Added — object storage (no action required)
+
+A new optional `storage` block in `settings.json` declares named storage
+drivers, reachable from application code as `gina.storage()`. Existing projects
+are unaffected: with no `storage` block the feature is inert, and the upload
+path — `self.store()`, the multipart handler, and every `upload` group setting —
+behaves exactly as before.
+
+If you adopt it, three things are worth knowing up front because they are
+enforced at boot rather than at first use:
+
+- A driver `root` must be **absolute**, and must sit **outside every
+  web-served directory** (any bundle's `publicPath`, and any `content.statics`
+  target). A root inside one would make stored objects publicly fetchable
+  without passing your authorization, so the boot refuses it.
+- `maxObjectSize` takes a **unit-suffixed string** (`"50MB"`). A bare number
+  warns and falls back to the default — deliberately stricter than
+  `upload.maxFieldsSize`, where a bare number means megabytes for backward
+  compatibility.
+- The default metadata backend is an embedded SQLite file inside the driver
+  root and is **single-process per root**. If several bundles or replicas share
+  one root, point the driver's `store` at a `connectors.json` entry instead.
+
+Keys returned by `put()` are **opaque** — store them, but never parse one or
+build one by hand; that is what lets the key layout change later without
+breaking anything already stored.
+
+See [Object storage](/guides/storage) for the full guide.
+
+---
+
 ## 0.6.5 → 0.6.6
 
 ### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)
