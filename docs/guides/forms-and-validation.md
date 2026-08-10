@@ -451,8 +451,10 @@ Since 0.6.5 the framework ships a modest default look for the state —
 `cursor: not-allowed` plus `opacity: 0.7` on
 `[data-gina-form-submit-gated="true"]` — deliberately without
 `pointer-events: none`, which would swallow the very click the error reveal
-answers. The selector is a single attribute (specificity 0,1,0), so any class
-of your own wins:
+answers. The default lives in the `gina` cascade layer, so **any rule of your
+own overrides it** — whatever its specificity, wherever your stylesheet loads
+(see [the default look](#the-default-look-and-how-to-replace-it) for the full
+contract):
 
 ```css
 [data-gina-form-submit-gated="true"] {
@@ -684,14 +686,29 @@ Gina ships a deliberately minimal default: a `progress` cursor plus a gentle
 opacity pulse, with the pulse gated on `prefers-reduced-motion: no-preference`
 and a static dim for anyone who has asked for reduced motion.
 
-The selector is a single attribute, so any class of your own overrides it:
+Every default look — this one and the
+[submit-gated look](#the-submit-control) — ships inside a CSS cascade layer
+named `gina`, and that is the override contract: **any rule of your own that is
+not itself in a layer beats Gina's, regardless of selector specificity or of
+which stylesheet loads first.** Framework defaults sit below your CSS the same
+way user-agent defaults sit below author CSS. You do not need to know Gina's
+selectors, out-specificity them, or control the `<link>` order:
 
 ```css
+/* any of these wins over the default, as-is */
+button { cursor: wait; }
+
 .btn[data-gina-loading="true"] {
     animation: none;   /* drop just the motion */
     opacity: 1;
 }
 ```
+
+If your project organises its own CSS in cascade layers, order yourself against
+Gina explicitly — declare `@layer gina, app;` early in your first stylesheet so
+your layer outranks Gina's. In a browser without cascade-layer support the
+default look simply drops out: the attributes are still written, and your own
+CSS keyed on them still applies.
 
 Two things it deliberately does not do. It injects no spinner pseudo-element —
 that would stack with a spinner you already ship, and would force
