@@ -171,7 +171,7 @@ can accept files.
 ```json
 {
   "upload": {
-    "encoding"            : "utf8",
+    "tmpPath"             : "${tmpPath}",
     "maxFieldsSize"       : "2MB",
     "maxFields"           : 1000,
     "autoTmpCleanupTimeout": false,
@@ -179,8 +179,7 @@ can accept files.
       "avatar": {
         "path"              : "${tmpPath}",
         "allowedExtensions" : ["jpg", "jpeg", "png", "webp"],
-        "isMultipleAllowed" : false,
-        "maxFieldsSize"     : "512K"
+        "isMultipleAllowed" : false
       }
     }
   }
@@ -189,22 +188,33 @@ can accept files.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `encoding` | string | `"utf8"` | Upload encoding |
-| `maxFieldsSize` | string | `"2MB"` | Global max upload size. Per-group override takes precedence |
-| `maxFields` | number | `1000` | Max number of files when `isMultipleAllowed: true` |
-| `autoTmpCleanupTimeout` | string \| `false` | `false` | Auto-delete tmp files after this duration (e.g. `"10m"`, `"1h"`). Set `false` to disable |
+| `tmpPath` | string | `"${tmpPath}"` | Directory uploaded files stream to at parse time. `${tmpPath}` resolves to `<project>/tmp` |
+| `uploadDir` | string | — | Alternative landing directory; wins over `tmpPath` when both are set |
+| `maxFieldsSize` | string \| number | `"2MB"` | Size cap for the **whole request**, compared against `Content-Length` (HTTP 431 past it). Unit suffix `B`/`KB`/`MB`/`GB`; a bare number means MB. `0` or unset disables. Block-level only |
+| `maxFields` | number | `1000` | Per-request **file-count** cap (HTTP 400 past it), applied regardless of `isMultipleAllowed`. `0` or unset disables. Block-level only |
+| `maxTextFields` | number | `1000` | Maximum multipart **text** (non-file) fields per request (HTTP 400 past it). `0` or below means no limit |
+| `maxTextFieldSize` | string \| number | `"1MB"` | Per text-field value cap (HTTP 400 on breach). Same unit suffixes; explicit `0` disables |
+| `autoTmpCleanupTimeout` | string \| number \| `false` | `false` | Auto-delete tmp files after this duration (e.g. `"10m"`, `"1h"`, `"500ms"`; a bare number is milliseconds). `false` or `0` disables. Block-level only |
 | `groups` | object | — | Named upload groups. At least one group required to enable uploads |
 
 **Group fields:**
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `path` | string | — | Destination directory. Supports `${tmpPath}` |
-| `allowedExtensions` | string[] \| `"*"` | — | Allowed file extensions. `"*"` accepts everything |
-| `isMultipleAllowed` | boolean | `false` | Allow multiple files per upload |
-| `maxFieldsSize` | string | global | Per-group size override (e.g. `"8MB"`, `"512K"`) |
-| `filePrefix` | string | — | Prefix added to the saved filename |
-| `subFolder` | string | — | Subfolder within `path`. Supports `:paramName` substitution |
+| `path` | string | — | Parse-time landing directory for this group, overriding the block default. Supports `${tmpPath}`; created if missing. For a group with a `driver` this is only the **staging** directory — the driver owns final placement |
+| `allowedExtensions` | string[] \| `"*"` | — | Allowed file extensions. `"*"` accepts everything; anything else is rejected with HTTP 400 at parse time |
+| `isMultipleAllowed` | boolean | multiple allowed | Set explicitly to `false` to reject a request carrying more than one file for this group (HTTP 400). **Omitting it allows multiple files** |
+| `driver` | string | — | Routes this group's `self.store()` step through the named [storage](../guides/storage) driver: files publish as opaque keys instead of moving to the call's target. A driver not declared in `storage.drivers` refuses the boot. See [Routing a group to a storage driver](../guides/file-uploads#routing-a-group-to-a-storage-driver) |
+| `simulateWriteError` | boolean | — | **Test-only** fault injector: every upload tagged with this group fails deterministically through the real write-error path, so the crash-guard can be probed after an upgrade. Ignored in production scope |
+
+:::note Only these keys have framework behaviour
+Group keys beyond the ones listed here are ignored by Gina — they validate (so
+applications can keep their own per-group metadata and compose with it
+app-side), but nothing in the framework reads them. Earlier revisions of this
+page listed `filePrefix`, `subFolder` and a per-group `maxFieldsSize` override;
+none of those were ever read by the framework and they have been removed from
+the shipped settings template.
+:::
 
 ### WebSocket — `engine.io`
 

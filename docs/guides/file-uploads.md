@@ -124,6 +124,14 @@ On success `err` is `false` and `files` is an array describing what was stored:
 | `type` | The MIME type. |
 | `encoding` | The part's transfer encoding. |
 
+:::tip Files can go to a storage driver instead
+If a file's upload group declares a `driver`, `store()` publishes it through the
+[storage](./storage) layer rather than moving it to `targetDir` — and that entry
+comes back with an opaque `key` (plus `group` and `driver`) and **no**
+`filename`. One call can mix both kinds. See
+[Routing a group to a storage driver](#routing-a-group-to-a-storage-driver).
+:::
+
 On failure `err` is the real filesystem `Error` with its `code` intact (`EACCES`,
 `ENOSPC`, `ENOENT`, …); the literal `No file to upload` message is reserved for the
 genuinely-empty case — calling `store()` with nothing to store. Each file is published
@@ -149,7 +157,6 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 
 ```json title="config/settings.json"
 "upload": {
-  "encoding": "utf8",
   "maxFieldsSize": "2MB",
   "groups": {
     "avatars": {
@@ -167,14 +174,17 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 | Key | Effect |
 |---|---|
 | `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
+| `uploadDir` | Alternative global landing directory. When both are set, `uploadDir` wins over `tmpPath`. |
 | `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request larger than this is rejected with **HTTP 431** before any file is read. |
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
+| `autoTmpCleanupTimeout` | Arms a deletion timer on each landed temp file (e.g. `"30s"`, `"10m"`, `"1h"`; a bare number is milliseconds). `false`, `0` or omitted disables it — the shipped default, in which case removing temp files is your own job. |
 | `groups` | Named upload groups. A file is checked against its group's rules at parse time. |
 | `groups.<name>.path` | Directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. |
 | `groups.<name>.allowedExtensions` | An array of permitted extensions (e.g. `["jpg","png"]`), or `"*"` for any. A disallowed extension is rejected with **HTTP 400**. |
-| `groups.<name>.isMultipleAllowed` | When `false`, a request carrying more than one file for that group is rejected with **HTTP 400**. |
+| `groups.<name>.isMultipleAllowed` | When `false`, a request carrying more than one file for that group is rejected with **HTTP 400**. Omitting it allows multiple files. |
+| `groups.<name>.driver` | Routes this group's `self.store()` step through the named [storage](./storage) driver instead of moving files to the call's target directory. See [Routing a group to a storage driver](#routing-a-group-to-a-storage-driver). |
 
 A file is tagged with a group on the client via
 `data-gina-form-upload-group` (see below); on the wire the group travels in each
@@ -195,6 +205,94 @@ flowchart TD
     G -->|no| F
     G -->|yes| H["Streamed to temp"]
 ```
+
+### Routing a group to a storage driver
+
+By default `self.store()` moves uploaded files into the target directory you
+pass it. Give a group a `driver`, and that group's files are instead published
+through the named [storage](./storage) driver — you get back an opaque storage
+key rather than a path, and the driver owns where the bytes actually live.
+
+```json title="config/settings.json"
+"storage": {
+  "default": "assets",
+  "drivers": {
+    "assets": {
+      "adapter": "local",
+      "strategy": "sharded",
+      "root": "/var/data/assets",
+      "maxObjectSize": "50MB"
+    }
+  }
+},
+"upload": {
+  "groups": {
+    "avatars": {
+      "allowedExtensions": ["jpg", "jpeg", "png"],
+      "isMultipleAllowed": false,
+      "driver": "assets"
+    },
+    "scratch": {
+      "allowedExtensions": "*"
+    }
+  }
+}
+```
+
+Nothing changes about how you call `store()`:
+
+```js
+self.store(targetDir, req.files, function(err, files) {
+  if (err) { return self.throwError(500, err); }
+
+  // files[i] for a MOVED file   → { file, filename, size, type, encoding }
+  // files[i] for a ROUTED file  → { file, group, driver, key, size, type, encoding }
+  self.renderJSON({ files: files });
+});
+```
+
+A routed entry carries **`key` and no `filename`** — there is no path to hand
+back. Persist the key exactly as given (never parse or rebuild one) and read the
+object through the driver:
+
+```js
+gina.storage('assets').get(savedKey, function(err, stream) {
+  if (err) { return self.throwError(404); }
+  stream.pipe(self.res);
+});
+```
+
+Points worth knowing before you turn this on:
+
+- **Mixing is fine.** One `store()` call can contain both routed and moved
+  files; result slots stay aligned 1:1 with the input array, so `files[i]`
+  always corresponds to `req.files[i]`.
+- **Files in groups without a `driver` are completely unaffected** — same entry
+  shape, same behaviour as before.
+- **`target` may be `null`** when *every* file in the call routes to a driver.
+  If any file is still on the move path, a target is required and omitting it
+  errors, naming the offending file and its group. The target directory is
+  created only when a move-path file actually exists.
+- **`size` on a routed entry is the storage layer's on-disk measurement**, taken
+  after publication — not the parse-time byte count.
+- **Files publish one at a time and stop at the first failure.** Objects already
+  published are *not* rolled back, matching how the move path has always behaved
+  on a partial failure.
+- **Group rules still apply first.** `allowedExtensions`, `isMultipleAllowed`
+  and the request-level caps are enforced at parse time exactly as before; the
+  driver's own `maxObjectSize` is a second, later check applied at publish time.
+
+Two things the boot checks for you, so a misconfiguration fails immediately
+rather than at the first upload:
+
+- A group naming a driver that is **not declared** in `storage.drivers` refuses
+  the boot — as does any `driver` binding when there is no `storage` block at
+  all.
+- A group may keep its `path` alongside `driver`: for a routed group `path` only
+  sets the parse-time staging directory, and the driver still owns final
+  placement. Pointing that staging path **inside the driver's own root** earns a
+  boot warning, because files staged there are left behind with no storage key
+  referencing them.
 
 ### Probing the write-error crash-guard
 

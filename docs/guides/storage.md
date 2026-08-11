@@ -157,6 +157,59 @@ Every capability is `false` in this release: `offload`, `ranges`, `dedup`, `resu
 
 ---
 
+## Binding upload groups
+
+Server-generated files are one producer. The other is uploads — and an upload
+group can publish straight into a driver instead of being moved to a directory.
+Add a `driver` to the group:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "avatars": {
+      "allowedExtensions": ["jpg", "jpeg", "png"],
+      "driver": "assets"
+    }
+  }
+}
+```
+
+`self.store()` then partitions the call: files in that group publish through the
+driver and come back with an opaque `key` (plus `group`, `driver` and the
+layer's on-disk `size`) instead of a `filename`, while files in groups without a
+`driver` keep the historical move behaviour. A single call can carry both.
+
+```js
+self.store(targetDir, req.files, function(err, files) {
+  if (err) { return self.throwError(500, err); }
+  // routed:  { file, group, driver, key, size, type, encoding }
+  // moved:   { file, filename, size, type, encoding }
+});
+```
+
+`targetDir` may be `null` when every file in the call routes to a driver.
+
+Two boot-time checks apply, so a misconfiguration surfaces at startup rather
+than on the first upload: a group naming a driver that is not declared in
+`storage.drivers` refuses the boot (as does any `driver` binding when there is
+no `storage` block at all), and a group whose staging `path` sits inside its
+driver's own `root` earns a warning — files staged there are stranded with no
+key referencing them. Keeping `path` alongside `driver` is otherwise perfectly
+valid: for a routed group it only names the parse-time staging directory.
+
+:::note One driver set per process
+Drivers are resolved from the **starting app's** `storage` block, and that set
+is process-wide. When several bundles run merged into one process, every
+bundle's upload groups validate against that same set of drivers — so a group in
+bundle B naming a driver only bundle B declares will not resolve unless the
+starting app declares it too.
+:::
+
+The full upload-side reference — group rules, ordering, failure semantics —
+lives in the [file uploads guide](/guides/file-uploads#routing-a-group-to-a-storage-driver).
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
 Each object gets a metadata row — original name, content type, size, creation time — which is what `stat()` reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
@@ -205,8 +258,7 @@ Connector backends are demand-gated. Setting `store` today refuses the boot with
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. |
 | Range serving | `206 Partial Content` for media, in both engines. |
 | Size tiering | Small objects inline in the metadata store. |
-| Upload integration | Routing an upload group straight to a storage driver. |
 
-Uploads are unaffected by this release — [`self.store()`](/guides/file-uploads) keeps its current behaviour exactly.
+Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
 Configuring a strategy that is designed but not yet implemented (`cas`, `stream`) refuses the boot with a message saying so, rather than treating it as a typo.

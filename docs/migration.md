@@ -27,7 +27,8 @@ A new optional `storage` block in `settings.json` declares named storage
 drivers, reachable from application code as `gina.storage()`. Existing projects
 are unaffected: with no `storage` block the feature is inert, and the upload
 path — `self.store()`, the multipart handler, and every `upload` group setting —
-behaves exactly as before.
+behaves exactly as before. Routing an upload group into a driver is opt-in and
+covered in its own entry below.
 
 If you adopt it, three things are worth knowing up front because they are
 enforced at boot rather than at first use:
@@ -49,6 +50,85 @@ build one by hand; that is what lets the key layout change later without
 breaking anything already stored.
 
 See [Object storage](/guides/storage) for the full guide.
+
+### Added — upload groups can publish to a storage driver (no action required)
+
+An upload group may now carry a `driver` key, routing that group's
+`self.store()` step through the named `storage` driver instead of moving files
+to the call's target directory:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "avatars": { "allowedExtensions": ["jpg", "png"], "driver": "assets" }
+  }
+}
+```
+
+This is entirely opt-in. **Groups without a `driver` keep the historical move
+path byte-for-byte** — same result entry shape, same success sentinel, same
+abort-on-first-error — so an existing project sees no change.
+
+If you do adopt it, the result entries for that group change shape: a routed
+file comes back as `{ file, group, driver, key, size, type, encoding }` with an
+opaque storage `key` and **no `filename`**, because there is no path to hand
+back. Persist the key and read the object through `gina.storage(driver)`. One
+`store()` call may mix routed and moved files, with result slots staying aligned
+1:1 with the input; and `target` may be `null` when every file routes.
+
+Two boot-time checks come with it: a group naming a driver that is not declared
+in `storage.drivers` refuses the boot (as does any `driver` binding when no
+`storage` block exists), and a group whose `path` sits inside its driver's
+`root` earns a warning — `path` remains valid beside `driver`, but for a routed
+group it only names the parse-time staging directory.
+
+See [Routing a group to a storage driver](/guides/file-uploads#routing-a-group-to-a-storage-driver).
+
+### Fixed — `req.files[].group` carries the resolved group (action may be required)
+
+The multipart parser already resolved each file part's upload group — a part
+carrying no `group` tag resolves to `untagged` — but it pushed the **raw**
+disposition parameter into the record. `req.files[].group` was therefore
+`undefined` in exactly that default case, absent from the very field the group
+gate had just enforced against.
+
+The record now carries the resolved group, so an untagged part reports
+`group: "untagged"`.
+
+**Check any controller that tests the field's truthiness.** Code shaped like:
+
+```js
+if (file.group) {
+  // previously skipped for untagged files — now entered
+}
+```
+
+now takes the branch for untagged uploads. Code comparing against a known group
+name (`file.group === 'avatars'`) is unaffected, and code that already defaulted
+the value app-side keeps working.
+
+### Fixed — the settings template no longer advertises upload keys the framework never read (no action required)
+
+The scaffolded `settings.json` used to show per-group `filePrefix`, `subFolder`
+and `maxFieldsSize` samples, plus a block-level `encoding` key. **No code path
+ever read any of them** — `encoding` in particular has always been ignored in
+favour of the parser's own UTF-8 parameter decoding. They are removed from the
+template, three comments claiming block-level keys could be redefined per group
+are corrected, and `schema/settings.json` now declares the real key set at both
+block and group level.
+
+Nothing changes at runtime, because nothing read those keys. **Applications that
+declare their own per-group keys and apply them app-side are unaffected** and
+should keep doing so — `additionalProperties` stays permissive precisely so
+those configurations continue to validate, and the framework still does not read
+them, so nothing is applied twice.
+
+The [settings reference](/reference/settings) has been corrected accordingly: it
+had documented those keys as functional, including a `:paramName` substitution
+syntax for `subFolder` that never existed, a claim that a per-group
+`maxFieldsSize` took precedence over the block-level one, and a `false` default
+for `isMultipleAllowed` (multiple files are in fact allowed when the key is
+omitted).
 
 ---
 
