@@ -130,6 +130,28 @@ syntax for `subFolder` that never existed, a claim that a per-group
 for `isMultipleAllowed` (multiple files are in fact allowed when the key is
 omitted).
 
+### Fixed — `is` regex literals compile as authored (ACTION REQUIRED if your patterns contain parentheses)
+
+A security transform in the `is` rule removed every `(`, `)` and literal
+`return` from a regex-literal condition **before** compiling it, silently
+changing what the pattern matched. Grouping was destroyed and the anchors
+rebound — `/^(a|b)$/` behaved as `/^a|b$/`, which accepts any value merely
+*containing* a middle alternative — and a quantified group like `(#TAG)?`
+became a literal `#TA` followed by an optional `G`. The transform now applies
+only to the binary-comparison form (`$a >= $b`, `"x" === "y"`, …), which keeps
+its grammar-locked protection; a regex literal compiles exactly as written.
+
+**Action required:** review `is` rules whose pattern contains parentheses.
+They now match as authored — stricter — so any value that was passing only
+through the mangled pattern will start failing validation. Patterns without
+parentheses are unaffected, as are patterns already written with each
+alternative anchored independently (`/^a$|^b$/`), which behave identically
+before and after this fix.
+
+One edge case: a condition written as a parenthesis-wrapped regex — `(/foo/)`
+rather than `/foo/` — previously worked because the transform unwrapped it; it
+now fails the field with a console warning. Write the literal unwrapped.
+
 ---
 
 ## 0.6.5 → 0.6.6
