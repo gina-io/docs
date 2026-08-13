@@ -166,7 +166,7 @@ as its operation plus a record count. To see real values, set
 ```
 
 Capturing bound values can expose credentials to the process log and the Inspector
-payload — including during a [production instrumentation window](#production-instrumentation-windows)
+payload — including during a [production instrumentation window](#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation)
 — so it is off by default. Treat it as a local development aid, the same contract as
 `inspector.ai.captureText` and `inspector.events.captureArgs`. Arity mismatches and type
 coercion bugs — the usual reasons to read a params line — stay diagnosable in the
