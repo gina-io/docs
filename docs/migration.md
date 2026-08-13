@@ -225,6 +225,95 @@ renders the errors and releases the form. Nothing changes for forms without
 settled field with a committed error keeps the reveal-and-focus answer. See
 [the marker-gate warning](/guides/forms-and-validation) for the full contract.
 
+### Fixed — forms with an async `query` rule complete correctly (no action required)
+
+A cluster of defects in how a validation pass settled around an asynchronous
+`query` rule. They interacted, which is why they are described together — a
+form could exhibit several at once, and each masked the others. All are fixes
+restoring the intended behaviour; none require a configuration change.
+
+- **A submit could leave before the query answered.** A concurrent validation
+  pass disarmed the whole pass's async waiter when the field's listener was
+  already registered, so the pass completed on the sync-only verdict: the
+  request went out, and the query's error rendered after the POST had already
+  left. Waiters are now pass-local, stack, and detach per pass, and the engine
+  marks each (field, value) request in flight so the same-value fast path
+  cannot release a field whose verdict is still pending. A failing query now
+  blocks the submit outright.
+- **The completion carried only the query field's verdict.** On a full-form
+  submit, every *other* invalid field was adjudicated but never rendered, and
+  the first-invalid focus could only ever land on the query field. The inverse
+  scene — the query passes but another field is invalid — dispatched an empty
+  error set and refused the submit with nothing shown. The completion now
+  carries the whole form's verdict. Single-element live-check passes are
+  unchanged.
+- **A re-click on an unchanged value cleared other fields' errors.** The two
+  synchronous release paths (a cached same-value verdict, and the known-invalid
+  wire skip) fired mid-validation, completing the pass before fields declared
+  *after* the query field were adjudicated — so the outcome depended on field
+  declaration order. Both now defer to a microtask, taking the same post-pass
+  shape a real network settle always had.
+- **A clean form whose query field was not declared last could never submit.**
+  The async completion dispatched only when the query field was last in the
+  rule set, so the submit callback starved, no request left, and the form's
+  re-entry latch stranded — silently swallowing every later click until the
+  page was reloaded. A latched form's completion now dispatches
+  unconditionally.
+- **Stale listeners could replay a submit.** Each pass left its
+  `validated.<formId>` listener attached for the page's lifetime (the removal
+  call carried no function reference, so it detached nothing), and every stale
+  listener ran the dispatching pass's callback — one completion could replay a
+  submit once per leftover listener. Listeners now register only when the pass
+  carries a callback, consume only their own pass's dispatch, and detach on
+  consumption.
+- **A submit trigger with no markup `id` was bound twice**, so every click ran
+  two full validation cycles. Control collection is deduped by node identity
+  now, and the rebind guard tests the key that actually gets registered.
+  Id-carrying and form-reassociated triggers were never affected.
+
+### Fixed — `getConfig().settings` resolves path placeholders (action may be required)
+
+A settings value written with a `${bundlePath}`, `${libPath}`, `${publicPath}`,
+`${handlersPath}`, `${mountPath}`, `${gina}`, `${project}`, `${root}`,
+`${source}` or `${<name>Port}` placeholder reached the **no-argument**
+`getConfig()` surface as a literal, unsubstituted token. The alias was bound
+before the substitution pass ran, and that pass returns a new object rather
+than rewriting the original one, so `getConfig().settings` kept pointing at the
+pre-substitution copy while `getConfig().content.settings` carried the resolved
+values.
+
+Both surfaces now agree. Placeholders an earlier pass already resolved
+(`${homedir}`, `${scope}`, …) and `${secret:…}` references were never affected.
+
+**Check any code that read around this.** Reading
+`getConfig().content.settings` explicitly, or substituting the token app-side,
+keeps working unchanged — both now receive the same resolved value. Code that
+*branched on seeing a literal placeholder* (treating the raw `${…}` token as a
+sentinel for "not configured") will stop taking that branch.
+
+### Fixed — Inspector Data and Forms tabs show your data, not the framework's (no action required)
+
+Dev-mode Inspector only; nothing on the wire or in production changes.
+
+- **The Data tab no longer lists the `__ginaFlow` and `__ginaQueries`
+  transport keys.** They are embedded in JSON responses in dev mode so a
+  calling bundle can merge the upstream query log and timeline, and the Query
+  and Flow tabs already present them first-class — but they also appeared as
+  top-level rows in the Data tree, in raw-JSON mode, and in the download
+  dialog. Any **root** key prefixed `__gina` is now hidden across every Data
+  surface, including the payload size badge, which measures what the tab
+  actually displays. Nested keys carrying the prefix are treated as
+  application data and stay visible.
+- **The Forms tab no longer renders the bundle's forms catalog as pseudo-forms.**
+  The walked `forms/` directory groups (rules, mocks, validators) appeared as
+  sections above the page's real forms. They are now demoted into a single
+  collapsed **Bundle catalog** card at the bottom of the tab: page forms keep
+  the prime space, each group stays inspectable inside the card with its fold
+  state preserved, and runtime form state that outlived its DOM form (a closed
+  popin's form) keeps its own card. When the payload carries no pristine
+  catalog snapshot the tab falls back to the previous per-key rendering, so
+  nothing is ever hidden.
+
 ### Changed — query instrumentation redacts bound parameter values by default (action rarely required)
 
 Dev-mode console query lines and the Inspector Query tab no longer show bound
@@ -252,6 +341,33 @@ The opt-in follows the same contract as `inspector.ai.captureText` and
 `inspector.events.captureArgs`, and also governs the instrumentation-window
 capture on production-scope processes. See
 [the Inspector guide](/guides/inspector) for details.
+
+### Changed — framework default looks ship in a CSS cascade layer (action rarely required)
+
+The default styling gina ships for its state-hook attributes —
+`data-gina-loading` and `data-gina-form-submit-gated` — now lives inside a
+`@layer gina` cascade layer. Any **un-layered** rule in your own stylesheets
+beats it, regardless of selector specificity or stylesheet load order, so
+overriding a framework default no longer needs `!important` or a
+specificity-inflating selector.
+
+Two boundaries worth knowing:
+
+- **Functional rules stay un-layered on purpose** — popin structure and the
+  scroll lock among them. Layering those would let a generic project reset
+  silently break them, which is a worse failure than an unwanted default look.
+- **If your project organises its own CSS in cascade layers**, order yourself
+  against gina explicitly: declare `@layer gina, app;` early in your first
+  stylesheet. Layered project rules otherwise resolve against gina's layer by
+  declaration order, which is not what you want to leave to chance.
+
+Browsers without cascade-layer support simply drop the default look; the
+attributes are still written and project CSS keyed on them still applies.
+
+**Action required only if** you previously fought these defaults with
+`!important` or an inflated selector — those still work, and can now be
+simplified. See
+[the override contract](/guides/forms-and-validation) in the forms guide.
 
 ## 0.6.5 → 0.6.6
 
