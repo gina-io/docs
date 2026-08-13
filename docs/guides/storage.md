@@ -64,11 +64,15 @@ A file-backed write reaches its final path only through `rename(2)`, which is at
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `adapter` | yes | Where bytes live. `local` = the local filesystem under `root`. |
-| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension. |
+| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted. |
 | `root` | yes | Absolute directory holding this driver's objects. |
 | `maxObjectSize` | no | Per-object ceiling, as a **unit-suffixed string** (`"50MB"`). Defaults to `100MB`. |
 | `store` | no | A `connectors.json` entry name for the metadata store. Omit for the embedded default. |
-| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. |
+| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to both strategies. |
+| `hash` | no | **cas only.** The digest algorithm; its name becomes a namespace segment in every key. Defaults to `"sha256"`. Validated at boot against what *this runtime's* crypto provides. |
+| `fsync` | no | **cas only.** Whether publishes are flushed to disk before being acknowledged. Defaults to `true` — see [Durability](#durability-stated-plainly). |
+| `sweepInterval` | no | **cas only.** How often the garbage-collection sweep runs, as a **unit-suffixed duration** (`"15m"`). `"0s"` disables the periodic sweep. |
+| `sweepGrace` | no | **cas only.** How long a blob must sit at zero references before the sweep may collect it (`"1h"`). Must be greater than zero. |
 
 `storage.default` names the driver returned by a no-argument `gina.storage()`. Omit it and every call must name its driver.
 
@@ -125,7 +129,7 @@ gina.storage().get(order.invoiceKey, function (err, stream) {
 
 `put()` returns a key. Store it, pass it around, hand it back to `get()` — but never parse it, build one by hand, or assume it encodes a date or a filename. That opacity is what allows a future strategy to change the layout without breaking anything already stored.
 
-The client's filename never becomes the path. It is kept verbatim in the metadata row, and only a hard-whitelisted extension (alphanumerics, at most ten characters, lowercased) is appended to the key — enough for an operator browsing the tree to tell a PDF from a PNG.
+The client's filename never becomes the path. It is kept verbatim in the metadata row, and under `sharded` only a hard-whitelisted extension (alphanumerics, at most ten characters, lowercased) is appended to the key — enough for an operator browsing the tree to tell a PDF from a PNG. Under [`cas`](#content-addressed-storage-cas), keys carry **no extension at all**: identical bytes uploaded under different names must mint the same key for deduplication to work, so the content type lives in the metadata row alone.
 
 ---
 
@@ -133,11 +137,12 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. |
+| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. Under `cas` the result also carries `deduplicated` — `true` when identical content already existed. |
 | `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. Serves both tiers. |
-| `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. |
-| `release(key, cb)` | `existed` | Removes the object and its metadata row. Idempotent. Handles both tiers. |
+| `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. Under `cas` it includes `refs`, the live reference count. |
+| `release(key, cb)` | `existed` | Under `sharded`: removes the object and its metadata row. Under `cas`: **drops one reference** — bytes are only reclaimed by the [sweep](#content-addressed-storage-cas). Idempotent either way. |
 | `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
+| `findByDigest(algo, hex, cb)` | a key, or `null` | **cas only** — gated by `capabilities.dedup`. The pre-upload existence check; see [the oracle caution](#content-addressed-storage-cas). |
 | `capabilities` | an object | What this driver can do. |
 
 ```javascript
@@ -156,7 +161,7 @@ if (driver.capabilities.ranges) {
 }
 ```
 
-`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. The rest — `offload`, `ranges`, `dedup`, `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. The rest — `offload`, `ranges`, `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
 
 ---
 
@@ -233,6 +238,75 @@ Two operational tradeoffs, stated plainly:
 
 ---
 
+## Content-addressed storage (cas)
+
+For immutable content — invoices, receipts, signed documents, anything where "has this exact file been stored already?" is a meaningful question — declare `strategy: "cas"`:
+
+```json
+"drivers": {
+  "invoices": {
+    "adapter": "local",
+    "strategy": "cas",
+    "root": "/var/data/invoices",
+    "maxObjectSize": "50MB"
+  }
+}
+```
+
+The key **is** the content address: `blobs/<algo>/<aa>/<bb>/<hex>`, derived from the object's digest and nothing else. Storing identical bytes twice yields the *same key* and *no second copy* — the blob gains a reference instead, and the second `put()`'s result says so:
+
+```javascript
+gina.storage('invoices').put(pdf, { originalName: 'invoice-991.pdf' }, function (err, res) {
+    // res => { key, size, contentType, deduplicated }
+    // deduplicated: true  => identical content already existed; no new bytes were stored
+});
+```
+
+```mermaid
+flowchart LR
+    A[put stream] --> B[hash chunk by chunk<br/>while writing]
+    B --> C{content already<br/>stored?}
+    C -- no --> D[fsync + rename<br/>into the blob tree]
+    C -- yes --> E[discard this copy<br/>count one more reference]
+    D --> F["{key, deduplicated: false}"]
+    E --> G["{key, deduplicated: true}"]
+```
+
+Because keys are content addresses, they carry **no extension** and metadata is **first-write-wins**: two uploads of identical bytes under different filenames share one row, which keeps the first `originalName` and `contentType`. And because a content address can never go stale, cas objects are ideal for `Cache-Control: immutable` serving with the key as the ETag.
+
+Keys remain [opaque](#keys-are-opaque) even though cas keys *look* parseable — composing one by hand breaks the moment the layout changes. The one sanctioned way from a digest to a key is `findByDigest`:
+
+```javascript
+// the client hashed the file locally and asks before uploading
+driver.findByDigest('sha256', clientHexDigest, function (err, key) {
+    if (key) { /* already stored — skip the transfer entirely */ }
+});
+```
+
+:::caution findByDigest is a dedup oracle
+An answer to "do you already have this exact content?" tells the asker whether *someone* has stored that file before — across users, that is an information leak. gina ships **no HTTP endpoint** for it: if you expose one, you own its authentication, and you should scope what it reveals per driver (a single-tenant archive leaks nothing; a shared upload pool does).
+:::
+
+### Releasing and the sweep
+
+`release()` on a cas driver **drops one reference** — it never deletes bytes. A blob whose count reaches zero is stamped and left in place for a grace window (`sweepGrace`, default `"1h"`); a periodic sweep (`sweepInterval`, default `"15m"`) then reclaims blobs that have sat at zero past the grace. Three consequences worth knowing:
+
+- **Re-uploading just-released content is free.** Within the grace window the blob is still there; an identical `put()` resurrects it without transferring anything twice.
+- **A fully-released key reads as gone immediately.** `stat()` answers `null`, `get()` errors — the grace window is a garbage-collection detail, not a visible afterlife.
+- **The grace window is a correctness margin, not a convenience.** It is what keeps the sweep from racing an in-flight identical upload. Do not set it lower than your longest plausible upload.
+
+### Changing the digest algorithm — cheap. Changing the strategy — not.
+
+The algorithm's name is a namespace segment in every key, so changing `hash` (say `sha256` → `sha512`) is **additive**: existing blobs stay addressable — and `findByDigest`-able — under their original algorithm, new writes land under the new one, and dedup simply does not span the two. The boot notes the change once and moves on.
+
+Changing a driver's **strategy** on populated storage is a different animal: keys are strategy-specific, so every stored reference would dangle. The boot stamps each driver root with its strategy on first start and **warns on every boot** while a mismatch stands — the fix is a re-key migration, never a config edit. This stamp check applies to `sharded` drivers too.
+
+### What cas is not for
+
+Content addressing makes in-place mutation impossible — editing produces a new blob under a new key, and your reference updates or the old content stays. That is exactly right for legally-immutable documents and exactly wrong for anything with random writes; use `sharded` there.
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
 Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
@@ -264,11 +338,18 @@ That default is **single-process per driver root**. SQLite's locking is unreliab
 Connector backends are demand-gated. Setting `store` today refuses the boot with a clear message rather than falling back silently — the embedded SQLite backend is the supported path in this release. If you need a shared-root deployment, open an issue describing the connector you need.
 :::
 
+A store backing a **cas** driver additionally implements the four refcount verbs (`acquireRef` / `releaseRef` / `listZeroRefs` / `removeIfZero`) — the embedded store does, migrating pre-cas databases in place; a cas driver refuses to boot over a store that does not. Each verb must be atomic per key: that atomicity is what makes two concurrent identical uploads yield one blob with two references instead of a lost update.
+
 ---
 
 ## Durability, stated plainly
 
-For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object. It does **not** guarantee the object survives a host crash: writes are not `fsync`ed, so an acknowledged write can still be lost if the machine loses power before the filesystem flushes. Inline objects are in the same class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. Either way — recent writes at risk, never a partial object. If your retention requirements are stricter than that, replicate to durable storage rather than relying on the local adapter alone.
+For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object — under either strategy. What differs is crash durability:
+
+- **`sharded` writes are not `fsync`ed.** An acknowledged write can still be lost if the machine loses power before the filesystem flushes. Recent writes at risk, never a partial object.
+- **`cas` publishes are `fsync`ed by default** (`fsync: true`): the temp file is flushed *before* the rename publishes it — a flush failure fails the `put()` — and the parent directory is flushed after, **best-effort**: platforms that cannot fsync a directory (Windows; some network mounts) skip that half silently, and macOS honours `fsync` as the platform defines it. cas exists for immutable content where "acknowledged means durable" is the point; set `fsync: false` per driver to opt back into sharded-class durability.
+
+Inline objects (either strategy) are in the sharded class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. If your retention requirements are stricter than all of this, replicate to durable storage rather than relying on the local adapter alone.
 
 ---
 
@@ -276,11 +357,11 @@ For file-backed objects, `rename(2)` guarantees that a reader never observes a p
 
 | Not yet | What it will bring |
 | --- | --- |
-| `cas` strategy | Content-addressed storage with refcounts and dedup. |
 | `stream` strategy | Large sequential media, resumable segment uploads. |
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. |
 | Range serving | `206 Partial Content` for media, in both engines. |
+| `gina storage:*` CLI | Stats, verify/scrub (orphaned-file reclaim), migration tooling. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
-Configuring a strategy that is designed but not yet implemented (`cas`, `stream`) refuses the boot with a message saying so, rather than treating it as a typo.
+Configuring a strategy that is designed but not yet implemented (`stream`) refuses the boot with a message saying so, rather than treating it as a typo.

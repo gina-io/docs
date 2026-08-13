@@ -57,6 +57,36 @@ breaking anything already stored.
 
 See [Object storage](/guides/storage) for the full guide.
 
+### Added — the cas storage strategy (no action required)
+
+Storage drivers can now declare `strategy: "cas"` — content-addressed,
+deduplicating, refcounted storage for immutable content. Existing drivers and
+projects are unaffected: `sharded` behaviour, key shapes and durability are
+byte-for-byte unchanged, and cas is purely opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **Identical bytes stored twice yield the same key** and no second copy;
+  `put()` results carry a `deduplicated` flag. Keys are extension-less by
+  construction.
+- **`release()` drops a reference instead of deleting.** Bytes are reclaimed
+  by a periodic sweep once a blob has sat at zero references past a grace
+  window (`sweepGrace`, default `"1h"`) — so releasing and immediately
+  re-uploading the same content transfers nothing twice.
+- **cas publishes fsync by default** (`fsync: true`) — the first fsync
+  anywhere in gina. If you measure a write-latency regression on a cas driver
+  and your durability requirements allow it, `fsync: false` opts back into
+  sharded-class durability.
+- **The boot now stamps every driver root with its strategy** — cas and
+  sharded alike — and warns on every boot if the configured strategy stops
+  matching the stamp, because a strategy flip on populated storage requires a
+  re-key migration. A pre-existing root is stamped silently on its first boot
+  after the upgrade; the embedded metadata database gains two columns in
+  place, idempotently.
+
+See [Content-addressed storage](/guides/storage#content-addressed-storage-cas)
+for the full section, including the `findByDigest` dedup-oracle caution.
+
 ### Added — upload groups can publish to a storage driver (no action required)
 
 An upload group may now carry a `driver` key, routing that group's
