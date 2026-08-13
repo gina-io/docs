@@ -353,6 +353,68 @@ Inline objects (either strategy) are in the sharded class: the embedded store ru
 
 ---
 
+## Maintenance: stats, gc and verify
+
+Three CLI commands operate a bundle's storage, each following the cache-command
+grammar (`<bundle> @<project>`, or `@<project>` alone for every bundle;
+`--driver=<name>` to scope one driver; `--format=json` for scripting):
+
+```bash
+gina storage:stats  api @myproject             # per-driver counts and bytes
+gina storage:gc     api @myproject             # run the cas sweep now, to drained
+gina storage:gc     api @myproject --dry-run   # list what a pass would collect
+gina storage:verify api @myproject             # files ↔ metadata consistency scan
+gina storage:verify api @myproject --fix       # also scrub orphaned files (bundle stopped)
+```
+
+**Who does the work depends on who owns the store.** The embedded metadata
+store is single-process per driver root, so the CLI never opens a store a
+running bundle owns:
+
+- **Bundle running** — the command calls the bundle's own admin-gated
+  `/_gina/storage/stats`, `/_gina/storage/gc` (POST) or
+  `/_gina/storage/verify` endpoint, and the owning process does the work.
+  The endpoints are always-on and gated by `app.json > admin.allowFrom`
+  (loopback by default) — the same allowlist as `/_gina/info` and
+  `/_gina/cache/stats`.
+- **Bundle stopped** (every assigned port refuses the connection) — the
+  command resolves the bundle's `settings.storage` and opens the store
+  directly, offline.
+- **Anything else** — a timeout, an unexpected socket error — is reported as
+  unknown and the store is **not** opened: the bundle may still be alive and
+  owning it.
+
+A driver backed by a connector `store` has nothing local to open, so it is
+reachable through the running bundle only.
+
+`storage:stats` reports, per driver, the identity (strategy, root,
+capabilities) plus the metadata store's counts: total objects, refcounted
+(cas) objects, zero-reference blobs awaiting the sweep, inline (size-tiered)
+objects, and total logical bytes — a deduplicated blob counts once.
+
+`storage:gc` drives the cas sweep immediately instead of waiting for the next
+`sweepInterval` tick, looping until nothing older than `sweepGrace` remains.
+`--dry-run` lists the collectable blobs and touches nothing. `sharded` drivers
+have no sweep and are named and skipped, never an error.
+
+`storage:verify` walks the blob tree against the metadata rows and reports two
+finding classes — deliberately asymmetric:
+
+- **Files without rows** — the sweep's documented crash residue (a blob file
+  whose row was already claimed). Harmless and invisible to every read verb;
+  `--fix` unlinks them, and only offline: `--fix` is refused while the bundle
+  runs, and the HTTP endpoint does not even accept a fix flag.
+- **Rows without files** — a referenced object whose bytes are gone. That is
+  **loss evidence**: it is reported and never auto-fixed, because deleting
+  the row would destroy the only signal that content vanished.
+
+Both directions are age-gated past `sweepGrace`, so in-flight uploads are
+never reported as findings. A root shared by several bundles appears under
+each of them; `gc` and `verify` against a shared root are idempotent — the
+same result from whichever bundle you point at.
+
+---
+
 ## What is not in this release
 
 | Not yet | What it will bring |
@@ -360,7 +422,7 @@ Inline objects (either strategy) are in the sharded class: the embedded store ru
 | `stream` strategy | Large sequential media, resumable segment uploads. |
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. |
 | Range serving | `206 Partial Content` for media, in both engines. |
-| `gina storage:*` CLI | Stats, verify/scrub (orphaned-file reclaim), migration tooling. |
+| `storage:migrate` | Strategy/hash re-key tooling for populated roots. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 

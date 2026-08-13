@@ -87,6 +87,22 @@ Worth knowing if you adopt it:
 See [Content-addressed storage](/guides/storage#content-addressed-storage-cas)
 for the full section, including the `findByDigest` dedup-oracle caution.
 
+### Added — storage maintenance CLI and endpoints (no action required)
+
+`gina storage:stats`, `gina storage:gc` (`--dry-run`) and `gina storage:verify`
+(`--fix`) operate a bundle's storage drivers with the cache-command grammar. A
+running bundle is served through new always-on, admin-gated
+`/_gina/storage/stats|gc|verify` endpoints (`app.json > admin.allowFrom`,
+loopback by default) so the process that owns the store does the work; a
+stopped bundle is resolved offline. `storage:verify` reports orphaned blob
+files (fixable, offline only) separately from rows whose bytes are missing
+(loss evidence — reported, never auto-fixed). Nothing is required of existing
+projects: with no `storage` block, the commands simply report storage as not
+configured.
+
+See [Maintenance: stats, gc and verify](/guides/storage#maintenance-stats-gc-and-verify)
+for the full section.
+
 ### Added — upload groups can publish to a storage driver (no action required)
 
 An upload group may now carry a `driver` key, routing that group's
