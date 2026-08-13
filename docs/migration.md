@@ -209,6 +209,34 @@ renders the errors and releases the form. Nothing changes for forms without
 settled field with a committed error keeps the reveal-and-focus answer. See
 [the marker-gate warning](/guides/forms-and-validation) for the full contract.
 
+### Changed — query instrumentation redacts bound parameter values by default (action rarely required)
+
+Dev-mode console query lines and the Inspector Query tab no longer show bound
+parameter values — nor a MongoDB resolved body's values, nor the document
+values a Couchbase `bulkInsert` statement inlines. They carry count + type
+markers instead (e.g. `3 [string, number, string]`, or `[string]` markers in
+the params table). Bound values are routinely secrets owned by your
+application — session or credential tokens, API keys, password hashes — and
+they were reaching the process log in clear; the key-based `inspector.redact`
+matching cannot cover a positional bind array, which has no key names.
+
+**Action required only if** your debugging workflow relies on seeing real
+bound values. Opt back in per bundle:
+
+```json title="settings.json"
+{
+  "inspector": {
+    "queries": { "captureValues": true }
+  }
+}
+```
+
+Statements, timings, index badges, and arity/type diagnostics are unchanged.
+The opt-in follows the same contract as `inspector.ai.captureText` and
+`inspector.events.captureArgs`, and also governs the instrumentation-window
+capture on production-scope processes. See
+[the Inspector guide](/guides/inspector) for details.
+
 ## 0.6.5 → 0.6.6
 
 ### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)
