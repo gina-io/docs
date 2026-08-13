@@ -53,6 +53,53 @@ merge can repair a pseudo-header — so a frame assembled by hand must carry
 literal.
 :::
 
+### Fixed — the webroot redirect keeps the query string (no action required)
+
+If your bundle sets a non-root `server.webroot`, gina generates a redirect from the
+bare webroot path to its trailing-slash form. That redirect used to drop the query:
+
+```
+before:  GET /dashboard?token=abc   ->  302   Location: /dashboard/
+after:   GET /dashboard?token=abc   ->  302   Location: /dashboard/?token=abc
+```
+
+So any flow carrying a signed token, a redirect target or any other parameter into a
+bundle lost it whenever the entry URL was written without a trailing slash. Because
+the parameter was gone before the application ran, it surfaced as an unexplained
+refusal — nothing on screen, and nothing in the application's own logs, pointed at
+the URL.
+
+This is a behaviour change on that redirect, but it restores the parameter the caller
+sent rather than altering anything you configured, so no action is expected.
+
+:::caution `webrootAutoredirect: false` was never a workaround
+That setting only controls whether the **site root** `/` also redirects to the
+webroot. The bare-webroot redirect comes from the route's own URL and happens either
+way — so turning the setting off did not avoid the loss, it only removed the extra
+root match.
+:::
+
+The mechanism behind the fix is `keep-params`, a redirect-route option that has been
+documented since before the project moved to GitHub but was never implemented — the
+value was read and then discarded, so *every* `control: "redirect"` route dropped the
+caller's query. It is now honoured and still defaults to `false`, so your own redirect
+routes are unaffected unless you opt in:
+
+```json
+"docs-redirect": {
+  "url": "/documentation",
+  "param": {
+    "control": "redirect",
+    "path": "/documentation/",
+    "keep-params": true
+  }
+}
+```
+
+Only a local target inherits the query — an absolute `param.url` names another origin,
+so the flag is ignored there rather than disclosing your callers' parameters to a third
+party. See the [routing guide](/guides/routing#keeping-the-query-string).
+
 ---
 
 ## 0.6.6 → 0.6.7
