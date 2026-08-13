@@ -19,6 +19,42 @@ upward to the target version.
 
 ---
 
+## 0.6.7 → 0.6.8
+
+### Fixed — `renderStream()` honours a caller-set status code (no action required)
+
+`self.renderStream()` could only ever answer **200**, on both engines. The HTTP/2
+arm built its `stream.respond()` frame with a hardcoded `':status': 200`
+pseudo-header, and the HTTP/1.1 arm assigned `response.statusCode = 200`
+unconditionally inside its not-yet-sent block — clobbering a code the controller
+had already chosen.
+
+Both arms now resolve `response.statusCode || 200`, so a controller may set the
+status before it starts streaming:
+
+```js
+// now honoured on both engines
+self.response.statusCode = 206;
+self.renderStream(chunks, 'application/octet-stream');
+```
+
+Nothing changes for existing callers: with no status set, the answer is still
+200, and the pending-header merge still refuses to overwrite `:status`.
+
+This is what made `206 Partial Content` and `416` unreachable through
+`renderStream`, so it is a prerequisite for HTTP Range serving rather than a
+feature in its own right.
+
+:::note Why a literal is never safe in a hand-built HTTP/2 frame
+`setHeader(':status', …)` throws on an HTTP/2 response, and no later header
+merge can repair a pseudo-header — so a frame assembled by hand must carry
+`response.statusCode || 200` at construction time. The same defect was fixed in
+`renderJSON` earlier; this was the last hand-built frame still carrying a
+literal.
+:::
+
+---
+
 ## 0.6.6 → 0.6.7
 
 ### Added — object storage (no action required)
