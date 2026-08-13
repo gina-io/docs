@@ -37,10 +37,16 @@ enforced at boot rather than at first use:
   web-served directory** (any bundle's `publicPath`, and any `content.statics`
   target). A root inside one would make stored objects publicly fetchable
   without passing your authorization, so the boot refuses it.
-- `maxObjectSize` takes a **unit-suffixed string** (`"50MB"`). A bare number
-  warns and falls back to the default — deliberately stricter than
-  `upload.maxFieldsSize`, where a bare number means megabytes for backward
-  compatibility.
+- `maxObjectSize` and `inlineThreshold` take **unit-suffixed strings**
+  (`"50MB"`, `"64KB"`). A bare number warns and falls back to the default —
+  deliberately stricter than `upload.maxFieldsSize`, where a bare number means
+  megabytes for backward compatibility.
+- **Size tiering is on by default**: objects strictly under `inlineThreshold`
+  (default `"64KB"`) are stored inline in the metadata store rather than as
+  individual files — measurably faster for small objects, but they are not
+  browsable on disk and the metadata store then carries their bytes. Set
+  `inlineThreshold: "0B"` on a driver if you want every object to be a visible
+  file. See [Size tiering](/guides/storage#size-tiering).
 - The default metadata backend is an embedded SQLite file inside the driver
   root and is **single-process per root**. If several bundles or replicas share
   one root, point the driver's `store` at a `connectors.json` entry instead.

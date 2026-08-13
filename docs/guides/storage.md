@@ -29,14 +29,16 @@ Gina also ships a client-side AMD module with the id `gina/storage` — a `local
 flowchart LR
     A["Controller action<br/>gina.storage()"] -->|"put(stream, meta)"| D[Driver]
     D --> S["Strategy<br/>(sharded)<br/>builds the key"]
-    D --> AD["Adapter<br/>(local)<br/>writes the bytes"]
+    D --> Q{"size vs<br/>inlineThreshold"}
+    Q -->|"under — inline tier"| M["Metadata store<br/>(embedded SQLite,<br/>or a connector)"]
+    Q -->|"at or above"| AD["Adapter<br/>(local)<br/>writes the bytes"]
     AD -->|"1. stream"| T["&lt;root&gt;/.tmp/…"]
     T -->|"2. rename — atomic publish"| F["&lt;root&gt;/YYYY/MM/DD/&lt;ulid&gt;.pdf"]
-    D -->|"3. metadata row"| M["Metadata store<br/>(embedded SQLite,<br/>or a connector)"]
+    AD -->|"3. metadata row"| M
     D -.->|"returns"| K["{ key, size, contentType }"]
 ```
 
-The write reaches its final path only through `rename(2)`, which is atomic: a concurrent reader either sees nothing or sees the complete object, never a partial one. If anything fails mid-write — the source errors, the disk fills, the size cap is exceeded — the temp file is removed and the **real** error is reported.
+A file-backed write reaches its final path only through `rename(2)`, which is atomic: a concurrent reader either sees nothing or sees the complete object, never a partial one. An object smaller than the driver's [size-tiering threshold](#size-tiering) never touches the filesystem at all — its bytes land in the metadata store in a single transaction. If anything fails mid-write — the source errors, the disk fills, the size cap is exceeded — nothing is published and the **real** error is reported.
 
 ---
 
@@ -66,6 +68,7 @@ The write reaches its final path only through `rename(2)`, which is atomic: a co
 | `root` | yes | Absolute directory holding this driver's objects. |
 | `maxObjectSize` | no | Per-object ceiling, as a **unit-suffixed string** (`"50MB"`). Defaults to `100MB`. |
 | `store` | no | A `connectors.json` entry name for the metadata store. Omit for the embedded default. |
+| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. |
 
 `storage.default` names the driver returned by a no-argument `gina.storage()`. Omit it and every call must name its driver.
 
@@ -82,7 +85,7 @@ The write reaches its final path only through `rename(2)`, which is atomic: a co
 "maxObjectSize": 50        // ⚠️ warns at boot, falls back to the default
 ```
 
-This is deliberately stricter than `settings.json > upload`, where a bare number means megabytes for backward compatibility. Inside `upload` a bare number already means two different things — `maxFields: 1000` is a count, `maxFieldsSize: 50` would be megabytes — so there is no single meaning for this key to inherit. Rather than guess, it asks.
+This is deliberately stricter than `settings.json > upload`, where a bare number means megabytes for backward compatibility. Inside `upload` a bare number already means two different things — `maxFields: 1000` is a count, `maxFieldsSize: 50` would be megabytes — so there is no single meaning for this key to inherit. Rather than guess, it asks. `inlineThreshold` follows the same rule.
 
 ---
 
@@ -130,11 +133,11 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured from the published file, never taken from the client. |
-| `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. |
-| `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. |
-| `release(key, cb)` | `existed` | Removes the object and its metadata row. Idempotent. |
-| `resolve(key, cb)` | `{kind: 'path', path}` | How to serve the object. Branch on `kind`. |
+| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. |
+| `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. Serves both tiers. |
+| `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. |
+| `release(key, cb)` | `existed` | Removes the object and its metadata row. Idempotent. Handles both tiers. |
+| `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
 | `capabilities` | an object | What this driver can do. |
 
 ```javascript
@@ -153,7 +156,7 @@ if (driver.capabilities.ranges) {
 }
 ```
 
-Every capability is `false` in this release: `offload`, `ranges`, `dedup`, `resumable`, `inline`. They flip as the strategies that provide them arrive, and code that branches now keeps working when they do.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. The rest — `offload`, `ranges`, `dedup`, `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
 
 ---
 
@@ -210,9 +213,29 @@ lives in the [file uploads guide](/guides/file-uploads#routing-a-group-to-a-stor
 
 ---
 
+## Size tiering
+
+Below a threshold, per-file overhead — inode, block allocation, the syscalls around open and rename — costs more than the payload itself. So objects **strictly under** a driver's `inlineThreshold` are stored *inline*: their bytes land in the metadata store as part of a single transaction, with no temp file, no directories, no filesystem round-trip. At or above the threshold, objects take the file path described above.
+
+The default is `"64KB"`, and it is a measured number, not folklore: on the embedded store, inline writes are 2.7–13× faster than per-file writes at and below that size, and the advantage disappears above it. Set `"0B"` to turn tiering off for a driver, or raise the threshold for a metadata backend that handles larger blobs well.
+
+Nothing else about the driver changes:
+
+- **Keys look the same in both tiers** — still opaque, still date-ordered.
+- **`get()`, `stat()` and `release()` behave identically** for inline and file-backed objects.
+- **`resolve()` is where the tier shows**: `{kind: 'inline'}` instead of `{kind: 'path'}`, because an inline object has no file to hand to a sendfile-style offload — stream it through `get()`.
+- **Changing the threshold is safe at any time.** Reads follow where each object's bytes actually live, so existing objects stay readable on either side of a new threshold; only new writes are placed by it. A metadata database created before tiering existed is migrated in place at open.
+
+Two operational tradeoffs, stated plainly:
+
+- **Sub-threshold objects are not individually visible on disk.** The "SSH in and find the file by date" property of the `sharded` layout holds only for objects at or above the threshold. If your operations depend on every object being a browsable file, set `"0B"`.
+- **The metadata store carries their bytes.** Losing `<root>/.meta.db` loses inline objects themselves, not just their metadata — file-backed bytes survive an index loss. The embedded database lives inside the driver root, so any backup of the root already includes it; on a connector-backed store, the payloads land in that backend and follow *its* durability story.
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
-Each object gets a metadata row — original name, content type, size, creation time — which is what `stat()` reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
+Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
 
 That default is **single-process per driver root**. SQLite's locking is unreliable on a shared network filesystem, so if two bundles, or several replicas, share one root, point the driver at a connector instead:
 
@@ -245,7 +268,7 @@ Connector backends are demand-gated. Setting `store` today refuses the boot with
 
 ## Durability, stated plainly
 
-`rename(2)` guarantees that a reader never observes a partial object. It does **not** guarantee the object survives a host crash: writes are not `fsync`ed, so an acknowledged write can still be lost if the machine loses power before the filesystem flushes. If your retention requirements are stricter than that, replicate to durable storage rather than relying on the local adapter alone.
+For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object. It does **not** guarantee the object survives a host crash: writes are not `fsync`ed, so an acknowledged write can still be lost if the machine loses power before the filesystem flushes. Inline objects are in the same class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. Either way — recent writes at risk, never a partial object. If your retention requirements are stricter than that, replicate to durable storage rather than relying on the local adapter alone.
 
 ---
 
@@ -257,7 +280,6 @@ Connector backends are demand-gated. Setting `store` today refuses the boot with
 | `stream` strategy | Large sequential media, resumable segment uploads. |
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. |
 | Range serving | `206 Partial Content` for media, in both engines. |
-| Size tiering | Small objects inline in the metadata store. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
