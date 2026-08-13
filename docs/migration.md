@@ -154,6 +154,25 @@ now fails the field with a console warning. Write the literal unwrapped.
 
 ---
 
+### Fixed — submit gestures during an in-flight live-check query now wait for the verdict (no action required)
+
+With live checking enabled, a submit gesture that landed while a field's async
+`query` rule was still waiting for its server verdict used to be silently
+refused: the not-yet-valid trigger gate could not tell *verdict pending* from
+*invalid*, and the refusal had no errors to reveal — a dead click whose window
+lasts the whole query round trip (it scales with query latency, not typing
+speed). This affected a direct click, a click on markup nested inside the
+button (`<button type="submit"><span>`), and a programmatic `submit()` — which
+could stall without a trace.
+
+All submit doors now recognize the pending state: the gesture starts a normal
+submit cycle that waits for the verdict — the loading state arms while it
+waits, a passing verdict sends exactly once after the settle, and a failing one
+renders the errors and releases the form. Nothing changes for forms without
+`query` rules; authored `aria-disabled` / `disabled` marks keep refusing, and a
+settled field with a committed error keeps the reveal-and-focus answer. See
+[the marker-gate warning](/guides/forms-and-validation) for the full contract.
+
 ## 0.6.5 → 0.6.6
 
 ### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)

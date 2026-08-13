@@ -443,7 +443,9 @@ disabled button emits no click event, so clicking it would give the user no
 feedback at all — **nor** `aria-disabled`, which announces the control as not
 operable to assistive technology while Gina deliberately answers a click here:
 validation runs, every invalid field is revealed, and focus moves to the first
-one, while the send stays blocked. Before 0.6.5 this state was expressed with
+one, while the send stays blocked — or, since 0.6.7, when the only blocker is
+an async `query` verdict still on the wire, the click instead starts a submit
+cycle that waits for it (see the warning below). Before 0.6.5 this state was expressed with
 `aria-disabled="true"`; if your CSS or tests select on that attribute, see the
 [migration notes](/migration).
 
@@ -474,23 +476,32 @@ readable.
 :::warning The marker gates trusted gestures; the validity check gates everything else
 Since 0.6.4 these markers are no longer purely presentational: Gina refuses a
 click on a marked submit control outright — the invalid fields are revealed and
-the first is focused, but the send is never reached. Since 0.6.5 the same gate
+the first is focused, but the send is never reached. Since 0.6.7 that refusal
+happens only when there is a settled verdict to show: when the **only** blocker
+is an async `query` verdict still on the wire (no settled field carries a
+committed error), the gesture proceeds instead — the submit cycle starts, the
+loading state arms, and the pass waits for the verdict, sending exactly once
+after a passing settle or rendering the errors and releasing the form on a
+failing one. Since 0.6.5 the same gate
 covers every **trusted gesture** into submit, read off the form's live
 registered trigger: Enter inside a field, and a click that lands on markup
 nested inside the button, such as
 `<button type="submit"><span>Save</span></button>`, are refused the same way
-while the trigger is marked.
+while the trigger is marked — with the same 0.6.7 pending-verdict exception.
 
 Programmatic routes — `form.requestSubmit()` and
 `gina.validator.$forms[formId].submit()` — are not gestures and are
 deliberately not gated by the marker. What blocks them is Gina's validity check
 at submit time, and that check runs whether or not a submit control was ever
-discovered.
+discovered. Since 0.6.7 a programmatic submit issued while a `query` verdict is
+on the wire also waits for it and completes — previously it could stall
+silently.
 
 The gate also honours a disabled state you author yourself: a submit control
 you mark `aria-disabled="true"` (or natively `disabled`, where the browser does
 not already enforce it) is refused the same way — and since 0.6.5 Gina never
-auto-clears an `aria-disabled` you authored. It is yours until you remove it.
+auto-clears an `aria-disabled` you authored. It is yours until you remove it,
+and the pending-verdict exception never overrides an authored mark.
 
 So treat the markers as the affordance and the validity check as the guarantee.
 There is no "block submit" data attribute. If a form has no discoverable submit
