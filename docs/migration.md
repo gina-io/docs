@@ -19,6 +19,356 @@ upward to the target version.
 
 ---
 
+## 0.6.6 → 0.6.7
+
+### Added — object storage (no action required)
+
+A new optional `storage` block in `settings.json` declares named storage
+drivers, reachable from application code as `gina.storage()`. Existing projects
+are unaffected: with no `storage` block the feature is inert, and the upload
+path — `self.store()`, the multipart handler, and every `upload` group setting —
+behaves exactly as before. Routing an upload group into a driver is opt-in and
+covered in its own entry below.
+
+If you adopt it, three things are worth knowing up front because they are
+enforced at boot rather than at first use:
+
+- A driver `root` must be **absolute**, and must sit **outside every
+  web-served directory** (any bundle's `publicPath`, and any `content.statics`
+  target). A root inside one would make stored objects publicly fetchable
+  without passing your authorization, so the boot refuses it.
+- `maxObjectSize` and `inlineThreshold` take **unit-suffixed strings**
+  (`"50MB"`, `"64KB"`). A bare number warns and falls back to the default —
+  deliberately stricter than `upload.maxFieldsSize`, where a bare number means
+  megabytes for backward compatibility.
+- **Size tiering is on by default**: objects strictly under `inlineThreshold`
+  (default `"64KB"`) are stored inline in the metadata store rather than as
+  individual files — measurably faster for small objects, but they are not
+  browsable on disk and the metadata store then carries their bytes. Set
+  `inlineThreshold: "0B"` on a driver if you want every object to be a visible
+  file. See [Size tiering](/guides/storage#size-tiering).
+- The default metadata backend is an embedded SQLite file inside the driver
+  root and is **single-process per root**. If several bundles or replicas share
+  one root, point the driver's `store` at a `connectors.json` entry instead.
+
+Keys returned by `put()` are **opaque** — store them, but never parse one or
+build one by hand; that is what lets the key layout change later without
+breaking anything already stored.
+
+See [Object storage](/guides/storage) for the full guide.
+
+### Added — the cas storage strategy (no action required)
+
+Storage drivers can now declare `strategy: "cas"` — content-addressed,
+deduplicating, refcounted storage for immutable content. Existing drivers and
+projects are unaffected: `sharded` behaviour, key shapes and durability are
+byte-for-byte unchanged, and cas is purely opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **Identical bytes stored twice yield the same key** and no second copy;
+  `put()` results carry a `deduplicated` flag. Keys are extension-less by
+  construction.
+- **`release()` drops a reference instead of deleting.** Bytes are reclaimed
+  by a periodic sweep once a blob has sat at zero references past a grace
+  window (`sweepGrace`, default `"1h"`) — so releasing and immediately
+  re-uploading the same content transfers nothing twice.
+- **cas publishes fsync by default** (`fsync: true`) — the first fsync
+  anywhere in gina. If you measure a write-latency regression on a cas driver
+  and your durability requirements allow it, `fsync: false` opts back into
+  sharded-class durability.
+- **The boot now stamps every driver root with its strategy** — cas and
+  sharded alike — and warns on every boot if the configured strategy stops
+  matching the stamp, because a strategy flip on populated storage requires a
+  re-key migration. A pre-existing root is stamped silently on its first boot
+  after the upgrade; the embedded metadata database gains two columns in
+  place, idempotently.
+
+See [Content-addressed storage](/guides/storage#content-addressed-storage-cas)
+for the full section, including the `findByDigest` dedup-oracle caution.
+
+### Added — storage maintenance CLI and endpoints (no action required)
+
+`gina storage:stats`, `gina storage:gc` (`--dry-run`) and `gina storage:verify`
+(`--fix`) operate a bundle's storage drivers with the cache-command grammar. A
+running bundle is served through new always-on, admin-gated
+`/_gina/storage/stats|gc|verify` endpoints (`app.json > admin.allowFrom`,
+loopback by default) so the process that owns the store does the work; a
+stopped bundle is resolved offline. `storage:verify` reports orphaned blob
+files (fixable, offline only) separately from rows whose bytes are missing
+(loss evidence — reported, never auto-fixed). Nothing is required of existing
+projects: with no `storage` block, the commands simply report storage as not
+configured.
+
+See [Maintenance: stats, gc and verify](/guides/storage#maintenance-stats-gc-and-verify)
+for the full section.
+
+### Added — upload groups can publish to a storage driver (no action required)
+
+An upload group may now carry a `driver` key, routing that group's
+`self.store()` step through the named `storage` driver instead of moving files
+to the call's target directory:
+
+```json title="config/settings.json"
+"upload": {
+  "groups": {
+    "avatars": { "allowedExtensions": ["jpg", "png"], "driver": "assets" }
+  }
+}
+```
+
+This is entirely opt-in. **Groups without a `driver` keep the historical move
+path byte-for-byte** — same result entry shape, same success sentinel, same
+abort-on-first-error — so an existing project sees no change.
+
+If you do adopt it, the result entries for that group change shape: a routed
+file comes back as `{ file, group, driver, key, size, type, encoding }` with an
+opaque storage `key` and **no `filename`**, because there is no path to hand
+back. Persist the key and read the object through `gina.storage(driver)`. One
+`store()` call may mix routed and moved files, with result slots staying aligned
+1:1 with the input; and `target` may be `null` when every file routes.
+
+Two boot-time checks come with it: a group naming a driver that is not declared
+in `storage.drivers` refuses the boot (as does any `driver` binding when no
+`storage` block exists), and a group whose `path` sits inside its driver's
+`root` earns a warning — `path` remains valid beside `driver`, but for a routed
+group it only names the parse-time staging directory.
+
+See [Routing a group to a storage driver](/guides/file-uploads#routing-a-group-to-a-storage-driver).
+
+### Fixed — `req.files[].group` carries the resolved group (action may be required)
+
+The multipart parser already resolved each file part's upload group — a part
+carrying no `group` tag resolves to `untagged` — but it pushed the **raw**
+disposition parameter into the record. `req.files[].group` was therefore
+`undefined` in exactly that default case, absent from the very field the group
+gate had just enforced against.
+
+The record now carries the resolved group, so an untagged part reports
+`group: "untagged"`.
+
+**Check any controller that tests the field's truthiness.** Code shaped like:
+
+```js
+if (file.group) {
+  // previously skipped for untagged files — now entered
+}
+```
+
+now takes the branch for untagged uploads. Code comparing against a known group
+name (`file.group === 'avatars'`) is unaffected, and code that already defaulted
+the value app-side keeps working.
+
+### Fixed — the settings template no longer advertises upload keys the framework never read (no action required)
+
+The scaffolded `settings.json` used to show per-group `filePrefix`, `subFolder`
+and `maxFieldsSize` samples, plus a block-level `encoding` key. **No code path
+ever read any of them** — `encoding` in particular has always been ignored in
+favour of the parser's own UTF-8 parameter decoding. They are removed from the
+template, three comments claiming block-level keys could be redefined per group
+are corrected, and `schema/settings.json` now declares the real key set at both
+block and group level.
+
+Nothing changes at runtime, because nothing read those keys. **Applications that
+declare their own per-group keys and apply them app-side are unaffected** and
+should keep doing so — `additionalProperties` stays permissive precisely so
+those configurations continue to validate, and the framework still does not read
+them, so nothing is applied twice.
+
+The [settings reference](/reference/settings) has been corrected accordingly: it
+had documented those keys as functional, including a `:paramName` substitution
+syntax for `subFolder` that never existed, a claim that a per-group
+`maxFieldsSize` took precedence over the block-level one, and a `false` default
+for `isMultipleAllowed` (multiple files are in fact allowed when the key is
+omitted).
+
+### Fixed — `is` regex literals compile as authored (ACTION REQUIRED if your patterns contain parentheses)
+
+A security transform in the `is` rule removed every `(`, `)` and literal
+`return` from a regex-literal condition **before** compiling it, silently
+changing what the pattern matched. Grouping was destroyed and the anchors
+rebound — `/^(a|b)$/` behaved as `/^a|b$/`, which accepts any value merely
+*containing* a middle alternative — and a quantified group like `(#TAG)?`
+became a literal `#TA` followed by an optional `G`. The transform now applies
+only to the binary-comparison form (`$a >= $b`, `"x" === "y"`, …), which keeps
+its grammar-locked protection; a regex literal compiles exactly as written.
+
+**Action required:** review `is` rules whose pattern contains parentheses.
+They now match as authored — stricter — so any value that was passing only
+through the mangled pattern will start failing validation. Patterns without
+parentheses are unaffected, as are patterns already written with each
+alternative anchored independently (`/^a$|^b$/`), which behave identically
+before and after this fix.
+
+One edge case: a condition written as a parenthesis-wrapped regex — `(/foo/)`
+rather than `/foo/` — previously worked because the transform unwrapped it; it
+now fails the field with a console warning. Write the literal unwrapped.
+
+---
+
+### Fixed — submit gestures during an in-flight live-check query now wait for the verdict (no action required)
+
+With live checking enabled, a submit gesture that landed while a field's async
+`query` rule was still waiting for its server verdict used to be silently
+refused: the not-yet-valid trigger gate could not tell *verdict pending* from
+*invalid*, and the refusal had no errors to reveal — a dead click whose window
+lasts the whole query round trip (it scales with query latency, not typing
+speed). This affected a direct click, a click on markup nested inside the
+button (`<button type="submit"><span>`), and a programmatic `submit()` — which
+could stall without a trace.
+
+All submit doors now recognize the pending state: the gesture starts a normal
+submit cycle that waits for the verdict — the loading state arms while it
+waits, a passing verdict sends exactly once after the settle, and a failing one
+renders the errors and releases the form. Nothing changes for forms without
+`query` rules; authored `aria-disabled` / `disabled` marks keep refusing, and a
+settled field with a committed error keeps the reveal-and-focus answer. See
+[the marker-gate warning](/guides/forms-and-validation) for the full contract.
+
+### Fixed — forms with an async `query` rule complete correctly (no action required)
+
+A cluster of defects in how a validation pass settled around an asynchronous
+`query` rule. They interacted, which is why they are described together — a
+form could exhibit several at once, and each masked the others. All are fixes
+restoring the intended behaviour; none require a configuration change.
+
+- **A submit could leave before the query answered.** A concurrent validation
+  pass disarmed the whole pass's async waiter when the field's listener was
+  already registered, so the pass completed on the sync-only verdict: the
+  request went out, and the query's error rendered after the POST had already
+  left. Waiters are now pass-local, stack, and detach per pass, and the engine
+  marks each (field, value) request in flight so the same-value fast path
+  cannot release a field whose verdict is still pending. A failing query now
+  blocks the submit outright.
+- **The completion carried only the query field's verdict.** On a full-form
+  submit, every *other* invalid field was adjudicated but never rendered, and
+  the first-invalid focus could only ever land on the query field. The inverse
+  scene — the query passes but another field is invalid — dispatched an empty
+  error set and refused the submit with nothing shown. The completion now
+  carries the whole form's verdict. Single-element live-check passes are
+  unchanged.
+- **A re-click on an unchanged value cleared other fields' errors.** The two
+  synchronous release paths (a cached same-value verdict, and the known-invalid
+  wire skip) fired mid-validation, completing the pass before fields declared
+  *after* the query field were adjudicated — so the outcome depended on field
+  declaration order. Both now defer to a microtask, taking the same post-pass
+  shape a real network settle always had.
+- **A clean form whose query field was not declared last could never submit.**
+  The async completion dispatched only when the query field was last in the
+  rule set, so the submit callback starved, no request left, and the form's
+  re-entry latch stranded — silently swallowing every later click until the
+  page was reloaded. A latched form's completion now dispatches
+  unconditionally.
+- **Stale listeners could replay a submit.** Each pass left its
+  `validated.<formId>` listener attached for the page's lifetime (the removal
+  call carried no function reference, so it detached nothing), and every stale
+  listener ran the dispatching pass's callback — one completion could replay a
+  submit once per leftover listener. Listeners now register only when the pass
+  carries a callback, consume only their own pass's dispatch, and detach on
+  consumption.
+- **A submit trigger with no markup `id` was bound twice**, so every click ran
+  two full validation cycles. Control collection is deduped by node identity
+  now, and the rebind guard tests the key that actually gets registered.
+  Id-carrying and form-reassociated triggers were never affected.
+
+### Fixed — `getConfig().settings` resolves path placeholders (action may be required)
+
+A settings value written with a `${bundlePath}`, `${libPath}`, `${publicPath}`,
+`${handlersPath}`, `${mountPath}`, `${gina}`, `${project}`, `${root}`,
+`${source}` or `${<name>Port}` placeholder reached the **no-argument**
+`getConfig()` surface as a literal, unsubstituted token. The alias was bound
+before the substitution pass ran, and that pass returns a new object rather
+than rewriting the original one, so `getConfig().settings` kept pointing at the
+pre-substitution copy while `getConfig().content.settings` carried the resolved
+values.
+
+Both surfaces now agree. Placeholders an earlier pass already resolved
+(`${homedir}`, `${scope}`, …) and `${secret:…}` references were never affected.
+
+**Check any code that read around this.** Reading
+`getConfig().content.settings` explicitly, or substituting the token app-side,
+keeps working unchanged — both now receive the same resolved value. Code that
+*branched on seeing a literal placeholder* (treating the raw `${…}` token as a
+sentinel for "not configured") will stop taking that branch.
+
+### Fixed — Inspector Data and Forms tabs show your data, not the framework's (no action required)
+
+Dev-mode Inspector only; nothing on the wire or in production changes.
+
+- **The Data tab no longer lists the `__ginaFlow` and `__ginaQueries`
+  transport keys.** They are embedded in JSON responses in dev mode so a
+  calling bundle can merge the upstream query log and timeline, and the Query
+  and Flow tabs already present them first-class — but they also appeared as
+  top-level rows in the Data tree, in raw-JSON mode, and in the download
+  dialog. Any **root** key prefixed `__gina` is now hidden across every Data
+  surface, including the payload size badge, which measures what the tab
+  actually displays. Nested keys carrying the prefix are treated as
+  application data and stay visible.
+- **The Forms tab no longer renders the bundle's forms catalog as pseudo-forms.**
+  The walked `forms/` directory groups (rules, mocks, validators) appeared as
+  sections above the page's real forms. They are now demoted into a single
+  collapsed **Bundle catalog** card at the bottom of the tab: page forms keep
+  the prime space, each group stays inspectable inside the card with its fold
+  state preserved, and runtime form state that outlived its DOM form (a closed
+  popin's form) keeps its own card. When the payload carries no pristine
+  catalog snapshot the tab falls back to the previous per-key rendering, so
+  nothing is ever hidden.
+
+### Changed — query instrumentation redacts bound parameter values by default (action rarely required)
+
+Dev-mode console query lines and the Inspector Query tab no longer show bound
+parameter values — nor a MongoDB resolved body's values, nor the document
+values a Couchbase `bulkInsert` statement inlines. They carry count + type
+markers instead (e.g. `3 [string, number, string]`, or `[string]` markers in
+the params table). Bound values are routinely secrets owned by your
+application — session or credential tokens, API keys, password hashes — and
+they were reaching the process log in clear; the key-based `inspector.redact`
+matching cannot cover a positional bind array, which has no key names.
+
+**Action required only if** your debugging workflow relies on seeing real
+bound values. Opt back in per bundle:
+
+```json title="settings.json"
+{
+  "inspector": {
+    "queries": { "captureValues": true }
+  }
+}
+```
+
+Statements, timings, index badges, and arity/type diagnostics are unchanged.
+The opt-in follows the same contract as `inspector.ai.captureText` and
+`inspector.events.captureArgs`, and also governs the instrumentation-window
+capture on production-scope processes. See
+[the Inspector guide](/guides/inspector) for details.
+
+### Changed — framework default looks ship in a CSS cascade layer (action rarely required)
+
+The default styling gina ships for its state-hook attributes —
+`data-gina-loading` and `data-gina-form-submit-gated` — now lives inside a
+`@layer gina` cascade layer. Any **un-layered** rule in your own stylesheets
+beats it, regardless of selector specificity or stylesheet load order, so
+overriding a framework default no longer needs `!important` or a
+specificity-inflating selector.
+
+Two boundaries worth knowing:
+
+- **Functional rules stay un-layered on purpose** — popin structure and the
+  scroll lock among them. Layering those would let a generic project reset
+  silently break them, which is a worse failure than an unwanted default look.
+- **If your project organises its own CSS in cascade layers**, order yourself
+  against gina explicitly: declare `@layer gina, app;` early in your first
+  stylesheet. Layered project rules otherwise resolve against gina's layer by
+  declaration order, which is not what you want to leave to chance.
+
+Browsers without cascade-layer support simply drop the default look; the
+attributes are still written and project CSS keyed on them still applies.
+
+**Action required only if** you previously fought these defaults with
+`!important` or an inflated selector — those still work, and can now be
+simplified. See
+[the override contract](/guides/forms-and-validation) in the forms guide.
+
 ## 0.6.5 → 0.6.6
 
 ### Changed — MQ log transports always deliver to the local daemon; `host_v4` no longer affects them (action rarely required)

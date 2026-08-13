@@ -443,7 +443,9 @@ disabled button emits no click event, so clicking it would give the user no
 feedback at all — **nor** `aria-disabled`, which announces the control as not
 operable to assistive technology while Gina deliberately answers a click here:
 validation runs, every invalid field is revealed, and focus moves to the first
-one, while the send stays blocked. Before 0.6.5 this state was expressed with
+one, while the send stays blocked — or, since 0.6.7, when the only blocker is
+an async `query` verdict still on the wire, the click instead starts a submit
+cycle that waits for it (see the warning below). Before 0.6.5 this state was expressed with
 `aria-disabled="true"`; if your CSS or tests select on that attribute, see the
 [migration notes](/migration).
 
@@ -451,8 +453,10 @@ Since 0.6.5 the framework ships a modest default look for the state —
 `cursor: not-allowed` plus `opacity: 0.7` on
 `[data-gina-form-submit-gated="true"]` — deliberately without
 `pointer-events: none`, which would swallow the very click the error reveal
-answers. The selector is a single attribute (specificity 0,1,0), so any class
-of your own wins:
+answers. The default lives in the `gina` cascade layer, so **any rule of your
+own overrides it** — whatever its specificity, wherever your stylesheet loads
+(see [the default look](#the-default-look-and-how-to-replace-it) for the full
+contract):
 
 ```css
 [data-gina-form-submit-gated="true"] {
@@ -472,23 +476,32 @@ readable.
 :::warning The marker gates trusted gestures; the validity check gates everything else
 Since 0.6.4 these markers are no longer purely presentational: Gina refuses a
 click on a marked submit control outright — the invalid fields are revealed and
-the first is focused, but the send is never reached. Since 0.6.5 the same gate
+the first is focused, but the send is never reached. Since 0.6.7 that refusal
+happens only when there is a settled verdict to show: when the **only** blocker
+is an async `query` verdict still on the wire (no settled field carries a
+committed error), the gesture proceeds instead — the submit cycle starts, the
+loading state arms, and the pass waits for the verdict, sending exactly once
+after a passing settle or rendering the errors and releasing the form on a
+failing one. Since 0.6.5 the same gate
 covers every **trusted gesture** into submit, read off the form's live
 registered trigger: Enter inside a field, and a click that lands on markup
 nested inside the button, such as
 `<button type="submit"><span>Save</span></button>`, are refused the same way
-while the trigger is marked.
+while the trigger is marked — with the same 0.6.7 pending-verdict exception.
 
 Programmatic routes — `form.requestSubmit()` and
 `gina.validator.$forms[formId].submit()` — are not gestures and are
 deliberately not gated by the marker. What blocks them is Gina's validity check
 at submit time, and that check runs whether or not a submit control was ever
-discovered.
+discovered. Since 0.6.7 a programmatic submit issued while a `query` verdict is
+on the wire also waits for it and completes — previously it could stall
+silently.
 
 The gate also honours a disabled state you author yourself: a submit control
 you mark `aria-disabled="true"` (or natively `disabled`, where the browser does
 not already enforce it) is refused the same way — and since 0.6.5 Gina never
-auto-clears an `aria-disabled` you authored. It is yours until you remove it.
+auto-clears an `aria-disabled` you authored. It is yours until you remove it,
+and the pending-verdict exception never overrides an authored mark.
 
 So treat the markers as the affordance and the validity check as the guarantee.
 There is no "block submit" data attribute. If a form has no discoverable submit
@@ -684,14 +697,29 @@ Gina ships a deliberately minimal default: a `progress` cursor plus a gentle
 opacity pulse, with the pulse gated on `prefers-reduced-motion: no-preference`
 and a static dim for anyone who has asked for reduced motion.
 
-The selector is a single attribute, so any class of your own overrides it:
+Every default look — this one and the
+[submit-gated look](#the-submit-control) — ships inside a CSS cascade layer
+named `gina`, and that is the override contract: **any rule of your own that is
+not itself in a layer beats Gina's, regardless of selector specificity or of
+which stylesheet loads first.** Framework defaults sit below your CSS the same
+way user-agent defaults sit below author CSS. You do not need to know Gina's
+selectors, out-specificity them, or control the `<link>` order:
 
 ```css
+/* any of these wins over the default, as-is */
+button { cursor: wait; }
+
 .btn[data-gina-loading="true"] {
     animation: none;   /* drop just the motion */
     opacity: 1;
 }
 ```
+
+If your project organises its own CSS in cascade layers, order yourself against
+Gina explicitly — declare `@layer gina, app;` early in your first stylesheet so
+your layer outranks Gina's. In a browser without cascade-layer support the
+default look simply drops out: the attributes are still written, and your own
+CSS keyed on them still applies.
 
 Two things it deliberately does not do. It injects no spinner pseudo-element —
 that would stack with a spinner you already ship, and would force

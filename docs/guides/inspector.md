@@ -117,7 +117,8 @@ error messages.
 ### Query
 
 Surfaces every database query tied to the current HTTP request. Supported connectors:
-**Couchbase**, **MySQL**, **PostgreSQL**, and **SQLite**.
+**Couchbase**, **MySQL**, **PostgreSQL**, **SQLite**, **DuckDB**, **ScyllaDB**, and
+**MongoDB** (index badges are available on the first four).
 
 ```mermaid
 flowchart LR
@@ -133,7 +134,7 @@ Each query entry shows:
 - **Type** — query type (e.g. `N1QL`, `SQL`)
 - **Trigger** — `entity#method` as a split badge
 - **Statement** — SQL with syntax highlighting (keywords blue, functions purple, placeholders gold, strings green)
-- **Params** — positional parameters `$1`, `$2` with color-coded values
+- **Params** — positional parameters `$1`, `$2`; type markers by default, real values only when captured (see below)
 - **Timing** — execution duration in ms
 - **Origin** — which bundle executed the query
 - **Connector** — which connector was used (e.g. `couchbase`, `mysql`, `postgresql`, `sqlite`)
@@ -143,6 +144,33 @@ A **search bar** filters across all fields. When bundle A calls bundle B via HTT
 (`self.query()`), B's queries travel back as a `__ginaQueries` JSON sidecar and are
 merged into A's query log automatically — giving you full-page query visibility across
 bundle boundaries.
+
+**Capturing bound parameter values.** By default the params table — and the connectors'
+dev console query lines — carry only each parameter's *shape*: count and type markers
+such as `[string]`, `[number]` (`3 [string, number, string]` on the console lines).
+The bound values themselves never ride: a bound value is routinely a secret owned by
+your application (a session or credential token, an API key, a password hash), and the
+key-based `inspector.redact` matching cannot cover a positional array — it has no key
+names. The same treatment applies to value-bearing statement bodies: a MongoDB resolved
+body is logged with its structure (keys and nesting) but every primitive value masked,
+and a Couchbase `bulkInsert` statement — which inlines full document values — is logged
+as its operation plus a record count. To see real values, set
+`inspector.queries.captureValues` to `true` in `settings.json`:
+
+```json title="settings.json"
+{
+  "inspector": {
+    "queries": { "captureValues": true }
+  }
+}
+```
+
+Capturing bound values can expose credentials to the process log and the Inspector
+payload — including during a [production instrumentation window](#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation)
+— so it is off by default. Treat it as a local development aid, the same contract as
+`inspector.ai.captureText` and `inspector.events.captureArgs`. Arity mismatches and type
+coercion bugs — the usual reasons to read a params line — stay diagnosable in the
+redacted forms.
 
 #### Index reporting
 
