@@ -337,15 +337,71 @@ That default is **single-process per driver root**. SQLite's locking is unreliab
 ```json
 // connectors.json
 {
-  "assetsMeta": { "connector": "redis", "host": "127.0.0.1", "port": 6379 }
+  "assetsMeta": {
+    "connector": "couchbase",
+    "protocol": "couchbase://",
+    "host": "db1.internal",
+    "username": "gina",
+    "password": "${secret:CB_PASSWORD}",
+    "database": "gina_storage"
+  }
 }
 ```
 
-:::caution No connector ships a storage store yet
-Connector backends are demand-gated. Setting `store` today refuses the boot with a clear message rather than falling back silently — the embedded SQLite backend is the supported path in this release. If you need a shared-root deployment, open an issue describing the connector you need.
+:::info Couchbase is the connector store that ships today
+Other backends stay demand-gated: naming one refuses the boot with a clear message rather than falling back silently. If you need a different one, open an issue describing it.
 :::
 
 A store backing a **cas** driver additionally implements the four refcount verbs (`acquireRef` / `releaseRef` / `listZeroRefs` / `removeIfZero`) — the embedded store does, migrating pre-cas databases in place; a cas driver refuses to boot over a store that does not. Each verb must be atomic per key: that atomicity is what makes two concurrent identical uploads yield one blob with two references instead of a lost update.
+
+### The couchbase store
+
+Requires the `couchbase` SDK (major 3 or 4) in **your** project — the framework
+declares no dependency on it — and reads the connector's usual keys, where
+`database` is the **bucket** name. Optional: `scope` and `collection` (both
+`_default`), `prefix` (`stor:`), and `durability`.
+
+Each metadata row is one JSON document keyed `<prefix><driver>:<key>`. **The
+driver name namespaces every row**, so several drivers may share one
+`connectors.json` entry without colliding — which matters under `cas`, where
+keys are content-derived and therefore identical across drivers storing the
+same bytes.
+
+Per-key atomicity comes from Couchbase's own CAS: each refcount verb reads the
+document and writes it back with a compare-and-set guard, retrying a bounded
+number of times if another writer got there first. That is also why **no sweep
+election is needed** when several replicas run the GC concurrently — the claim
+step is itself compare-and-set, so exactly one sweeper collects each blob and
+the others simply skip it.
+
+Two things worth knowing before you deploy it:
+
+- **Inline payloads are stored base64-encoded inside the JSON document**, not
+  as binary document bodies — Couchbase cannot index or query a binary value,
+  and the maintenance verbs need to query. Budget the +33%: with the default
+  64KB tiering threshold a row is about 85KB, comfortably under Couchbase's
+  20MB document limit, but an `inlineThreshold` above roughly 14MB will not
+  fit.
+- **Two secondary indexes back the maintenance verbs.** The store creates them
+  at boot when they are missing:
+
+  ```sql
+  CREATE INDEX `gina_storage_refs` ON `bucket`.`scope`.`collection`(d, refs, zeroAt);
+  CREATE INDEX `gina_storage_keys` ON `bucket`.`scope`.`collection`(d, k);
+  ```
+
+  If the account cannot create indexes, that is not fatal — but run the two
+  statements by hand, because Couchbase *errors* on an unindexed query rather
+  than merely running it slowly, which would leave the GC sweep failing
+  silently. The store logs the exact statement to run in that case.
+
+Mutations use the SDK's default durability unless you set `durability` to
+`majority`, `majorityAndPersistToActive` or `persistToMajority`. The default is
+the same honesty class as the embedded store's WAL setting: a crash can lose the
+most recently acknowledged write. Couchbase failover can lose durably-written
+data too, and the two directions are not symmetric — a lost `acquireRef`
+undercounts (the grace window and `storage:verify` catch it), while a lost
+`releaseRef` overcounts and that blob is never collected.
 
 ---
 
