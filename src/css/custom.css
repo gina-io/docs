@@ -828,6 +828,16 @@ html:not([data-sidebar-collapsed]) .sidebar-flyout {
   color: #f0b036;
 }
 
+.tutorial-card--advanced .tutorial-card__level {
+  background: rgba(130, 80, 223, 0.12);
+  color: #6d28d9;
+}
+
+[data-theme='dark'] .tutorial-card--advanced .tutorial-card__level {
+  background: rgba(139, 92, 246, 0.18);
+  color: #a78bfa;
+}
+
 .tutorial-card__tags {
   display: flex;
   flex-wrap: wrap;

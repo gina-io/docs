@@ -13,6 +13,7 @@ function parseLink(item) {
 const LEVEL_CONFIG = {
   beginner:     { label: 'Beginner',     className: styles.levelBeginner },
   intermediate: { label: 'Intermediate', className: styles.levelIntermediate },
+  advanced:     { label: 'Advanced',     className: styles.levelAdvanced },
   expert:       { label: 'Expert',       className: styles.levelExpert },
 };
 
