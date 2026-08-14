@@ -72,7 +72,7 @@ A file-backed write reaches its final path only through `rename(2)`, which is at
 | `hash` | no | **cas only.** The digest algorithm; its name becomes a namespace segment in every key. Defaults to `"sha256"`. Validated at boot against what *this runtime's* crypto provides. |
 | `fsync` | no | **cas and stream.** Whether writes are flushed to disk before they are published or acknowledged — under `stream`, that includes each resumable segment before its durability marker. Defaults to `true` in both — see [Durability](#durability-stated-plainly). |
 | `sweepInterval` | no | **cas only.** How often the garbage-collection sweep runs, as a **unit-suffixed duration** (`"15m"`). `"0s"` disables the periodic sweep. |
-| `sweepGrace` | no | **cas only.** How long a blob must sit at zero references before the sweep may collect it (`"1h"`). Must be greater than zero. |
+| `sweepGrace` | no | **cas and sharded.** Under `cas`, how long a blob must sit at zero references before the sweep may collect it, *and* how old a leftover temp must be before it is reclaimed; under `sharded`, that temp rule alone. Defaults to `"1h"` and must be greater than zero. |
 | `chunkSize` | no | **stream only.** The segment size the write path is tuned for, as a **unit-suffixed string**. Defaults to `"8MB"`, and `createUpload()` reports it back so a client can match it. A tuning knob, not a protocol constraint. |
 | `sessionTtl` | no | **stream only.** How long an untouched [resumable upload session](#large-media-and-resumable-uploads-stream) survives before it is reclaimed, as a **unit-suffixed duration**. Defaults to `"24h"`. Must be greater than zero. |
 | `sessionSweepInterval` | no | **stream only.** How often that reclamation runs (`"1h"`). A pass also runs at boot. `"0s"` disables the periodic one. |
@@ -662,6 +662,17 @@ objects, and total logical bytes — a deduplicated blob counts once.
 `stream` drivers have no sweep *here* and are named and skipped, never an error
 — a `stream` driver does reclaim abandoned upload sessions, but on its own
 schedule rather than through this command.
+
+:::note Every strategy reclaims its own crashed-`put()` temps
+A `put()` whose **process** died leaves a temp file behind, and no verb ever
+looks at it again. Each strategy clears its own at **build time** — when the
+bundle starts, which is the earliest moment the previous process is provably
+gone — removing only temps older than the grace window (`sweepGrace`, or
+`sessionTtl` under `stream`). The age gate is the point: on a root shared by
+several bundles or replicas, a *fresh* temp may be a sibling process's live
+write, and eating it would corrupt a put in flight. Nothing here needs
+operating; it is why a crash does not slowly fill your driver root.
+:::
 
 `storage:verify` walks the blob tree against the metadata rows and reports two
 finding classes — deliberately asymmetric:
