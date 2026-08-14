@@ -193,13 +193,13 @@ if (driver.capabilities.ranges) {
 }
 ```
 
-`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `resumable` is `true` on a [`stream`](#large-media-and-resumable-uploads-stream) driver and is what gates the five session verbs. `ranges` is `true` on every local driver, because all three strategies implement `getRange()`.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `resumable` is `true` on a [`stream`](#large-media-and-resumable-uploads-stream) driver and is what gates the five session verbs. `ranges` is `true` on every local driver, because all three strategies implement `getRange()` — and on the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage), whose `get()`/`getRange()` proxy the provider.
 
 :::info `ranges` is consumed by the framework
 `capabilities.ranges` says the driver can return a byte range — and [`self.serveFromStorage()`](#serving-objects-over-http) consumes it: when the flag is `true`, HTTP `Range` requests are answered with `206`/`416` and `Accept-Ranges`; when `false`, the header is transparently ignored and the full `200` is served. Reach for raw `getRange()` only when you want custom protocol handling.
 :::
 
-`offload` is `false` everywhere in this release — no X-Accel / X-Sendfile handling exists in either engine, so you stream the bytes yourself — and flips with the `s3` adapter; code that branches now keeps working when it does.
+`offload` is `true` on the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage) — and `false` on every local driver, where you stream the bytes yourself. It is consumed by the framework from day one: [`self.serveFromStorage()`](#serving-objects-over-http) answers GET/HEAD on an offload-capable driver with a **307** to a short-lived presigned URL, handing the byte transfer to the provider. Code that branched on `capabilities.offload` while it was still `false` everywhere keeps working unchanged — that is what the flag was for.
 
 ---
 
@@ -224,7 +224,9 @@ flowchart LR
     B -- "null" --> N404[404]
     B -- "meta" --> C{If-None-Match<br/>matches the ETag?}
     C -- "yes" --> N304[304 — no read]
-    C -- "no" --> D{Range header,<br/>capabilities.ranges?}
+    C -- "no" --> O{capabilities.offload?<br/>GET / HEAD}
+    O -- "yes" --> R307["resolve() → 307 to a<br/>presigned URL, no-store"]
+    O -- "no (or opts.offload:false)" --> D{Range header,<br/>capabilities.ranges?}
     D -- "none / ignored" --> F["get() → 200, full body"]
     D -- "unsatisfiable" --> N416["416 + bytes */size"]
     D -- "satisfiable" --> E["getRange() → 206 + Content-Range"]
@@ -239,8 +241,9 @@ What one call gives you:
 | Conditional GET | `If-None-Match` matching the key ETag answers **304** with no driver read at all. |
 | Range | A single `bytes=` range (`a-b`, `a-`, `-n`) answers **206** with `Content-Range` and an exact `Content-Length`, read through `getRange()`. Unsatisfiable → **416** with `Content-Range: bytes */<size>`. Multi-range lists, other units and malformed values are ignored into the full **200**, which RFC 9110 allows. `Accept-Ranges: bytes` is advertised whenever `capabilities.ranges` is true. |
 | `If-Range` | Honoured only on an exact validator match; anything else degrades to the full 200 — fail-safe, so an interrupted download never resumes against different bytes. |
-| HEAD | Headers only — full-size accounting, no driver read, no body. |
+| HEAD | Headers only — full-size accounting, no driver read, no body. (On an offload-capable driver, HEAD redirects like GET — 307 preserves the method.) |
 | Caching | `Cache-Control: private, max-age=31536000, immutable` by default — a key's bytes can never change, and `private` keeps shared caches out of your authorization. Override verbatim with `opts.cacheControl`. |
+| Offload | On a driver with `capabilities.offload` (the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage)), GET/HEAD answer **307** to a presigned URL after the 304 check — the provider serves the bytes, `Range` included, with the content-type downgrade riding the *signed* `response-content-type`. `opts.offload: false` forces the in-process proxy path below. |
 
 ### Options
 
@@ -248,8 +251,9 @@ What one call gives you:
 | --- | --- |
 | `contentType` | Served verbatim — your informed choice, bypassing the downgrade below. |
 | `cacheControl` | Replaces the immutable caching default, verbatim. |
-| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). |
+| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). On the offload path it rides the presigned URL as `response-content-disposition`, so the provider's response carries it too. |
 | `filename` | The attachment filename (implies `download`). |
+| `offload` | `false` forces the in-process proxy path on an offload-capable driver — a private bucket, IP-gated egress, or byte-level control. Default: offload when the driver can. |
 
 :::caution The stored contentType is uploader-supplied
 `stat()` hands back whatever MIME type the uploader declared, verbatim. Serving `text/html` or `image/svg+xml` back on your own origin is a stored-XSS vector — and `nosniff` does not stop a *declared* type from rendering. So without an explicit `opts.contentType`, active-content types (`html`, `xml`, `svg`, `javascript`) are downgraded to `application/octet-stream`, and every response carries `X-Content-Type-Options: nosniff`. Pass `opts.contentType` once you have validated the type yourself.
@@ -498,6 +502,81 @@ Finally: `stream` neither tiers nor hashes. `inlineThreshold` and `hash` on a `s
 
 ---
 
+## The `s3` adapter — provider-owned object storage
+
+Set `"adapter": "s3"` and the driver stores its objects on any S3-compatible provider — AWS S3, Scaleway, MinIO, R2 — instead of the local filesystem:
+
+```js
+"storage": {
+  "drivers": {
+    "archive": {
+      "adapter": "s3",
+      "bucket": "my-archive",
+      "prefix": "app/",
+      "endpoint": "s3.fr-par.scw.cloud"
+    }
+  }
+}
+```
+
+`bucket` is the only required key beside the adapter. `strategy` may simply be omitted — on external object storage the layout algorithm collapses to key naming, so `s3` runs the `sharded` grammar (`YYYY/MM/DD/<ulid><ext>`, under your `prefix`) and that is the default; declaring `cas` or `stream` refuses the boot with the reason (the provider owns placement — S3 ETags are not content digests, and multipart is the provider's own resumable). `endpoint` is for non-AWS providers (`https://` is prepended when you give a bare host); `forcePathStyle: true` is what MinIO wants. The opaque key **excludes** the prefix, so re-pointing `prefix` orphans previously stored objects exactly as re-pointing a local `root` would.
+
+Install the client **in your own project** — the framework declares no dependency on it, the same policy every database connector follows:
+
+```bash
+npm install @aws-sdk/client-s3 @aws-sdk/lib-storage @aws-sdk/s3-request-presigner
+```
+
+A configured `s3` driver whose SDK is not installed refuses the boot with exactly that hint.
+
+### Storeless — the provider owns the metadata
+
+An `s3` driver has **no metadata store**: no `root`, no embedded `.meta.db`, no `store` key (each warns as ignored if set). One `PutObject` atomically carries the bytes, the Content-Type, and the original name (as URI-encoded user metadata — which the provider documents as **immutable after upload**, exactly this layer's immutable-key contract). `stat()` is a strongly-consistent `HeadObject`; `release()` is an idempotent `DeleteObject` (the provider acknowledges without reporting prior existence, so `existed` is documented as acknowledgement-only — `stat()` first if you need the distinction). There is nothing to drift and nothing for `storage:verify` to check, **by construction** — and the shared-root topology that requires a [connector-backed store](#the-couchbase-store) on the `local` adapter cannot arise: every replica reads the provider's truth. Size tiering does not apply (`capabilities.inline` is `false`; `inlineThreshold` warns as ignored), and durability is the provider's, not a driver `fsync` knob.
+
+### Credentials
+
+Set `accessKeyId` + `secretAccessKey` **both or neither** — `${secret:KEY}` placeholders resolve here as in any config — or omit both (recommended on AWS and Kubernetes) and the SDK's default provider chain runs: environment variables, shared config, IMDS, IRSA. `sessionToken` is meaningful only beside the static pair. `region` may be omitted on real AWS (the SDK chain resolves it); beside a custom `endpoint` it defaults to `us-east-1`, which S3-compatible providers accept.
+
+### Offload serving — the presigned 307
+
+`capabilities.offload` is `true`, and [`self.serveFromStorage()`](#serving-objects-over-http) consumes it: GET and HEAD answer **`307 Temporary Redirect`** to a short-lived presigned URL (`presignExpiry`, default `"15m"`), and the provider serves the bytes — `Range` included, natively.
+
+```mermaid
+sequenceDiagram
+    participant C as client
+    participant G as gina (serveFromStorage)
+    participant P as provider (S3)
+    C->>G: GET /files/42 (your route, your authorization)
+    G->>P: HeadObject (stat gate — 404 stays yours)
+    G->>G: If-None-Match? → 304, no presign spent
+    G->>G: downgrade contentType, presign with signed response-* overrides
+    G-->>C: 307 Location: presigned URL (Cache-Control: private, no-store)
+    C->>P: GET presigned URL (Range rides along)
+    P-->>C: 200/206 — bytes, with YOUR content-type and cache policy
+```
+
+The order of the gates is the point: your route's **authorization already ran** (you called the facade), the **404 is still yours** (the stat gate — a missing object never leaks a provider error page), the **304 costs no signature**, and the facade's decisions reach the *provider's* response as **signed `response-*` overrides** — the fail-closed [content-type downgrade](#serving-objects-over-http) included, so an uploader-supplied `text/html` is not served verbatim from the bucket either. The redirect itself is `Cache-Control: private, no-store` (it must never outlive its signature), while the payload's caching policy — the immutable default, or your `opts.cacheControl` — rides `response-cache-control` on the presigned URL.
+
+`opts.offload: false` forces the in-process proxy path: `get()`/`getRange()` are real (`GetObject`, with `Range`), so everything the serving section documents works unchanged when you would rather not expose the bucket at all. Non-GET/HEAD methods always proxy. `resolve()` itself is also yours to call — `resolve(key[, opts], cb)` answers `{kind: 'url', url, expiresAt}` for embedding a link in a page or an email; presigning is local computation, so it deliberately does **not** verify existence (a URL to a since-released object answers the provider's own 404).
+
+### The minimal IAM policy
+
+Grant the driver's credentials, scoped to the bucket (and prefix where your policy language allows):
+
+- `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` — the verbs
+- `s3:ListBucket` — **without it, a missing key answers `403` instead of `404`**, so `stat()` surfaces an access error where the contract says `null`
+- `s3:ListBucketMultipartUploads`, `s3:AbortMultipartUpload` — the orphan sweep below
+
+### Incomplete multipart uploads
+
+A `put()` of unknown length uploads multipart under the hood, and a process that dies mid-put leaves an **incomplete multipart upload** — the s3 analog of a crashed-put temp file, except this one **bills storage until it is aborted, with no expiry**. The driver sweeps at build time: uploads under your `prefix` older than `sweepGrace` (default `"1h"`, the same key and meaning as the local temp-orphan gate) are aborted, best-effort, one bounded page per boot. Configure an `AbortIncompleteMultipartUpload` bucket lifecycle rule as defense-in-depth for processes that never restart.
+
+:::info S3-compatible providers
+Strong read-after-write consistency (HEAD and LIST included) and the user-metadata semantics above are **AWS-documented** behaviour. A compatible provider claiming API parity owns its own consistency model — the adapter only uses the core compatibility surface (Put/Get/Head/Delete, ListObjectsV2, the multipart listing pair, and SigV4 presigning), and MinIO, Scaleway and R2 all implement it, but the guarantee is theirs to state, not gina's to transfer.
+:::
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
 Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
@@ -696,11 +775,10 @@ same result from whichever bundle you point at.
 
 | Not yet | What it will bring |
 | --- | --- |
-| `s3` adapter | Object-store backend; its client stays a project-side dependency. Brings `resolve()` → `{kind: 'url'}`, presigned URLs and `capabilities.offload`. |
 | Renditions | A `putRendition()` API for transcoded variants. The [`stream`](#large-media-and-resumable-uploads-stream) key layout already reserves the room beside `original`; there is no API yet. |
 | Stream maintenance | `storage:gc` and `storage:verify` support for `stream` — orphaned upload sessions and objects orphaned by a failed post-publish row write. A `stream` driver reclaims abandoned sessions on its own schedule; what is missing is an operator door and a consistency scan. |
 | `storage:migrate` | Strategy/hash re-key tooling for populated roots. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
-Every strategy named in the design now ships. A strategy name gina does not recognise refuses the boot as a typo, naming the ones it does.
+Every strategy — and every adapter — named in the design now ships: the layer is complete. A strategy or adapter name gina does not recognise refuses the boot as a typo, naming the ones it does.

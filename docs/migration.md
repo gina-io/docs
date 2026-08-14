@@ -21,6 +21,45 @@ upward to the target version.
 
 ## 0.6.7 → 0.6.8
 
+### Added — the `s3` storage adapter (no action required)
+
+Storage drivers can now declare `"adapter": "s3"` — objects live on any
+S3-compatible provider (AWS S3, Scaleway, MinIO, R2) instead of the local
+filesystem. Existing drivers are unaffected: `local` behaviour is
+byte-unchanged, and `s3` is opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **The SDK is your project's dependency** — install `@aws-sdk/client-s3`,
+  `@aws-sdk/lib-storage` and `@aws-sdk/s3-request-presigner`; a configured
+  driver without them refuses the boot with that hint (the policy every
+  database connector follows).
+- **Storeless** — the provider carries each object's metadata on the object
+  itself (immutable after upload, like the key). No `root`, no `store`, no
+  tiering; `stat()` is a strongly-consistent `HeadObject`. Grant
+  `s3:ListBucket`, or a missing key answers `403` where the contract says
+  `404`/`null` — the guide ships the minimal IAM policy.
+- **`resolve()` answers `{kind: 'url'}`** — a presigned GET (`presignExpiry`,
+  default `"15m"`) — and gains an optional middle `opts` argument
+  (`resolve(key[, opts], cb)`) carrying response overrides. Local strategies
+  accept and ignore it, so existing two-argument calls are untouched.
+- **`capabilities.offload` flips `true` for the first time**, and
+  `self.serveFromStorage()` consumes it: GET/HEAD answer **307** to a presigned
+  URL — after the local `If-None-Match` 304 check, with the fail-closed
+  content-type downgrade riding the *signed* `response-content-type` — while
+  `opts.offload: false` keeps the in-process proxy path. Code that branches on
+  `capabilities.offload` keeps working, exactly as documented when the flag
+  was introduced.
+- **Incomplete multipart uploads bill until aborted** — a build-time sweep
+  aborts uploads older than `sweepGrace`, and an
+  `AbortIncompleteMultipartUpload` bucket lifecycle rule is recommended
+  defense-in-depth.
+- **`cas`/`stream` refuse the s3 adapter at boot** with the reason (the
+  provider owns placement); `strategy` may simply be omitted there.
+
+See [The s3 adapter](/guides/storage#the-s3-adapter--provider-owned-object-storage)
+for the full section.
+
 ### Added — the stream storage strategy and resumable uploads (no action required)
 
 Storage drivers can now declare `strategy: "stream"` — one directory per asset,
