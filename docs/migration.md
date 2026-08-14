@@ -107,15 +107,24 @@ replayed against a redirect target tested only for `GET`, so `HEAD` was handled 
 `POST` or `PUT`:
 
 ```
-before:  HEAD /<webroot>?t=V   ->  303   Location: /<webroot>/?inheritedData=%7B…%7D   + a warning
-after:   HEAD /<webroot>?t=V   ->  302   Location: /<webroot>/?t=V                     + no warning
+before:  HEAD /<webroot>?t=V   ->  303   Location: /<webroot>/    + a warning
+after:   HEAD /<webroot>?t=V   ->  302   Location: /<webroot>/?t=V
 ```
 
 It drew a `trying to redirect using the wrong method` warning even on a route that
 explicitly lists `HEAD` among its own methods, it was answered `303` — telling the client
 to re-issue as `GET` and fetch a body it had deliberately not asked for — and, because the
-method was switched, it also received a copy of the request parameters appended to the
-target that the same request as a `GET` never gets.
+method was switched, it also received a copy of the request parameters that the same
+request as a `GET` never gets.
+
+:::note Where that parameter copy goes
+It rides the **session** when one is mounted, so the `Location` looks exactly as above. In
+a bundle with **no session plugin**, the session-less fallback appends it to the target in
+clear instead — `Location: /<webroot>/?inheritedData=%7B…%7D`. Same mechanism, different
+landing place, so a redirect's `Location` alone does not tell you whether the copy was
+made. This is the long-standing `redirect()` behaviour described in the
+[controller guide](/guides/controller), not something this release changes.
+:::
 
 `HEAD` now behaves exactly as `GET` does: the route's configured status code, the same
 `Location`, no warning.
