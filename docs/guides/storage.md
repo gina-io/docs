@@ -189,17 +189,73 @@ gina.storage().stat(key, function (err, meta) {
 ```javascript
 var driver = gina.storage();
 if (driver.capabilities.ranges) {
-    // serve a 206 range response
+    // Range requests will be answered with 206 — see "Serving objects over HTTP"
 }
 ```
 
 `inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `resumable` is `true` on a [`stream`](#large-media-and-resumable-uploads-stream) driver and is what gates the five session verbs. `ranges` is `true` on every local driver, because all three strategies implement `getRange()`.
 
-:::note `ranges` describes the DRIVER, not the server
-`capabilities.ranges` says the driver can return a byte range. It does **not** mean gina answers HTTP `Range` requests — the engines still send no `Accept-Ranges` or `206`, and wiring that up is [its own arc](#what-is-not-in-this-release). If you serve ranges today, you read them with `getRange()` and set the status and headers yourself.
+:::info `ranges` is consumed by the framework
+`capabilities.ranges` says the driver can return a byte range — and [`self.serveFromStorage()`](#serving-objects-over-http) consumes it: when the flag is `true`, HTTP `Range` requests are answered with `206`/`416` and `Accept-Ranges`; when `false`, the header is transparently ignored and the full `200` is served. Reach for raw `getRange()` only when you want custom protocol handling.
 :::
 
 `offload` is `false` everywhere in this release — no X-Accel / X-Sendfile handling exists in either engine, so you stream the bytes yourself — and flips with the `s3` adapter; code that branches now keeps working when it does.
+
+---
+
+## Serving objects over HTTP
+
+`self.serveFromStorage(driverName, key[, opts])` serves a stored object as the HTTP response with the protocol handled for you, identically on both engines: strong validators, conditional GET, and full single-range `Range` support.
+
+```javascript
+// GET /files/:id — Range, 304 and HEAD all handled for free
+this.download = function (req, res) {
+    var self = this;
+    var doc  = getDocFromDb(req.params.id);   // { storageKey, mime }
+    self.serveFromStorage('media', doc.storageKey, { contentType: doc.mime });
+};
+```
+
+The method is **terminal** — it renders the bytes (or a 304/416, or a 404/500 through `throwError`) and ends the response. Do not render after it.
+
+```mermaid
+flowchart LR
+    A[request] --> B{stat key}
+    B -- "null" --> N404[404]
+    B -- "meta" --> C{If-None-Match<br/>matches the ETag?}
+    C -- "yes" --> N304[304 — no read]
+    C -- "no" --> D{Range header,<br/>capabilities.ranges?}
+    D -- "none / ignored" --> F["get() → 200, full body"]
+    D -- "unsatisfiable" --> N416["416 + bytes */size"]
+    D -- "satisfiable" --> E["getRange() → 206 + Content-Range"]
+```
+
+What one call gives you:
+
+| Concern | Behaviour |
+| --- | --- |
+| Existence | `stat()`-gated: an unknown or released key answers **404**. A missing *driver* is an app config error and answers **500**, never 404. |
+| Validators | `ETag: "<key>"` — deliberately **strong**, because storage keys are immutable (every strategy publishes by temp-and-rename; nothing mutates in place) — plus `Last-Modified` from the publish time. |
+| Conditional GET | `If-None-Match` matching the key ETag answers **304** with no driver read at all. |
+| Range | A single `bytes=` range (`a-b`, `a-`, `-n`) answers **206** with `Content-Range` and an exact `Content-Length`, read through `getRange()`. Unsatisfiable → **416** with `Content-Range: bytes */<size>`. Multi-range lists, other units and malformed values are ignored into the full **200**, which RFC 9110 allows. `Accept-Ranges: bytes` is advertised whenever `capabilities.ranges` is true. |
+| `If-Range` | Honoured only on an exact validator match; anything else degrades to the full 200 — fail-safe, so an interrupted download never resumes against different bytes. |
+| HEAD | Headers only — full-size accounting, no driver read, no body. |
+| Caching | `Cache-Control: private, max-age=31536000, immutable` by default — a key's bytes can never change, and `private` keeps shared caches out of your authorization. Override verbatim with `opts.cacheControl`. |
+
+### Options
+
+| Key | Effect |
+| --- | --- |
+| `contentType` | Served verbatim — your informed choice, bypassing the downgrade below. |
+| `cacheControl` | Replaces the immutable caching default, verbatim. |
+| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). |
+| `filename` | The attachment filename (implies `download`). |
+
+:::caution The stored contentType is uploader-supplied
+`stat()` hands back whatever MIME type the uploader declared, verbatim. Serving `text/html` or `image/svg+xml` back on your own origin is a stored-XSS vector — and `nosniff` does not stop a *declared* type from rendering. So without an explicit `opts.contentType`, active-content types (`html`, `xml`, `svg`, `javascript`) are downgraded to `application/octet-stream`, and every response carries `X-Content-Type-Options: nosniff`. Pass `opts.contentType` once you have validated the type yourself.
+:::
+
+Under [`cas`](#content-addressed-storage-cas), a partially-downloaded object stays valid indefinitely — the key is a content address — which is exactly what the immutable cache default and the strong ETag lean on.
 
 ---
 
@@ -614,7 +670,6 @@ same result from whichever bundle you point at.
 | Not yet | What it will bring |
 | --- | --- |
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. Brings `resolve()` → `{kind: 'url'}`, presigned URLs and `capabilities.offload`. |
-| Range serving | `206 Partial Content` in both engines, driven from `getRange()`. The **driver** half already ships on all three strategies — what is missing is the engines parsing `Range` and answering `Accept-Ranges`/`Content-Range`. |
 | Renditions | A `putRendition()` API for transcoded variants. The [`stream`](#large-media-and-resumable-uploads-stream) key layout already reserves the room beside `original`; there is no API yet. |
 | Stream maintenance | `storage:gc` and `storage:verify` support for `stream` — orphaned upload sessions and objects orphaned by a failed post-publish row write. A `stream` driver reclaims abandoned sessions on its own schedule; what is missing is an operator door and a consistency scan. |
 | `storage:migrate` | Strategy/hash re-key tooling for populated roots. |

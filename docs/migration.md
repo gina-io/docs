@@ -226,6 +226,33 @@ code — `302` for the framework-generated webroot redirect — instead of `303`
 monitor or health-check asserting `303` on a `HEAD` against a bare webroot, adjust it.
 :::
 
+### Added — HTTP Range serving for stored objects (no action required)
+
+A controller can now serve a stored object over HTTP with one call.
+`self.serveFromStorage(driverName, key[, opts])` answers `200`/`206`/`416`/`304`
+(and `404`/`500` through `throwError`) with `Accept-Ranges`, `Content-Range`, a
+strong key-derived `ETag`, `Last-Modified`, conditional GET and `If-Range`, on
+both engines — see [Serving objects over HTTP](/guides/storage#serving-objects-over-http).
+The storage read verbs (`get`/`getRange`/`resolve`) now also carry a
+machine-readable `err.code` — `STORAGE_NO_OBJECT`, `STORAGE_RANGE_UNSATISFIABLE`,
+`STORAGE_INVALID_RANGE` — with message wording unchanged, so your own serving
+code can discriminate 404/416/400 without parsing message text.
+
+### Changed — `renderStream()` is byte-serving-capable (check if you stream Buffers or HEAD streaming routes)
+
+`renderStream()` now passes **Buffer chunks through verbatim on non-SSE
+content-types**. They were previously UTF-8-decoded, which corrupted binary
+payloads (every invalid-UTF-8 byte became U+FFFD); a valid-UTF-8 Buffer
+re-encodes byte-identically, so text consumers see no change, and SSE keeps its
+decode. Two more wire-visible refinements: a `HEAD` request to a streaming route
+now answers headers-only instead of streaming a full body (the same render-layer
+body suppression every other delegate already applied), and the delegate's
+default headers (`cache-control`, `connection`, `x-accel-buffering`) now yield
+to values you pre-set instead of silently overwriting them. Also fixed: a
+swallowed post-end `TypeError` fired on every streamed response and dropped the
+Inspector Flow timeline's stream entries — the timeline now survives streaming
+requests.
+
 ---
 
 ## 0.6.6 → 0.6.7
