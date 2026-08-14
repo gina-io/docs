@@ -3,7 +3,7 @@ title: Object storage
 sidebar_label: Object storage
 sidebar_position: 3.7
 description: Store files in Gina through a pluggable storage layer — named drivers pairing an adapter (where bytes live) with a strategy (how keys are laid out), opaque keys, atomic writes, and per-object metadata through a pluggable store seam.
-keywords: [gina object storage, file storage, blob storage, storage driver, sharded storage, opaque keys, atomic write, temp and rename, storage metadata, sqlite metadata store, maxObjectSize, gina.storage, node.js object storage]
+keywords: [gina object storage, file storage, blob storage, storage driver, sharded storage, content-addressed storage, cas, stream strategy, resumable uploads, resumable upload node.js, opaque keys, atomic write, temp and rename, byte range, storage metadata, sqlite metadata store, maxObjectSize, gina.storage, node.js object storage]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -64,15 +64,18 @@ A file-backed write reaches its final path only through `rename(2)`, which is at
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `adapter` | yes | Where bytes live. `local` = the local filesystem under `root`. |
-| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted. |
+| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted; [`stream`](#large-media-and-resumable-uploads-stream) = one directory per asset, with resumable uploads. |
 | `root` | yes | Absolute directory holding this driver's objects. |
 | `maxObjectSize` | no | Per-object ceiling, as a **unit-suffixed string** (`"50MB"`). Defaults to `100MB`. |
 | `store` | no | A `connectors.json` entry name for the metadata store. Omit for the embedded default. |
-| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to both strategies. |
+| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to `sharded` and `cas`; reported as an ignored key under `stream`, which never inlines. |
 | `hash` | no | **cas only.** The digest algorithm; its name becomes a namespace segment in every key. Defaults to `"sha256"`. Validated at boot against what *this runtime's* crypto provides. |
-| `fsync` | no | **cas only.** Whether publishes are flushed to disk before being acknowledged. Defaults to `true` — see [Durability](#durability-stated-plainly). |
+| `fsync` | no | **cas and stream.** Whether writes are flushed to disk before they are published or acknowledged — under `stream`, that includes each resumable segment before its durability marker. Defaults to `true` in both — see [Durability](#durability-stated-plainly). |
 | `sweepInterval` | no | **cas only.** How often the garbage-collection sweep runs, as a **unit-suffixed duration** (`"15m"`). `"0s"` disables the periodic sweep. |
 | `sweepGrace` | no | **cas only.** How long a blob must sit at zero references before the sweep may collect it (`"1h"`). Must be greater than zero. |
+| `chunkSize` | no | **stream only.** The segment size the write path is tuned for, as a **unit-suffixed string**. Defaults to `"8MB"`, and `createUpload()` reports it back so a client can match it. A tuning knob, not a protocol constraint. |
+| `sessionTtl` | no | **stream only.** How long an untouched [resumable upload session](#large-media-and-resumable-uploads-stream) survives before it is reclaimed, as a **unit-suffixed duration**. Defaults to `"24h"`. Must be greater than zero. |
+| `sessionSweepInterval` | no | **stream only.** How often that reclamation runs (`"1h"`). A pass also runs at boot. `"0s"` disables the periodic one. |
 
 `storage.default` names the driver returned by a no-argument `gina.storage()`. Omit it and every call must name its driver.
 
@@ -125,6 +128,29 @@ gina.storage().get(order.invoiceKey, function (err, stream) {
 });
 ```
 
+### Storing a file that is already on disk
+
+`put()` takes a **readable stream**, which is what a file already on disk becomes in one line — a child process wrote it, a library produced it, or you staged it yourself:
+
+```javascript
+var fs = require('fs');
+
+gina.storage().put(fs.createReadStream('/tmp/report-8821.pdf'), {
+    originalName : 'report-8821.pdf',
+    contentType  : 'application/pdf'
+}, function (err, res) {
+    if (err) {
+        return self.throwError(500, err);
+    }
+    // res.size is measured from the published bytes — no stat() needed
+    fs.unlink('/tmp/report-8821.pdf', function () {});   // your temp, your call
+});
+```
+
+Two things you do not have to do yourself: `res.size` is **measured by the layer** from what it actually published, so there is no reason to `stat()` afterwards or to trust a size you were handed; and on failure `put()` **destroys the source stream** before calling back, so a failed store leaves you no stream to clean up. The temp file itself is yours — the layer copies out of it and never assumes it may delete it.
+
+If you hold the bytes in memory rather than on disk, wrap them the same way: `require('stream').Readable.from([buffer])`.
+
 ### Keys are opaque
 
 `put()` returns a key. Store it, pass it around, hand it back to `get()` — but never parse it, build one by hand, or assume it encodes a date or a filename. That opacity is what allows a future strategy to change the layout without breaking anything already stored.
@@ -144,6 +170,11 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 | `release(key, cb)` | `existed` | Under `sharded`: removes the object and its metadata row. Under `cas`: **drops one reference** — bytes are only reclaimed by the [sweep](#content-addressed-storage-cas). Idempotent either way. |
 | `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
 | `findByDigest(algo, hex, cb)` | a key, or `null` | **cas only** — gated by `capabilities.dedup`. The pre-upload existence check; see [the oracle caution](#content-addressed-storage-cas). |
+| `createUpload(meta, cb)` | `{uploadId, chunkSize, expectedSize}` | **stream only** — gated by `capabilities.resumable`. Opens a [resumable session](#large-media-and-resumable-uploads-stream). `meta.expectedSize` is **required**. |
+| `writeSegment(id, offset, stream, cb)` | `{offset, length, received}` | **stream only.** Writes one segment at a byte offset. Segments may arrive out of order; re-sending a covered range is harmless. |
+| `statUpload(id, cb)` | upload state | **stream only.** `{expectedSize, received[], missing[], complete, …}` — the resumable twin of `stat()`, and what makes resuming possible. |
+| `finalize(id, cb)` | `{key, size, contentType}` | **stream only.** Verifies coverage and publishes. Refuses a gap and keeps the session alive. Idempotent. |
+| `abortUpload(id, cb)` | `{aborted}` | **stream only.** Discards a session. Idempotent. |
 | `capabilities` | an object | What this driver can do. |
 
 ```javascript
@@ -162,13 +193,13 @@ if (driver.capabilities.ranges) {
 }
 ```
 
-`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `ranges` is `true` on every local driver, because both strategies implement `getRange()`.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `resumable` is `true` on a [`stream`](#large-media-and-resumable-uploads-stream) driver and is what gates the five session verbs. `ranges` is `true` on every local driver, because all three strategies implement `getRange()`.
 
 :::note `ranges` describes the DRIVER, not the server
 `capabilities.ranges` says the driver can return a byte range. It does **not** mean gina answers HTTP `Range` requests — the engines still send no `Accept-Ranges` or `206`, and wiring that up is [its own arc](#what-is-not-in-this-release). If you serve ranges today, you read them with `getRange()` and set the status and headers yourself.
 :::
 
-The rest — `offload` and `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
+`offload` is `false` everywhere in this release — no X-Accel / X-Sendfile handling exists in either engine, so you stream the bytes yourself — and flips with the `s3` adapter; code that branches now keeps working when it does.
 
 ---
 
@@ -314,6 +345,103 @@ Content addressing makes in-place mutation impossible — editing produces a new
 
 ---
 
+## Large media and resumable uploads (`stream`)
+
+The `stream` strategy is for content too big to send in one go: video, audio, large archives — anything where a dropped connection halfway through should not mean starting over.
+
+```json
+// settings.json
+"storage": {
+  "default": "media",
+  "drivers": {
+    "media": {
+      "adapter": "local",
+      "strategy": "stream",
+      "root": "/var/data/media",
+      "maxObjectSize": "5GB",
+      "chunkSize": "8MB"
+    }
+  }
+}
+```
+
+A `stream` key names an **asset**, not a file — `assets/<ulid>/original.mp4` — so the object and anything later derived from it live in one directory you can move, back up or delete as a unit. (Renditions beside `original` are [not in this release](#what-is-not-in-this-release); the layout reserves the room.) Keys stay opaque, exactly as under the other strategies.
+
+`put()` works here as everywhere, for content you can send in one request. What `stream` adds is the resumable path.
+
+### Resumable uploads
+
+Five verbs, gated by `capabilities.resumable`:
+
+```javascript
+var driver = gina.storage('media');
+
+// 1. open a session — expectedSize is REQUIRED
+driver.createUpload({
+    expectedSize : 4294967296,
+    originalName : 'talk.mp4',
+    contentType  : 'video/mp4'
+}, function (err, session) {
+    // session => { uploadId, chunkSize, expectedSize }
+});
+
+// 2. send segments — any order, in parallel, resumable
+driver.writeSegment(uploadId, 8388608, req, function (err, r) {
+    // r => { offset, length, received }
+});
+
+// 3. ask what is still missing (after a reconnect, say)
+driver.statUpload(uploadId, function (err, state) {
+    // state => { expectedSize, received: [...], missing: [...], complete, … }
+});
+
+// 4. publish
+driver.finalize(uploadId, function (err, res) {
+    // res => { key, size, contentType } — the same shape put() returns
+});
+
+// …or throw the session away
+driver.abortUpload(uploadId, function (err, r) { /* r => { aborted } */ });
+```
+
+Segments are written **at their byte offset**, straight into the file being assembled, so they may arrive out of order or in parallel and no assembly pass runs at the end. Re-sending a range that already landed is harmless, and overlapping re-sends are fine. A session's state lives in the driver root rather than in memory, so it survives a bundle restart — `statUpload()` answers correctly afterwards.
+
+:::info `expectedSize` is required, and that is deliberate
+Without a declared total, nothing can verify that the ranges you sent actually **cover** the object, and `statUpload()` could only report what arrived — never what is missing. Uploading content whose size you do not know is what `put()` is for. (Equivalent wire protocols agree: `tus` requires `Upload-Length` unless a server opts into a separate extension, and S3 multipart can never tell you which part is missing because it never learns the total.)
+:::
+
+`expectedSize` also lets gina refuse an oversized upload before a single byte moves. That check is a courtesy, not the enforcement: the value comes from the client, so a segment that runs past the declared total is refused as it is written.
+
+### Why finalise can refuse
+
+`finalize()` merges the ranges it has actually made durable and requires them to cover `[0, expectedSize)` exactly. A gap is a real error, and the session is **kept alive** so the client can send what is missing and try again.
+
+That check is the whole safety story, and it is worth knowing why it is stricter than it looks. An unwritten range in a partly-filled file does not fail on read — it returns **zeros**. So a finalise that simply added up the bytes it received would happily publish an object that looks complete and is quietly wrong: two segments overlapping in the middle can add up to the full size while leaving the tail untouched. Merging the ranges catches that; summing them does not.
+
+If `finalize()` publishes the bytes but then fails to write the metadata row, call it again — it detects the published object, completes the row and cleans up. Do not call `writeSegment()` for a session while `finalize()` is running on it; one actor per finalise.
+
+### Durability of a resumable upload
+
+Each segment is flushed to disk **before** it is recorded as durable, so a client is never told a range is safe when it is not — that is the contract `statUpload()` rests on. `fsync: true` is the default here for that reason.
+
+The cost is proportional to how fast the bytes arrive: measured, that flush is about 2% of the time an 8MB segment takes to cross a 100 Mbps link, but it dominates on a 10 Gbps LAN. If you are ingesting over a fast local network and can accept losing the last few segments' durability claim to a power cut, set `fsync: false`.
+
+:::note gina cannot defragment
+An earlier design called for preallocating the file. Node exposes no `fallocate`, and the available fallback produces a *sparse* file that reserves nothing — so gina neither prevents fragmentation nor can pretend to. Contiguity is a filesystem and volume concern (XFS extent hints and the like). What the per-asset directory buys is **operational** grouping, not physical locality.
+:::
+
+### Abandoned sessions
+
+A client that simply goes away leaves a session holding real disk. Each `stream` driver reclaims sessions untouched for longer than `sessionTtl` (default `"24h"`), sweeping at boot and every `sessionSweepInterval` (default `"1h"`) — the same pass also clears temp files from a crashed `put()`. Liveness is measured from the file being assembled, so a long, slow upload is never mistaken for an abandoned one.
+
+### Several processes, one session
+
+Writing disjoint ranges of one session from several processes is safe on a POSIX-coherent filesystem. On a network mount with relaxed coherence, route a given session's segments to a single process — nothing in the driver enforces that, and it has not been measured there.
+
+Finally: `stream` neither tiers nor hashes. `inlineThreshold` and `hash` on a `stream` driver are reported as ignored keys rather than silently doing nothing, and `capabilities.inline` and `capabilities.dedup` are `false` by design rather than pending.
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
 Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
@@ -407,12 +535,13 @@ undercounts (the grace window and `storage:verify` catch it), while a lost
 
 ## Durability, stated plainly
 
-For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object — under either strategy. What differs is crash durability:
+For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object — under every strategy. What differs is crash durability:
 
 - **`sharded` writes are not `fsync`ed.** An acknowledged write can still be lost if the machine loses power before the filesystem flushes. Recent writes at risk, never a partial object.
 - **`cas` publishes are `fsync`ed by default** (`fsync: true`): the temp file is flushed *before* the rename publishes it — a flush failure fails the `put()` — and the parent directory is flushed after, **best-effort**: platforms that cannot fsync a directory (Windows; some network mounts) skip that half silently, and macOS honours `fsync` as the platform defines it. cas exists for immutable content where "acknowledged means durable" is the point; set `fsync: false` per driver to opt back into sharded-class durability.
+- **`stream` fsyncs by default too**, and additionally flushes **each resumable segment before recording it as durable** — that ordering is what lets a client trust `statUpload()`. See [Durability of a resumable upload](#durability-of-a-resumable-upload) for when to turn it off.
 
-Inline objects (either strategy) are in the sharded class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. If your retention requirements are stricter than all of this, replicate to durable storage rather than relying on the local adapter alone.
+Inline objects (`sharded` or `cas` — `stream` never inlines) are in the sharded class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. If your retention requirements are stricter than all of this, replicate to durable storage rather than relying on the local adapter alone.
 
 ---
 
@@ -457,8 +586,10 @@ objects, and total logical bytes — a deduplicated blob counts once.
 
 `storage:gc` drives the cas sweep immediately instead of waiting for the next
 `sweepInterval` tick, looping until nothing older than `sweepGrace` remains.
-`--dry-run` lists the collectable blobs and touches nothing. `sharded` drivers
-have no sweep and are named and skipped, never an error.
+`--dry-run` lists the collectable blobs and touches nothing. `sharded` and
+`stream` drivers have no sweep *here* and are named and skipped, never an error
+— a `stream` driver does reclaim abandoned upload sessions, but on its own
+schedule rather than through this command.
 
 `storage:verify` walks the blob tree against the metadata rows and reports two
 finding classes — deliberately asymmetric:
@@ -482,11 +613,12 @@ same result from whichever bundle you point at.
 
 | Not yet | What it will bring |
 | --- | --- |
-| `stream` strategy | Large sequential media, resumable segment uploads. |
-| `s3` adapter | Object-store backend; its client stays a project-side dependency. |
-| Range serving | `206 Partial Content` in both engines, driven from `getRange()`. The **driver** half already ships — what is missing is the engines parsing `Range` and answering `Accept-Ranges`/`Content-Range`. |
+| `s3` adapter | Object-store backend; its client stays a project-side dependency. Brings `resolve()` → `{kind: 'url'}`, presigned URLs and `capabilities.offload`. |
+| Range serving | `206 Partial Content` in both engines, driven from `getRange()`. The **driver** half already ships on all three strategies — what is missing is the engines parsing `Range` and answering `Accept-Ranges`/`Content-Range`. |
+| Renditions | A `putRendition()` API for transcoded variants. The [`stream`](#large-media-and-resumable-uploads-stream) key layout already reserves the room beside `original`; there is no API yet. |
+| Stream maintenance | `storage:gc` and `storage:verify` support for `stream` — orphaned upload sessions and objects orphaned by a failed post-publish row write. A `stream` driver reclaims abandoned sessions on its own schedule; what is missing is an operator door and a consistency scan. |
 | `storage:migrate` | Strategy/hash re-key tooling for populated roots. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
-Configuring a strategy that is designed but not yet implemented (`stream`) refuses the boot with a message saying so, rather than treating it as a typo.
+Every strategy named in the design now ships. A strategy name gina does not recognise refuses the boot as a typo, naming the ones it does.

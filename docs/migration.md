@@ -21,6 +21,94 @@ upward to the target version.
 
 ## 0.6.7 → 0.6.8
 
+### Added — the stream storage strategy and resumable uploads (no action required)
+
+Storage drivers can now declare `strategy: "stream"` — one directory per asset,
+built for large sequential media, and the first strategy to support **resumable
+uploads**. Existing drivers are unaffected: `sharded` and `cas` behaviour, key
+shapes and durability are unchanged, and `stream` is purely opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **A key names an asset, not a file** (`assets/<ulid>/original<ext>`), so an
+  object and anything later derived from it share one directory. Keys stay
+  opaque, as under every strategy.
+- **Five new verbs, gated by `capabilities.resumable`** — `createUpload()`,
+  `writeSegment()`, `statUpload()`, `finalize()`, `abortUpload()`. Segments are
+  written at a byte offset, so they may arrive out of order or in parallel, and
+  re-sending a range that already landed is harmless. A session lives in the
+  driver root, so it survives a bundle restart.
+- **`createUpload()` requires the object's total size.** Without it nothing can
+  verify that the received ranges cover the object, and `statUpload()` could not
+  report what is *missing*. Uploading content of unknown size stays `put()`'s
+  job.
+- **`finalize()` refuses to publish a gap** and keeps the session alive so the
+  client can complete it. The check merges ranges rather than adding them up,
+  because an unwritten range reads back as zeros — a naive check would publish a
+  plausible object with silently wrong bytes.
+- **Segments fsync before they are recorded as durable** (`fsync: true` here as
+  for `cas`). On a fast LAN, where that flush costs more than the transfer,
+  `fsync: false` opts out with a documented power-loss window.
+- **Three new optional per-driver keys** — `chunkSize` (`"8MB"`), `sessionTtl`
+  (`"24h"`) and `sessionSweepInterval` (`"1h"`); abandoned sessions are
+  reclaimed on their own schedule. `inlineThreshold` and `hash` are reported as
+  ignored keys on a `stream` driver, which neither tiers nor hashes.
+- **`storage:gc` and `storage:verify` stay cas-only.** A `stream` driver is
+  named and skipped by both, never an error.
+
+See [Large media and resumable uploads](/guides/storage#large-media-and-resumable-uploads-stream)
+for the full section.
+
+### Added — byte-range reads on every storage driver (no action required)
+
+Storage drivers gained `getRange(key, start, end, cb)`, and
+`capabilities.ranges` is now `true` on every local strategy where it was `false`
+in every prior release. Nothing existing changes: it is a new verb beside
+`get()`.
+
+`end` is **inclusive**, matching the HTTP `Range` header, so a header's byte
+offsets pass through unchanged. An `end` past the last byte is clamped rather
+than refused; only a `start` at or beyond the object's size is unsatisfiable —
+that is your `416`. Both size tiers answer, and under `cas` a released blob
+stays invisible to `getRange()` exactly as it already is to `get()`.
+
+This is the **driver** half only. The engines still send no `Accept-Ranges` or
+`Content-Range` and never answer `206` on their own, so `capabilities.ranges`
+describes what a driver can return, not what the server answers — until HTTP
+Range serving lands, a controller reads with `getRange()` and sets the status
+and headers itself.
+
+### Added — a Couchbase metadata store for storage drivers (no action required)
+
+A driver's `store` may now name a `connectors.json` entry whose connector is
+`couchbase`, putting every metadata row — inline payloads included — on the
+cluster instead of in `<root>/.meta.db`. Drivers that name no `store` are
+unaffected and keep the embedded SQLite default.
+
+This is what makes a driver root **shareable**: the embedded default is
+documented single-process-per-root, so two bundles — or two replicas of one —
+could not share a root until now.
+
+Worth knowing if you adopt it:
+
+- **The SDK stays a project-side dependency** (major 3 or 4), like every other
+  connector; the framework declares none.
+- **`cas` reference counting behaves exactly as on the embedded store**, from
+  Couchbase's own CAS — two concurrent identical uploads still yield one blob
+  with two references — and several replicas may run the GC sweep at once with
+  no election layer: the claim step is itself compare-and-set.
+- **Rows are namespaced by driver name**, so several drivers may share one
+  connectors entry without colliding.
+- **Two secondary indexes are created at boot when missing.** If the account may
+  not create them the boot still succeeds and the exact `CREATE INDEX`
+  statements are logged to run by hand.
+- **Inline payloads are base64-encoded inside the document** (Couchbase cannot
+  query a binary value), costing about a third more space and putting a
+  practical ceiling near a 14MB `inlineThreshold`.
+
+See [Metadata](/guides/storage#metadata-embedded-by-default-pluggable-when-you-need-it)
+for the full section.
+
 ### Fixed — `renderStream()` honours a caller-set status code (no action required)
 
 `self.renderStream()` could only ever answer **200**, on both engines. The HTTP/2
