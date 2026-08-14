@@ -100,6 +100,35 @@ Only a local target inherits the query — an absolute `param.url` names another
 so the flag is ignored there rather than disclosing your callers' parameters to a third
 party. See the [routing guide](/guides/routing#keeping-the-query-string).
 
+### Fixed — a redirect treats `HEAD` as the safe method it is (check HEAD health-checks)
+
+`HEAD` is `GET` without a response body. The guard that stops an **unsafe** method being
+replayed against a redirect target tested only for `GET`, so `HEAD` was handled like
+`POST` or `PUT`:
+
+```
+before:  HEAD /<webroot>?t=V   ->  303   Location: /<webroot>/?inheritedData=%7B…%7D   + a warning
+after:   HEAD /<webroot>?t=V   ->  302   Location: /<webroot>/?t=V                     + no warning
+```
+
+It drew a `trying to redirect using the wrong method` warning even on a route that
+explicitly lists `HEAD` among its own methods, it was answered `303` — telling the client
+to re-issue as `GET` and fetch a body it had deliberately not asked for — and, because the
+method was switched, it also received a copy of the request parameters appended to the
+target that the same request as a `GET` never gets.
+
+`HEAD` now behaves exactly as `GET` does: the route's configured status code, the same
+`Location`, no warning.
+
+**Unsafe methods are unchanged.** `POST`, `PUT` and `DELETE` still get the warning, the
+switch to `GET` and the `303`.
+
+:::caution One thing to check
+This is wire-visible: a `HEAD` request against a redirect route now answers the route's own
+code — `302` for the framework-generated webroot redirect — instead of `303`. If you have a
+monitor or health-check asserting `303` on a `HEAD` against a bare webroot, adjust it.
+:::
+
 ---
 
 ## 0.6.6 → 0.6.7
