@@ -502,7 +502,7 @@ Finally: `stream` neither tiers nor hashes. `inlineThreshold` and `hash` on a `s
 
 Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
 
-That default is **single-process per driver root**. SQLite's locking is unreliable on a shared network filesystem, so if two bundles, or several replicas, share one root, point the driver at a connector instead:
+That default is **single-process per driver root**. SQLite's locking is unreliable on a shared network filesystem, so if two bundles, or several replicas, share one root, point the driver at a connector instead. `store` names an entry in `connectors.json`:
 
 ```json
 // settings.json
@@ -518,8 +518,12 @@ That default is **single-process per driver root**. SQLite's locking is unreliab
 }
 ```
 
+**If you already have a connector entry for that cluster, name it here and you are done.** The store reuses that entry's credential, so reuse costs you nothing beyond the `store` line — no new secret, no new delivery mechanism. That is the recommended path, and it is worth taking deliberately rather than by default: giving storage its *own* credential means delivering a **database** credential to a running process, and not every deployment has a wire for that. Application-secret pipelines frequently do not carry DB credentials, which instead ride as literals in shipped config — so a storage-specific credential can mean new orchestration and provisioning work, not just a new config key.
+
+Only when storage gets its own entry do you write one:
+
 ```json
-// connectors.json
+// connectors.json — needed only when storage does NOT reuse an existing entry
 {
   "assetsMeta": {
     "connector": "couchbase",
@@ -544,6 +548,18 @@ Requires the `couchbase` SDK (major 3 or 4) in **your** project — the framewor
 declares no dependency on it — and reads the connector's usual keys, where
 `database` is the **bucket** name. Optional: `scope` and `collection` (both
 `_default`), `prefix` (`stor:`), and `durability`.
+
+**A dedicated bucket — or at least a dedicated collection — is the right
+default, but it is not free.** Nothing breaks if you share one with application
+data: every row carries `d`/`k` discriminators and every query filters on them.
+What a dedicated keyspace buys you is that the two secondary indexes below stay
+off your application's data, and that storage rows are trivially separable in a
+backup. Weigh that against how your cluster is provisioned: where buckets are
+created only at cluster initialisation, adding one later is a deliberate
+operational change rather than a config edit, and may touch provisioning you do
+not otherwise revisit. A dedicated **collection** gets you most of the
+separation for a fraction of that cost, and sharing an existing keyspace remains
+a legitimate choice rather than a mistake.
 
 Each metadata row is one JSON document keyed `<prefix><driver>:<key>`. **The
 driver name namespaces every row**, so several drivers may share one
