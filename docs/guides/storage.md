@@ -139,6 +139,7 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 | --- | --- | --- |
 | `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. Under `cas` the result also carries `deduplicated` — `true` when identical content already existed. |
 | `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. Serves both tiers. |
+| `getRange(key, start, end, cb)` | a readable stream | A byte range, `end` **inclusive** (as in the HTTP header). An `end` past the last byte is clamped; only a `start` at or beyond the object's size errors — that is your `416`. Serves both tiers. Gated by `capabilities.ranges`, true on every local driver. |
 | `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. Under `cas` it includes `refs`, the live reference count. |
 | `release(key, cb)` | `existed` | Under `sharded`: removes the object and its metadata row. Under `cas`: **drops one reference** — bytes are only reclaimed by the [sweep](#content-addressed-storage-cas). Idempotent either way. |
 | `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
@@ -161,7 +162,13 @@ if (driver.capabilities.ranges) {
 }
 ```
 
-`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. The rest — `offload`, `ranges`, `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `ranges` is `true` on every local driver, because both strategies implement `getRange()`.
+
+:::note `ranges` describes the DRIVER, not the server
+`capabilities.ranges` says the driver can return a byte range. It does **not** mean gina answers HTTP `Range` requests — the engines still send no `Accept-Ranges` or `206`, and wiring that up is [its own arc](#what-is-not-in-this-release). If you serve ranges today, you read them with `getRange()` and set the status and headers yourself.
+:::
+
+The rest — `offload` and `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
 
 ---
 
@@ -421,7 +428,7 @@ same result from whichever bundle you point at.
 | --- | --- |
 | `stream` strategy | Large sequential media, resumable segment uploads. |
 | `s3` adapter | Object-store backend; its client stays a project-side dependency. |
-| Range serving | `206 Partial Content` for media, in both engines. |
+| Range serving | `206 Partial Content` in both engines, driven from `getRange()`. The **driver** half already ships — what is missing is the engines parsing `Range` and answering `Accept-Ranges`/`Content-Range`. |
 | `storage:migrate` | Strategy/hash re-key tooling for populated roots. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
