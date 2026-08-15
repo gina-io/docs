@@ -122,10 +122,26 @@ host and webroot exactly as if the header had never been sent — including the 
 classification itself, so a malformed `X-Forwarded-Host` no longer marks a request as
 proxied.
 
-Whether you were reachable depended on your proxy. One that sets or strips the
-`X-Forwarded-*` headers it forwards never passed an injected value through; a bundle
-exposed directly, or sitting behind a proxy that relays client headers verbatim, could
-be driven by any anonymous caller.
+Whether you were reachable depended on your proxy — but **check the four headers
+separately, because a proxy that correctly overrides the well-known ones can still let
+the vulnerable one through.**
+
+⚠️ **`X-Forwarded-Prefix` is the one to check.** A careful edge config usually sets
+`Host`, `X-Forwarded-Host`, `X-Forwarded-Proto` and `X-Forwarded-For` from its own
+knowledge and never mentions `X-Forwarded-Prefix` — a mount path is a concern most
+deployments never set deliberately. nginx forwards any request header it does not
+explicitly override, so the prefix travels verbatim while the others are correctly
+replaced. That gap is sufficient on its own: pre-`0.6.8` the prefix was read *outside*
+any proxy-classification gate, so it was accepted whether or not the request counted as
+proxied, and overriding `X-Forwarded-Host` correctly did not close it.
+
+So the useful question is per-header — "is `X-Forwarded-Prefix` named in this config,
+yes or no?" — asked at *every* proxy layer. The blanket version, "do we set the
+`X-Forwarded-*` headers?", answers "yes, we're fine" for a config that is silent about
+the prefix, which is the common case. Exposure has been reported in exactly that shape.
+
+Beyond the prefix: a bundle exposed directly, or behind a proxy that relays client
+headers verbatim, could be driven by any anonymous caller.
 
 **No action beyond upgrading.** A deployment whose proxy sends a well-formed host,
 scheme and prefix behaves identically. One edge worth knowing: a **comma-separated**
