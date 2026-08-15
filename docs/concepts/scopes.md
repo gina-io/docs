@@ -70,6 +70,57 @@ gina scope:remove staging @myproject
 
 ---
 
+## Restrict a bundle to certain scopes
+
+By default every bundle registered in `manifest.json` is deployed in **every**
+scope. When you are building a new bundle and do not want it going out with the
+others yet, give its manifest entry a `scopes` allow-list:
+
+```json
+{
+  "bundles": {
+    "newthing": {
+      "version": "0.0.1",
+      "src": "src/newthing",
+      "link": "bundles/newthing",
+      "scopes": ["local"]
+    }
+  }
+}
+```
+
+`newthing` is now built and started in `local`, and every other scope behaves as
+though it does not exist. When it is ready to ship, add the other scopes to the
+list — or delete the key.
+
+| Value | Meaning |
+| --- | --- |
+| key absent (or `null`) | Deployed in **every** scope. This is the default, and what every existing manifest does. |
+| `["local"]` | Deployed in `local` only. |
+| `["local", "staging"]` | Deployed in those two scopes. |
+| `[]` | Parked — deployed in no scope at all. |
+
+:::note What happens to an excluded bundle
+It depends on whether you asked for it by name. Booting a project, or running
+`gina project:build`, **skips** an excluded bundle and logs a notice saying which
+scope it is missing from — so one parked bundle never blocks a whole project
+build. Starting that bundle, or naming it explicitly in
+`gina bundle:build newthing --scope=production`, is **refused** with an error,
+because quietly producing nothing would look like success in a deploy script.
+:::
+
+:::warning Deleting `releases.<scope>` is not a substitute
+It may look equivalent to remove the bundle's `releases.<scope>` entry by hand.
+It is not: both build commands walk every scope in the project and re-create any
+missing release entry, so the deletion reappears on the next build. Use `scopes`
+— it is the only declaration the tooling preserves.
+:::
+
+A value that is not an array (for example `"scopes": "local"`) is reported as a
+manifest error naming the bundle, rather than being read as "no scopes at all".
+
+---
+
 ## Link scopes to local and production slots
 
 Gina reserves two special slots for every project: `local_scope` and

@@ -187,6 +187,14 @@ gina bundle:build <bundle> @<project> [--env=<env>] [--scope=<scope>]
 gina bundle:build frontend @myproject --env=prod --scope=local
 ```
 
+:::note Bundles restricted to certain scopes
+If the bundle's `manifest.json` entry carries a `scopes` allow-list that does not
+include `--scope`, this command **refuses** rather than building nothing — naming
+the bundle, the scope, and how to change it. `gina project:build` skips such a
+bundle instead, so one restricted bundle does not block a project-wide build. See
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+:::
+
 ---
 
 ## `bundle:add`
