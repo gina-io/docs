@@ -39,6 +39,10 @@
   background: #fff3cd;
   color: #7a5800;
 }
+.levelAdvanced {
+  background: #efe7fd;
+  color: #6d28d9;
+}
 .levelExpert {
   background: #fde8e8;
   color: #b91c1c;
@@ -52,6 +56,10 @@
 [data-theme='dark'] .levelIntermediate {
   background: rgba(240, 176, 54, 0.14);
   color: var(--gina-amber);
+}
+[data-theme='dark'] .levelAdvanced {
+  background: rgba(139, 92, 246, 0.14);
+  color: #a78bfa;
 }
 [data-theme='dark'] .levelExpert {
   background: rgba(239, 68, 68, 0.14);

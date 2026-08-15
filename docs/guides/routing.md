@@ -467,6 +467,56 @@ requests a `301` remains cacheable as usual.
 }
 ```
 
+### Keeping the query string
+
+`param.path` is a fixed target, so by default a redirect drops whatever query the
+caller sent: a request to `/documentation?from=search` lands on `/documentation/`
+with `from` gone. Set `keep-params` to `true` when the redirect is a path
+normalisation and should stay transparent to request state:
+
+```json
+"docs-redirect": {
+  "url": "/documentation",
+  "param": {
+    "control": "redirect",
+    "path": "/documentation/",
+    "code": 301,
+    "keep-params": true
+  }
+}
+```
+
+`/documentation?from=search` then redirects to `/documentation/?from=search`. If the
+target already carries a query of its own, the incoming one is appended with `&`.
+
+Only a **local** target inherits the query. When the redirect points at an absolute
+`param.url` on another origin, the flag is ignored — forwarding the caller's
+parameters would disclose whatever they carried (a session token, an account id) to
+a third party.
+
+:::note
+The redirect that gina generates for a non-root [webroot](#webroot) sets
+`keep-params` itself, so a bare-webroot request such as `/dashboard?token=abc`
+redirects to `/dashboard/?token=abc` rather than losing the parameter. Turning
+`webrootAutoredirect` off does not change this: that setting only controls whether
+the site root `/` also redirects to the webroot.
+:::
+
+### Redirects and the request method
+
+`GET` and `HEAD` are **safe** methods, and a redirect answers both the same way: the
+status code the route declares (`param.code`, default `301`), and the same `Location`.
+
+An **unsafe** method — `POST`, `PUT`, `DELETE` — is different. Replaying it against the
+redirect target would repeat a state-changing operation somewhere the caller did not
+choose, so gina logs a warning, switches the request to `GET`, and answers `303`, which
+tells the client to retrieve the target with `GET`. Any parameters the request carried
+travel to the next route through the session (or, in a session-less bundle, appended to
+the URL) so the target action can still see them.
+
+If you want a redirect route to accept only safe methods, declare that on the route
+itself with `"method": "GET, HEAD"` rather than relying on the redirect behaviour.
+
 ---
 
 ## Scopes

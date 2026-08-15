@@ -19,6 +19,376 @@ upward to the target version.
 
 ---
 
+## 0.6.7 → 0.6.8
+
+This release fixes **two security flaws**, both live in every published version up
+to and including `0.6.7`. One of them changes behaviour you may be relying on —
+read the `self.push()` entry before upgrading.
+
+Pickup is a **bundle restart**; the browser bundle is byte-identical to `0.6.7`, so
+unlike that release this one needs no rebuild. `0.6.8` is a patch, so the
+`shortVersion` stays `0.6` and your `~/.gina/0.6/settings.json` is untouched.
+
+### Security — `self.push()` decides its own recipient (ACTION REQUIRED if you push at all)
+
+`self.push()` used to read its recipient from the request body. A caller could aim a
+push at any session by sending that session's id, and **omitting the id broadcast the
+payload to every connected client**. The payload defaults to request input too, so on
+any route that reached `push()` an unprivileged caller could deliver content of their
+choosing to everyone, or to a chosen victim.
+
+The recipient is now decided server-side, in this order:
+
+1. an explicit `option.sessionID` that **your** code supplies,
+2. otherwise the caller's own session,
+3. otherwise nothing at all, with a warning.
+
+Reaching every connected client now requires asking for it deliberately with
+`{ broadcast: true }`. The request body cannot influence the recipient in any branch.
+
+**What breaks.** A bare `self.push()` driven over an HTTP hop by a background worker —
+a job runner reporting progress to the user who queued it, threading that user's
+session id through the request — now resolves to the caller's own session and stops
+delivering. That hop is exactly the vulnerability, so it cannot be preserved.
+
+**And there is no in-process substitute yet.** `push()` returns early once the request
+is released, and nothing outside a live request-bound controller can reach the socket
+set, so a worker has nothing to migrate *to*. Until an explicit out-of-request channel
+exists, report out-of-request progress by polling `GET /_gina/jobs/:id`, or over a
+transport your application owns.
+
+One case keeps working without change: if your authentication layer already adopts a
+token's session id onto the request's own session before the controller runs, then
+"the caller's own session" *is* the target, and those pushes continue to deliver.
+
+In-request callers are unaffected unless they relied on the implicit fan-out, which
+now needs `{ broadcast: true }`.
+
+### Security — forwarded headers can no longer inject script (no action required)
+
+`X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Prefix` and the request's own
+`Host` were spliced unescaped into the client bootstrap script gina emits on every
+rendered page, where they land inside JavaScript string literals. A header containing
+a single quote closed the literal and ran attacker-chosen script in the browser of
+anyone served that page — with no authentication, on any route that renders a view.
+
+These values are now validated where they are read:
+
+- a **host** must be a hostname with an optional port, or a bracketed IPv6 literal;
+- a **forwarded scheme** must be exactly `http` or `https`;
+- a **forwarded path prefix** must consist of URL-path characters only.
+
+Anything else is refused, and the request falls back to the bundle's own configured
+host and webroot exactly as if the header had never been sent — including the proxied
+classification itself, so a malformed `X-Forwarded-Host` no longer marks a request as
+proxied.
+
+Whether you were reachable depended on your proxy. One that sets or strips the
+`X-Forwarded-*` headers it forwards never passed an injected value through; a bundle
+exposed directly, or sitting behind a proxy that relays client headers verbatim, could
+be driven by any anonymous caller.
+
+**No action beyond upgrading.** A deployment whose proxy sends a well-formed host,
+scheme and prefix behaves identically. One edge worth knowing: a **comma-separated**
+`X-Forwarded-Host`, which chained proxies sometimes emit, now fails validation and
+falls back to the configured host. Before this release that input produced a public
+origin like `https://a.example, b.example`, so the fallback replaces one wrong value
+with a sane one. Gina deliberately does not split the list: in a trusted chain the
+first element is the original client's own value and is the least trustworthy thing in
+the header, and selecting any other element needs a trusted-hop count the framework
+does not have.
+### Added — the `s3` storage adapter (no action required)
+
+Storage drivers can now declare `"adapter": "s3"` — objects live on any
+S3-compatible provider (AWS S3, Scaleway, MinIO, R2) instead of the local
+filesystem. Existing drivers are unaffected: `local` behaviour is
+byte-unchanged, and `s3` is opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **The SDK is your project's dependency** — install `@aws-sdk/client-s3`,
+  `@aws-sdk/lib-storage` and `@aws-sdk/s3-request-presigner`; a configured
+  driver without them refuses the boot with that hint (the policy every
+  database connector follows).
+- **Storeless** — the provider carries each object's metadata on the object
+  itself (immutable after upload, like the key). No `root`, no `store`, no
+  tiering; `stat()` is a strongly-consistent `HeadObject`. Grant
+  `s3:ListBucket`, or a missing key answers `403` where the contract says
+  `404`/`null` — the guide ships the minimal IAM policy.
+- **`resolve()` answers `{kind: 'url'}`** — a presigned GET (`presignExpiry`,
+  default `"15m"`) — and gains an optional middle `opts` argument
+  (`resolve(key[, opts], cb)`) carrying response overrides. Local strategies
+  accept and ignore it, so existing two-argument calls are untouched.
+- **`capabilities.offload` flips `true` for the first time**, and
+  `self.serveFromStorage()` consumes it: GET/HEAD answer **307** to a presigned
+  URL — after the local `If-None-Match` 304 check, with the fail-closed
+  content-type downgrade riding the *signed* `response-content-type` — while
+  `opts.offload: false` keeps the in-process proxy path. Code that branches on
+  `capabilities.offload` keeps working, exactly as documented when the flag
+  was introduced.
+- **Incomplete multipart uploads bill until aborted** — a build-time sweep
+  aborts uploads older than `sweepGrace`, and an
+  `AbortIncompleteMultipartUpload` bucket lifecycle rule is recommended
+  defense-in-depth.
+- **`cas`/`stream` refuse the s3 adapter at boot** with the reason (the
+  provider owns placement); `strategy` may simply be omitted there.
+
+See [The s3 adapter](/guides/storage#the-s3-adapter--provider-owned-object-storage)
+for the full section.
+
+### Added — the stream storage strategy and resumable uploads (no action required)
+
+Storage drivers can now declare `strategy: "stream"` — one directory per asset,
+built for large sequential media, and the first strategy to support **resumable
+uploads**. Existing drivers are unaffected: `sharded` and `cas` behaviour, key
+shapes and durability are unchanged, and `stream` is purely opt-in per driver.
+
+Worth knowing if you adopt it:
+
+- **A key names an asset, not a file** (`assets/<ulid>/original<ext>`), so an
+  object and anything later derived from it share one directory. Keys stay
+  opaque, as under every strategy.
+- **Five new verbs, gated by `capabilities.resumable`** — `createUpload()`,
+  `writeSegment()`, `statUpload()`, `finalize()`, `abortUpload()`. Segments are
+  written at a byte offset, so they may arrive out of order or in parallel, and
+  re-sending a range that already landed is harmless. A session lives in the
+  driver root, so it survives a bundle restart.
+- **`createUpload()` requires the object's total size.** Without it nothing can
+  verify that the received ranges cover the object, and `statUpload()` could not
+  report what is *missing*. Uploading content of unknown size stays `put()`'s
+  job.
+- **`finalize()` refuses to publish a gap** and keeps the session alive so the
+  client can complete it. The check merges ranges rather than adding them up,
+  because an unwritten range reads back as zeros — a naive check would publish a
+  plausible object with silently wrong bytes.
+- **Segments fsync before they are recorded as durable** (`fsync: true` here as
+  for `cas`). On a fast LAN, where that flush costs more than the transfer,
+  `fsync: false` opts out with a documented power-loss window.
+- **Three new optional per-driver keys** — `chunkSize` (`"8MB"`), `sessionTtl`
+  (`"24h"`) and `sessionSweepInterval` (`"1h"`); abandoned sessions are
+  reclaimed on their own schedule. `inlineThreshold` and `hash` are reported as
+  ignored keys on a `stream` driver, which neither tiers nor hashes.
+- **`storage:gc` and `storage:verify` stay cas-only.** A `stream` driver is
+  named and skipped by both, never an error.
+
+See [Large media and resumable uploads](/guides/storage#large-media-and-resumable-uploads-stream)
+for the full section.
+
+### Added — byte-range reads on every storage driver (no action required)
+
+Storage drivers gained `getRange(key, start, end, cb)`, and
+`capabilities.ranges` is now `true` on every local strategy where it was `false`
+in every prior release. Nothing existing changes: it is a new verb beside
+`get()`.
+
+`end` is **inclusive**, matching the HTTP `Range` header, so a header's byte
+offsets pass through unchanged. An `end` past the last byte is clamped rather
+than refused; only a `start` at or beyond the object's size is unsatisfiable —
+that is your `416`. Both size tiers answer, and under `cas` a released blob
+stays invisible to `getRange()` exactly as it already is to `get()`.
+
+This is the **driver** half only. The engines still send no `Accept-Ranges` or
+`Content-Range` and never answer `206` on their own, so `capabilities.ranges`
+describes what a driver can return, not what the server answers — until HTTP
+Range serving lands, a controller reads with `getRange()` and sets the status
+and headers itself.
+
+### Added — a Couchbase metadata store for storage drivers (no action required)
+
+A driver's `store` may now name a `connectors.json` entry whose connector is
+`couchbase`, putting every metadata row — inline payloads included — on the
+cluster instead of in `<root>/.meta.db`. Drivers that name no `store` are
+unaffected and keep the embedded SQLite default.
+
+This is what makes a driver root **shareable**: the embedded default is
+documented single-process-per-root, so two bundles — or two replicas of one —
+could not share a root until now.
+
+Worth knowing if you adopt it:
+
+- **The SDK stays a project-side dependency** (major 3 or 4), like every other
+  connector; the framework declares none.
+- **`cas` reference counting behaves exactly as on the embedded store**, from
+  Couchbase's own CAS — two concurrent identical uploads still yield one blob
+  with two references — and several replicas may run the GC sweep at once with
+  no election layer: the claim step is itself compare-and-set.
+- **Rows are namespaced by driver name**, so several drivers may share one
+  connectors entry without colliding.
+- **Two secondary indexes are created at boot when missing.** If the account may
+  not create them the boot still succeeds and the exact `CREATE INDEX`
+  statements are logged to run by hand.
+- **Inline payloads are base64-encoded inside the document** (Couchbase cannot
+  query a binary value), costing about a third more space and putting a
+  practical ceiling near a 14MB `inlineThreshold`.
+
+See [Metadata](/guides/storage#metadata-embedded-by-default-pluggable-when-you-need-it)
+for the full section.
+
+### Fixed — `renderStream()` honours a caller-set status code (no action required)
+
+`self.renderStream()` could only ever answer **200**, on both engines. The HTTP/2
+arm built its `stream.respond()` frame with a hardcoded `':status': 200`
+pseudo-header, and the HTTP/1.1 arm assigned `response.statusCode = 200`
+unconditionally inside its not-yet-sent block — clobbering a code the controller
+had already chosen.
+
+Both arms now resolve `response.statusCode || 200`, so a controller may set the
+status before it starts streaming:
+
+```js
+// now honoured on both engines
+self.response.statusCode = 206;
+self.renderStream(chunks, 'application/octet-stream');
+```
+
+Nothing changes for existing callers: with no status set, the answer is still
+200, and the pending-header merge still refuses to overwrite `:status`.
+
+This is what made `206 Partial Content` and `416` unreachable through
+`renderStream`, so it is a prerequisite for HTTP Range serving rather than a
+feature in its own right.
+
+:::note Why a literal is never safe in a hand-built HTTP/2 frame
+`setHeader(':status', …)` throws on an HTTP/2 response, and no later header
+merge can repair a pseudo-header — so a frame assembled by hand must carry
+`response.statusCode || 200` at construction time. The same defect was fixed in
+`renderJSON` earlier; this was the last hand-built frame still carrying a
+literal.
+:::
+
+### Fixed — the webroot redirect keeps the query string (no action required)
+
+If your bundle sets a non-root `server.webroot`, gina generates a redirect from the
+bare webroot path to its trailing-slash form. That redirect used to drop the query:
+
+```
+before:  GET /dashboard?token=abc   ->  302   Location: /dashboard/
+after:   GET /dashboard?token=abc   ->  302   Location: /dashboard/?token=abc
+```
+
+So any flow carrying a signed token, a redirect target or any other parameter into a
+bundle lost it whenever the entry URL was written without a trailing slash. Because
+the parameter was gone before the application ran, it surfaced as an unexplained
+refusal — nothing on screen, and nothing in the application's own logs, pointed at
+the URL.
+
+This is a behaviour change on that redirect, but it restores the parameter the caller
+sent rather than altering anything you configured, so no action is expected.
+
+:::caution `webrootAutoredirect: false` was never a workaround
+That setting only controls whether the **site root** `/` also redirects to the
+webroot. The bare-webroot redirect comes from the route's own URL and happens either
+way — so turning the setting off did not avoid the loss, it only removed the extra
+root match.
+:::
+
+The mechanism behind the fix is `keep-params`, a redirect-route option that has been
+documented since before the project moved to GitHub but was never implemented — the
+value was read and then discarded, so *every* `control: "redirect"` route dropped the
+caller's query. It is now honoured and still defaults to `false`, so your own redirect
+routes are unaffected unless you opt in:
+
+```json
+"docs-redirect": {
+  "url": "/documentation",
+  "param": {
+    "control": "redirect",
+    "path": "/documentation/",
+    "keep-params": true
+  }
+}
+```
+
+Only a local target inherits the query — an absolute `param.url` names another origin,
+so the flag is ignored there rather than disclosing your callers' parameters to a third
+party. See the [routing guide](/guides/routing#keeping-the-query-string).
+
+### Fixed — a redirect treats `HEAD` as the safe method it is (check HEAD health-checks)
+
+`HEAD` is `GET` without a response body. The guard that stops an **unsafe** method being
+replayed against a redirect target tested only for `GET`, so `HEAD` was handled like
+`POST` or `PUT`:
+
+```
+before:  HEAD /<webroot>?t=V   ->  303   Location: /<webroot>/    + a warning
+after:   HEAD /<webroot>?t=V   ->  302   Location: /<webroot>/?t=V
+```
+
+It drew a `trying to redirect using the wrong method` warning even on a route that
+explicitly lists `HEAD` among its own methods, it was answered `303` — telling the client
+to re-issue as `GET` and fetch a body it had deliberately not asked for — and, because the
+method was switched, it also received a copy of the request parameters that the same
+request as a `GET` never gets.
+
+:::note Where that parameter copy goes
+It rides the **session** when one is mounted, so the `Location` looks exactly as above. In
+a bundle with **no session plugin**, the session-less fallback appends it to the target in
+clear instead — `Location: /<webroot>/?inheritedData=%7B…%7D`. Same mechanism, different
+landing place, so a redirect's `Location` alone does not tell you whether the copy was
+made. This is the long-standing `redirect()` behaviour described in the
+[controller guide](/guides/controller), not something this release changes.
+:::
+
+`HEAD` now behaves exactly as `GET` does: the route's configured status code, the same
+`Location`, no warning.
+
+**Unsafe methods are unchanged.** `POST`, `PUT` and `DELETE` still get the warning, the
+switch to `GET` and the `303`.
+
+:::caution One thing to check
+This is wire-visible: a `HEAD` request against a redirect route now answers the route's own
+code — `302` for the framework-generated webroot redirect — instead of `303`. If you have a
+monitor or health-check asserting `303` on a `HEAD` against a bare webroot, adjust it.
+:::
+
+### Added — HTTP Range serving for stored objects (no action required)
+
+A controller can now serve a stored object over HTTP with one call.
+`self.serveFromStorage(driverName, key[, opts])` answers `200`/`206`/`416`/`304`
+(and `404`/`500` through `throwError`) with `Accept-Ranges`, `Content-Range`, a
+strong key-derived `ETag`, `Last-Modified`, conditional GET and `If-Range`, on
+both engines — see [Serving objects over HTTP](/guides/storage#serving-objects-over-http).
+The storage read verbs (`get`/`getRange`/`resolve`) now also carry a
+machine-readable `err.code` — `STORAGE_NO_OBJECT`, `STORAGE_RANGE_UNSATISFIABLE`,
+`STORAGE_INVALID_RANGE` — with message wording unchanged, so your own serving
+code can discriminate 404/416/400 without parsing message text.
+
+### Changed — `renderStream()` is byte-serving-capable (check if you stream Buffers or HEAD streaming routes)
+
+`renderStream()` now passes **Buffer chunks through verbatim on non-SSE
+content-types**. They were previously UTF-8-decoded, which corrupted binary
+payloads (every invalid-UTF-8 byte became U+FFFD); a valid-UTF-8 Buffer
+re-encodes byte-identically, so text consumers see no change, and SSE keeps its
+decode. Two more wire-visible refinements: a `HEAD` request to a streaming route
+now answers headers-only instead of streaming a full body (the same render-layer
+body suppression every other delegate already applied), and the delegate's
+default headers (`cache-control`, `connection`, `x-accel-buffering`) now yield
+to values you pre-set instead of silently overwriting them. Also fixed: a
+swallowed post-end `TypeError` fired on every streamed response and dropped the
+Inspector Flow timeline's stream entries — the timeline now survives streaming
+requests.
+
+---
+
+### Added — Couchbase soak probes ship in the package (no action required)
+
+The soak probes for the Couchbase metadata store now ship at `script/soak/storage/`,
+so you can exercise a cluster-backed driver root against your own deployment rather
+than taking ours on trust. They are test tooling — nothing loads them at runtime.
+
+### Fixed — a `sharded` driver reclaims temp files left by a crashed `put()` (no action required)
+
+A `put()` whose **process** died left its temp file behind in the driver root, where it
+accumulated indefinitely. Local drivers now run an age-gated, best-effort sweep that
+reclaims them. The sweep only touches temp files older than the driver's grace window,
+so an upload in flight during a restart is never disturbed.
+
+### Fixed — a refused or interrupted `put()` leaves no temp residue (no action required)
+
+Distinct from the crashed-process case above: a `put()` that was **rejected or
+interrupted while the process stayed alive** still left a stray temp file in a local
+storage root. The failure path now removes it.
+
 ## 0.6.6 → 0.6.7
 
 ### Added — object storage (no action required)

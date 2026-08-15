@@ -3,7 +3,7 @@ title: Object storage
 sidebar_label: Object storage
 sidebar_position: 3.7
 description: Store files in Gina through a pluggable storage layer — named drivers pairing an adapter (where bytes live) with a strategy (how keys are laid out), opaque keys, atomic writes, and per-object metadata through a pluggable store seam.
-keywords: [gina object storage, file storage, blob storage, storage driver, sharded storage, opaque keys, atomic write, temp and rename, storage metadata, sqlite metadata store, maxObjectSize, gina.storage, node.js object storage]
+keywords: [gina object storage, file storage, blob storage, storage driver, sharded storage, content-addressed storage, cas, stream strategy, resumable uploads, resumable upload node.js, opaque keys, atomic write, temp and rename, byte range, storage metadata, sqlite metadata store, maxObjectSize, gina.storage, node.js object storage]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -64,15 +64,18 @@ A file-backed write reaches its final path only through `rename(2)`, which is at
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `adapter` | yes | Where bytes live. `local` = the local filesystem under `root`. |
-| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted. |
+| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted; [`stream`](#large-media-and-resumable-uploads-stream) = one directory per asset, with resumable uploads. |
 | `root` | yes | Absolute directory holding this driver's objects. |
 | `maxObjectSize` | no | Per-object ceiling, as a **unit-suffixed string** (`"50MB"`). Defaults to `100MB`. |
 | `store` | no | A `connectors.json` entry name for the metadata store. Omit for the embedded default. |
-| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to both strategies. |
+| `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to `sharded` and `cas`; reported as an ignored key under `stream`, which never inlines. |
 | `hash` | no | **cas only.** The digest algorithm; its name becomes a namespace segment in every key. Defaults to `"sha256"`. Validated at boot against what *this runtime's* crypto provides. |
-| `fsync` | no | **cas only.** Whether publishes are flushed to disk before being acknowledged. Defaults to `true` — see [Durability](#durability-stated-plainly). |
+| `fsync` | no | **cas and stream.** Whether writes are flushed to disk before they are published or acknowledged — under `stream`, that includes each resumable segment before its durability marker. Defaults to `true` in both — see [Durability](#durability-stated-plainly). |
 | `sweepInterval` | no | **cas only.** How often the garbage-collection sweep runs, as a **unit-suffixed duration** (`"15m"`). `"0s"` disables the periodic sweep. |
-| `sweepGrace` | no | **cas only.** How long a blob must sit at zero references before the sweep may collect it (`"1h"`). Must be greater than zero. |
+| `sweepGrace` | no | **cas and sharded.** Under `cas`, how long a blob must sit at zero references before the sweep may collect it, *and* how old a leftover temp must be before it is reclaimed; under `sharded`, that temp rule alone. Defaults to `"1h"` and must be greater than zero. |
+| `chunkSize` | no | **stream only.** The segment size the write path is tuned for, as a **unit-suffixed string**. Defaults to `"8MB"`, and `createUpload()` reports it back so a client can match it. A tuning knob, not a protocol constraint. |
+| `sessionTtl` | no | **stream only.** How long an untouched [resumable upload session](#large-media-and-resumable-uploads-stream) survives before it is reclaimed, as a **unit-suffixed duration**. Defaults to `"24h"`. Must be greater than zero. |
+| `sessionSweepInterval` | no | **stream only.** How often that reclamation runs (`"1h"`). A pass also runs at boot. `"0s"` disables the periodic one. |
 
 `storage.default` names the driver returned by a no-argument `gina.storage()`. Omit it and every call must name its driver.
 
@@ -125,6 +128,29 @@ gina.storage().get(order.invoiceKey, function (err, stream) {
 });
 ```
 
+### Storing a file that is already on disk
+
+`put()` takes a **readable stream**, which is what a file already on disk becomes in one line — a child process wrote it, a library produced it, or you staged it yourself:
+
+```javascript
+var fs = require('fs');
+
+gina.storage().put(fs.createReadStream('/tmp/report-8821.pdf'), {
+    originalName : 'report-8821.pdf',
+    contentType  : 'application/pdf'
+}, function (err, res) {
+    if (err) {
+        return self.throwError(500, err);
+    }
+    // res.size is measured from the published bytes — no stat() needed
+    fs.unlink('/tmp/report-8821.pdf', function () {});   // your temp, your call
+});
+```
+
+Two things you do not have to do yourself: `res.size` is **measured by the layer** from what it actually published, so there is no reason to `stat()` afterwards or to trust a size you were handed; and on failure `put()` **destroys the source stream** before calling back, so a failed store leaves you no stream to clean up. The temp file itself is yours — the layer copies out of it and never assumes it may delete it.
+
+If you hold the bytes in memory rather than on disk, wrap them the same way: `require('stream').Readable.from([buffer])`.
+
 ### Keys are opaque
 
 `put()` returns a key. Store it, pass it around, hand it back to `get()` — but never parse it, build one by hand, or assume it encodes a date or a filename. That opacity is what allows a future strategy to change the layout without breaking anything already stored.
@@ -139,10 +165,16 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 | --- | --- | --- |
 | `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. Under `cas` the result also carries `deduplicated` — `true` when identical content already existed. |
 | `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. Serves both tiers. |
+| `getRange(key, start, end, cb)` | a readable stream | A byte range, `end` **inclusive** (as in the HTTP header). An `end` past the last byte is clamped; only a `start` at or beyond the object's size errors — that is your `416`. Serves both tiers. Gated by `capabilities.ranges`, true on every local driver. |
 | `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. Under `cas` it includes `refs`, the live reference count. |
 | `release(key, cb)` | `existed` | Under `sharded`: removes the object and its metadata row. Under `cas`: **drops one reference** — bytes are only reclaimed by the [sweep](#content-addressed-storage-cas). Idempotent either way. |
 | `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
 | `findByDigest(algo, hex, cb)` | a key, or `null` | **cas only** — gated by `capabilities.dedup`. The pre-upload existence check; see [the oracle caution](#content-addressed-storage-cas). |
+| `createUpload(meta, cb)` | `{uploadId, chunkSize, expectedSize}` | **stream only** — gated by `capabilities.resumable`. Opens a [resumable session](#large-media-and-resumable-uploads-stream). `meta.expectedSize` is **required**. |
+| `writeSegment(id, offset, stream, cb)` | `{offset, length, received}` | **stream only.** Writes one segment at a byte offset. Segments may arrive out of order; re-sending a covered range is harmless. |
+| `statUpload(id, cb)` | upload state | **stream only.** `{expectedSize, received[], missing[], complete, …}` — the resumable twin of `stat()`, and what makes resuming possible. |
+| `finalize(id, cb)` | `{key, size, contentType}` | **stream only.** Verifies coverage and publishes. Refuses a gap and keeps the session alive. Idempotent. |
+| `abortUpload(id, cb)` | `{aborted}` | **stream only.** Discards a session. Idempotent. |
 | `capabilities` | an object | What this driver can do. |
 
 ```javascript
@@ -157,11 +189,77 @@ gina.storage().stat(key, function (err, meta) {
 ```javascript
 var driver = gina.storage();
 if (driver.capabilities.ranges) {
-    // serve a 206 range response
+    // Range requests will be answered with 206 — see "Serving objects over HTTP"
 }
 ```
 
-`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. The rest — `offload`, `ranges`, `resumable` — are `false` in this release and flip as the strategies that provide them arrive; code that branches now keeps working when they do.
+`inline` is `true` when the driver's [size tiering](#size-tiering) is active — meaning `resolve()` may answer `{kind: 'inline'}`. `dedup` is `true` on a [`cas`](#content-addressed-storage-cas) driver and is what gates `findByDigest()`. `resumable` is `true` on a [`stream`](#large-media-and-resumable-uploads-stream) driver and is what gates the five session verbs. `ranges` is `true` on every local driver, because all three strategies implement `getRange()` — and on the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage), whose `get()`/`getRange()` proxy the provider.
+
+:::info `ranges` is consumed by the framework
+`capabilities.ranges` says the driver can return a byte range — and [`self.serveFromStorage()`](#serving-objects-over-http) consumes it: when the flag is `true`, HTTP `Range` requests are answered with `206`/`416` and `Accept-Ranges`; when `false`, the header is transparently ignored and the full `200` is served. Reach for raw `getRange()` only when you want custom protocol handling.
+:::
+
+`offload` is `true` on the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage) — and `false` on every local driver, where you stream the bytes yourself. It is consumed by the framework from day one: [`self.serveFromStorage()`](#serving-objects-over-http) answers GET/HEAD on an offload-capable driver with a **307** to a short-lived presigned URL, handing the byte transfer to the provider. Code that branched on `capabilities.offload` while it was still `false` everywhere keeps working unchanged — that is what the flag was for.
+
+---
+
+## Serving objects over HTTP
+
+`self.serveFromStorage(driverName, key[, opts])` serves a stored object as the HTTP response with the protocol handled for you, identically on both engines: strong validators, conditional GET, and full single-range `Range` support.
+
+```javascript
+// GET /files/:id — Range, 304 and HEAD all handled for free
+this.download = function (req, res) {
+    var self = this;
+    var doc  = getDocFromDb(req.params.id);   // { storageKey, mime }
+    self.serveFromStorage('media', doc.storageKey, { contentType: doc.mime });
+};
+```
+
+The method is **terminal** — it renders the bytes (or a 304/416, or a 404/500 through `throwError`) and ends the response. Do not render after it.
+
+```mermaid
+flowchart LR
+    A[request] --> B{stat key}
+    B -- "null" --> N404[404]
+    B -- "meta" --> C{If-None-Match<br/>matches the ETag?}
+    C -- "yes" --> N304[304 — no read]
+    C -- "no" --> O{capabilities.offload?<br/>GET / HEAD}
+    O -- "yes" --> R307["resolve() → 307 to a<br/>presigned URL, no-store"]
+    O -- "no (or opts.offload:false)" --> D{Range header,<br/>capabilities.ranges?}
+    D -- "none / ignored" --> F["get() → 200, full body"]
+    D -- "unsatisfiable" --> N416["416 + bytes */size"]
+    D -- "satisfiable" --> E["getRange() → 206 + Content-Range"]
+```
+
+What one call gives you:
+
+| Concern | Behaviour |
+| --- | --- |
+| Existence | `stat()`-gated: an unknown or released key answers **404**. A missing *driver* is an app config error and answers **500**, never 404. |
+| Validators | `ETag: "<key>"` — deliberately **strong**, because storage keys are immutable (every strategy publishes by temp-and-rename; nothing mutates in place) — plus `Last-Modified` from the publish time. |
+| Conditional GET | `If-None-Match` matching the key ETag answers **304** with no driver read at all. |
+| Range | A single `bytes=` range (`a-b`, `a-`, `-n`) answers **206** with `Content-Range` and an exact `Content-Length`, read through `getRange()`. Unsatisfiable → **416** with `Content-Range: bytes */<size>`. Multi-range lists, other units and malformed values are ignored into the full **200**, which RFC 9110 allows. `Accept-Ranges: bytes` is advertised whenever `capabilities.ranges` is true. |
+| `If-Range` | Honoured only on an exact validator match; anything else degrades to the full 200 — fail-safe, so an interrupted download never resumes against different bytes. |
+| HEAD | Headers only — full-size accounting, no driver read, no body. (On an offload-capable driver, HEAD redirects like GET — 307 preserves the method.) |
+| Caching | `Cache-Control: private, max-age=31536000, immutable` by default — a key's bytes can never change, and `private` keeps shared caches out of your authorization. Override verbatim with `opts.cacheControl`. |
+| Offload | On a driver with `capabilities.offload` (the [`s3` adapter](#the-s3-adapter--provider-owned-object-storage)), GET/HEAD answer **307** to a presigned URL after the 304 check — the provider serves the bytes, `Range` included, with the content-type downgrade riding the *signed* `response-content-type`. `opts.offload: false` forces the in-process proxy path below. |
+
+### Options
+
+| Key | Effect |
+| --- | --- |
+| `contentType` | Served verbatim — your informed choice, bypassing the downgrade below. |
+| `cacheControl` | Replaces the immutable caching default, verbatim. |
+| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). On the offload path it rides the presigned URL as `response-content-disposition`, so the provider's response carries it too. |
+| `filename` | The attachment filename (implies `download`). |
+| `offload` | `false` forces the in-process proxy path on an offload-capable driver — a private bucket, IP-gated egress, or byte-level control. Default: offload when the driver can. |
+
+:::caution The stored contentType is uploader-supplied
+`stat()` hands back whatever MIME type the uploader declared, verbatim. Serving `text/html` or `image/svg+xml` back on your own origin is a stored-XSS vector — and `nosniff` does not stop a *declared* type from rendering. So without an explicit `opts.contentType`, active-content types (`html`, `xml`, `svg`, `javascript`) are downgraded to `application/octet-stream`, and every response carries `X-Content-Type-Options: nosniff`. Pass `opts.contentType` once you have validated the type yourself.
+:::
+
+Under [`cas`](#content-addressed-storage-cas), a partially-downloaded object stays valid indefinitely — the key is a content address — which is exactly what the immutable cache default and the strong ETag lean on.
 
 ---
 
@@ -307,11 +405,183 @@ Content addressing makes in-place mutation impossible — editing produces a new
 
 ---
 
+## Large media and resumable uploads (`stream`)
+
+The `stream` strategy is for content too big to send in one go: video, audio, large archives — anything where a dropped connection halfway through should not mean starting over.
+
+```json
+// settings.json
+"storage": {
+  "default": "media",
+  "drivers": {
+    "media": {
+      "adapter": "local",
+      "strategy": "stream",
+      "root": "/var/data/media",
+      "maxObjectSize": "5GB",
+      "chunkSize": "8MB"
+    }
+  }
+}
+```
+
+A `stream` key names an **asset**, not a file — `assets/<ulid>/original.mp4` — so the object and anything later derived from it live in one directory you can move, back up or delete as a unit. (Renditions beside `original` are [not in this release](#what-is-not-in-this-release); the layout reserves the room.) Keys stay opaque, exactly as under the other strategies.
+
+`put()` works here as everywhere, for content you can send in one request. What `stream` adds is the resumable path.
+
+### Resumable uploads
+
+Five verbs, gated by `capabilities.resumable`:
+
+```javascript
+var driver = gina.storage('media');
+
+// 1. open a session — expectedSize is REQUIRED
+driver.createUpload({
+    expectedSize : 4294967296,
+    originalName : 'talk.mp4',
+    contentType  : 'video/mp4'
+}, function (err, session) {
+    // session => { uploadId, chunkSize, expectedSize }
+});
+
+// 2. send segments — any order, in parallel, resumable
+driver.writeSegment(uploadId, 8388608, req, function (err, r) {
+    // r => { offset, length, received }
+});
+
+// 3. ask what is still missing (after a reconnect, say)
+driver.statUpload(uploadId, function (err, state) {
+    // state => { expectedSize, received: [...], missing: [...], complete, … }
+});
+
+// 4. publish
+driver.finalize(uploadId, function (err, res) {
+    // res => { key, size, contentType } — the same shape put() returns
+});
+
+// …or throw the session away
+driver.abortUpload(uploadId, function (err, r) { /* r => { aborted } */ });
+```
+
+Segments are written **at their byte offset**, straight into the file being assembled, so they may arrive out of order or in parallel and no assembly pass runs at the end. Re-sending a range that already landed is harmless, and overlapping re-sends are fine. A session's state lives in the driver root rather than in memory, so it survives a bundle restart — `statUpload()` answers correctly afterwards.
+
+:::info `expectedSize` is required, and that is deliberate
+Without a declared total, nothing can verify that the ranges you sent actually **cover** the object, and `statUpload()` could only report what arrived — never what is missing. Uploading content whose size you do not know is what `put()` is for. (Equivalent wire protocols agree: `tus` requires `Upload-Length` unless a server opts into a separate extension, and S3 multipart can never tell you which part is missing because it never learns the total.)
+:::
+
+`expectedSize` also lets gina refuse an oversized upload before a single byte moves. That check is a courtesy, not the enforcement: the value comes from the client, so a segment that runs past the declared total is refused as it is written.
+
+### Why finalise can refuse
+
+`finalize()` merges the ranges it has actually made durable and requires them to cover `[0, expectedSize)` exactly. A gap is a real error, and the session is **kept alive** so the client can send what is missing and try again.
+
+That check is the whole safety story, and it is worth knowing why it is stricter than it looks. An unwritten range in a partly-filled file does not fail on read — it returns **zeros**. So a finalise that simply added up the bytes it received would happily publish an object that looks complete and is quietly wrong: two segments overlapping in the middle can add up to the full size while leaving the tail untouched. Merging the ranges catches that; summing them does not.
+
+If `finalize()` publishes the bytes but then fails to write the metadata row, call it again — it detects the published object, completes the row and cleans up. Do not call `writeSegment()` for a session while `finalize()` is running on it; one actor per finalise.
+
+### Durability of a resumable upload
+
+Each segment is flushed to disk **before** it is recorded as durable, so a client is never told a range is safe when it is not — that is the contract `statUpload()` rests on. `fsync: true` is the default here for that reason.
+
+The cost is proportional to how fast the bytes arrive: measured, that flush is about 2% of the time an 8MB segment takes to cross a 100 Mbps link, but it dominates on a 10 Gbps LAN. If you are ingesting over a fast local network and can accept losing the last few segments' durability claim to a power cut, set `fsync: false`.
+
+:::note gina cannot defragment
+An earlier design called for preallocating the file. Node exposes no `fallocate`, and the available fallback produces a *sparse* file that reserves nothing — so gina neither prevents fragmentation nor can pretend to. Contiguity is a filesystem and volume concern (XFS extent hints and the like). What the per-asset directory buys is **operational** grouping, not physical locality.
+:::
+
+### Abandoned sessions
+
+A client that simply goes away leaves a session holding real disk. Each `stream` driver reclaims sessions untouched for longer than `sessionTtl` (default `"24h"`), sweeping at boot and every `sessionSweepInterval` (default `"1h"`) — the same pass also clears temp files from a crashed `put()`. Liveness is measured from the file being assembled, so a long, slow upload is never mistaken for an abandoned one.
+
+### Several processes, one session
+
+Writing disjoint ranges of one session from several processes is safe on a POSIX-coherent filesystem. On a network mount with relaxed coherence, route a given session's segments to a single process — nothing in the driver enforces that, and it has not been measured there.
+
+Finally: `stream` neither tiers nor hashes. `inlineThreshold` and `hash` on a `stream` driver are reported as ignored keys rather than silently doing nothing, and `capabilities.inline` and `capabilities.dedup` are `false` by design rather than pending.
+
+---
+
+## The `s3` adapter — provider-owned object storage
+
+Set `"adapter": "s3"` and the driver stores its objects on any S3-compatible provider — AWS S3, Scaleway, MinIO, R2 — instead of the local filesystem:
+
+```js
+"storage": {
+  "drivers": {
+    "archive": {
+      "adapter": "s3",
+      "bucket": "my-archive",
+      "prefix": "app/",
+      "endpoint": "s3.fr-par.scw.cloud"
+    }
+  }
+}
+```
+
+`bucket` is the only required key beside the adapter. `strategy` may simply be omitted — on external object storage the layout algorithm collapses to key naming, so `s3` runs the `sharded` grammar (`YYYY/MM/DD/<ulid><ext>`, under your `prefix`) and that is the default; declaring `cas` or `stream` refuses the boot with the reason (the provider owns placement — S3 ETags are not content digests, and multipart is the provider's own resumable). `endpoint` is for non-AWS providers (`https://` is prepended when you give a bare host); `forcePathStyle: true` is what MinIO wants. The opaque key **excludes** the prefix, so re-pointing `prefix` orphans previously stored objects exactly as re-pointing a local `root` would.
+
+Install the client **in your own project** — the framework declares no dependency on it, the same policy every database connector follows:
+
+```bash
+npm install @aws-sdk/client-s3 @aws-sdk/lib-storage @aws-sdk/s3-request-presigner
+```
+
+A configured `s3` driver whose SDK is not installed refuses the boot with exactly that hint.
+
+### Storeless — the provider owns the metadata
+
+An `s3` driver has **no metadata store**: no `root`, no embedded `.meta.db`, no `store` key (each warns as ignored if set). One `PutObject` atomically carries the bytes, the Content-Type, and the original name (as URI-encoded user metadata — which the provider documents as **immutable after upload**, exactly this layer's immutable-key contract). `stat()` is a strongly-consistent `HeadObject`; `release()` is an idempotent `DeleteObject` (the provider acknowledges without reporting prior existence, so `existed` is documented as acknowledgement-only — `stat()` first if you need the distinction). There is nothing to drift and nothing for `storage:verify` to check, **by construction** — and the shared-root topology that requires a [connector-backed store](#the-couchbase-store) on the `local` adapter cannot arise: every replica reads the provider's truth. Size tiering does not apply (`capabilities.inline` is `false`; `inlineThreshold` warns as ignored), and durability is the provider's, not a driver `fsync` knob.
+
+### Credentials
+
+Set `accessKeyId` + `secretAccessKey` **both or neither** — `${secret:KEY}` placeholders resolve here as in any config — or omit both (recommended on AWS and Kubernetes) and the SDK's default provider chain runs: environment variables, shared config, IMDS, IRSA. `sessionToken` is meaningful only beside the static pair. `region` may be omitted on real AWS (the SDK chain resolves it); beside a custom `endpoint` it defaults to `us-east-1`, which S3-compatible providers accept.
+
+### Offload serving — the presigned 307
+
+`capabilities.offload` is `true`, and [`self.serveFromStorage()`](#serving-objects-over-http) consumes it: GET and HEAD answer **`307 Temporary Redirect`** to a short-lived presigned URL (`presignExpiry`, default `"15m"`), and the provider serves the bytes — `Range` included, natively.
+
+```mermaid
+sequenceDiagram
+    participant C as client
+    participant G as gina (serveFromStorage)
+    participant P as provider (S3)
+    C->>G: GET /files/42 (your route, your authorization)
+    G->>P: HeadObject (stat gate — 404 stays yours)
+    G->>G: If-None-Match? → 304, no presign spent
+    G->>G: downgrade contentType, presign with signed response-* overrides
+    G-->>C: 307 Location: presigned URL (Cache-Control: private, no-store)
+    C->>P: GET presigned URL (Range rides along)
+    P-->>C: 200/206 — bytes, with YOUR content-type and cache policy
+```
+
+The order of the gates is the point: your route's **authorization already ran** (you called the facade), the **404 is still yours** (the stat gate — a missing object never leaks a provider error page), the **304 costs no signature**, and the facade's decisions reach the *provider's* response as **signed `response-*` overrides** — the fail-closed [content-type downgrade](#serving-objects-over-http) included, so an uploader-supplied `text/html` is not served verbatim from the bucket either. The redirect itself is `Cache-Control: private, no-store` (it must never outlive its signature), while the payload's caching policy — the immutable default, or your `opts.cacheControl` — rides `response-cache-control` on the presigned URL.
+
+`opts.offload: false` forces the in-process proxy path: `get()`/`getRange()` are real (`GetObject`, with `Range`), so everything the serving section documents works unchanged when you would rather not expose the bucket at all. Non-GET/HEAD methods always proxy. `resolve()` itself is also yours to call — `resolve(key[, opts], cb)` answers `{kind: 'url', url, expiresAt}` for embedding a link in a page or an email; presigning is local computation, so it deliberately does **not** verify existence (a URL to a since-released object answers the provider's own 404).
+
+### The minimal IAM policy
+
+Grant the driver's credentials, scoped to the bucket (and prefix where your policy language allows):
+
+- `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` — the verbs
+- `s3:ListBucket` — **without it, a missing key answers `403` instead of `404`**, so `stat()` surfaces an access error where the contract says `null`
+- `s3:ListBucketMultipartUploads`, `s3:AbortMultipartUpload` — the orphan sweep below
+
+### Incomplete multipart uploads
+
+A `put()` of unknown length uploads multipart under the hood, and a process that dies mid-put leaves an **incomplete multipart upload** — the s3 analog of a crashed-put temp file, except this one **bills storage until it is aborted, with no expiry**. The driver sweeps at build time: uploads under your `prefix` older than `sweepGrace` (default `"1h"`, the same key and meaning as the local temp-orphan gate) are aborted, best-effort, one bounded page per boot. Configure an `AbortIncompleteMultipartUpload` bucket lifecycle rule as defense-in-depth for processes that never restart.
+
+:::info S3-compatible providers
+Strong read-after-write consistency (HEAD and LIST included) and the user-metadata semantics above are **AWS-documented** behaviour. A compatible provider claiming API parity owns its own consistency model — the adapter only uses the core compatibility surface (Put/Get/Head/Delete, ListObjectsV2, the multipart listing pair, and SigV4 presigning), and MinIO, Scaleway and R2 all implement it, but the guarantee is theirs to state, not gina's to transfer.
+:::
+
+---
+
 ## Metadata: embedded by default, pluggable when you need it
 
 Each object gets a metadata row — original name, content type, size, creation time, and, for inline objects, the payload itself — which is what `stat()` (minus the payload) reads. By default that lives in an embedded SQLite file inside the driver root (`<root>/.meta.db`), so moving or backing up the root moves its metadata with it.
 
-That default is **single-process per driver root**. SQLite's locking is unreliable on a shared network filesystem, so if two bundles, or several replicas, share one root, point the driver at a connector instead:
+That default is **single-process per driver root**. SQLite's locking is unreliable on a shared network filesystem, so if two bundles, or several replicas, share one root, point the driver at a connector instead. `store` names an entry in `connectors.json`:
 
 ```json
 // settings.json
@@ -327,29 +597,102 @@ That default is **single-process per driver root**. SQLite's locking is unreliab
 }
 ```
 
+**If you already have a connector entry for that cluster, name it here and you are done.** The store reuses that entry's credential, so reuse costs you nothing beyond the `store` line — no new secret, no new delivery mechanism. That is the recommended path, and it is worth taking deliberately rather than by default: giving storage its *own* credential means delivering a **database** credential to a running process, and not every deployment has a wire for that. Application-secret pipelines frequently do not carry DB credentials, which instead ride as literals in shipped config — so a storage-specific credential can mean new orchestration and provisioning work, not just a new config key.
+
+Only when storage gets its own entry do you write one:
+
 ```json
-// connectors.json
+// connectors.json — needed only when storage does NOT reuse an existing entry
 {
-  "assetsMeta": { "connector": "redis", "host": "127.0.0.1", "port": 6379 }
+  "assetsMeta": {
+    "connector": "couchbase",
+    "protocol": "couchbase://",
+    "host": "db1.internal",
+    "username": "gina",
+    "password": "${secret:CB_PASSWORD}",
+    "database": "gina_storage"
+  }
 }
 ```
 
-:::caution No connector ships a storage store yet
-Connector backends are demand-gated. Setting `store` today refuses the boot with a clear message rather than falling back silently — the embedded SQLite backend is the supported path in this release. If you need a shared-root deployment, open an issue describing the connector you need.
+:::info Couchbase is the connector store that ships today
+Other backends stay demand-gated: naming one refuses the boot with a clear message rather than falling back silently. If you need a different one, open an issue describing it.
 :::
 
 A store backing a **cas** driver additionally implements the four refcount verbs (`acquireRef` / `releaseRef` / `listZeroRefs` / `removeIfZero`) — the embedded store does, migrating pre-cas databases in place; a cas driver refuses to boot over a store that does not. Each verb must be atomic per key: that atomicity is what makes two concurrent identical uploads yield one blob with two references instead of a lost update.
+
+### The couchbase store
+
+Requires the `couchbase` SDK (major 3 or 4) in **your** project — the framework
+declares no dependency on it — and reads the connector's usual keys, where
+`database` is the **bucket** name. Optional: `scope` and `collection` (both
+`_default`), `prefix` (`stor:`), and `durability`.
+
+**A dedicated bucket — or at least a dedicated collection — is the right
+default, but it is not free.** Nothing breaks if you share one with application
+data: every row carries `d`/`k` discriminators and every query filters on them.
+What a dedicated keyspace buys you is that the two secondary indexes below stay
+off your application's data, and that storage rows are trivially separable in a
+backup. Weigh that against how your cluster is provisioned: where buckets are
+created only at cluster initialisation, adding one later is a deliberate
+operational change rather than a config edit, and may touch provisioning you do
+not otherwise revisit. A dedicated **collection** gets you most of the
+separation for a fraction of that cost, and sharing an existing keyspace remains
+a legitimate choice rather than a mistake.
+
+Each metadata row is one JSON document keyed `<prefix><driver>:<key>`. **The
+driver name namespaces every row**, so several drivers may share one
+`connectors.json` entry without colliding — which matters under `cas`, where
+keys are content-derived and therefore identical across drivers storing the
+same bytes.
+
+Per-key atomicity comes from Couchbase's own CAS: each refcount verb reads the
+document and writes it back with a compare-and-set guard, retrying a bounded
+number of times if another writer got there first. That is also why **no sweep
+election is needed** when several replicas run the GC concurrently — the claim
+step is itself compare-and-set, so exactly one sweeper collects each blob and
+the others simply skip it.
+
+Two things worth knowing before you deploy it:
+
+- **Inline payloads are stored base64-encoded inside the JSON document**, not
+  as binary document bodies — Couchbase cannot index or query a binary value,
+  and the maintenance verbs need to query. Budget the +33%: with the default
+  64KB tiering threshold a row is about 85KB, comfortably under Couchbase's
+  20MB document limit, but an `inlineThreshold` above roughly 14MB will not
+  fit.
+- **Two secondary indexes back the maintenance verbs.** The store creates them
+  at boot when they are missing:
+
+  ```sql
+  CREATE INDEX `gina_storage_refs` ON `bucket`.`scope`.`collection`(d, refs, zeroAt);
+  CREATE INDEX `gina_storage_keys` ON `bucket`.`scope`.`collection`(d, k);
+  ```
+
+  If the account cannot create indexes, that is not fatal — but run the two
+  statements by hand, because Couchbase *errors* on an unindexed query rather
+  than merely running it slowly, which would leave the GC sweep failing
+  silently. The store logs the exact statement to run in that case.
+
+Mutations use the SDK's default durability unless you set `durability` to
+`majority`, `majorityAndPersistToActive` or `persistToMajority`. The default is
+the same honesty class as the embedded store's WAL setting: a crash can lose the
+most recently acknowledged write. Couchbase failover can lose durably-written
+data too, and the two directions are not symmetric — a lost `acquireRef`
+undercounts (the grace window and `storage:verify` catch it), while a lost
+`releaseRef` overcounts and that blob is never collected.
 
 ---
 
 ## Durability, stated plainly
 
-For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object — under either strategy. What differs is crash durability:
+For file-backed objects, `rename(2)` guarantees that a reader never observes a partial object — under every strategy. What differs is crash durability:
 
 - **`sharded` writes are not `fsync`ed.** An acknowledged write can still be lost if the machine loses power before the filesystem flushes. Recent writes at risk, never a partial object.
 - **`cas` publishes are `fsync`ed by default** (`fsync: true`): the temp file is flushed *before* the rename publishes it — a flush failure fails the `put()` — and the parent directory is flushed after, **best-effort**: platforms that cannot fsync a directory (Windows; some network mounts) skip that half silently, and macOS honours `fsync` as the platform defines it. cas exists for immutable content where "acknowledged means durable" is the point; set `fsync: false` per driver to opt back into sharded-class durability.
+- **`stream` fsyncs by default too**, and additionally flushes **each resumable segment before recording it as durable** — that ordering is what lets a client trust `statUpload()`. See [Durability of a resumable upload](#durability-of-a-resumable-upload) for when to turn it off.
 
-Inline objects (either strategy) are in the sharded class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. If your retention requirements are stricter than all of this, replicate to durable storage rather than relying on the local adapter alone.
+Inline objects (`sharded` or `cas` — `stream` never inlines) are in the sharded class: the embedded store runs SQLite in WAL mode with `synchronous=NORMAL`, so a crash can lose the most recent committed transaction but never yields a torn row. If your retention requirements are stricter than all of this, replicate to durable storage rather than relying on the local adapter alone.
 
 ---
 
@@ -394,8 +737,21 @@ objects, and total logical bytes — a deduplicated blob counts once.
 
 `storage:gc` drives the cas sweep immediately instead of waiting for the next
 `sweepInterval` tick, looping until nothing older than `sweepGrace` remains.
-`--dry-run` lists the collectable blobs and touches nothing. `sharded` drivers
-have no sweep and are named and skipped, never an error.
+`--dry-run` lists the collectable blobs and touches nothing. `sharded` and
+`stream` drivers have no sweep *here* and are named and skipped, never an error
+— a `stream` driver does reclaim abandoned upload sessions, but on its own
+schedule rather than through this command.
+
+:::note Every strategy reclaims its own crashed-`put()` temps
+A `put()` whose **process** died leaves a temp file behind, and no verb ever
+looks at it again. Each strategy clears its own at **build time** — when the
+bundle starts, which is the earliest moment the previous process is provably
+gone — removing only temps older than the grace window (`sweepGrace`, or
+`sessionTtl` under `stream`). The age gate is the point: on a root shared by
+several bundles or replicas, a *fresh* temp may be a sibling process's live
+write, and eating it would corrupt a put in flight. Nothing here needs
+operating; it is why a crash does not slowly fill your driver root.
+:::
 
 `storage:verify` walks the blob tree against the metadata rows and reports two
 finding classes — deliberately asymmetric:
@@ -419,11 +775,10 @@ same result from whichever bundle you point at.
 
 | Not yet | What it will bring |
 | --- | --- |
-| `stream` strategy | Large sequential media, resumable segment uploads. |
-| `s3` adapter | Object-store backend; its client stays a project-side dependency. |
-| Range serving | `206 Partial Content` for media, in both engines. |
+| Renditions | A `putRendition()` API for transcoded variants. The [`stream`](#large-media-and-resumable-uploads-stream) key layout already reserves the room beside `original`; there is no API yet. |
+| Stream maintenance | `storage:gc` and `storage:verify` support for `stream` — orphaned upload sessions and objects orphaned by a failed post-publish row write. A `stream` driver reclaims abandoned sessions on its own schedule; what is missing is an operator door and a consistency scan. |
 | `storage:migrate` | Strategy/hash re-key tooling for populated roots. |
 
 Uploads that are **not** routed to a driver are unaffected — [`self.store()`](/guides/file-uploads) keeps its existing behaviour byte-for-byte for them. See [Binding upload groups](#binding-upload-groups) for routing one.
 
-Configuring a strategy that is designed but not yet implemented (`stream`) refuses the boot with a message saying so, rather than treating it as a typo.
+Every strategy — and every adapter — named in the design now ships: the layer is complete. A strategy or adapter name gina does not recognise refuses the boot as a typo, naming the ones it does.
