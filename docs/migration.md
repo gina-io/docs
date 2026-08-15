@@ -48,17 +48,42 @@ Reaching every connected client now requires asking for it deliberately with
 
 **What breaks.** A bare `self.push()` driven over an HTTP hop by a background worker —
 a job runner reporting progress to the user who queued it, threading that user's
-session id through the request — now resolves to the caller's own session and stops
-delivering. That hop is exactly the vulnerability, so it cannot be preserved.
+session id **through the request** — now resolves to the caller's own session and stops
+delivering. Carrying the recipient in the request *is* the vulnerability, so that hop
+cannot be preserved as written.
 
-**And there is no in-process substitute yet.** `push()` returns early once the request
-is released, and nothing outside a live request-bound controller can reach the socket
-set, so a worker has nothing to migrate *to*. Until an explicit out-of-request channel
-exists, report out-of-request progress by polling `GET /_gina/jobs/:id`, or over a
-transport your application owns.
+**The shape is recoverable when the hop is authenticated.** If the worker's hop lands in
+an ordinary request-bound controller and carries a credential your own server minted —
+one that names the target session — then the controller can decode what it has just
+authenticated and name the recipient itself:
 
-A narrow case does survive, but it is worth stating precisely, because the obvious
-reading of it silently does not work.
+```js
+// in the controller the worker's hop reaches
+self.push(payload, { sessionID: verified.sessionID });
+```
+
+`option.sessionID` is the **first** branch of the resolution order, so it wins over the
+caller's own session. The recipient is still decided server-side: it comes from a value
+your code verified, never from the request body, which `push()` no longer reads for it at
+all. Pass it explicitly rather than leaning on the fallback — the fallback resolves to
+whatever session the *hop's own request* carries, which is not the user you are pushing
+to unless your auth layer deliberately adopts it, the narrow case described below.
+
+**`0.6.7` accepts `option` but ignores it.** Checked at the `v0.6.7` tag: `push()` already
+had the `option` parameter there, but the recipient is `req[method].sessionID` and nothing
+else — the argument is never read for it. So passing `{ sessionID }` on its own changes
+nothing before `0.6.8`, and does so silently. If one codebase has to work against both
+versions during a rollout, write **both** sinks: the request value `0.6.7` reads, and the
+option `0.6.8` honours.
+
+**What genuinely has no substitute** is a worker with no request context at all — one that
+never makes such a hop. `push()` returns early once the request is released, and nothing
+outside a live request-bound controller can reach the socket set, so that shape has
+nothing to migrate *to*. Until an explicit out-of-request channel exists, report its
+progress by polling `GET /_gina/jobs/:id`, or over a transport your application owns.
+
+A second, narrower route also survives, but it is worth stating precisely, because the
+obvious reading of it silently does not work.
 
 `push()` resolves the caller's session from **`req.sessionID`** first, and only then
 falls back to `req.session.id`. So an application that assigns `req.sessionID` — a
