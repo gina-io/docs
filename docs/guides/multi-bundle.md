@@ -123,6 +123,42 @@ Each `bundle:start` spawns a separate Node.js process. Ports are auto-assigned
 from a pool managed by `ports.json`, or you can configure them explicitly in the
 bundle's `settings.json`.
 
+### Adding a bundle without shipping it everywhere
+
+A multi-bundle project usually has one bundle further along than the others. By
+default every bundle you add is deployed in **every** scope, so a half-finished
+one goes out with the rest. Hold it back with a `scopes` allow-list in
+`manifest.json`:
+
+```json
+"reporting": {
+  "version": "0.0.1",
+  "src": "src/reporting",
+  "link": "bundles/reporting",
+  "scopes": ["local"]
+}
+```
+
+```bash
+# builds dashboard, api, auth — skips reporting with a notice
+gina project:build @myapp --env=prod --scope=production
+
+# still works, because local is in the list
+gina bundle:start reporting @myapp
+```
+
+When it is ready, add the other scopes to the list or delete the key. Existing
+bundles are unaffected: no key means every scope, which is what they all do
+today. Full semantics in ['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+
+:::warning Do not prune `releases` by hand to achieve this
+Removing a bundle's `releases.<scope>` entry looks like it would do the same
+thing. It does not hold — `bundle:build` and `project:build` both walk every
+scope in the project and re-create any missing release entry, so the deletion
+comes back on the next build. `scopes` is the only declaration the tooling
+preserves.
+:::
+
 ---
 
 ## Inter-bundle communication

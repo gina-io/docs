@@ -250,6 +250,14 @@ Build all bundles in a project.
 gina project:build @<project> [--env=<env>] [--scope=<scope>]
 ```
 
+:::note Bundles restricted to certain scopes
+A bundle whose `manifest.json` entry carries a `scopes` allow-list that does not
+include `--scope` is **skipped**, with a notice naming the scope — one restricted
+bundle never blocks a project-wide build. (`bundle:build`, which targets a bundle
+by name, refuses instead.) See
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+:::
+
 ---
 
 ## `project:backup`

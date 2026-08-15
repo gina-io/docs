@@ -100,14 +100,33 @@ list — or delete the key.
 | `["local", "staging"]` | Deployed in those two scopes. |
 | `[]` | Parked — deployed in no scope at all. |
 
-:::note What happens to an excluded bundle
-It depends on whether you asked for it by name. Booting a project, or running
-`gina project:build`, **skips** an excluded bundle and logs a notice saying which
-scope it is missing from — so one parked bundle never blocks a whole project
-build. Starting that bundle, or naming it explicitly in
-`gina bundle:build newthing --scope=production`, is **refused** with an error,
-because quietly producing nothing would look like success in a deploy script.
-:::
+### What happens to an excluded bundle
+
+It depends on whether you asked for that bundle **by name**. A bulk operation
+skips it and says so; an explicit, single-bundle request refuses — because
+quietly producing nothing would look like success in a deploy script.
+
+```mermaid
+flowchart TD
+  A[operation runs in scope S] --> B{bundle declares scopes?}
+  B -->|no key| C[deployed<br/>every scope, as always]
+  B -->|yes| D{is S in the list?}
+  D -->|yes| C
+  D -->|no| E{did you name<br/>this bundle?}
+  E -->|"no — booting a project,<br/>gina project:build"| F[SKIP<br/>notice names the scope<br/>and the remedy]
+  E -->|"yes — gina bundle:start,<br/>gina bundle:build &lt;name&gt;"| G[REFUSE<br/>error names bundle,<br/>scope and remedy]
+```
+
+| Operation | Excluded bundle |
+| --- | --- |
+| Booting a project | **Skipped**, with a notice |
+| `gina project:build` | **Skipped**, with a notice — one parked bundle never blocks a project build |
+| `gina bundle:start <name>` | **Refused** by name |
+| `gina bundle:build <name> --scope=<scope>` | **Refused** by name |
+
+The one exception worth knowing: if the bundle you are *starting* is excluded
+from the scope you start it in, that is refused rather than skipped — a boot with
+nothing to serve is never what you meant.
 
 :::warning Deleting `releases.<scope>` is not a substitute
 It may look equivalent to remove the bundle's `releases.<scope>` entry by hand.
