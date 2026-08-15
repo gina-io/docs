@@ -39,6 +39,8 @@ gina project:add @myproject --path=./myproject
 
 Gina creates the directory if it does not exist, writes `manifest.json`, `package.json`, and `env.json`, and records the project path in `~/.gina/<version>/projects.json`.
 
+Since `0.6.9` it also writes a `.gitignore` — but **only when the project does not already have one**. Yours is never replaced or appended to, so re-running `project:add` over an existing project leaves it untouched. The scaffolded file covers the usual build output (`node_modules`, `releases`, `logs`, `tmp`) and the secret-file globs `.env`, `.env.*` and `*.env`, with `!.env.example` negations so a sample can still be committed.
+
 ### Options
 
 | Option | Description |

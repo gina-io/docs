@@ -348,9 +348,14 @@ it there is what keeps a KMS call off the boot path.
   did not know. Unknown tokens are preserved verbatim by design, so a typo
   would otherwise become a silent lookup for a literally-named file that
   never exists.
-- **Keep declared files out of `git`.** They are plaintext by definition. The
-  scaffolded `.gitignore` matches `*secrets*.env` and `.env*`; verify your
-  own before committing.
+- **Keep declared files out of `git`.** They are plaintext by definition.
+  Since `0.6.9` `gina project:add` writes a `.gitignore` when the project has
+  none, carrying `.env`, `.env.*` and `*.env` (with `!.env.example` and
+  `!*.example.env` so a sample can still be committed). All three forms are
+  needed: a bare `.env` matches neither `secrets.env` nor `.env.production`.
+  **Before `0.6.9` no `.gitignore` was scaffolded at all**, and the command
+  never replaces one you already have — so on any project created earlier, or
+  one that brought its own, verify the patterns yourself before committing.
 
 #### The file syntax
 

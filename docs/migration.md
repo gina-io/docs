@@ -36,6 +36,35 @@ express@^5` or `@^4`) — the framework deliberately ships no express dependency
 and no peer dependency either. Bundles on the default `isaac` engine are
 untouched.
 
+### Fixed — `project:add` writes a `.gitignore` (new projects only; yours is never touched)
+
+The framework has always shipped a `core/template/_gitignore` whose underscore
+prefix implies a rename to the dotted form at scaffold time. Nothing performed
+that rename, so the template had no consumer and **every scaffolded project came
+out with no `.gitignore` at all** — which meant the secret-file globs it carries
+were protecting nothing, and a new project would happily track a `secrets.env`
+or `.env.production` on its first commit.
+
+`gina project:add` now copies it to `<project>/.gitignore`, **only when the
+project has none**. Your own file is never replaced or appended to, so the step
+is idempotent and re-running the command over an existing project changes
+nothing. It applies on the import path too, since an imported project without a
+`.gitignore` has the same exposure.
+
+Nothing to do for existing projects — they are untouched. If you created one
+before `0.6.9` and want the same coverage, the globs worth having are:
+
+```gitignore
+.env
+.env.*
+*.env
+!.env.example
+!*.example.env
+```
+
+All three positive forms are needed: a bare `.env` matches neither
+`secrets.env` nor `.env.production`.
+
 ### Fixed — the environment really does beat the secrets file again (no action required)
 
 The guide has always said [the environment always
