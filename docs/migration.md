@@ -51,6 +51,67 @@ only code matching the literal pre-existing string
 `Error on Path.cp(...): Not found ...` needs adjusting — and `err.stack` now
 actually exists, where the string shape logged `undefined`.
 
+### Added — a bundle can declare which scopes it is deployed in (opt-in; no action required)
+
+Until now every bundle registered in `manifest.json` was deployed in **every**
+scope, and the only way to exclude one was to leave it out of the manifest —
+which removes it from all scopes at once. A bundle entry can now carry a
+`scopes` allow-list:
+
+```json
+"newthing": {
+  "version": "0.0.1",
+  "src": "src/newthing",
+  "link": "bundles/newthing",
+  "scopes": ["local"]
+}
+```
+
+An **absent** key means every scope, so existing manifests are unaffected and no
+migration is needed. `[]` parks the bundle everywhere. A value that is not an
+array is reported as a manifest error naming the bundle, rather than being read
+as "no scopes".
+
+Booting a project and `gina project:build` **skip** an excluded bundle with a
+notice; starting it, or naming it explicitly in `gina bundle:build <name>
+--scope=<scope>`, is **refused** by name, so a deploy script cannot mistake
+"built nothing" for success.
+
+**If you already prune `releases.<scope>` entries by hand to keep a bundle out of
+an environment, stop** — it never worked: both build commands walk every scope in
+the project and re-create any missing release entry, so the deletion reappears on
+the next build. Use `scopes` instead. See
+['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+
+### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
+
+A failed release link during configuration load reported
+`TypeError: Cannot set properties of undefined (setting 'env')` — an
+uncaughtException pointing at framework internals rather than at the path you had
+to fix. Because the configuration load is shared across a project, one bundle's
+missing release tree took down **every** bundle in it, and the server never bound,
+so a startup probe saw only a refused connection.
+
+The real reason is now propagated and reported: the failure names the bundle, the
+environment and the scope, keeps the underlying error, and exits cleanly instead
+of dying as an unhandled exception. No action required — this is diagnosability
+only, and the class of deployment that failed before still fails, just legibly.
+
+### Fixed — `self.push()` on an engine without an engine.io channel (Express users)
+
+Calling `self.push()` on the Express engine dereferenced an absent engine.io
+channel and surfaced as an opaque 500 naming neither push nor the missing
+channel. It now warns, passes a supplied `callback` a
+`PUSH_CHANNEL_NOT_CONFIGURED` error, and sends nothing — **without failing the
+request**, so a notification side-channel no longer takes down the response it
+rode in on.
+
+This is the first time `self.push()` honours the `callback(err, result)` contract
+its documentation always described but the implementation never invoked. If you
+call `self.push()` on Express and relied on the 500 to detect the misconfiguration,
+check the log or pass a callback instead. The push channel requires the `isaac`
+engine with `server.ioServer` attached.
+
 ## 0.6.7 → 0.6.8
 
 This release fixes **two security flaws**, both live in every published version up
