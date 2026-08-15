@@ -36,6 +36,48 @@ express@^5` or `@^4`) — the framework deliberately ships no express dependency
 and no peer dependency either. Bundles on the default `isaac` engine are
 untouched.
 
+### Fixed — the environment really does beat the secrets file again (no action required)
+
+The guide has always said [the environment always
+wins](/guides/secrets#the-environment-always-wins) over a `secrets.file`
+tier. For one shape of key that was not true. The two environment tiers were
+read as `frameworkValue || process.env[KEY]`, and the CLI stores swept
+`GINA_*` / `VENDOR_*` / `USER_*` values as **real booleans** — so a key whose
+swept value was boolean `true` satisfied the `||`, `process.env` was never
+consulted, and the file tier won over a set environment variable. A stale
+plaintext file could therefore shadow the credential the platform injected,
+which is the exact failure the precedence rule exists to prevent.
+
+The tiers are now read independently: only a non-empty **string** from the
+framework environment wins, and anything else — a boolean, a number, unset,
+or empty — falls through to `process.env`. Nothing to change in your config;
+if you were affected you were silently on the wrong value.
+
+### Fixed — three malformed `secrets.file` shapes are no longer silent
+
+Two of these now **refuse to boot**, so check your config if you use the file
+tier. Both are typos rather than working configurations, and each error names
+the offending path:
+
+- **A whitespace-only entry** (`"file": [" "]`) is refused. The schema's
+  `minLength: 1` counts a space, so it used to pass validation and build a
+  tier that could never resolve anything — visible only as a suppressed debug
+  line.
+- **A path containing an empty segment** (`//`) is refused. This is what a
+  `${...}` token that resolved to an *empty* value leaves behind:
+  `"${homedir}/${scope}/secrets.env"` with an empty scope collapses to
+  `<home>//secrets.env`, which POSIX reads as the file one directory **up** —
+  a silent read of the wrong file, with no unresolved token left for the
+  existing guard to catch.
+
+The third is a warning, not a refusal: **an empty array** (`"file": []`)
+still disables the file tier exactly like `null`, but it now says so at boot.
+Emptying the array to drop one layer drops the whole tier.
+
+`schema/settings.json` also gains `minItems: 1` for editor feedback. No
+runtime validator reads that schema, so the runtime guards above are the
+enforcement.
+
 ### Fixed — path-helper copy failures surface a real `Error` (check literal error-string matching)
 
 The file copier behind `_().cp()` and `PathObject.mv()` now stages bytes to a

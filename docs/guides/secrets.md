@@ -274,8 +274,15 @@ are worth knowing because two of them look alike and mean opposite things:
 | declares no `secrets` block | the shared one — inherited |
 | declares `"secrets": {}` | the shared one — an empty block **does not** disable an inherited chain |
 | declares `"secrets": { "file": null }` | **none** — this is the explicit opt-out |
+| declares `"secrets": { "file": [] }` | **none** — an empty array disables the tier just like `null`, and warns at boot so it is not mistaken for "drop one layer" |
 
-The last two are the pair to be careful with: `{}` inherits, `null` opts out.
+The pair to be careful with is `{}` against `null`: `{}` inherits, `null` opts out.
+
+An empty **array** is the one shape that tends to surprise: emptying it to
+remove a single layer removes the whole tier, not one entry. It is accepted
+rather than refused — an empty list genuinely means "no files", and refusing
+boot over it would turn a harmless config into an outage — but since `0.6.9`
+it says so at boot. Prefer `null` when you mean to opt out.
 
 Paths are written with the ordinary config tokens and may be a single string
 instead of an array.
@@ -771,9 +778,8 @@ never needs to know.
 
 `lib/secrets` tracks the dotted paths it substituted during the walk
 via an internal `WeakMap`. The list is queryable for tooling — for
-example, a future log-redaction wrapper, a debug-export tool, or a
-config-audit that wants to know "which fields originated as
-secrets?":
+example a debug-export tool, or a config-audit that wants to know
+"which fields originated as secrets?":
 
 ```javascript
 var secrets = require('lib/secrets');
@@ -798,8 +804,19 @@ field-path only — never the resolved value, so logging it is safe.
 
 You typically don't need to call this directly — the framework's
 internal hook in `loadBundleConfig` handles substitution
-transparently. The accessor is exposed for tooling and future
-redaction wrappers.
+transparently.
+
+:::note Scope — this is not a redaction hook
+It is tempting to read this accessor as a substrate for masking secrets in
+logs or developer tooling, and it will not serve that purpose. Two limits,
+either one sufficient: the paths address **that config object** and no
+other, and the lookup is keyed on the object's **identity**, so a caller
+must hold the very object `resolve()` mutated — a structural clone
+(`JSON.parse(JSON.stringify(conf))`) returns an empty list. A surface that
+holds *values* rather than the config therefore cannot use it; masking
+there needs a value-based pass, which is why connector bind-parameter
+redaction is a separate mechanism rather than an extension of this one.
+:::
 
 ---
 
