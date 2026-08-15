@@ -93,6 +93,18 @@ others yet, give its manifest entry a `scopes` allow-list:
 though it does not exist. When it is ready to ship, add the other scopes to the
 list — or delete the key.
 
+:::caution `scopes` does not survive `project:add` / `project:import` yet
+If the number of bundles declared in `manifest.json` differs from the number
+found in the directory those two commands read, the whole `bundles` block is
+rebuilt from what is on disk and the rebuilt entries carry no `scopes` key. The
+declaration is dropped without a message.
+
+Either direction of mismatch triggers it — declaring *fewer* bundles than are
+present counts too, so a deployment shipping a reduced manifest alongside a full
+tree is affected on every registration. **Re-apply your `scopes` keys after
+running either command and check the file**, rather than assuming it survived.
+:::
+
 | Value | Meaning |
 | --- | --- |
 | key absent (or `null`) | Deployed in **every** scope. This is the default, and what every existing manifest does. |

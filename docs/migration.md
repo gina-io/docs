@@ -161,6 +161,23 @@ the project and re-create any missing release entry, so the deletion reappears o
 the next build. Use `scopes` instead. See
 ['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
 
+:::caution Known limitation — `scopes` does not survive `project:add` / `project:import` yet
+A `scopes` declaration is dropped when the number of bundles declared in
+`manifest.json` differs from the number found in the directory `gina project:add`
+and `gina project:import` read. In that case the whole `bundles` block is rebuilt
+from what is on disk, and the rebuilt entries carry no `scopes` key — silently.
+
+The mismatch triggers it **in either direction**. Declaring *fewer* bundles than
+are present arms it just as readily as declaring one that is missing, so a
+deployment that ships a reduced manifest alongside a full tree sits in that state
+permanently and is affected on every registration.
+
+This is long-standing behaviour rather than something introduced with `scopes`,
+but it matters more now that the manifest carries per-bundle data worth keeping.
+Until it is fixed, **re-apply your `scopes` keys after running either command,
+and check the file** rather than assuming it round-tripped.
+:::
+
 ### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
 
 A failed release link during configuration load reported
