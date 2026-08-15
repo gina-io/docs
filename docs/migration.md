@@ -21,6 +21,82 @@ upward to the target version.
 
 ## 0.6.7 → 0.6.8
 
+This release fixes **two security flaws**, both live in every published version up
+to and including `0.6.7`. One of them changes behaviour you may be relying on —
+read the `self.push()` entry before upgrading.
+
+Pickup is a **bundle restart**; the browser bundle is byte-identical to `0.6.7`, so
+unlike that release this one needs no rebuild. `0.6.8` is a patch, so the
+`shortVersion` stays `0.6` and your `~/.gina/0.6/settings.json` is untouched.
+
+### Security — `self.push()` decides its own recipient (ACTION REQUIRED if you push at all)
+
+`self.push()` used to read its recipient from the request body. A caller could aim a
+push at any session by sending that session's id, and **omitting the id broadcast the
+payload to every connected client**. The payload defaults to request input too, so on
+any route that reached `push()` an unprivileged caller could deliver content of their
+choosing to everyone, or to a chosen victim.
+
+The recipient is now decided server-side, in this order:
+
+1. an explicit `option.sessionID` that **your** code supplies,
+2. otherwise the caller's own session,
+3. otherwise nothing at all, with a warning.
+
+Reaching every connected client now requires asking for it deliberately with
+`{ broadcast: true }`. The request body cannot influence the recipient in any branch.
+
+**What breaks.** A bare `self.push()` driven over an HTTP hop by a background worker —
+a job runner reporting progress to the user who queued it, threading that user's
+session id through the request — now resolves to the caller's own session and stops
+delivering. That hop is exactly the vulnerability, so it cannot be preserved.
+
+**And there is no in-process substitute yet.** `push()` returns early once the request
+is released, and nothing outside a live request-bound controller can reach the socket
+set, so a worker has nothing to migrate *to*. Until an explicit out-of-request channel
+exists, report out-of-request progress by polling `GET /_gina/jobs/:id`, or over a
+transport your application owns.
+
+One case keeps working without change: if your authentication layer already adopts a
+token's session id onto the request's own session before the controller runs, then
+"the caller's own session" *is* the target, and those pushes continue to deliver.
+
+In-request callers are unaffected unless they relied on the implicit fan-out, which
+now needs `{ broadcast: true }`.
+
+### Security — forwarded headers can no longer inject script (no action required)
+
+`X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Prefix` and the request's own
+`Host` were spliced unescaped into the client bootstrap script gina emits on every
+rendered page, where they land inside JavaScript string literals. A header containing
+a single quote closed the literal and ran attacker-chosen script in the browser of
+anyone served that page — with no authentication, on any route that renders a view.
+
+These values are now validated where they are read:
+
+- a **host** must be a hostname with an optional port, or a bracketed IPv6 literal;
+- a **forwarded scheme** must be exactly `http` or `https`;
+- a **forwarded path prefix** must consist of URL-path characters only.
+
+Anything else is refused, and the request falls back to the bundle's own configured
+host and webroot exactly as if the header had never been sent — including the proxied
+classification itself, so a malformed `X-Forwarded-Host` no longer marks a request as
+proxied.
+
+Whether you were reachable depended on your proxy. One that sets or strips the
+`X-Forwarded-*` headers it forwards never passed an injected value through; a bundle
+exposed directly, or sitting behind a proxy that relays client headers verbatim, could
+be driven by any anonymous caller.
+
+**No action beyond upgrading.** A deployment whose proxy sends a well-formed host,
+scheme and prefix behaves identically. One edge worth knowing: a **comma-separated**
+`X-Forwarded-Host`, which chained proxies sometimes emit, now fails validation and
+falls back to the configured host. Before this release that input produced a public
+origin like `https://a.example, b.example`, so the fallback replaces one wrong value
+with a sane one. Gina deliberately does not split the list: in a trusted chain the
+first element is the original client's own value and is the least trustworthy thing in
+the header, and selecting any other element needs a trusted-hop count the framework
+does not have.
 ### Added — the `s3` storage adapter (no action required)
 
 Storage drivers can now declare `"adapter": "s3"` — objects live on any
@@ -293,6 +369,25 @@ Inspector Flow timeline's stream entries — the timeline now survives streaming
 requests.
 
 ---
+
+### Added — Couchbase soak probes ship in the package (no action required)
+
+The soak probes for the Couchbase metadata store now ship at `script/soak/storage/`,
+so you can exercise a cluster-backed driver root against your own deployment rather
+than taking ours on trust. They are test tooling — nothing loads them at runtime.
+
+### Fixed — a `sharded` driver reclaims temp files left by a crashed `put()` (no action required)
+
+A `put()` whose **process** died left its temp file behind in the driver root, where it
+accumulated indefinitely. Local drivers now run an age-gated, best-effort sweep that
+reclaims them. The sweep only touches temp files older than the driver's grace window,
+so an upload in flight during a restart is never disturbed.
+
+### Fixed — a refused or interrupted `put()` leaves no temp residue (no action required)
+
+Distinct from the crashed-process case above: a `put()` that was **rejected or
+interrupted while the process stayed alive** still left a stray temp file in a local
+storage root. The failure path now removes it.
 
 ## 0.6.6 → 0.6.7
 
