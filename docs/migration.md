@@ -19,6 +19,38 @@ upward to the target version.
 
 ---
 
+## 0.6.8 → 0.6.9
+
+### Fixed — `engine: "express"` boots and serves on Express 5 (no action required; range now declared)
+
+A bundle opting into the Express engine could not boot on Express 5 — the boot
+aborted at mount time before ever listening, and even past the mount every
+request would have died on Express 5's `req.query` getter. Both halves are
+fixed, and the supported range is declared for the first time: **Express
+`>= 4 < 6`**, with 4 and 5 both verified live. The engine now logs the detected
+Express version at construction; an Express major outside the range logs a loud
+warning but still boots.
+
+Express remains yours to provide: install it in your project (`npm install
+express@^5` or `@^4`) — the framework deliberately ships no express dependency,
+and no peer dependency either. Bundles on the default `isaac` engine are
+untouched.
+
+### Fixed — path-helper copy failures surface a real `Error` (check literal error-string matching)
+
+The file copier behind `_().cp()` and `PathObject.mv()` now stages bytes to a
+temp sibling and publishes with an atomic rename: a reader can no longer
+observe a truncated destination mid-copy, and a pre-existing destination
+survives a failed copy instead of being deleted before the copy had succeeded.
+A source-side read error no longer kills the process, and a failed copy settles
+its callback exactly once.
+
+**One contract note:** failures now propagate an `Error` object instead of the
+former plain string. `if (err)` checks and `err.message` reads are unaffected;
+only code matching the literal pre-existing string
+`Error on Path.cp(...): Not found ...` needs adjusting — and `err.stack` now
+actually exists, where the string shape logged `undefined`.
+
 ## 0.6.7 → 0.6.8
 
 This release fixes **two security flaws**, both live in every published version up
