@@ -92,12 +92,19 @@ the offending path:
   `minLength: 1` counts a space, so it used to pass validation and build a
   tier that could never resolve anything — visible only as a suppressed debug
   line.
-- **A path containing an empty segment** (`//`) is refused. This is what a
-  `${...}` token that resolved to an *empty* value leaves behind:
-  `"${homedir}/${scope}/secrets.env"` with an empty scope collapses to
-  `<home>//secrets.env`, which POSIX reads as the file one directory **up** —
-  a silent read of the wrong file, with no unresolved token left for the
-  existing guard to catch.
+- **A path containing an empty segment** (`//`) is refused, because such a path
+  does not name the file it appears to — POSIX reads `<a>//<b>` as `<a>/<b>`.
+  The cause worth catching is a `${...}` token that resolved to an *empty*
+  value: `"${homedir}/${scope}/secrets.env"` with an empty scope collapses to
+  `<home>//secrets.env`, i.e. a silent read of the file one directory **up**,
+  with no unresolved token left for the existing guard to see.
+
+  **Check this one if you set `GINA_HOMEDIR` (or any path token) with a
+  trailing slash** — `"/opt/gina/"` plus `"${homedir}/secrets.env"` also
+  produces `//`. That case is harmless (it resolves to the file you meant) but
+  is indistinguishable from the dangerous one once the path is assembled, so
+  boot refuses on both rather than risk running on the wrong credential.
+  Dropping the trailing slash, or the doubled separator, fixes it.
 
 The third is a warning, not a refusal: **an empty array** (`"file": []`)
 still disables the file tier exactly like `null`, but it now says so at boot.
