@@ -57,9 +57,23 @@ set, so a worker has nothing to migrate *to*. Until an explicit out-of-request c
 exists, report out-of-request progress by polling `GET /_gina/jobs/:id`, or over a
 transport your application owns.
 
-One case keeps working without change: if your authentication layer already adopts a
-token's session id onto the request's own session before the controller runs, then
-"the caller's own session" *is* the target, and those pushes continue to deliver.
+A narrow case does survive, but it is worth stating precisely, because the obvious
+reading of it silently does not work.
+
+`push()` resolves the caller's session from **`req.sessionID`** first, and only then
+falls back to `req.session.id`. So an application that assigns `req.sessionID` — a
+plain property on the request — to the target session before the controller runs will
+still deliver.
+
+Assigning **`req.session.id`** will not. Under `express-session`, `Session#id` is
+defined with `Object.defineProperty(this, 'id', { value })` and no `writable`, so
+outside strict mode that assignment is a **silent no-op**: no error, no warning, and
+`push()` then resolves to a freshly minted per-request session id with no relation to
+the target browser. Nothing is delivered.
+
+If you are counting on session adoption to keep worker pushes alive, check which of
+those two properties your code actually writes — and confirm it by driving the path,
+not by reading the line.
 
 In-request callers are unaffected unless they relied on the implicit fan-out, which
 now needs `{ broadcast: true }`.
