@@ -19,6 +19,139 @@ upward to the target version.
 
 ---
 
+## 0.6.9 → 0.6.10
+
+### Maintenance mode (new feature — opt-in, nothing changes until you enable it)
+
+A bundle can now be closed to the public **without being stopped**, via a new
+`server.maintenance` block in `settings.json`. It is disabled by default, so
+this release changes nothing for an existing project until you opt in.
+
+```json
+"maintenance": {
+  "enabled": false,
+  "retryAfter": 300,
+  "message": "Back shortly",
+  "bypassKey": "${secret:MAINTENANCE_BYPASS_KEY}",
+  "allowFrom": ["127.0.0.1", "::1"]
+}
+```
+
+While a window is open, every request except the framework's own `/_gina/*`
+endpoints is answered `503` with `Retry-After` and `Cache-Control: no-store` —
+a self-contained page for a browser navigation, and the standard JSON body for
+XHR, SPA-fragment and JSON callers.
+
+**Why this is not the same as a maintenance middleware.** Route middleware runs
+only *after* a route has matched, so it cannot cover static assets or URLs that
+match no route. This gate sits ahead of static serving, both output-cache serve
+points and routing, so those are covered too. The liveness endpoint
+`/_gina/health/check` deliberately keeps answering `200`, so an orchestrator
+does not restart healthy instances over a declared window — and the toggle
+itself stays reachable, so you are never stranded outside your own off switch.
+
+**Getting yourself through.** The `bypassKey` works under any deployment: send
+it as an `x-gina-maintenance-key` header, or once as `?gina-maintenance-key=…`
+in the address bar — which then sets a short-lived cookie and redirects to the
+same URL without the secret, so it leaves your history and `Referer`. The
+supplementary `allowFrom` list applies **only** to requests that did not arrive
+through a reverse proxy: behind one, every address is the proxy's, so an
+unconditioned IP list would let either everybody or nobody through.
+
+**Flipping it at runtime** is possible through the admin-gated
+`POST /_gina/maintenance` with an optional `ttlSeconds`. A runtime flip is
+**not persisted** — a restart returns the bundle to whatever `settings.json`
+says — and a lapsed expiry reverts to your *configuration* rather than to
+"off", so a forgotten timer cannot re-open a site that configuration says is
+closed. For a window that must survive restarts, set `enabled: true` in
+configuration.
+
+Full detail in the [maintenance mode guide](/guides/maintenance-mode).
+
+---
+
+### Admin `/_gina/*` endpoints now refuse cross-origin writes (security — no action for most projects)
+
+This release closes a **cross-site request forgery** hole present in every
+version up to and including `0.6.9`.
+
+The admin control endpoints authorise callers by IP allowlist alone
+(`app.json` `admin.allowFrom`, loopback by default). That is an *ambient*
+credential: a browser attaches it automatically to any request a page makes.
+So an operator browsing from an allowlisted machine — by default, the machine
+running the bundle — could be lured to a page that silently issued writes to
+`/_gina/storage/gc`, `/_gina/cache/clear`, `/_gina/release/rebuild` or
+`/_gina/maintenance`.
+
+`/_gina/storage/gc`, `/_gina/cache/clear` and `/_gina/release/rebuild` read
+their entire input from the **query string** and never read a request body, so
+the attack required no JavaScript and no CORS involvement at all — a plain
+auto-submitting HTML form was enough, and browsers have always permitted a
+form to POST cross-origin. The attacker could not read any response, but the
+write still happened.
+
+From `0.6.10`, a cross-origin write to any `/_gina/*` endpoint is refused with
+**403** on both engines. The check consults `Sec-Fetch-Site` where the browser
+sends it, and otherwise compares `Origin` against the authority the client
+actually connected to — never against `X-Forwarded-Host` or any other
+forwarded header, which an attacker controls.
+
+**Two things are deliberately unaffected**, so most projects need no action:
+
+- **Requests carrying no browser origin signal still work.** `curl`, the gina
+  CLI and deploy scripts send neither header, and CSRF is an attack on ambient
+  *browser* credentials — so operator tooling is unchanged.
+- **Safe methods are untouched** (`GET`, `HEAD`, `OPTIONS`, `TRACE`). The
+  Inspector's deliberately cross-origin SSE and GET channels — `/_gina/agent`,
+  `/_gina/logs`, `/_gina/indexes` — keep working exactly as before.
+
+**You only need to act if** you drive a `/_gina/*` write from a browser page
+served on a *different* origin from the bundle. That is refused now. Issue the
+call from a non-browser client instead, or serve the page from the same origin
+as the bundle.
+
+:::note
+This is defence in depth, not a replacement for the IP allowlist. Keep
+`admin.allowFrom` as tight as your deployment allows — it remains the primary
+gate on these endpoints.
+:::
+
+---
+
+### Boot-time bundle mounts are now idempotent, atomic and concurrency-safe (awareness — no action for most projects)
+
+Every boot used to re-create every declared bundle's mount symlink in two
+non-atomic steps (unlink, then create), with no mutual exclusion. With several
+processes booting **one shared project tree** — replicas over a POSIX network
+filesystem, or two containers bind-mounting the same checkout — the contended
+rewrites could kill a boot outright (a lost race surfaced as `EEXIST`, `ENOENT`
+or, on network filesystems, `EIO` from the mount path) or abort the shared
+config load for every bundle in the project.
+
+From `0.6.10`:
+
+- A mount link that already resolves to the intended source is **kept
+  untouched** — the steady-state boot writes nothing, so concurrent boots of an
+  already-correct tree no longer contend at all.
+- A wrong or missing link is published **atomically** (a temp sibling in the
+  same directory, then `rename(2)`), so the mount name never disappears
+  mid-rewrite.
+- A concurrent process publishing the **identical** link is treated as success
+  instead of a fatal error.
+- The project `bundles/`, `tmp/` and `cache/` directories are created
+  race-free (recursive create instead of check-then-create).
+
+No configuration is involved and the mount layout on disk is unchanged.
+
+**One behaviour change to be aware of:** a *real directory* (not a symlink)
+sitting at a bundle's mount path used to be silently deleted and replaced by
+the link during config load. It now **refuses the boot loudly** instead,
+naming the path. If you hit that refusal after upgrading, remove or relocate
+the directory — a real directory at a mount path was almost certainly a
+deployment accident the old behaviour was papering over.
+
+---
+
 ## 0.6.8 → 0.6.9
 
 This release fixes **one security flaw**, live in every published version that
@@ -82,9 +215,25 @@ from this API at all — a deliberate all-clients send stays in-request as
 `self.push(payload, { broadcast: true })`.
 
 **Source the recipient from server-held state** — capture it when the work is
-queued and keep it server-side. Round-tripping a recipient id, or a token naming
-one, through the browser hands the choice back to the caller and re-opens the
-`0.6.8` flaw one layer up.
+queued and keep it server-side. That is the default because it gives the caller
+nothing to influence: a **bare** recipient id round-tripped through the browser —
+in a body, a query string, any client-writable field — re-opens the `0.6.8` flaw
+one layer up, because whoever writes the field chooses the target.
+
+**A server-minted, integrity-protected token that names the recipient is a
+different shape, and it is sanctioned** — it is the same pattern the `0.6.8`
+entry below describes for `self.push()`'s authenticated hop. The distinction is
+*who made the choice*: a signature fixes the recipient at mint time, so the
+browser can only replay a decision your server already made, never make one.
+Holding that line means the handler **verifies** the token and derives the
+recipient **only from the verified claims** — a plaintext id travelling beside
+it is never consulted, and a disagreeing one is overridden and logged, which
+doubles as tamper detection — and an absent or unverifiable token fails
+**closed**, never through to an unsigned fallback. Keep the token short-lived:
+it is a bearer credential for pushing to one session, and targeting integrity
+does not make it replay-proof. The receiver side backstops the stale case — a
+token naming a session that has since been destroyed or rotated matches no
+bound socket and simply delivers to zero.
 
 Delivery is reported rather than assumed: the callback fires exactly once with
 the number of sockets written, and `delivered: 0` is a **normal** outcome (the
