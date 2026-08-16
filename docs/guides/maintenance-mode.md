@@ -233,6 +233,19 @@ Two deliberate behaviours:
 The status payload reports `hasBypassKey` so you can confirm you will be able to
 get back in — but never the key itself.
 
+:::caution The toggle refuses cross-origin writes
+`POST /_gina/maintenance` is gated by an IP allowlist, which is an *ambient*
+credential — a browser attaches it automatically to any request a page makes.
+So a `POST` from a browser page served on a **different origin** than the bundle
+is refused with **403**, together with the rest of the `/_gina/*` control family.
+
+This does not affect the examples above: `curl` sends no browser origin signal,
+so command-line and scripted use is unchanged. `GET /_gina/maintenance` is a safe
+method and is never refused. You only hit this if you drive the toggle from a
+web page hosted somewhere other than the bundle itself — in which case call it
+from a non-browser client, or serve that page from the bundle's own origin.
+:::
+
 ---
 
 ## Behind a reverse proxy

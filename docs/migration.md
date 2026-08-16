@@ -21,6 +21,54 @@ upward to the target version.
 
 ## 0.6.9 → 0.6.10
 
+### Admin `/_gina/*` endpoints now refuse cross-origin writes (security — no action for most projects)
+
+This release closes a **cross-site request forgery** hole present in every
+version up to and including `0.6.9`.
+
+The admin control endpoints authorise callers by IP allowlist alone
+(`app.json` `admin.allowFrom`, loopback by default). That is an *ambient*
+credential: a browser attaches it automatically to any request a page makes.
+So an operator browsing from an allowlisted machine — by default, the machine
+running the bundle — could be lured to a page that silently issued writes to
+`/_gina/storage/gc`, `/_gina/cache/clear`, `/_gina/release/rebuild` or
+`/_gina/maintenance`.
+
+`/_gina/storage/gc`, `/_gina/cache/clear` and `/_gina/release/rebuild` read
+their entire input from the **query string** and never read a request body, so
+the attack required no JavaScript and no CORS involvement at all — a plain
+auto-submitting HTML form was enough, and browsers have always permitted a
+form to POST cross-origin. The attacker could not read any response, but the
+write still happened.
+
+From `0.6.10`, a cross-origin write to any `/_gina/*` endpoint is refused with
+**403** on both engines. The check consults `Sec-Fetch-Site` where the browser
+sends it, and otherwise compares `Origin` against the authority the client
+actually connected to — never against `X-Forwarded-Host` or any other
+forwarded header, which an attacker controls.
+
+**Two things are deliberately unaffected**, so most projects need no action:
+
+- **Requests carrying no browser origin signal still work.** `curl`, the gina
+  CLI and deploy scripts send neither header, and CSRF is an attack on ambient
+  *browser* credentials — so operator tooling is unchanged.
+- **Safe methods are untouched** (`GET`, `HEAD`, `OPTIONS`, `TRACE`). The
+  Inspector's deliberately cross-origin SSE and GET channels — `/_gina/agent`,
+  `/_gina/logs`, `/_gina/indexes` — keep working exactly as before.
+
+**You only need to act if** you drive a `/_gina/*` write from a browser page
+served on a *different* origin from the bundle. That is refused now. Issue the
+call from a non-browser client instead, or serve the page from the same origin
+as the bundle.
+
+:::note
+This is defence in depth, not a replacement for the IP allowlist. Keep
+`admin.allowFrom` as tight as your deployment allows — it remains the primary
+gate on these endpoints.
+:::
+
+---
+
 ### Boot-time bundle mounts are now idempotent, atomic and concurrency-safe (awareness — no action for most projects)
 
 Every boot used to re-create every declared bundle's mount symlink in two
