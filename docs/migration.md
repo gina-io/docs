@@ -19,6 +19,42 @@ upward to the target version.
 
 ---
 
+## 0.6.9 → 0.6.10
+
+### Boot-time bundle mounts are now idempotent, atomic and concurrency-safe (awareness — no action for most projects)
+
+Every boot used to re-create every declared bundle's mount symlink in two
+non-atomic steps (unlink, then create), with no mutual exclusion. With several
+processes booting **one shared project tree** — replicas over a POSIX network
+filesystem, or two containers bind-mounting the same checkout — the contended
+rewrites could kill a boot outright (a lost race surfaced as `EEXIST`, `ENOENT`
+or, on network filesystems, `EIO` from the mount path) or abort the shared
+config load for every bundle in the project.
+
+From `0.6.10`:
+
+- A mount link that already resolves to the intended source is **kept
+  untouched** — the steady-state boot writes nothing, so concurrent boots of an
+  already-correct tree no longer contend at all.
+- A wrong or missing link is published **atomically** (a temp sibling in the
+  same directory, then `rename(2)`), so the mount name never disappears
+  mid-rewrite.
+- A concurrent process publishing the **identical** link is treated as success
+  instead of a fatal error.
+- The project `bundles/`, `tmp/` and `cache/` directories are created
+  race-free (recursive create instead of check-then-create).
+
+No configuration is involved and the mount layout on disk is unchanged.
+
+**One behaviour change to be aware of:** a *real directory* (not a symlink)
+sitting at a bundle's mount path used to be silently deleted and replaced by
+the link during config load. It now **refuses the boot loudly** instead,
+naming the path. If you hit that refusal after upgrading, remove or relocate
+the directory — a real directory at a mount path was almost certainly a
+deployment accident the old behaviour was papering over.
+
+---
+
 ## 0.6.8 → 0.6.9
 
 This release fixes **one security flaw**, live in every published version that
