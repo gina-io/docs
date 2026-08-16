@@ -82,9 +82,25 @@ from this API at all — a deliberate all-clients send stays in-request as
 `self.push(payload, { broadcast: true })`.
 
 **Source the recipient from server-held state** — capture it when the work is
-queued and keep it server-side. Round-tripping a recipient id, or a token naming
-one, through the browser hands the choice back to the caller and re-opens the
-`0.6.8` flaw one layer up.
+queued and keep it server-side. That is the default because it gives the caller
+nothing to influence: a **bare** recipient id round-tripped through the browser —
+in a body, a query string, any client-writable field — re-opens the `0.6.8` flaw
+one layer up, because whoever writes the field chooses the target.
+
+**A server-minted, integrity-protected token that names the recipient is a
+different shape, and it is sanctioned** — it is the same pattern the `0.6.8`
+entry below describes for `self.push()`'s authenticated hop. The distinction is
+*who made the choice*: a signature fixes the recipient at mint time, so the
+browser can only replay a decision your server already made, never make one.
+Holding that line means the handler **verifies** the token and derives the
+recipient **only from the verified claims** — a plaintext id travelling beside
+it is never consulted, and a disagreeing one is overridden and logged, which
+doubles as tamper detection — and an absent or unverifiable token fails
+**closed**, never through to an unsigned fallback. Keep the token short-lived:
+it is a bearer credential for pushing to one session, and targeting integrity
+does not make it replay-proof. The receiver side backstops the stale case — a
+token naming a session that has since been destroyed or rotated matches no
+bound socket and simply delivers to zero.
 
 Delivery is reported rather than assumed: the callback fires exactly once with
 the number of sockets written, and `delivered: 0` is a **normal** outcome (the
