@@ -161,22 +161,38 @@ the project and re-create any missing release entry, so the deletion reappears o
 the next build. Use `scopes` instead. See
 ['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
 
-:::caution Known limitation — `scopes` does not survive `project:add` / `project:import` yet
-A `scopes` declaration is dropped when the number of bundles declared in
-`manifest.json` differs from the number found in the directory `gina project:add`
-and `gina project:import` read. In that case the whole `bundles` block is rebuilt
-from what is on disk, and the rebuilt entries carry no `scopes` key — silently.
+### Fixed — `project:add` / `project:import` no longer rebuild the `bundles` block destructively
 
-The mismatch triggers it **in either direction**. Declaring *fewer* bundles than
-are present arms it just as readily as declaring one that is missing, so a
-deployment that ships a reduced manifest alongside a full tree sits in that state
-permanently and is affected on every registration.
+Both commands used to reset a project's whole `manifest.json` `bundles` block
+whenever the number of declared bundles differed from the number of directories
+found on disk — and the reset applied to **every registered project on the
+machine**, not just the one being added or imported. A bystander project was
+left with a permanently empty `bundles` block (which fails its next boot), a
+plain `project:add` lost the block with nothing rebuilding it, and on the import
+path the rebuilt entries carried none of the original per-bundle data: the new
+`scopes` allow-list, `gina_version` and any custom key were dropped, and each
+bundle's `version`, `tag` and release targets were reset to defaults.
 
-This is long-standing behaviour rather than something introduced with `scopes`,
-but it matters more now that the manifest carries per-bundle data worth keeping.
-Until it is fixed, **re-apply your `scopes` keys after running either command,
-and check the file** rather than assuming it round-tripped.
-:::
+The commands now treat the manifest as the authority:
+
+- **Declared bundles are preserved untouched** — `scopes` declarations,
+  versions, custom keys and release targets all survive registration.
+- **Bundles found on disk but missing from the manifest are still registered**
+  on `project:import`, additively — the legitimate function the old reset
+  served.
+- **A declared bundle whose directory is absent is warned about** (naming the
+  bundle and the scanned location) and **never auto-pruned** — the declaration
+  may be deliberate, e.g. a bundle restricted to other scopes. Removing an
+  entry for good remains `gina bundle:remove`'s job.
+
+Two adjacent defects in the same pass are fixed with it: the rescan built a
+wrong `settings.json` lookup path for every bundle after the first (the
+protocol/scheme consistency check silently skipped those bundles), and
+importing a project whose manifest declares a bundle with no tree on disk could
+crash the port/settings pass.
+
+No action required. If you previously re-applied `scopes` keys after running
+either command as a workaround, you can stop.
 
 ### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
 
