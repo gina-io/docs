@@ -21,6 +21,55 @@ upward to the target version.
 
 ## 0.6.9 → 0.6.10
 
+### Maintenance mode (new feature — opt-in, nothing changes until you enable it)
+
+A bundle can now be closed to the public **without being stopped**, via a new
+`server.maintenance` block in `settings.json`. It is disabled by default, so
+this release changes nothing for an existing project until you opt in.
+
+```json
+"maintenance": {
+  "enabled": false,
+  "retryAfter": 300,
+  "message": "Back shortly",
+  "bypassKey": "${secret:MAINTENANCE_BYPASS_KEY}",
+  "allowFrom": ["127.0.0.1", "::1"]
+}
+```
+
+While a window is open, every request except the framework's own `/_gina/*`
+endpoints is answered `503` with `Retry-After` and `Cache-Control: no-store` —
+a self-contained page for a browser navigation, and the standard JSON body for
+XHR, SPA-fragment and JSON callers.
+
+**Why this is not the same as a maintenance middleware.** Route middleware runs
+only *after* a route has matched, so it cannot cover static assets or URLs that
+match no route. This gate sits ahead of static serving, both output-cache serve
+points and routing, so those are covered too. The liveness endpoint
+`/_gina/health/check` deliberately keeps answering `200`, so an orchestrator
+does not restart healthy instances over a declared window — and the toggle
+itself stays reachable, so you are never stranded outside your own off switch.
+
+**Getting yourself through.** The `bypassKey` works under any deployment: send
+it as an `x-gina-maintenance-key` header, or once as `?gina-maintenance-key=…`
+in the address bar — which then sets a short-lived cookie and redirects to the
+same URL without the secret, so it leaves your history and `Referer`. The
+supplementary `allowFrom` list applies **only** to requests that did not arrive
+through a reverse proxy: behind one, every address is the proxy's, so an
+unconditioned IP list would let either everybody or nobody through.
+
+**Flipping it at runtime** is possible through the admin-gated
+`POST /_gina/maintenance` with an optional `ttlSeconds`. A runtime flip is
+**not persisted** — a restart returns the bundle to whatever `settings.json`
+says — and a lapsed expiry reverts to your *configuration* rather than to
+"off", so a forgotten timer cannot re-open a site that configuration says is
+closed. For a window that must survive restarts, set `enabled: true` in
+configuration.
+
+Full detail in the [maintenance mode guide](/guides/maintenance-mode).
+
+---
+
 ### Admin `/_gina/*` endpoints now refuse cross-origin writes (security — no action for most projects)
 
 This release closes a **cross-site request forgery** hole present in every
