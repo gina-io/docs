@@ -21,6 +21,81 @@ upward to the target version.
 
 ## 0.6.8 → 0.6.9
 
+This release fixes **one security flaw**, live in every published version that
+attaches `server.ioServer`. It closes the receiver half of the axis `0.6.8`
+opened, and it fails closed — so if you use targeted pushes, confirm they still
+arrive after upgrading.
+
+Two `secrets.file` shapes now **refuse to boot** (see below), so check that
+config if you use the file tier. Pickup is a **bundle restart**; the browser
+bundle is byte-identical to `0.6.8`, so no rebuild is needed. `0.6.9` is a
+patch, so the `shortVersion` stays `0.6` and your `~/.gina/0.6/settings.json`
+is untouched.
+
+### Security — an engine.io socket's session is now proven, not claimed (verify targeted pushes still arrive)
+
+A socket's `sessionId` — the value every targeted `self.push()` matches
+against — was set from `payload.session.id`, **a field the browser sends**, on
+every message, and was never checked against the connection's own session. Any
+client could therefore claim another user's session and receive the pushes
+addressed to it. It was also cheaper than stealing the cookie: a rendered page
+carries the **bare** session id in its bootstrap script, while the cookie
+carries the signed form, so impersonation required strictly less than the
+cookie theft the signature exists to prevent.
+
+The binding now happens **once, at connection**, from the upgrade request's own
+cookie. The framework replays your bundle's own session middleware over that
+request, so the same secret, store and cookie name apply — no new
+configuration, and the framework never handles your secret. It works whether or
+not the bundle adopted `gina.plugins.Session()`. The response handed to that
+middleware is inert, so a socket upgrade can never emit `Set-Cookie` or persist
+a session.
+
+**It fails closed.** No session middleware, no cookie, or a cookie that does not
+verify leaves the socket with no id — and an id-less socket matches no targeted
+push, receiving only deliberate broadcasts. A client that still asserts an id is
+logged and ignored, which doubles as an impersonation detector.
+
+Nothing to change in your code. But because the failure direction is silence
+rather than an error, **check that your targeted pushes still land** — if they
+stop, the socket is not resolving a session, and the log will say so.
+
+### Added — `gina.pushToSession()`, for pushing from outside a request
+
+`self.push()` needs a live request-bound controller, so code that has none — a
+`lib/job` handler, a cron tick, a boot hook — had no route to a user's socket at
+all. The pattern reached for instead was a background worker making an HTTP hop
+carrying the user's session id in the request body, and that shape *was* the
+`0.6.8` vulnerability; closing it left the use case with nowhere to go. This is
+the replacement:
+
+```js
+gina.pushToSession(sessionID, payload, function (err, result) {
+    if (err) { return handle(err); }        // err.code is machine-readable
+    // result.delivered === number of sockets written
+});
+```
+
+It is deliberately narrow. The recipient is a **required** argument: an absent
+or empty `sessionID` is an error, never a fan-out, and no broadcast is reachable
+from this API at all — a deliberate all-clients send stays in-request as
+`self.push(payload, { broadcast: true })`.
+
+**Source the recipient from server-held state** — capture it when the work is
+queued and keep it server-side. Round-tripping a recipient id, or a token naming
+one, through the browser hands the choice back to the caller and re-opens the
+`0.6.8` flaw one layer up.
+
+Delivery is reported rather than assumed: the callback fires exactly once with
+the number of sockets written, and `delivered: 0` is a **normal** outcome (the
+user closed the tab), not an error. Errors carry `err.code` —
+`PUSH_INVALID_RECIPIENT`, `PUSH_INVALID_PAYLOAD`, `PUSH_CHANNEL_NOT_CONFIGURED`,
+`PUSH_CHANNEL_NOT_READY`, `PUSH_PAYLOAD_SERIALIZE_FAILED`.
+
+Requires the `isaac` engine with `server.ioServer` attached; on the Express
+engine there is no engine.io channel and the call now says so by name. Also
+available as `lib.push.toSession()` for code holding its own server instance.
+
 ### Fixed — `engine: "express"` boots and serves on Express 5 (no action required; range now declared)
 
 A bundle opting into the Express engine could not boot on Express 5 — the boot
@@ -221,6 +296,20 @@ warning, instead of rewriting the file behind a debug line.
 No action required. If a registration now prints a warning naming a bundle's
 protocol or scheme, that declaration was invalid all along — fix the bundle's
 `settings.json` (allowed values: `http/1.1`, `http/2.0`; `http`, `https`).
+
+### Fixed — the port-setup merge read the wrong list (no action required)
+
+The pass that folds newly seen protocols and schemes into a project's registry
+lists indexed the **project's own** list by the *contextual* list's position, so
+once the contextual list outgrew the project's, the overshoot read `undefined`.
+
+No user-visible consequence was demonstrated — a scene built specifically to arm
+the overshoot produced none — so this ships as a correctness fix rather than a
+behaviour change. The merge now reads the contextual list by its own index,
+exactly as the environment merge beside it always did, and it admits only values
+the framework supports: the contextual list also grows from `ports.json` keys,
+which can retain a protocol a framework update has since dropped, and those no
+longer re-enter a project's lists.
 
 ### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
 
