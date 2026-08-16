@@ -19,6 +19,327 @@ upward to the target version.
 
 ---
 
+## 0.6.8 → 0.6.9
+
+This release fixes **one security flaw**, live in every published version that
+attaches `server.ioServer`. It closes the receiver half of the axis `0.6.8`
+opened, and it fails closed — so if you use targeted pushes, confirm they still
+arrive after upgrading.
+
+Two `secrets.file` shapes now **refuse to boot** (see below), so check that
+config if you use the file tier. Pickup is a **bundle restart**; the browser
+bundle is byte-identical to `0.6.8`, so no rebuild is needed. `0.6.9` is a
+patch, so the `shortVersion` stays `0.6` and your `~/.gina/0.6/settings.json`
+is untouched.
+
+### Security — an engine.io socket's session is now proven, not claimed (verify targeted pushes still arrive)
+
+A socket's `sessionId` — the value every targeted `self.push()` matches
+against — was set from `payload.session.id`, **a field the browser sends**, on
+every message, and was never checked against the connection's own session. Any
+client could therefore claim another user's session and receive the pushes
+addressed to it. It was also cheaper than stealing the cookie: a rendered page
+carries the **bare** session id in its bootstrap script, while the cookie
+carries the signed form, so impersonation required strictly less than the
+cookie theft the signature exists to prevent.
+
+The binding now happens **once, at connection**, from the upgrade request's own
+cookie. The framework replays your bundle's own session middleware over that
+request, so the same secret, store and cookie name apply — no new
+configuration, and the framework never handles your secret. It works whether or
+not the bundle adopted `gina.plugins.Session()`. The response handed to that
+middleware is inert, so a socket upgrade can never emit `Set-Cookie` or persist
+a session.
+
+**It fails closed.** No session middleware, no cookie, or a cookie that does not
+verify leaves the socket with no id — and an id-less socket matches no targeted
+push, receiving only deliberate broadcasts. A client that still asserts an id is
+logged and ignored, which doubles as an impersonation detector.
+
+Nothing to change in your code. But because the failure direction is silence
+rather than an error, **check that your targeted pushes still land** — if they
+stop, the socket is not resolving a session, and the log will say so.
+
+### Added — `gina.pushToSession()`, for pushing from outside a request
+
+`self.push()` needs a live request-bound controller, so code that has none — a
+`lib/job` handler, a cron tick, a boot hook — had no route to a user's socket at
+all. The pattern reached for instead was a background worker making an HTTP hop
+carrying the user's session id in the request body, and that shape *was* the
+`0.6.8` vulnerability; closing it left the use case with nowhere to go. This is
+the replacement:
+
+```js
+gina.pushToSession(sessionID, payload, function (err, result) {
+    if (err) { return handle(err); }        // err.code is machine-readable
+    // result.delivered === number of sockets written
+});
+```
+
+It is deliberately narrow. The recipient is a **required** argument: an absent
+or empty `sessionID` is an error, never a fan-out, and no broadcast is reachable
+from this API at all — a deliberate all-clients send stays in-request as
+`self.push(payload, { broadcast: true })`.
+
+**Source the recipient from server-held state** — capture it when the work is
+queued and keep it server-side. Round-tripping a recipient id, or a token naming
+one, through the browser hands the choice back to the caller and re-opens the
+`0.6.8` flaw one layer up.
+
+Delivery is reported rather than assumed: the callback fires exactly once with
+the number of sockets written, and `delivered: 0` is a **normal** outcome (the
+user closed the tab), not an error. Errors carry `err.code` —
+`PUSH_INVALID_RECIPIENT`, `PUSH_INVALID_PAYLOAD`, `PUSH_CHANNEL_NOT_CONFIGURED`,
+`PUSH_CHANNEL_NOT_READY`, `PUSH_PAYLOAD_SERIALIZE_FAILED`.
+
+Requires the `isaac` engine with `server.ioServer` attached; on the Express
+engine there is no engine.io channel and the call now says so by name. Also
+available as `lib.push.toSession()` for code holding its own server instance.
+
+### Fixed — `engine: "express"` boots and serves on Express 5 (no action required; range now declared)
+
+A bundle opting into the Express engine could not boot on Express 5 — the boot
+aborted at mount time before ever listening, and even past the mount every
+request would have died on Express 5's `req.query` getter. Both halves are
+fixed, and the supported range is declared for the first time: **Express
+`>= 4 < 6`**, with 4 and 5 both verified live. The engine now logs the detected
+Express version at construction; an Express major outside the range logs a loud
+warning but still boots.
+
+Express remains yours to provide: install it in your project (`npm install
+express@^5` or `@^4`) — the framework deliberately ships no express dependency,
+and no peer dependency either. Bundles on the default `isaac` engine are
+untouched.
+
+### Fixed — `project:add` writes a `.gitignore` (new projects only; yours is never touched)
+
+The framework has always shipped a `core/template/_gitignore` whose underscore
+prefix implies a rename to the dotted form at scaffold time. Nothing performed
+that rename, so the template had no consumer and **every scaffolded project came
+out with no `.gitignore` at all** — which meant the secret-file globs it carries
+were protecting nothing, and a new project would happily track a `secrets.env`
+or `.env.production` on its first commit.
+
+`gina project:add` now copies it to `<project>/.gitignore`, **only when the
+project has none**. Your own file is never replaced or appended to, so the step
+is idempotent and re-running the command over an existing project changes
+nothing. It applies on the import path too, since an imported project without a
+`.gitignore` has the same exposure.
+
+Nothing to do for existing projects — they are untouched. If you created one
+before `0.6.9` and want the same coverage, the globs worth having are:
+
+```gitignore
+.env
+.env.*
+*.env
+!.env.example
+!*.example.env
+```
+
+All three positive forms are needed: a bare `.env` matches neither
+`secrets.env` nor `.env.production`.
+
+### Fixed — the environment really does beat the secrets file again (no action required)
+
+The guide has always said [the environment always
+wins](/guides/secrets#the-environment-always-wins) over a `secrets.file`
+tier. For one shape of key that was not true. The two environment tiers were
+read as `frameworkValue || process.env[KEY]`, and the CLI stores swept
+`GINA_*` / `VENDOR_*` / `USER_*` values as **real booleans** — so a key whose
+swept value was boolean `true` satisfied the `||`, `process.env` was never
+consulted, and the file tier won over a set environment variable. A stale
+plaintext file could therefore shadow the credential the platform injected,
+which is the exact failure the precedence rule exists to prevent.
+
+The tiers are now read independently: only a non-empty **string** from the
+framework environment wins, and anything else — a boolean, a number, unset,
+or empty — falls through to `process.env`. Nothing to change in your config;
+if you were affected you were silently on the wrong value.
+
+### Fixed — three malformed `secrets.file` shapes are no longer silent
+
+Two of these now **refuse to boot**, so check your config if you use the file
+tier. Both are typos rather than working configurations, and each error names
+the offending path:
+
+- **A whitespace-only entry** (`"file": [" "]`) is refused. The schema's
+  `minLength: 1` counts a space, so it used to pass validation and build a
+  tier that could never resolve anything — visible only as a suppressed debug
+  line.
+- **A path containing an empty segment** (`//`) is refused, because such a path
+  does not name the file it appears to — POSIX reads `<a>//<b>` as `<a>/<b>`.
+  The cause worth catching is a `${...}` token that resolved to an *empty*
+  value: `"${homedir}/${scope}/secrets.env"` with an empty scope collapses to
+  `<home>//secrets.env`, i.e. a silent read of the file one directory **up**,
+  with no unresolved token left for the existing guard to see.
+
+  **Check this one if you set `GINA_HOMEDIR` (or any path token) with a
+  trailing slash** — `"/opt/gina/"` plus `"${homedir}/secrets.env"` also
+  produces `//`. That case is harmless (it resolves to the file you meant) but
+  is indistinguishable from the dangerous one once the path is assembled, so
+  boot refuses on both rather than risk running on the wrong credential.
+  Dropping the trailing slash, or the doubled separator, fixes it.
+
+The third is a warning, not a refusal: **an empty array** (`"file": []`)
+still disables the file tier exactly like `null`, but it now says so at boot.
+Emptying the array to drop one layer drops the whole tier.
+
+`schema/settings.json` also gains `minItems: 1` for editor feedback. No
+runtime validator reads that schema, so the runtime guards above are the
+enforcement.
+
+### Fixed — path-helper copy failures surface a real `Error` (check literal error-string matching)
+
+The file copier behind `_().cp()` and `PathObject.mv()` now stages bytes to a
+temp sibling and publishes with an atomic rename: a reader can no longer
+observe a truncated destination mid-copy, and a pre-existing destination
+survives a failed copy instead of being deleted before the copy had succeeded.
+A source-side read error no longer kills the process, and a failed copy settles
+its callback exactly once.
+
+**One contract note:** failures now propagate an `Error` object instead of the
+former plain string. `if (err)` checks and `err.message` reads are unaffected;
+only code matching the literal pre-existing string
+`Error on Path.cp(...): Not found ...` needs adjusting — and `err.stack` now
+actually exists, where the string shape logged `undefined`.
+
+### Added — a bundle can declare which scopes it is deployed in (opt-in; no action required)
+
+Until now every bundle registered in `manifest.json` was deployed in **every**
+scope, and the only way to exclude one was to leave it out of the manifest —
+which removes it from all scopes at once. A bundle entry can now carry a
+`scopes` allow-list:
+
+```json
+"newthing": {
+  "version": "0.0.1",
+  "src": "src/newthing",
+  "link": "bundles/newthing",
+  "scopes": ["local"]
+}
+```
+
+An **absent** key means every scope, so existing manifests are unaffected and no
+migration is needed. `[]` parks the bundle everywhere. A value that is not an
+array is reported as a manifest error naming the bundle, rather than being read
+as "no scopes".
+
+Booting a project and `gina project:build` **skip** an excluded bundle with a
+notice; starting it, or naming it explicitly in `gina bundle:build <name>
+--scope=<scope>`, is **refused** by name, so a deploy script cannot mistake
+"built nothing" for success.
+
+**If you already prune `releases.<scope>` entries by hand to keep a bundle out of
+an environment, stop** — it never worked: both build commands walk every scope in
+the project and re-create any missing release entry, so the deletion reappears on
+the next build. Use `scopes` instead. See
+['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+
+### Fixed — `project:add` / `project:import` no longer rebuild the `bundles` block destructively
+
+Both commands used to reset a project's whole `manifest.json` `bundles` block
+whenever the number of declared bundles differed from the number of directories
+found on disk — and the reset applied to **every registered project on the
+machine**, not just the one being added or imported. A bystander project was
+left with a permanently empty `bundles` block (which fails its next boot), a
+plain `project:add` lost the block with nothing rebuilding it, and on the import
+path the rebuilt entries carried none of the original per-bundle data: the new
+`scopes` allow-list, `gina_version` and any custom key were dropped, and each
+bundle's `version`, `tag` and release targets were reset to defaults.
+
+The commands now treat the manifest as the authority:
+
+- **Declared bundles are preserved untouched** — `scopes` declarations,
+  versions, custom keys and release targets all survive registration.
+- **Bundles found on disk but missing from the manifest are still registered**
+  on `project:import`, additively — the legitimate function the old reset
+  served.
+- **A declared bundle whose directory is absent is warned about** (naming the
+  bundle and the scanned location) and **never auto-pruned** — the declaration
+  may be deliberate, e.g. a bundle restricted to other scopes. Removing an
+  entry for good remains `gina bundle:remove`'s job.
+
+Two adjacent defects in the same pass are fixed with it: the rescan built a
+wrong `settings.json` lookup path for every bundle after the first (the
+protocol/scheme consistency check silently skipped those bundles), and
+importing a project whose manifest declares a bundle with no tree on disk could
+crash the port/settings pass.
+
+No action required. If you previously re-applied `scopes` keys after running
+either command as a workaround, you can stop.
+
+### Fixed — registration no longer adopts invalid protocol/scheme declarations, nor reads other projects' bundles
+
+Two related defects in the same registration pass:
+
+- A bundle's `settings.json` could declare **any string** as `server.protocol`
+  or `server.scheme`, and `project:add`/`project:import` adopted it straight
+  into the project's `protocols`/`schemes` lists in `~/.gina/projects.json` —
+  where `gina image:build` then baked it into the synthesized container
+  image's environment. The framework's supported sets in `~/main.json` are now
+  the authority: a declared value still extends the project's list when the
+  framework supports it, but an unsupported one is reported by name (bundle,
+  value, and the allowed set) and adopted nowhere — not even as the bundle's
+  default.
+- The pass resolved **every** registered project's bundles against the path of
+  the project being registered — so two projects each holding a bundle of the
+  same name (an `api` or `web` in both, say) leaked declarations into each
+  other's registry entries, from commands that never named them. Each
+  project's bundles now resolve against that project's own path.
+
+The import-time heal that rewrites an invalid bundle declaration to the
+project default still runs — it is what keeps the bundle bootable — but it now
+reports each change by name (`server.protocol "x" -> "http/1.1"`) as a
+warning, instead of rewriting the file behind a debug line.
+
+No action required. If a registration now prints a warning naming a bundle's
+protocol or scheme, that declaration was invalid all along — fix the bundle's
+`settings.json` (allowed values: `http/1.1`, `http/2.0`; `http`, `https`).
+
+### Fixed — the port-setup merge read the wrong list (no action required)
+
+The pass that folds newly seen protocols and schemes into a project's registry
+lists indexed the **project's own** list by the *contextual* list's position, so
+once the contextual list outgrew the project's, the overshoot read `undefined`.
+
+No user-visible consequence was demonstrated — a scene built specifically to arm
+the overshoot produced none — so this ships as a correctness fix rather than a
+behaviour change. The merge now reads the contextual list by its own index,
+exactly as the environment merge beside it always did, and it admits only values
+the framework supports: the contextual list also grows from `ports.json` keys,
+which can retain a protocol a framework update has since dropped, and those no
+longer re-enter a project's lists.
+
+### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
+
+A failed release link during configuration load reported
+`TypeError: Cannot set properties of undefined (setting 'env')` — an
+uncaughtException pointing at framework internals rather than at the path you had
+to fix. Because the configuration load is shared across a project, one bundle's
+missing release tree took down **every** bundle in it, and the server never bound,
+so a startup probe saw only a refused connection.
+
+The real reason is now propagated and reported: the failure names the bundle, the
+environment and the scope, keeps the underlying error, and exits cleanly instead
+of dying as an unhandled exception. No action required — this is diagnosability
+only, and the class of deployment that failed before still fails, just legibly.
+
+### Fixed — `self.push()` on an engine without an engine.io channel (Express users)
+
+Calling `self.push()` on the Express engine dereferenced an absent engine.io
+channel and surfaced as an opaque 500 naming neither push nor the missing
+channel. It now warns, passes a supplied `callback` a
+`PUSH_CHANNEL_NOT_CONFIGURED` error, and sends nothing — **without failing the
+request**, so a notification side-channel no longer takes down the response it
+rode in on.
+
+This is the first time `self.push()` honours the `callback(err, result)` contract
+its documentation always described but the implementation never invoked. If you
+call `self.push()` on Express and relied on the 500 to detect the misconfiguration,
+check the log or pass a callback instead. The push channel requires the `isaac`
+engine with `server.ioServer` attached.
+
 ## 0.6.7 → 0.6.8
 
 This release fixes **two security flaws**, both live in every published version up

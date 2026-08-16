@@ -70,6 +70,84 @@ gina scope:remove staging @myproject
 
 ---
 
+## Restrict a bundle to certain scopes
+
+By default every bundle registered in `manifest.json` is deployed in **every**
+scope. When you are building a new bundle and do not want it going out with the
+others yet, give its manifest entry a `scopes` allow-list:
+
+```json
+{
+  "bundles": {
+    "newthing": {
+      "version": "0.0.1",
+      "src": "src/newthing",
+      "link": "bundles/newthing",
+      "scopes": ["local"]
+    }
+  }
+}
+```
+
+`newthing` is now built and started in `local`, and every other scope behaves as
+though it does not exist. When it is ready to ship, add the other scopes to the
+list — or delete the key.
+
+:::info `scopes` survives `project:add` / `project:import`
+Registration preserves declared bundle entries verbatim — `scopes` included.
+If a declared bundle's directory is absent from the location those commands
+scan, the command prints a warning naming the bundle and keeps the declaration
+(it may be deliberate — precisely this feature); removing an entry for good is
+`gina bundle:remove`'s job.
+:::
+
+| Value | Meaning |
+| --- | --- |
+| key absent (or `null`) | Deployed in **every** scope. This is the default, and what every existing manifest does. |
+| `["local"]` | Deployed in `local` only. |
+| `["local", "staging"]` | Deployed in those two scopes. |
+| `[]` | Parked — deployed in no scope at all. |
+
+### What happens to an excluded bundle
+
+It depends on whether you asked for that bundle **by name**. A bulk operation
+skips it and says so; an explicit, single-bundle request refuses — because
+quietly producing nothing would look like success in a deploy script.
+
+```mermaid
+flowchart TD
+  A[operation runs in scope S] --> B{bundle declares scopes?}
+  B -->|no key| C[deployed<br/>every scope, as always]
+  B -->|yes| D{is S in the list?}
+  D -->|yes| C
+  D -->|no| E{did you name<br/>this bundle?}
+  E -->|"no — booting a project,<br/>gina project:build"| F[SKIP<br/>notice names the scope<br/>and the remedy]
+  E -->|"yes — gina bundle:start,<br/>gina bundle:build &lt;name&gt;"| G[REFUSE<br/>error names bundle,<br/>scope and remedy]
+```
+
+| Operation | Excluded bundle |
+| --- | --- |
+| Booting a project | **Skipped**, with a notice |
+| `gina project:build` | **Skipped**, with a notice — one parked bundle never blocks a project build |
+| `gina bundle:start <name>` | **Refused** by name |
+| `gina bundle:build <name> --scope=<scope>` | **Refused** by name |
+
+The one exception worth knowing: if the bundle you are *starting* is excluded
+from the scope you start it in, that is refused rather than skipped — a boot with
+nothing to serve is never what you meant.
+
+:::warning Deleting `releases.<scope>` is not a substitute
+It may look equivalent to remove the bundle's `releases.<scope>` entry by hand.
+It is not: both build commands walk every scope in the project and re-create any
+missing release entry, so the deletion reappears on the next build. Use `scopes`
+— it is the only declaration the tooling preserves.
+:::
+
+A value that is not an array (for example `"scopes": "local"`) is reported as a
+manifest error naming the bundle, rather than being read as "no scopes at all".
+
+---
+
 ## Link scopes to local and production slots
 
 Gina reserves two special slots for every project: `local_scope` and

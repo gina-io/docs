@@ -31,6 +31,13 @@ gina bundle:start frontend @myproject
 The bundle's entry point (`src/<bundle>/index.js`) is executed in a detached
 child process. The assigned port is printed to stdout on success.
 
+:::note Bundles restricted to certain scopes
+If the bundle's `manifest.json` entry carries a `scopes` allow-list that does not
+include the scope you are starting in, the start is **refused** by name — a boot
+with nothing to serve is never what you meant. See
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+:::
+
 **Flags**
 
 | Flag | Description |
@@ -187,6 +194,14 @@ gina bundle:build <bundle> @<project> [--env=<env>] [--scope=<scope>]
 gina bundle:build frontend @myproject --env=prod --scope=local
 ```
 
+:::note Bundles restricted to certain scopes
+If the bundle's `manifest.json` entry carries a `scopes` allow-list that does not
+include `--scope`, this command **refuses** rather than building nothing — naming
+the bundle, the scope, and how to change it. `gina project:build` skips such a
+bundle instead, so one restricted bundle does not block a project-wide build. See
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+:::
+
 ---
 
 ## `bundle:add`
@@ -221,6 +236,21 @@ version pinned as `gina_version` so the pin is explicit from day one:
 To run the bundle under a different installed version, edit `gina_version`
 manually or use `--gina-version` at start time. See
 [Per-bundle framework version](#per-bundle-framework-version) below.
+
+The new bundle is deployed in **every** scope. While you are still building it,
+add a `scopes` allow-list to its manifest entry to hold it back from the others:
+
+```jsonc title="manifest.json"
+"admin": {
+  "version":      "0.0.1",
+  "src":          "src/admin",
+  "link":         "bundles/admin",
+  "scopes":       ["local"]        // built and started in local only
+}
+```
+
+Remove the key (or add the other scopes) when it is ready to ship. See
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
 
 ### Controlling the port scan
 

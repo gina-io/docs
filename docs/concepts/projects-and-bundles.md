@@ -65,6 +65,26 @@ myproject/src/frontend/
 └── index.js                             ← Bundle entry point
 ```
 
+### Where a bundle is deployed
+
+Every bundle registered in the project manifest is deployed in **every** scope by
+default. A bundle you are still building can be held back with a `scopes`
+allow-list on its manifest entry:
+
+```json
+"newthing": {
+  "version": "0.0.1",
+  "src": "src/newthing",
+  "link": "bundles/newthing",
+  "scopes": ["local"]
+}
+```
+
+`newthing` now runs in `local`, and every other scope behaves as though it does
+not exist. Omit the key — as every bundle does until you add it — and nothing
+changes. See ['Restrict a bundle to certain scopes'](/concepts/scopes#restrict-a-bundle-to-certain-scopes)
+for the full semantics.
+
 ### Bundle commands
 
 | Command | Description |
