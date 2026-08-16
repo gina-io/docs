@@ -192,7 +192,8 @@
           "type": ["string", "array", "null"],
           "items": { "type": "string", "minLength": 1 },
           "minLength": 1,
-          "description": "One `.env`-style file path, or an array of them, layered UNDERNEATH the environment. Written with the ordinary config tokens, e.g. [\"${homedir}/secrets.env\", \"${homedir}/${scope}/secrets.env\"]. A NON-EMPTY environment value always wins: every production delivery mechanism (a Kubernetes envFrom secretRef, an ECS task secret, `sops exec-env`, a CI export) arrives through the environment, so a file that won could let a stale plaintext copy baked into an image silently shadow the credential the platform injected while the bundle looked healthy. As a fallback it can only ever fill a gap. A variable that is SET but EMPTY counts as absent, so the file tier fills it — that is what keeps the common `environment: [\"X=${X}\"]` passthrough working when the outer variable is unset — but because the same shape also arises when an entrypoint's `export X=\"$(fetch …)\"` fails, the fallback emits a warning naming the key so the dangerous case is visible without the benign one becoming fatal. Within the array, LATER entries win over earlier ones, so a shared base file and a per-scope file combine. A declared file that does not exist contributes nothing and is not an error — a project may ship a base file and add the per-scope one only on some targets. A declared file that EXISTS but cannot be read (wrong permissions or ownership) IS an error and boot refuses, naming the path: skipping it silently would drop the chain onto the shared base file and run the bundle on the wrong credential with no signal. Resolution stays fail-closed when a key is in neither tier. Boot refuses on a non-string or empty entry, on a `${secret:…}` placeholder (the backend that would resolve it is the one being built), and on any `${…}` token the substitution pass did not know — unknown tokens are preserved verbatim by design, so a typo would otherwise become a silent lookup for a literally-named file that never exists. NOT a secrets-management integration: it does not decrypt, and pointed at ciphertext it yields ciphertext silently. For SOPS, Vault or a KMS keep decrypting at the container entrypoint so values land in the environment, which this tier already prefers. Files are layered once per config-load cycle, so editing one after the bundle has started changes nothing until a restart.",
+          "minItems": 1,
+          "description": "One `.env`-style file path, or an array of them, layered UNDERNEATH the environment. Written with the ordinary config tokens, e.g. [\"${homedir}/secrets.env\", \"${homedir}/${scope}/secrets.env\"]. A NON-EMPTY environment value always wins: every production delivery mechanism (a Kubernetes envFrom secretRef, an ECS task secret, `sops exec-env`, a CI export) arrives through the environment, so a file that won could let a stale plaintext copy baked into an image silently shadow the credential the platform injected while the bundle looked healthy. As a fallback it can only ever fill a gap. A variable that is SET but EMPTY counts as absent, so the file tier fills it — that is what keeps the common `environment: [\"X=${X}\"]` passthrough working when the outer variable is unset — but because the same shape also arises when an entrypoint's `export X=\"$(fetch …)\"` fails, the fallback emits a warning naming the key so the dangerous case is visible without the benign one becoming fatal. Within the array, LATER entries win over earlier ones, so a shared base file and a per-scope file combine. A declared file that does not exist contributes nothing and is not an error — a project may ship a base file and add the per-scope one only on some targets. A declared file that EXISTS but cannot be read (wrong permissions or ownership) IS an error and boot refuses, naming the path: skipping it silently would drop the chain onto the shared base file and run the bundle on the wrong credential with no signal. Resolution stays fail-closed when a key is in neither tier. Boot refuses on a non-string, empty or whitespace-only entry, on a `${secret:…}` placeholder (the backend that would resolve it is the one being built), on any `${…}` token the substitution pass did not know — unknown tokens are preserved verbatim by design, so a typo would otherwise become a silent lookup for a literally-named file that never exists — and on a path containing an empty segment (`//`), because such a path does not name the file it appears to — POSIX reads `<a>//<b>` as `<a>/<b>`. The dangerous cause is a `${…}` token that resolved to an EMPTY value: `${homedir}/${scope}/secrets.env` with an empty scope collapses to a read of the file one directory up, silently, with no token left for the check above to catch. The benign cause is a token carrying a trailing slash (e.g. `GINA_HOMEDIR=/opt/gina/`), which resolves to the intended file; the two are indistinguishable by the time the path is assembled, so boot refuses on both rather than risk running on the wrong credential. Removing the doubled separator, or the trailing slash from the token, resolves either. An empty ARRAY is accepted and disables the file tier exactly like `null`, but it warns, because emptying the array to drop one layer drops the whole tier; prefer `null` when opting out deliberately. NOT a secrets-management integration: it does not decrypt, and pointed at ciphertext it yields ciphertext silently. For SOPS, Vault or a KMS keep decrypting at the container entrypoint so values land in the environment, which this tier already prefers. Files are layered once per config-load cycle, so editing one after the bundle has started changes nothing until a restart.",
           "default": null
         }
       }
@@ -228,6 +229,43 @@
         "allowHTTP1": {
           "type": "boolean",
           "description": "When true, the HTTP/2 server also accepts HTTP/1.1 connections (ALPN negotiation). Defaults to true."
+        },
+        "maintenance": {
+          "type": "object",
+          "description": "Opt-in maintenance mode (#MAINT1). When active, every request EXCEPT the /_gina/* endpoints is answered 503 + Retry-After with a self-contained maintenance page, before static assets, the render/output cache and routing — coverage a route middleware cannot reach, since middleware only runs once a route has matched. The /_gina/* family stays reachable on purpose: liveness keeps answering 200 so an orchestrator does not restart pods over a declared window, and the operator can always reach the toggle. Flip it at runtime with POST /_gina/maintenance (admin-gated); a runtime override is NOT persisted across a restart, so `enabled` here is the durable form. A malformed block warns at boot per key and never refuses a boot.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch, and the state a restart returns to. Must be strictly boolean true to turn maintenance on — any other type or value leaves it off. Defaults to false.",
+              "default": false
+            },
+            "retryAfter": {
+              "type": "integer",
+              "description": "Delta-seconds emitted as the Retry-After header on the 503. Integer between 1 and 86400; out-of-range or non-integer values are ignored with a boot warning. Defaults to 300 (5 minutes) — longer than transientErrors' 30s, because an operator-declared window does not resolve in seconds.",
+              "minimum": 1,
+              "maximum": 86400,
+              "default": 300
+            },
+            "message": {
+              "type": "string",
+              "description": "User-facing text shown on the maintenance page and placed in the `explicit` field of the JSON body. HTML-escaped at the emission site. Non-empty string; empty or non-string values are ignored with a boot warning. Defaults to the standard 503 status text (Service Unavailable).",
+              "minLength": 1
+            },
+            "bypassKey": {
+              "type": "string",
+              "description": "Shared secret that lets a chosen visitor through an active maintenance window — the topology-INDEPENDENT bypass, and the only one that works behind a reverse proxy. Present it as the `x-gina-maintenance-key` header (programmatic callers) or as `?gina-maintenance-key=…` once in a browser, which sets a 12h HttpOnly cookie and redirects to the same URL without the secret. Compared in constant time; fail-closed when unset. Supports ${secret:KEY} substitution. Mint with `openssl rand -hex 24`; keys shorter than 16 characters warn at boot. Rotate the key to revoke every outstanding cookie.",
+              "minLength": 1
+            },
+            "allowFrom": {
+              "type": "array",
+              "description": "Supplementary IP allowlist for bypassing an active window. Honoured ONLY for requests that do NOT classify as proxied, because behind a reverse proxy every socket address is the proxy's: an unconditioned list would either admit the entire internet (proxy listed) or nobody (proxy not listed). Behind a proxy this axis is deliberately inert and `bypassKey` is the bypass. Reads req.socket.remoteAddress only — X-Forwarded-For is NOT trusted. Defaults to an empty list (no IP bypass).",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          }
         },
         "transientErrors": {
           "type": "object",
