@@ -194,6 +194,34 @@ crash the port/settings pass.
 No action required. If you previously re-applied `scopes` keys after running
 either command as a workaround, you can stop.
 
+### Fixed — registration no longer adopts invalid protocol/scheme declarations, nor reads other projects' bundles
+
+Two related defects in the same registration pass:
+
+- A bundle's `settings.json` could declare **any string** as `server.protocol`
+  or `server.scheme`, and `project:add`/`project:import` adopted it straight
+  into the project's `protocols`/`schemes` lists in `~/.gina/projects.json` —
+  where `gina image:build` then baked it into the synthesized container
+  image's environment. The framework's supported sets in `~/main.json` are now
+  the authority: a declared value still extends the project's list when the
+  framework supports it, but an unsupported one is reported by name (bundle,
+  value, and the allowed set) and adopted nowhere — not even as the bundle's
+  default.
+- The pass resolved **every** registered project's bundles against the path of
+  the project being registered — so two projects each holding a bundle of the
+  same name (an `api` or `web` in both, say) leaked declarations into each
+  other's registry entries, from commands that never named them. Each
+  project's bundles now resolve against that project's own path.
+
+The import-time heal that rewrites an invalid bundle declaration to the
+project default still runs — it is what keeps the bundle bootable — but it now
+reports each change by name (`server.protocol "x" -> "http/1.1"`) as a
+warning, instead of rewriting the file behind a debug line.
+
+No action required. If a registration now prints a warning naming a bundle's
+protocol or scheme, that declaration was invalid all along — fix the bundle's
+`settings.json` (allowed values: `http/1.1`, `http/2.0`; `http`, `https`).
+
 ### Fixed — a bundle whose release path cannot be linked now says which bundle, and why
 
 A failed release link during configuration load reported
