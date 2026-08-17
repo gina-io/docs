@@ -415,8 +415,31 @@ protocol/scheme consistency check silently skipped those bundles), and
 importing a project whose manifest declares a bundle with no tree on disk could
 crash the port/settings pass.
 
-No action required. If you previously re-applied `scopes` keys after running
-either command as a workaround, you can stop.
+If you previously re-applied `scopes` keys after running either command as a
+workaround, you can stop.
+
+:::caution Action may be required in one narrow case
+Because a declared-but-absent bundle is now **preserved** rather than dropped,
+one shape that previously booted can now refuse: a manifest that declares a
+bundle whose directory is absent **and** carries no `scopes` key. The old reset
+removed such declarations as a side effect of emptying the block; now they
+survive, and the boot refuses with an error naming the bundle, environment,
+scope and link path.
+
+This is the intended behaviour — the declaration is telling gina to deploy
+something that is not there — but it is a boot that used to succeed, so it is
+worth checking before you upgrade. Two supported fixes, depending on intent:
+
+- **The bundle should not be deployed at this scope** — give it a `scopes`
+  allow-list. Bundles excluded from the booting scope are skipped cleanly,
+  which is why this shape does not affect deployments that already use
+  `scopes`.
+- **The bundle is gone for good** — remove the entry with
+  `gina bundle:remove <name> @<project>`.
+
+Registration also warns about the same condition, naming the bundle and the
+directory it scanned, so the state is reported before the boot ever refuses.
+:::
 
 ### Fixed — registration no longer adopts invalid protocol/scheme declarations, nor reads other projects' bundles
 
