@@ -19,6 +19,155 @@ upward to the target version.
 
 ---
 
+## 0.6.10 → 0.6.11
+
+A fixes-only release: seven fixes, two of them reported through GitHub issues
+(#63, #64). **One behaviour change to check** — `Collection.replace()` now
+**throws** where it previously failed silently, when neither side of the
+comparison carries a usable key (see below). Everything else needs no action.
+
+Pickup is a bundle **restart AND rebuild**: the browser bundle changed in this
+release (`lib/collection` and the FormValidator plugin are bundled), so a
+restart alone keeps serving the old client code — run `gina bundle:build` for
+each bundle as well as `gina bundle:restart`. `0.6.11` is a patch, so the
+`shortVersion` stays `0.6` and your `~/.gina/0.6/settings.json` is untouched.
+
+### Fixed — `Collection.replace()` no longer silently discards the write (check call sites that relied on the quiet no-op)
+
+`replace(filter, set[, key])` locates each entry to overwrite by comparing a
+key on the stored entry against the same key on `set`. That key used to be
+resolved by inspecting the **stored entry alone**: the internal `_uuid` if the
+stored entry had one, otherwise `id`, refusing only when the stored entry had
+neither. So in the one combination none of those branches covered — the stored
+entry **has** a `_uuid` and `set` **does not** — the comparison became
+`<storedUuid> == undefined`, which is never true. Nothing matched, nothing was
+replaced, no error was raised, and the call returned a chainable result that
+looked entirely successful: a silent, lossy write.
+
+Why it looked intermittent: a Collection built from fresh raw data keeps no
+`_uuid` on its instance rows, so the `id` fallback fired and the call worked.
+A stored `_uuid` is present exactly when you re-load an array that a previous
+**chained** call returned — chained results carry the internal key on every
+entry they did not replace.
+
+The key is now resolved per entry from **both** sides:
+
+1. the internal `_uuid`, when the stored entry **and** `set` both carry one;
+2. otherwise `id`, when both carry one;
+3. otherwise the call **throws** `No comparison key defined !`.
+
+An explicitly supplied `key` argument is still honoured exactly as given — no
+fallback, no refusal. The resolved key is also scoped per entry rather than
+assigned to a shared variable, so a fallback taken for one entry can no longer
+apply to the entries examined after it.
+
+**What to check.** A call site that was silently replacing nothing will now
+surface an error instead of failing invisibly — that is the point of the fix,
+but it is a behaviour change. Calls that pass an explicit key, or where both
+sides carry an `id`, are unaffected; every previously-working call is
+unaffected. When you persist the result of a chained `replace()`, prefer
+`toRaw()` so the internal `_uuid` does not travel into your store. Browser-bundled.
+
+### Fixed — concurrent `util.promisify(entity.method)` calls no longer cross-deliver or hang (no action required; read the residual if you promisify under concurrency)
+
+When an entity method is called detached — `util.promisify(entity.method)` with
+`this` unbound and a trailing callback — the framework's promisify fast-path
+kept a **single scalar** slot for the pending callback. Two concurrent calls on
+the same method raced on that slot: the second overwrote the first, the first
+result to arrive was flushed to the last-registered callback (one caller
+receiving another's record), and the displaced caller's `once` listener found
+its guard false, so its promise **never settled** — a request left hanging with
+nothing logged, and a read-modify-write variant that could persist one key's
+document under another.
+
+The entity-context path already used a FIFO queue with a single persistent
+dispatch listener; the fast-path now uses the same shape. **Starvation is
+eliminated** — every concurrent caller settles — and **cross-delivery is closed
+whenever the underlying operations complete in call order**.
+
+**The residual, stated so you can decide.** When operations can complete out of
+call order, results are still paired by *arrival* order, so two calls on the
+same method can still swap results. That is identical to what the
+entity-context path already carried; the fix aligns the two paths rather than
+introducing a new mechanism. If your method can complete out of order under
+concurrency, give it true per-call identity by **returning a Promise** instead
+of emitting its trigger — the framework resolves the exact call that made it.
+The [Models guide](/guides/models) concurrency note covers both shapes.
+Server-side; a restart picks it up.
+
+### Fixed — FormValidator: fast typing into a Safari `autocomplete="off"` field no longer scrambles the text (no action required)
+
+On Safari, the [form validation](/guides/forms-and-validation) keydown
+interception for a live-checked `autocomplete="off"` text input restored the
+caret only two timer hops after each programmatic value rebuild — and a value
+assignment parks the caret at the end of the field — so a quick second
+keystroke read a stale position and characters landed at the end instead of at
+the caret ("AXB" where you typed "ABX"). Every rebuild now commits the caret
+synchronously and records the intended position on the element; while a
+deferred restore is still in flight the interception trusts that recorded
+position, and the restore re-asserts the latest committed position instead of a
+stale per-keystroke capture. The transient-readonly autofill suppression is
+mechanism-unchanged. Browser-bundled.
+
+### Fixed — FormValidator: three position-0 edge cases in the same Safari interception (no action required)
+
+In the same `autocomplete="off"` keydown interception, three edge defects now
+match native field behaviour: **Backspace** at the start of the field deleted
+the first character (native is a no-op); **Delete** with a selection starting
+at position 0 removed one character more than the selection; and **ArrowLeft**
+at position 0 teleported the caret to the end of the field
+(`setSelectionRange(-1)` wraps to the unsigned maximum). Browser-bundled.
+
+### Fixed — FormValidator: a refused submit's answer stays visible and focused on async-`query` forms (no action required)
+
+On a form with an async `query` rule and a committed error, a refused submit's
+answer could render, take focus, and then be hidden again milliseconds later
+when the click landed while a previous validation round was still settling —
+the late completion's display refresh read the answered field as "being typed
+in" (it was the active element, because the answer had just focused it) and
+re-hid the very message the answer had rendered. The error message and its
+field focus now stay put: the framework records that the focus was placed by
+the answer rather than by the user, both display-refresh paths honour that
+record however late they run, and the first genuine user interaction (typing,
+clicking, tabbing away) releases it — so the deliberate hide-while-typing
+behaviour is unchanged. Browser-bundled.
+
+### Fixed — FormValidator: a stale not-ready submit marker no longer refuses every click until reload (no action required)
+
+On a form whose async `query` rule rides a field that is **not declared last**,
+the display-only validation pass answering a refused submit click could
+silently never complete — its result matched no completion route — so the stale
+not-ready marker on the submit trigger was never re-synced and a fully valid
+form kept refusing every click until reload. That pass now carries its own
+completion identity and always completes: the refused click renders the current
+validation state, the trigger state re-syncs from the fresh result, and the next
+click on a valid form goes through. Field declaration order no longer decides
+whether a stale marker can heal. Browser-bundled.
+
+### Fixed — Inspector (development mode): the page-weight badge and late timeline bars no longer go missing (no action required)
+
+The [Inspector](/guides/inspector)'s View tab could show two badges instead of
+three — dropping the page-weight badge until the Inspector was refreshed — and
+its Flow tab could be missing the template-compile, execute, response-write and
+total bars. Both came from one cause: the dev statusbar hands the page payload
+to the Inspector **before** the render delegates append their late-bind patch
+script above `</body>`, and that patch only mutated the in-memory object, so
+every channel the Inspector can read kept the emit-time payload for the life of
+the page (the page weight is unknown at emit, since the body length is not
+final until the render completes). The asymmetry made it look intermittent: the
+server-side time IS known at emit, so the load badge always rendered while the
+weight badge silently did not.
+
+Both of the Inspector's data channels are now refreshed at the end of that
+patch, after the values are written — the localStorage fallback mirror, and the
+per-tab broadcast channel a statusbar-launched Inspector actually binds to. The
+broadcast channel is keyed from per-tab session storage rather than the shared
+cross-tab advert, so one tab can never publish onto another tab's channel. The
+nunjucks delegate additionally injects its patch through a function replacer
+rather than a string one, so a timeline entry containing a dollar sequence can
+no longer corrupt the emitted script. Development mode only; server-side; no
+configuration change is required.
+
 ## 0.6.9 → 0.6.10
 
 ### Maintenance mode (new feature — opt-in, nothing changes until you enable it)
@@ -415,8 +564,31 @@ protocol/scheme consistency check silently skipped those bundles), and
 importing a project whose manifest declares a bundle with no tree on disk could
 crash the port/settings pass.
 
-No action required. If you previously re-applied `scopes` keys after running
-either command as a workaround, you can stop.
+If you previously re-applied `scopes` keys after running either command as a
+workaround, you can stop.
+
+:::caution Action may be required in one narrow case
+Because a declared-but-absent bundle is now **preserved** rather than dropped,
+one shape that previously booted can now refuse: a manifest that declares a
+bundle whose directory is absent **and** carries no `scopes` key. The old reset
+removed such declarations as a side effect of emptying the block; now they
+survive, and the boot refuses with an error naming the bundle, environment,
+scope and link path.
+
+This is the intended behaviour — the declaration is telling gina to deploy
+something that is not there — but it is a boot that used to succeed, so it is
+worth checking before you upgrade. Two supported fixes, depending on intent:
+
+- **The bundle should not be deployed at this scope** — give it a `scopes`
+  allow-list. Bundles excluded from the booting scope are skipped cleanly,
+  which is why this shape does not affect deployments that already use
+  `scopes`.
+- **The bundle is gone for good** — remove the entry with
+  `gina bundle:remove <name> @<project>`.
+
+Registration also warns about the same condition, naming the bundle and the
+directory it scanned, so the state is reported before the boot ever refuses.
+:::
 
 ### Fixed — registration no longer adopts invalid protocol/scheme declarations, nor reads other projects' bundles
 
