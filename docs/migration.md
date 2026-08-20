@@ -85,6 +85,18 @@ if (typeof source.someId !== 'undefined') {
 var row = col.findOne(filter);   // {} still means "no constraint" (matches all)
 ```
 
+If instead you were **looking up by a key that may be absent** — code shaped
+`if (!col.findOne({ id: maybeAbsent }))` or
+`col.findOne({ id: maybeAbsent }) || fallback` — the conditional-filter recipe
+above is not the fix you want. An empty filter matches everything and returns the
+first row, so the guard reads "found" and the fallback never runs. Guard the
+**call** instead:
+
+```js
+var row = (source.someId != null) ? col.findOne({ id: source.someId }) : null;
+if (!row) { /* fallback */ }
+```
+
 Deliberately unchanged: an explicitly empty `{}` filter still matches
 everything, `null` remains a legal needle comparing strictly against stored
 values, and `delete()` / `notIn()` are unaffected (their matching never had the
