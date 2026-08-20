@@ -93,6 +93,21 @@ defect).
 Pickup is a bundle **restart AND rebuild**: `lib/collection` ships in the
 browser bundle, so a restart alone keeps serving the old client code.
 
+
+### Fixed — the external references carried by the framework READMEs are current again
+
+The country-codes locale README pointed at a Simple Data Format specification
+URL (`dataprotocols.readthedocs.io`) that no longer resolves. It now names the
+[Tabular Data Package specification](https://specs.frictionlessdata.io/tabular-data-package/)
+that superseded it, which is what the upstream dataset the file mirrors is
+actually published as. Every remaining plain-HTTP reference in the locales and
+frontend-asset READMEs is now HTTPS — the UN Statistics Division, statoids.com
+and geonames.org links — with `geonames.org` resolved to the `www` host, because
+the bare domain redirects back down to HTTP.
+
+**No action is required.** These are READMEs shipped inside the framework
+package; no runtime, configuration or API surface changed.
+
 ---
 
 ## 0.6.10 → 0.6.11
