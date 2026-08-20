@@ -19,6 +19,53 @@ upward to the target version.
 
 ---
 
+## 0.6.11 → 0.6.12
+
+**One behaviour change to check** — `Collection.find()`, `findOne()`, `or()` and
+`update()` now **throw** where an undefined-valued filter key previously made the
+filter match **every** record. Everything else in this section is additive.
+
+### Fixed — an undefined-valued `Collection` filter key throws instead of matching everything (check filters built from possibly-absent fields)
+
+`find()` used to round-trip its filter objects through `JSON.stringify`, which
+silently **drops** keys whose value is `undefined`. A filter like
+`col.findOne({ id: source.someId })` where `source.someId` was absent therefore
+degraded to the match-everything `{}` filter: `findOne` returned the
+collection's **first row** instead of the `null` your guard was written for, and
+`update()` with such a filter wrote its `set` onto **every** record. The
+refusal that was always intended for this input (the matcher carries a guard
+whose message names the offending key) could never fire, because the
+serialization stripped the key before the matcher ran.
+
+Both now throw at the call site:
+
+```js
+col.findOne({ id: undefined });        // throws: filter `id` cannot be left undefined
+col.update({ id: undefined }, set);    // throws (previously mutated EVERY record)
+```
+
+**Action required only if you relied on the old behaviour** (an undefined value
+acting as "no constraint"): build the filter conditionally instead — add a key
+only when its value is defined.
+
+```js
+var filter = {};
+if (typeof source.someId !== 'undefined') {
+    filter.id = source.someId;
+}
+var row = col.findOne(filter);   // {} still means "no constraint" (matches all)
+```
+
+Deliberately unchanged: an explicitly empty `{}` filter still matches
+everything, `null` remains a legal needle comparing strictly against stored
+values, and `delete()` / `notIn()` are unaffected (their matching never had the
+defect).
+
+Pickup is a bundle **restart AND rebuild**: `lib/collection` ships in the
+browser bundle, so a restart alone keeps serving the old client code.
+
+---
+
 ## 0.6.10 → 0.6.11
 
 A fixes-only release: seven fixes, two of them reported through GitHub issues
