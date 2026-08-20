@@ -86,11 +86,14 @@ field optional and short-circuits the check.
 
 `isEmail()` · JSON: `"isEmail": true`
 
-Checks a syntactically valid email address. The value is lowercased.
+Checks a syntactically valid email address. A string value is lowercased first.
 
 - **Default message:** *A valid email is required*
 - An empty value is left to [`isRequired`](#isrequired) alone — `isEmail` adds no
   message of its own to a blank field, whether or not the field is required.
+- A **non-string** value (a `123` or `true` arriving from a JSON body, say) is
+  left untouched and simply fails the check, recording the normal message. It is
+  never silently accepted.
 
 ```json
 "email": { "isRequired": true, "isEmail": true }
@@ -243,8 +246,9 @@ Checks the three dot-separated base64url segments of a JWT.
 - **Default message:** *Must be a valid JSON Web Token*
 
 :::note
-This rule lowercases the value as part of its check, which is destructive to a
-real token. Use it to validate shape, not to pass a token through unchanged.
+This rule lowercases a string value as part of its check, which is destructive
+to a real token. Use it to validate shape, not to pass a token through
+unchanged. A non-string value is left untouched and fails the check.
 :::
 
 ### is
@@ -339,7 +343,8 @@ contexts, use [`isFloat`](#isfloat) or [`isNumber`](#isnumber) instead.
 
 `trim(isApplicable)` · JSON: `"trim": true`
 
-Strips leading and trailing whitespace from a string value.
+Strips leading and trailing whitespace from a string value. A non-string value
+is passed through untransformed rather than raising an error.
 
 :::warning Always pass `true`
 `trim` only acts — and only continues a chain — when called with `true`.

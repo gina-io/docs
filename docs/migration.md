@@ -25,6 +25,35 @@ upward to the target version.
 `update()` now **throw** where an undefined-valued filter key previously made the
 filter match **every** record. Everything else in this section is additive.
 
+### Fixed — a non-string field value no longer aborts the whole form validation pass
+
+The `isEmail`, `isJsonWebToken` and `trim` rules called a string method on the
+field value without checking its type. A value that was not a string — a `123`,
+`true` or `[]` arriving from a JSON request body, or a checkbox boolean on the
+client — threw, and the rule driver re-threw, so **every remaining field in the
+pass went unchecked**. Server-side the request was not validated; client-side the
+boot-time binding loop died, and forms bound after the failing one silently lost
+both validation and CSRF token injection.
+
+All three now leave a non-string value untouched:
+
+- `isEmail` and `isJsonWebToken` record their normal rule error for it — the
+  value is *invalid*, not silently accepted.
+- `trim`, being a transform rather than a check, passes it through
+  untransformed, which is how `isFloat` already behaved.
+
+Whitespace trimming of real strings is unchanged. **No action is required** —
+this only turns a crash into the verdict you already expected. If you added a
+defensive coercion upstream to work around the crash (casting form values to
+strings before handing them to the validator), you can remove it.
+
+:::note
+`isDate`, `toFloat` and `format` are unchanged in this release and are tracked
+separately — `isDate` still raises on a value it cannot parse, and `toFloat` and
+`format` remain browser-side rules.
+:::
+
+
 ### Fixed — an undefined-valued `Collection` filter key throws instead of matching everything (check filters built from possibly-absent fields)
 
 `find()` used to round-trip its filter objects through `JSON.stringify`, which
