@@ -19,6 +19,97 @@ upward to the target version.
 
 ---
 
+## 0.6.11 → 0.6.12
+
+**One behaviour change to check** — `Collection.find()`, `findOne()`, `or()` and
+`update()` now **throw** where an undefined-valued filter key previously made the
+filter match **every** record. Everything else in this section is additive.
+
+### Fixed — a non-string field value no longer aborts the whole form validation pass
+
+The `isEmail`, `isJsonWebToken` and `trim` rules called a string method on the
+field value without checking its type. A value that was not a string — a `123`,
+`true` or `[]` arriving from a JSON request body, or a checkbox boolean on the
+client — threw, and the rule driver re-threw, so **every remaining field in the
+pass went unchecked**. Server-side the request was not validated; client-side the
+boot-time binding loop died, and forms bound after the failing one silently lost
+both validation and CSRF token injection.
+
+All three now leave a non-string value untouched:
+
+- `isEmail` and `isJsonWebToken` record their normal rule error for it — the
+  value is *invalid*, not silently accepted.
+- `trim`, being a transform rather than a check, passes it through
+  untransformed, which is how `isFloat` already behaved.
+
+Whitespace trimming of real strings is unchanged. **No action is required** —
+this only turns a crash into the verdict you already expected. If you added a
+defensive coercion upstream to work around the crash (casting form values to
+strings before handing them to the validator), you can remove it.
+
+:::note
+`isDate`, `toFloat` and `format` are unchanged in this release and are tracked
+separately — `isDate` still raises on a value it cannot parse, and `toFloat` and
+`format` remain browser-side rules.
+:::
+
+
+### Fixed — an undefined-valued `Collection` filter key throws instead of matching everything (check filters built from possibly-absent fields)
+
+`find()` used to round-trip its filter objects through `JSON.stringify`, which
+silently **drops** keys whose value is `undefined`. A filter like
+`col.findOne({ id: source.someId })` where `source.someId` was absent therefore
+degraded to the match-everything `{}` filter: `findOne` returned the
+collection's **first row** instead of the `null` your guard was written for, and
+`update()` with such a filter wrote its `set` onto **every** record. The
+refusal that was always intended for this input (the matcher carries a guard
+whose message names the offending key) could never fire, because the
+serialization stripped the key before the matcher ran.
+
+Both now throw at the call site:
+
+```js
+col.findOne({ id: undefined });        // throws: filter `id` cannot be left undefined
+col.update({ id: undefined }, set);    // throws (previously mutated EVERY record)
+```
+
+**Action required only if you relied on the old behaviour** (an undefined value
+acting as "no constraint"): build the filter conditionally instead — add a key
+only when its value is defined.
+
+```js
+var filter = {};
+if (typeof source.someId !== 'undefined') {
+    filter.id = source.someId;
+}
+var row = col.findOne(filter);   // {} still means "no constraint" (matches all)
+```
+
+Deliberately unchanged: an explicitly empty `{}` filter still matches
+everything, `null` remains a legal needle comparing strictly against stored
+values, and `delete()` / `notIn()` are unaffected (their matching never had the
+defect).
+
+Pickup is a bundle **restart AND rebuild**: `lib/collection` ships in the
+browser bundle, so a restart alone keeps serving the old client code.
+
+
+### Fixed — the external references carried by the framework READMEs are current again
+
+The country-codes locale README pointed at a Simple Data Format specification
+URL (`dataprotocols.readthedocs.io`) that no longer resolves. It now names the
+[Tabular Data Package specification](https://specs.frictionlessdata.io/tabular-data-package/)
+that superseded it, which is what the upstream dataset the file mirrors is
+actually published as. Every remaining plain-HTTP reference in the locales and
+frontend-asset READMEs is now HTTPS — the UN Statistics Division, statoids.com
+and geonames.org links — with `geonames.org` resolved to the `www` host, because
+the bare domain redirects back down to HTTP.
+
+**No action is required.** These are READMEs shipped inside the framework
+package; no runtime, configuration or API surface changed.
+
+---
+
 ## 0.6.10 → 0.6.11
 
 A fixes-only release: seven fixes, two of them reported through GitHub issues
