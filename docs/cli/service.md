@@ -10,10 +10,18 @@ prereqs:
   - '[CLI bundle reference](/cli/cli-bundle)'
 ---
 
-The `service` command group **starts and lists framework-internal services** — bundles that ship alongside gina and run as companion processes (currently `proxy` and `inspector`). These services are registered under the reserved `@gina` project.
+The `service` command group **starts and lists framework-internal services** — bundles of the reserved `@gina` project that run as companion processes. They live in the framework's `services/` directory, a maintainer-side tree that is **not part of the published package**, so a released install has nothing to list until that tree exists locally. `inspector` is the one maintained service.
 
 :::info Gina-internal surface
 `service:list` and `service:start` currently reject any project other than `@gina`. User-defined services are not a surface yet — use [`bundle:list`](/cli/cli-bundle#bundlelist) for bundles in user projects.
+:::
+
+:::note gina ships no edge proxy
+There is deliberately no built-in reverse-proxy or gateway service. Run one in
+front of your bundles — nginx, Traefik, or an ingress controller — which is the
+topology gina's [authentication](/guides/authentication),
+[rate-limiting](/roadmap) and [Kubernetes](/guides/k8s-docker) guidance already
+assumes.
 :::
 
 ---
@@ -42,7 +50,6 @@ gina service:list @gina
 
 ```text
 [ running ] inspector      http/2.0 dev https 4208  pid 27007
-[ running ] proxy          http/2.0 dev https 4210  pid 15346
 ```
 
 - **`[ running ]` / `[ stopped ]` / `[ ?! ]`** — running state (probed from `~/.gina/run/<service>@gina.pid` with `process.kill(pid, 0)`) or src-existence when the source directory is missing.
