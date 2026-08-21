@@ -856,6 +856,49 @@ instance other callers use, with the same connection.
 
 ---
 
+## Schema and data migrations
+
+**gina ships no database migration tool, deliberately — your schema and its data
+are yours to own.** There is no `up`/`down` runner, no migrations table, and no
+framework-managed schema state. Entities read and write through the SQL files
+described above; nothing in the framework creates, alters or versions the tables
+they target.
+
+:::warning `connector:migrate` is not a data migration
+Despite the name, [`gina connector:migrate`](/cli/cli-connector#connectormigrate)
+never touches your database. It lints `connectors.json` — the **connection
+configuration** — for schema drift in that file, and with `--fix` rewrites the
+JSON in place. It issues no SQL, opens no connection, and has no `up`/`down`
+concept. It is a config linter whose name predates this ambiguity.
+:::
+
+**What to use instead.** Pick the migration tool that belongs to your database
+rather than to your framework — they outlive any one application, and your DBAs
+and your CI already know them:
+
+| Database | Common choices |
+|---|---|
+| PostgreSQL / MySQL | Flyway, Liquibase, Sqitch, `node-pg-migrate`, Knex migrations |
+| SQLite | Sqitch, Knex migrations, or plain versioned `.sql` applied at deploy |
+| Couchbase | N1QL index/collection scripts applied by your deploy pipeline |
+
+**Where migrations run.** Keep them out of bundle boot. A bundle that migrates on
+startup races itself the moment you run more than one replica, and turns a schema
+error into a crash-loop instead of a failed deploy step. Run migrations as a
+discrete step *before* the new version starts serving — a CI job, a Kubernetes
+`Job` or init container, or a deploy hook. See
+[K8s and Docker](./k8s-docker) for the deployment shapes.
+
+**Keeping SQL and schema in step.** The SQL files in `sql/` (or `n1ql/`) are
+read against whatever schema is live, so a migration that renames a column and a
+query file that still selects it will fail at call time, not at boot — the two
+are versioned together in your repo but validated at different moments. Ship the
+migration first, or make the change additive (add the new column, backfill,
+switch the query, drop the old one) so old and new code can both run during a
+rolling deploy.
+
+---
+
 ## See also
 
 - [connectors.json reference](../reference/connectors) — configuring database connections
