@@ -162,6 +162,41 @@ a release-namespace rotation.
 
 See the [Caching guide](../guides/caching) for the full per-route field reference.
 
+### `kv`
+
+Declares the named key-value namespaces reached from application code as
+`gina.kv('<name>')`. Each namespace picks its own backend and its own failure
+policy; a namespace declared as `{}` is in-memory. Asking for a namespace that
+was never declared throws at the call site rather than returning an empty
+store. Absent entirely, the feature is off and `gina.kv()` throws a named
+error. See the [Key-value store guide](../guides/kv) for the operations and
+recipes.
+
+```json
+{
+  "kv": {
+    "default": "cache",
+    "namespaces": {
+      "cache":  { "failMode": "open" },
+      "tokens": { "store": "kvRedis" }
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `default` | string | — | Namespace returned by a no-argument `gina.kv()`. Must name a declared namespace, or the boot refuses. Omit it and every call must name its namespace |
+| `namespaces` | object | — | Namespaces keyed by name (`^[A-Za-z][A-Za-z0-9._-]*$`). `{}` declares a plain in-memory namespace |
+| `namespaces.<name>.store` | string | — | A `connectors.json` entry name. `redis` shares the namespace across hosts; `sqlite` makes it durable and shared across processes on one host. A connector with no KV implementation refuses the boot rather than falling back to memory. Omit for in-memory |
+| `namespaces.<name>.failMode` | `"closed"` \| `"open"` | `"closed"` | What a BACKEND error does. `closed` rejects the operation; `open` resolves it to the miss-shaped result (`null` / `false` / `0`) and logs a warning. Validation errors always reject, whatever the mode |
+| `namespaces.<name>.sweepInterval` | number | `30000` | Milliseconds between expired-entry sweeps. Reads already filter on expiry, so this bounds memory and file growth, not correctness |
+
+:::note Boot config
+Namespaces are built once at bundle startup from the starting bundle's
+settings — a change here needs a bundle restart.
+:::
+
 ### `upload`
 
 Configures multipart file uploads via [`@rhinostone/busboy`](https://github.com/gina-io/busboy) (a maintained fork of `busboy`).
