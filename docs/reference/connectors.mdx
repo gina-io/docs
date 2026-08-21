@@ -41,7 +41,7 @@ The [`connector:list`](/cli/cli-connector#connectorlist) command lists every con
 | [MongoDB](#mongodb) | Document store | Primary application data | ✅ Yes — replica sets, sharding | ✅ Available |
 | [MySQL / MariaDB](#mysql) | Relational | Primary application data | ⚠️ Partial — single server by default; Galera Cluster or managed service for multi-node | ✅ Available (v0.3.0) |
 | [PostgreSQL](#postgresql) | Relational | Primary application data | ⚠️ Partial — single server by default; Patroni or managed service for multi-node | ✅ Available (v0.3.0) |
-| [Redis](#redis) | Key-value store | Session store | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
+| [Redis](#redis) | Key-value store | Sessions, async jobs, render-cache L2 | ✅ Yes — Redis Cluster / Sentinel; designed for shared multi-pod state | ✅ Available |
 | [SQLite](#sqlite-data-connector) | Embedded relational | Application data & sessions — dev, staging, single-pod | ❌ No — file-based, single-process only | ✅ Available (Node ≥ 22.5) |
 | [AI / LLM](#ai) | LLM provider | Generative AI in controllers | — Stateless API calls | ✅ Available (v0.3.0) |
 | [ScyllaDB / Cassandra](/data/scylladb-orm) | Wide-column | High-throughput application data | ✅ Yes — distributed by design | ✅ Available |

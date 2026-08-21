@@ -31,16 +31,18 @@ section goes deep on individual stores.
 | [ScyllaDB / Cassandra](/data/scylladb-orm) | Wide-column | High-throughput application data | ✅ Distributed by design |
 | [MySQL / MariaDB](/data/mysql-orm) | Relational | Primary application data | ⚠️ Single server by default |
 | [PostgreSQL](/data/postgresql-orm) | Relational | Primary application data | ⚠️ Single server by default |
-| [Redis](/reference/connectors#redis) | Key-value store | Session store | ✅ Cluster / Sentinel |
+| [Redis](/reference/connectors#redis) | Key-value store | Sessions, async jobs, render-cache L2 | ✅ Cluster / Sentinel |
 | [SQLite](/data/sqlite-orm) | Embedded relational | Application data & sessions — dev, staging | ❌ File-based, single process |
 | [DuckDB](/data/duckdb-analytics) | Embedded analytical (OLAP) | In-process analytics & reporting | ❌ Embedded file; read-only sharing |
 | [AI / LLM](/guides/ai) | LLM provider | Generative AI in controllers | — Stateless API calls |
 
-Seven stores have a dedicated deep-dive in this section; Redis — a session
-store, not an ORM — is covered by the
-[connectors.json reference](/reference/connectors#redis) and the
-[Sessions guide](/guides/sessions). The reference documents every connection
-key for all of them.
+Seven stores have a dedicated deep-dive in this section; Redis — a store
+backend, not an ORM — is covered by the
+[connectors.json reference](/reference/connectors#redis), the
+[Sessions guide](/guides/sessions), the [Async jobs guide](/guides/async-jobs)
+and [Caching → redis (shared L2 across
+replicas)](/guides/caching#redis-shared-l2-across-replicas). The reference
+documents every connection key for all of them.
 
 ## Choosing a store
 
