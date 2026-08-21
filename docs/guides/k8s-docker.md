@@ -479,6 +479,54 @@ configuration, which is what you want in almost every cluster.
 
 ---
 
+## Circuit breaking between services
+
+During a rollout, a crash-loop, or a node drain, a downstream service can be
+gone for tens of seconds. Without a breaker every caller keeps paying the full
+timeout-and-retry cost per request — request threads pile up in the healthy
+pods precisely when traffic is being rebalanced onto them. `self.query()`
+ships an opt-in per-authority circuit breaker for exactly this window:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "query": {
+      "circuitBreaker": {
+        "enabled": true,
+        "failureThreshold": 5,
+        "cooldown": "30s"
+      }
+    }
+  }
+}
+```
+
+After 5 consecutive transport-class failures to one authority — each one a
+call whose own retries were already exhausted — the circuit opens and further
+calls fail fast with a machine-readable error (`code: "CIRCUIT_OPEN"`,
+`status: 503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead
+of waiting out another timeout. After the cooldown, one request is let through
+as a probe: if the upstream answers, the circuit closes; if not, it re-arms.
+
+Notes that matter in a cluster:
+
+- **Only transport failures count** — connection refused/reset, timeouts, and
+  the HTTP/2 transport error family. An application response (a `404`, a
+  `422`, a `500` from your own handler) never trips the breaker: the upstream
+  answered, so it is not down.
+- **State is per pod and per authority**, held in the bundle process. It
+  resets on restart — a fresh pod starts with every circuit closed. Replicas
+  do not share breaker state, and that is the intended shape: each pod
+  discovers upstream health through its own traffic.
+- **Fire-and-forget calls** (`critical: false`) rejected while the circuit is
+  open are swallowed log-only, matching their normal error contract — and they
+  are never used as the recovery probe.
+- The breaker complements — it does not replace — [liveness and readiness
+  probes](#liveness-and-readiness-probes): probes decide when a pod receives
+  traffic; the breaker decides how callers behave while the platform converges.
+
+---
+
 ## Stdout logging
 
 In containers, coloured multi-line log output is not useful — log collectors

@@ -75,6 +75,9 @@ The primary server settings file.
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
 | `proxy.requireForwardedHeaders` | boolean | `false` | Opt-in deterministic reverse-proxy classification: when `true`, only requests carrying `X-Forwarded-Host` are classified as proxied — the port-less-Host heuristic is disabled, so internal service-DNS calls (health probes on app routes, mesh hops, sibling-bundle calls) can never rewrite the worker's proxy-host context. Enable only behind a front proxy that always sends `X-Forwarded-Host`. *New in 0.5.25* |
+| `query.circuitBreaker.enabled` | boolean | `false` | Arm the per-authority circuit breaker for `self.query()`. Must be strictly `true` — any other value leaves it dormant. After `failureThreshold` consecutive transport-class failures to one authority (each already representing a call whose own retries were exhausted), further calls fail fast with a `CIRCUIT_OPEN` error (status `503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead of hammering a dead upstream. Gates both HTTP/1.x and HTTP/2 above the protocol dispatch. Resolved once at engine start — changes need a bundle restart. *New in 0.6.13* |
+| `query.circuitBreaker.failureThreshold` | integer | `5` | Consecutive transport-class failures (per `hostname:port`) that open the circuit. Application responses — whatever their status — and caller bugs never count. An invalid value on an enabled block refuses the boot. *New in 0.6.13* |
+| `query.circuitBreaker.cooldown` | string \| number | `"30s"` | How long an open circuit rejects before admitting exactly one critical request as the half-open probe (success closes the circuit, a transport failure re-arms it). Accepts `"30s"`, `"500ms"`, `"1m"` or milliseconds. An unparseable value on an enabled block refuses the boot. *New in 0.6.13* |
 
 ### `region`
 
