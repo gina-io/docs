@@ -875,13 +875,22 @@ self.query(opt, function(err, data) {
 });
 ```
 
+**Async callbacks are owned too.** If the function you pass — to the callback
+form or to `.onComplete()` — is `async` and its promise rejects, the framework
+answers **500** (carrying the incident `ref`) instead of leaving the request
+hanging. This holds on every delivery: success, non-2xx status, and connection
+failure alike. A callback that already sent a response before rejecting is
+absorbed safely (logged server-side, never a double response), and synchronous
+throws behave exactly as before.
+
 ---
 
 ## Async actions
 
 Actions can be declared `async`. The router automatically attaches `.catch()` to
 any thenable returned by an action — unhandled rejections become `500` responses
-rather than crashing the process. You can still add an explicit `try/catch` when
+rather than crashing the process. `self.query()` applies the same ownership to
+an `async` callback's rejection (see *Handling errors* above). You can still add an explicit `try/catch` when
 you want to map specific errors to different status codes.
 
 ```js
