@@ -798,6 +798,61 @@ var route = routing.getRoute('invoice', { id: 'abc-123' });
 
 ---
 
+## API versioning
+
+**gina has no built-in API-versioning mechanism, deliberately — versioning is the
+application's to own.** There is no `version` route field, no version-aware
+dispatch, and no framework opinion about URL prefixes versus headers. Nothing is
+missing: versioning policy is a product decision (when to cut a version, how long
+to support the old one, whether clients opt in), and a framework that picked one
+would be making that decision for you.
+
+The routing primitives you already have cover the common shapes:
+
+**URL prefix** — the most common choice. Give each version its own rules, and its
+own controller via [`namespace`](#namespaces):
+
+```json
+{
+  "invoice-v1": {
+    "namespace": "v1",
+    "url": "/api/v1/invoice/:id",
+    "method": "GET",
+    "param": { "control": "invoice" }
+  },
+  "invoice-v2": {
+    "namespace": "v2",
+    "url": "/api/v2/invoice/:id",
+    "method": "GET",
+    "param": { "control": "invoice" }
+  }
+}
+```
+
+Each namespace loads its own controller file (`controllers/controller.v1.js`,
+`controllers/controller.v2.js`), so the two versions evolve independently
+instead of accumulating branches inside one action.
+
+**Separate bundles** — when versions diverge enough to want their own
+dependencies, config or release cadence, give each its own bundle. Rule names are
+scoped per bundle (`"invoice"` becomes `"invoice@api-v2"` internally), so the
+same rule name in two bundles never collides. See
+[Multi-bundle projects](./multi-bundle).
+
+**Header or media-type negotiation** — read the header in the controller and
+branch, or route through [content negotiation](#content-negotiation). Keep the
+version check in one place (a middleware, or a `setup.js` helper) rather than in
+each action.
+
+:::tip Pick the boundary before the mechanism
+The question that decides this is not URL-versus-header but *what changes
+together*. If a version bump changes only a few payloads, namespaced rules in one
+bundle stay simple. If it changes dependencies, auth, or deploy cadence, separate
+bundles keep the blast radius small.
+:::
+
+---
+
 ## See also
 
 - [Forms and Validation](./forms-and-validation) — client + server form validation with the same `is*` rules

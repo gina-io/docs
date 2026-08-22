@@ -484,11 +484,20 @@ Mid-body `//` or `/* */` comments are **lost** on rewrite — the body is re-ser
 
 ---
 
-## `connector:migrate`
+## `connector:migrate` {#connectormigrate}
 
 *New in 0.3.7-alpha.2*
 
 Lint every `connectors.json` in a project (or a single bundle's file) and optionally apply auto-fixable issues in place. `connector:migrate` is **explicit and opt-in** — the framework never auto-migrates a `connectors.json` at bundle boot. Run it in CI or before committing.
+
+:::warning Not a database migration
+This command never touches your database. It lints the **connection
+configuration** (`connectors.json`) and, with `--fix`, rewrites that JSON — it
+issues no SQL, opens no connection, and has no `up`/`down` concept. gina ships no
+schema/data migration tool by design; see
+[Schema and data migrations](/guides/models#schema-and-data-migrations) for what
+to use and where to run it.
+:::
 
 ```bash
 gina connector:migrate @<project>                 # Scan shared + every bundle

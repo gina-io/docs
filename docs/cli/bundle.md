@@ -393,7 +393,7 @@ The text output shows a status prefix, the padded bundle name, the preferred por
 
 ```text
 [ ok ] inspector        http/2.0 dev https 4208  (running, pid 27007)
-[ ok ] proxy            http/2.0 dev https 4210  (stopped)
+[ ok ] api              http/2.0 dev https 4210  (stopped)
 [ ?! ] unbuilt          (no port)                (stopped)
 ```
 

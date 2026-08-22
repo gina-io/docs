@@ -75,6 +75,9 @@ The primary server settings file.
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
 | `proxy.requireForwardedHeaders` | boolean | `false` | Opt-in deterministic reverse-proxy classification: when `true`, only requests carrying `X-Forwarded-Host` are classified as proxied — the port-less-Host heuristic is disabled, so internal service-DNS calls (health probes on app routes, mesh hops, sibling-bundle calls) can never rewrite the worker's proxy-host context. Enable only behind a front proxy that always sends `X-Forwarded-Host`. *New in 0.5.25* |
+| `query.circuitBreaker.enabled` | boolean | `false` | Arm the per-authority circuit breaker for `self.query()`. Must be strictly `true` — any other value leaves it dormant. After `failureThreshold` consecutive transport-class failures to one authority (each already representing a call whose own retries were exhausted), further calls fail fast with a `CIRCUIT_OPEN` error (status `503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead of hammering a dead upstream. Gates both HTTP/1.x and HTTP/2 above the protocol dispatch. Resolved once at engine start — changes need a bundle restart. *New in 0.6.13* |
+| `query.circuitBreaker.failureThreshold` | integer | `5` | Consecutive transport-class failures (per `hostname:port`) that open the circuit. Application responses — whatever their status — and caller bugs never count. An invalid value on an enabled block refuses the boot. *New in 0.6.13* |
+| `query.circuitBreaker.cooldown` | string \| number | `"30s"` | How long an open circuit rejects before admitting exactly one critical request as the half-open probe (success closes the circuit, a transport failure re-arms it). Accepts `"30s"`, `"500ms"`, `"1m"` or milliseconds. An unparseable value on an enabled block refuses the boot. *New in 0.6.13* |
 
 ### `region`
 
@@ -161,6 +164,41 @@ or `invalidateOnEvents` — a non-expiring L2 key would be orphaned permanently 
 a release-namespace rotation.
 
 See the [Caching guide](../guides/caching) for the full per-route field reference.
+
+### `kv`
+
+Declares the named key-value namespaces reached from application code as
+`gina.kv('<name>')`. Each namespace picks its own backend and its own failure
+policy; a namespace declared as `{}` is in-memory. Asking for a namespace that
+was never declared throws at the call site rather than returning an empty
+store. Absent entirely, the feature is off and `gina.kv()` throws a named
+error. See the [Key-value store guide](../guides/kv) for the operations and
+recipes.
+
+```json
+{
+  "kv": {
+    "default": "cache",
+    "namespaces": {
+      "cache":  { "failMode": "open" },
+      "tokens": { "store": "kvRedis" }
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `default` | string | — | Namespace returned by a no-argument `gina.kv()`. Must name a declared namespace, or the boot refuses. Omit it and every call must name its namespace |
+| `namespaces` | object | — | Namespaces keyed by name (`^[A-Za-z][A-Za-z0-9._-]*$`). `{}` declares a plain in-memory namespace |
+| `namespaces.<name>.store` | string | — | A `connectors.json` entry name. `redis` shares the namespace across hosts; `sqlite` makes it durable and shared across processes on one host. A connector with no KV implementation refuses the boot rather than falling back to memory. Omit for in-memory |
+| `namespaces.<name>.failMode` | `"closed"` \| `"open"` | `"closed"` | What a BACKEND error does. `closed` rejects the operation; `open` resolves it to the miss-shaped result (`null` / `false` / `0`) and logs a warning. Validation errors always reject, whatever the mode |
+| `namespaces.<name>.sweepInterval` | number | `30000` | Milliseconds between expired-entry sweeps. Reads already filter on expiry, so this bounds memory and file growth, not correctness |
+
+:::note Boot config
+Namespaces are built once at bundle startup from the starting bundle's
+settings — a change here needs a bundle restart.
+:::
 
 ### `upload`
 

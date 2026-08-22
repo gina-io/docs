@@ -285,6 +285,52 @@ exec gina-container "$BUNDLE" "$PROJECT"
 
 ---
 
+## Before you scale past one replica
+
+A single gina pod keeps four kinds of state in process memory or on its own
+disk. Every one of them is correct for `replicas: 1` and wrong the moment a
+second pod starts serving the same traffic — and the failures are quiet, not
+loud: a user is logged out when the load balancer moves them, a cached page is
+stale on one pod and fresh on another, a job runs twice or vanishes, an uploaded
+file is visible only to the pod that received it.
+
+Wire all four before raising `replicas`:
+
+| State | Per-pod default | What to wire | Guide |
+|---|---|---|---|
+| **Sessions** | in-memory store | Redis session store | [Sessions](/guides/sessions) |
+| **Render / output cache** | `memory` strategy | `redis` strategy (shared L2) | [Caching](/guides/caching) |
+| **Async jobs** | memory store, or SQLite on the pod's own disk | a shared connector store | [Async jobs](/guides/async-jobs) |
+| **Object storage** | local filesystem driver | a shared adapter, or a shared root | [Object storage](/guides/storage) |
+
+```mermaid
+flowchart LR
+    LB([Load balancer]) --> P1[Pod 1]
+    LB --> P2[Pod 2]
+    LB --> P3[Pod 3]
+    P1 --> R[(Redis: sessions + cache L2)]
+    P2 --> R
+    P3 --> R
+    P1 --> J[(Connector job store)]
+    P2 --> J
+    P3 --> J
+    P1 --> S[(Shared object storage)]
+    P2 --> S
+    P3 --> S
+```
+
+Nothing else in gina holds cross-request state, so once these four point at
+shared backends the bundle is stateless and horizontal scaling is a matter of
+raising `replicas`.
+
+:::tip Verifying it
+Scale to two replicas and exercise one flow per row: sign in and reload until
+the balancer moves you (sessions), request a cached route from both pods
+(cache), enqueue a job and read its status (jobs), upload a file and fetch it
+back (storage). Every failure mode above is silent, so a meaningful smoke needs
+the read to land on a *different* pod than the write did.
+:::
+
 ## Kubernetes
 
 ### Pod spec
@@ -368,6 +414,116 @@ spec:
           ports:
             - containerPort: 3100
 ```
+
+:::caution `replicas: 3` needs shared state first
+This manifest scales to three pods. On the defaults — in-memory sessions, the
+`memory` cache strategy, a pod-local job store and the local-filesystem storage
+driver — that produces random logouts, inconsistent cached pages, and jobs and
+uploads that only one pod can see. Work through
+[Before you scale past one replica](#before-you-scale-past-one-replica) first.
+:::
+
+:::note What the env surface is, and is not
+`GINA_*` and `NODE_*` variables are **selectors** — which project, which
+bundles, which environment and scope, which ports, which log level — plus
+`${secret:}` resolution for credentials. They are not an arbitrary-key override
+mechanism: you cannot set an unrelated bundle-config value by inventing an
+environment variable for it. Bundle configuration lives in the bundle's own JSON
+config, with secrets pulled in via `${secret:}`. See [Secrets](/guides/secrets).
+:::
+
+---
+
+## Service discovery
+
+gina needs no service-discovery client. `self.query()` accepts any hostname, so
+in Kubernetes the answer is the platform's own: give each service its normal
+`Service` DNS name and put that name in the calling bundle's env config.
+
+```json title="src/<bundle>/config/env.json"
+{
+  "prod": {
+    "myproject/api": {
+      "host": "myproject-api.default.svc.cluster.local",
+      "port": 3100
+    }
+  }
+}
+```
+
+Cross-service request correlation rides along automatically — `self.query()`
+propagates `X-Request-Id` and echoes it as a response header.
+
+### Overriding the resolver
+
+When cluster DNS is not the resolver you want for a given scope, set
+`server.resolvers` in the same `env.json`. Entries are matched by `scope`:
+
+```json title="src/<bundle>/config/env.json"
+{
+  "prod": {
+    "server": {
+      "resolvers": [
+        {
+          "scope": "production",
+          "nameservers": ["10.96.0.10"]
+        }
+      ]
+    }
+  }
+}
+```
+
+Leave `resolvers` empty — the template default — to use the pod's own resolver
+configuration, which is what you want in almost every cluster.
+
+---
+
+## Circuit breaking between services
+
+During a rollout, a crash-loop, or a node drain, a downstream service can be
+gone for tens of seconds. Without a breaker every caller keeps paying the full
+timeout-and-retry cost per request — request threads pile up in the healthy
+pods precisely when traffic is being rebalanced onto them. `self.query()`
+ships an opt-in per-authority circuit breaker for exactly this window:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "query": {
+      "circuitBreaker": {
+        "enabled": true,
+        "failureThreshold": 5,
+        "cooldown": "30s"
+      }
+    }
+  }
+}
+```
+
+After 5 consecutive transport-class failures to one authority — each one a
+call whose own retries were already exhausted — the circuit opens and further
+calls fail fast with a machine-readable error (`code: "CIRCUIT_OPEN"`,
+`status: 503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead
+of waiting out another timeout. After the cooldown, one request is let through
+as a probe: if the upstream answers, the circuit closes; if not, it re-arms.
+
+Notes that matter in a cluster:
+
+- **Only transport failures count** — connection refused/reset, timeouts, and
+  the HTTP/2 transport error family. An application response (a `404`, a
+  `422`, a `500` from your own handler) never trips the breaker: the upstream
+  answered, so it is not down.
+- **State is per pod and per authority**, held in the bundle process. It
+  resets on restart — a fresh pod starts with every circuit closed. Replicas
+  do not share breaker state, and that is the intended shape: each pod
+  discovers upstream health through its own traffic.
+- **Fire-and-forget calls** (`critical: false`) rejected while the circuit is
+  open are swallowed log-only, matching their normal error contract — and they
+  are never used as the recovery probe.
+- The breaker complements — it does not replace — [liveness and readiness
+  probes](#liveness-and-readiness-probes): probes decide when a pod receives
+  traffic; the breaker decides how callers behave while the platform converges.
 
 ---
 
