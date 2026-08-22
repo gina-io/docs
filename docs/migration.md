@@ -21,9 +21,9 @@ upward to the target version.
 
 ## 0.6.11 → 0.6.12
 
-**One behaviour change to check** — `Collection.find()`, `findOne()`, `or()` and
-`update()` now **throw** where an undefined-valued filter key previously made the
-filter match **every** record. Everything else in this section is additive.
+**One behaviour change to check** — every `Collection` method that accepts a
+filter object now **throws** where an undefined-valued filter key previously made
+the filter match **every** record. Everything else in this section is additive.
 
 ### Fixed — a non-string field value no longer aborts the whole form validation pass
 
@@ -66,12 +66,31 @@ refusal that was always intended for this input (the matcher carries a guard
 whose message names the offending key) could never fire, because the
 serialization stripped the key before the matcher ran.
 
-Both now throw at the call site:
+The refusal sits at `find()`'s entry, and every filter-object method reaches it —
+`find()`, `findOne()`, `or()`, `update()`, `replace()`, `max()`, `notIn()` and
+`delete()`. The last two arrive transitively: `notIn()` routes a filter-object
+argument straight through `find()`, and `delete()` delegates wholly to `notIn()`.
+Only `notIn()`'s **array** form is exempt, because it never calls `find()`.
 
 ```js
 col.findOne({ id: undefined });        // throws: filter `id` cannot be left undefined
 col.update({ id: undefined }, set);    // throws (previously mutated EVERY record)
+col.delete({ id: undefined });         // throws (previously returned an EMPTY collection)
+col.replace({ id: undefined }, set);   // throws (previously replaced against a match-all)
+col.max({ order: undefined });         // throws (previously aggregated over EVERY record)
+col.notIn({ id: undefined });          // throws — the filter-object form routes through find()
+
+col.notIn(rows, 'id');                 // unaffected — the array form skips find() entirely
 ```
+
+:::caution
+`delete()` is the one most worth auditing. Pre-`0.6.12` it did not quietly no-op on
+an undefined-valued key — it matched **every** record, so `col = col.delete({ id:
+maybeAbsent })` returned an empty collection. (`delete()` builds a filtered copy
+rather than mutating in place, so the loss landed in the value you assigned, not in
+the source collection.) Those call sites are exactly the ones that were silently
+destructive before and now throw.
+:::
 
 **Action required only if you relied on the old behaviour** (an undefined value
 acting as "no constraint"): build the filter conditionally instead — add a key
