@@ -19,6 +19,222 @@ upward to the target version.
 
 ---
 
+## 0.6.12 → 0.6.13
+
+**One behaviour change to check** — an exception thrown by a controller's
+`onReady` or `setup` hook now answers a **500** where it previously crashed the
+bundle process or left the request hanging. Everything else in this release is
+additive and opt-in.
+
+**Pickup: restart *and* rebuild your bundles.** The browser bundle changed. Its
+client-side delta is inert — it is the per-route flag propagation the new rate
+limiter reads on the server, which is dead code in the browser — but the baked
+copy each bundle serves is no longer byte-identical to the shipped one, so run
+`gina bundle:build` for each bundle as well as `gina bundle:restart`.
+
+:::note No settings reset
+`0.6.13` is a patch — the `shortVersion` stays `0.6`, so your
+`~/.gina/0.6/settings.json` is untouched. (`0.6.0` was the reset.)
+:::
+
+### Fixed — an exception in `onReady` or `setup` now answers 500 instead of vanishing
+
+Both router dispatch sites invoked the reserved-action hooks **outside** the
+guarded band, while the main action dispatch five lines below already owned its
+promise. Two distinct failures followed:
+
+- A **synchronous** throw escaped to the process level. On the built-in engine
+  that meant an uncaught exception → `emerg` + `SIGTERM`, killing the whole
+  bundle process and taking every in-flight request with it. Express's own layer
+  catch answered a 500 instead — so the two engines disagreed.
+- An **asynchronous** rejection was unowned: nothing answered the request, which
+  hung to client or proxy timeout, while any work the hook was supposed to do
+  after the throw silently never happened. The only trace was a log line in a
+  stream a daemon-spawned bundle drops.
+
+Both hook loops now run inside the dispatch `try`, and every hook's returned
+promise is owned by the same `.catch` → 500 guard the action carries, naming the
+failing hook in the error detail. The synthesized `setup` wrapper now returns
+the app call's own result, so an async `controllers/setup.js` rejection actually
+reaches that guard rather than being discarded inside the wrapper.
+
+**Action required if a hook of yours can throw or reject.** It now produces a
+500 carrying an `#ERRREF` correlation ref (the full detail is on the paired
+server-side log line) where it previously crashed, hung, or was masked by the
+action's own response. If you were relying on a hook failure being survivable,
+handle it inside the hook.
+
+:::caution Hooks are not a gate
+Hooks are still dispatched **without awaiting**, in the same synchronous frame as
+the action. A rejecting hook does **not** prevent the action from running — its
+side effects may already have executed by the time the 500 reaches the client.
+Treat client retries of non-idempotent actions accordingly, and use route
+middleware, route authorization or DTO validation when you need to refuse a
+request *before* the action runs.
+:::
+
+### Added — a general-purpose key-value primitive (`gina.kv`)
+
+Declare namespaces under `settings.json > kv.namespaces` and reach them as
+`gina.kv('<namespace>')` (or `gina.kv()` for `kv.default`). The handle is
+promise-native, with 13 operations — including several that are hard to get
+right by hand: `setnx` (set-if-absent), `consume` (atomic read-and-delete, so a
+one-shot token's second reader gets `null`), `delIfEquals` (compare-and-delete,
+the safe lock-release primitive), `incr` / `decr` with TTL applied on create
+only, and `getOrSet` with per-process single-flight.
+
+Three backends ship. **In-memory** needs no configuration and counts per
+process. **Redis** serves namespaces shared across hosts and replicas, keeping
+every guarantee server-side (`SET .. PX .. NX`; `GETDEL` where the server
+supports it, a Lua script below redis 6.2; Lua for compare-and-delete and
+counters) — it requires `ioredis` in your project. **SQLite** is the
+zero-dependency durable option: it survives a bundle restart and is visible to
+any process opening the same file, with every read-modify-write inside an
+`IMMEDIATE` transaction so it stays atomic when a second process shares the
+file. It uses `node:sqlite` (a `bun:sqlite` adapter under Bun), so there is
+nothing to install.
+
+Select a backend by pointing a namespace's `store` at a `connectors.json` entry:
+
+```json
+{ "kv": { "namespaces": { "tokens": { "store": "kvRedis" } } } }
+```
+
+Namespaces are **strict-declared**: an unknown name throws at the call site
+rather than silently minting an empty store, and naming a connector that has no
+kv-store implementation refuses the boot rather than degrading quietly to
+memory. Each namespace owns its failure policy — `failMode: "closed"` (the
+default) rejects on backend errors, `"open"` degrades every operation to its
+miss-shaped result with a warning. Values are JSON-serialized, and `null` /
+`undefined` are refused on every write, since a stored `null` would be
+indistinguishable from a miss. TTLs are milliseconds and must be positive
+(`ttl: 0` refuses rather than meaning "no expiry").
+
+The whole feature is dormant with no `kv` block. It is deliberately **not** a
+redis client: no data structures, batch operations, key scanning, binary values
+or first-class locks.
+
+### Added — identified-caller rate limiting
+
+Opt-in quota enforcement at the router, configured under
+`settings.json > server.rateLimit` (`enabled`, `namespace`, `keyField`, `limit`,
+`window`). Counters are fixed windows stored in a kv namespace you declare — so
+choosing that namespace's backend chooses the quota's scope: a redis- or
+SQLite-backed namespace shares one quota across replicas, while an in-memory one
+counts per process. The boot resolver warns about that difference, and about a
+redis connectors entry missing the fail-fast tuning that would otherwise queue
+every gated request through an outage.
+
+The gate is keyed on the **authenticated principal** — the session user, via the
+`server.rateLimit.keyField` you name (required, because the session user's shape
+is yours, not the framework's), or a machine caller. It runs **after** route
+authorization and **before** DTO validation, so the refusal order is
+`401 → 429 → 422` and a throttled caller never receives a validation field map.
+
+:::note This is a quota, not flood control
+A request with **no resolvable principal is skipped**, never bucketed. Keying
+anonymous callers by IP is dishonest behind a reverse proxy, where every socket
+address is the proxy's — one bucket for the whole internet. Anonymous flood
+control belongs to your edge proxy and the built-in HTTP/2 rapid-reset guard;
+statics and the `/_gina/*` family never reach this band, so health and metrics
+are unthrottled by construction.
+:::
+
+Denials answer **429** with `Retry-After` plus the `RateLimit` and
+`RateLimit-Policy` structured fields from
+`draft-ietf-httpapi-ratelimit-headers-11`; allowed limited requests carry them
+too. Per-route overrides ride a top-level `rateLimit` key in `routing.json` —
+`false` exempts a route, an object with `limit` / `window` replaces the default
+policy for that route in its own bucket (a partial object inherits the missing
+key), and shapes are linted at boot so a typo refuses the deploy rather than
+surfacing at the first throttled request. Store outages follow the namespace's
+own `failMode`: `open` admits requests with a warning, `closed` answers 503 with
+`Retry-After` — the caller is not over quota and is not told it is.
+
+Dormant unless `enabled` is strictly `true`; structurally invalid values on an
+enabled block refuse the boot. Policy is resolved once at engine start, so
+changes need a bundle restart.
+
+### Added — an opt-in per-authority circuit breaker for `Controller::query()`
+
+Configured under `settings.json > server.query.circuitBreaker`. After N
+consecutive **transport-class** failures to one authority (default 5, each
+already representing a call whose own retries were exhausted), the circuit opens
+and every further call fails fast with a machine-readable `CIRCUIT_OPEN` error
+(status 503, `retryable: false`, plus the authority and `retryAfterMs`) instead
+of hammering a dead upstream. After the cooldown (default 30s) exactly one
+**critical** request is admitted as the half-open probe, closing the circuit on
+success and re-arming it on failure.
+
+The gate sits above the HTTP/1.x / HTTP/2 protocol dispatch, so an open circuit
+rejects before any connection, retry or pre-flight machinery runs — your
+existing retry invariants are untouched, and retries cannot hammer an open
+circuit by construction.
+
+:::note Only transport failures trip it
+An application response — whatever its status — flows through the success
+terminus as data, so a 500 from a healthy upstream cannot open the circuit.
+Only `GinaHttp2Error` and the socket-level `ECONN` family count, checked on both
+`err.code` and `err.cause.code`.
+:::
+
+Dormant unless `enabled` is strictly `true`; a structurally invalid enabled block
+refuses the boot rather than warn-and-disable. Policy is resolved once at engine
+start, so changes need a bundle restart.
+
+### Fixed — the entity dispatch diagnostics are readable again
+
+The five `DISPATCH` markers in the entity callback machinery were raw
+`console.log` calls. In gina that is the logger's raw-stdout branch: it bypasses
+both the container dispatch and the level gate, so the lines reached neither a
+bundle log file nor `gina tail`, and a daemon-spawned bundle has its child stdout
+filtered as well, so they never reached container logs either — they were
+visible only by running a bundle in the foreground and reading the terminal.
+
+They now go through `console.debug`, so they are off by default and appear when
+the log hierarchy is raised to `debug`, which was the original intent. **No
+action required.**
+
+### Changed — the `proxy` service claim is retired
+
+The service help text, its JSDoc and the docs-site CLI pages named `proxy` as one
+of two framework-internal services you could start, and `gina service:list`
+reported it with status `ok` — for a bundle that cannot serve a single proxied
+request. **Nothing is being removed from your install:** the services directory
+is CLI-generated, gitignored and npmignored, and the published tarball contains
+zero entries for it, so no release ever carried the bundle the text advertised.
+
+Each surface now carries the stance instead: **gina ships no edge or reverse
+proxy by design** — run nginx, Traefik or an ingress controller in front of your
+bundles. That is the position the rest of the documentation already assumed (the
+authentication guidance sends OAuth deployments behind a reverse proxy, and the
+Kubernetes guide is ingress-fronted throughout). No roadmap row ever promised a
+built-in proxy, so nothing planned is cancelled.
+
+### Documentation — two boundaries the framework deliberately does not cross
+
+Neither is a new capability; the point is that neither will be one.
+
+- **API versioning** — the routing guide now states plainly that there is no
+  version route field and no version-aware dispatch, because when to cut a
+  version and how long to support the old one are product decisions a framework
+  would be wrong to make for you. It shows the three shapes the existing
+  primitives already cover: a URL prefix with a per-version namespace, separate
+  bundles when versions need their own dependencies or release cadence, and
+  header negotiation.
+- **Database migrations** — the models guide names the per-database tools to use
+  instead, plus the two things that actually go wrong in practice: run
+  migrations as a discrete step **before** the new version serves, never at
+  bundle boot (where they race themselves the moment there is more than one
+  replica, turning a schema error into a crash-loop instead of a failed deploy
+  step), and keep changes additive during a rolling deploy, because SQL files
+  are validated at call time rather than at boot.
+
+The connector CLI page also gains an explicit warning that **`connector:migrate`
+is not a database migration** — it lints the connection configuration and, with
+`--fix`, rewrites that JSON; it issues no SQL and has no `up` / `down` concept.
+
+
 ## 0.6.11 → 0.6.12
 
 **One behaviour change to check** — every `Collection` method that accepts a
