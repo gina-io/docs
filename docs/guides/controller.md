@@ -839,7 +839,20 @@ Key options:
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
 
-When the callback is omitted, `self.query()` returns a Promise.
+When the callback is omitted, `self.query()` returns a small handle with an
+`.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
+directly. To use `await`, promisify the call (the framework uses the same idiom
+internally):
+
+```js
+var promisify = require('util').promisify;
+
+var data = await promisify(self.query)({ hostname: 'api-internal', path: '/x' }, {});
+```
+
+A non-2xx upstream status rejects the promisified call with the plain
+`{status, error, message}` object described below; a connection failure rejects
+with a native `Error`.
 
 **Error shape**
 
@@ -895,14 +908,16 @@ you want to map specific errors to different status codes.
 
 ```js
 // Minimal async action — router handles unhandled rejections automatically
+var promisify = require('util').promisify;
+
 var Controller = function() {
     var self = this;
 
     this.report = async function(req, res, next) {
-        var data = await self.query({
+        var data = await promisify(self.query)({
             hostname : 'api-internal'
           , path     : '/report/' + req.params.id
-        });
+        }, {});
         self.renderJSON(data);
     };
 };
@@ -911,18 +926,20 @@ module.exports = Controller;
 
 ```js
 // Explicit try/catch when you want fine-grained status codes
+var promisify = require('util').promisify;
+
 var Controller = function() {
     var self = this;
 
     this.report = async function(req, res, next) {
         try {
-            var data = await self.query({
+            var data = await promisify(self.query)({
                 hostname : 'api-internal'
               , path     : '/report/' + req.params.id
-            });
+            }, {});
             self.renderJSON(data);
         } catch (err) {
-            self.throwError(res, err.statusCode || 500, err);
+            self.throwError(res, err.status || 500, err);
         }
     };
 };
