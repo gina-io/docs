@@ -893,8 +893,10 @@ form or to `.onComplete()` — is `async` and its promise rejects, the framework
 answers **500** (carrying the incident `ref`) instead of leaving the request
 hanging. This holds on every delivery: success, non-2xx status, and connection
 failure alike. A callback that already sent a response before rejecting is
-absorbed safely (logged server-side, never a double response), and synchronous
-throws behave exactly as before.
+absorbed safely (logged server-side, never a double response). Synchronous
+throws are owned the same way: on every delivery — success, non-2xx, and
+connection failure alike — a throwing callback answers 500 rather than
+escaping.
 
 ---
 
