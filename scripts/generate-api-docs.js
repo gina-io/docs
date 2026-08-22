@@ -55,6 +55,12 @@ const PATCHES = [
   { re: /(@package)\\s+gina\\.lib/g, to: '@memberof module:lib' },
   // bare @returns with no type/description — jsdoc-to-markdown chokes on it
   { re: /(@returns)\\s*$/gm, to: '@returns {void}' },
+  // gina 0.6.12/0.6.13 shipped a Collection docblock naming only four of the
+  // eight methods that refuse an undefined-valued filter key. Corrected at
+  // source for 0.6.14; this patch keeps the published page honest for the
+  // versions already on npm and self-retires (no match) once the devDep moves.
+  { re: /Filter values must be defined:[^\\n]*throw an/,
+    to: 'Filter values must be defined: find, findOne, or, update, replace, max, notIn and delete - every method that accepts a filter object, with the array form notIn(rows, key) exempt - throw an' },
 ];
 
 function patchedCopy(src) {
