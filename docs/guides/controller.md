@@ -854,6 +854,13 @@ A non-2xx upstream status rejects the promisified call with the plain
 `{status, error, message}` object described below; a connection failure rejects
 with a native `Error`.
 
+The `.onComplete(cb)` listener itself is invoked err-first: on success
+`cb(false, data)`; on failure `cb(err)` with `data` undefined — `err` is the
+plain `{status, error}` object for a non-2xx status or a transport failure
+(the connection-failure case arrives status-wrapped here, where the callback
+form receives the bare `Error`), and a native `Error` for a pre-transport
+failure such as a missing host or an unreadable certificate.
+
 **Error shape**
 
 When the upstream returns a non-2xx status, the callback receives a plain object —
