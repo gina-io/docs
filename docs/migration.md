@@ -72,6 +72,139 @@ relied on `secrets:check` exiting `0` despite printed declaration errors, it
 will now fail** — which is the gate doing its job; fix the declaration it
 names.
 
+### Changed — the `secrets:scan` / `secrets:check` config walk moved into `lib.secrets` (no action required)
+
+Both CLI handlers previously carried their own near-identical copy of the
+walk that enumerates which config files a bundle reads. They now delegate to
+one shared implementation, `lib.secrets.getProjectRequiredKeys(projectPath,
+{scope, bundle})`, so the two commands — and any future boot-time consumer —
+enumerate the same sources by construction and cannot drift apart. **CLI
+behaviour and report output are unchanged by this relocation.**
+
+### Fixed — an exception in an `async` query callback no longer vanishes without a response (#B399) (action possible)
+
+Every app-callback delivery in a controller's `self.query()` — the
+Node-style callback form and the `{onComplete}` facade, on both HTTP/1.1 and
+HTTP/2, success and transport-error deliveries alike — invoked your callback
+bare. A *synchronous* throw was caught by the success-delivery guards, but an
+*asynchronous* rejection was unowned: the request hung until the client or
+proxy timed out, and the only trace floated up to the process-level rejection
+handler.
+
+Every delivery now routes a rejected callback promise into the same
+`throwError` shape the synchronous guards already built.
+
+**Behaviour change:** an `async` query callback whose promise rejects now
+answers **500** (carrying the `#ERRREF` correlation ref) where it previously
+hung. A callback that already responded before rejecting is absorbed by the
+released-response guard — logged server-side, never a double response.
+Synchronous behaviour at every delivery site is byte-unchanged, and plain
+(non-`async`) callbacks mint no promises.
+
+### Fixed — a synchronous throw in a transport-error callback no longer kills the bundle (#B402) (action possible)
+
+The adjacent gap to `#B399`: a synchronous throw inside a `self.query()`
+callback invoked on a **transport-error** delivery was never guarded. All 14
+formerly-bare error-path deliveries — host-missing, circuit refusal, the
+query-scope outer catch, both CA-read catches, HTTP/1.1 ALPN and
+request-error, the HTTP/2 typed terminals and both pre-flight PING failures —
+now wrap the callback.
+
+Previously, on the event- and timer-frame sites the throw escaped to the
+process handler (emerg + `SIGTERM` — **a whole-bundle kill, on both
+engines**), and on the caller-frame sites the query-scope catch re-invoked
+your callback a second time with its own exception as the error argument.
+
+**Behaviour change:** a throwing callback on an error-path delivery now
+answers **500** instead of killing the bundle or double-invoking. Your
+callback still receives the original transport error first, and callbacks
+that do not throw are untouched.
+
+### Fixed — an HTTP/2 transport failure is no longer answered twice (#B403) (no action required)
+
+The app callback received the typed error from the stream-level delivery
+while the **session** error handler independently answered the same request
+through `throwError` — racing graceful degraded-mode handling, so the
+framework's 500 could reach the wire before your response. On a reused
+session it could answer with the *creating* request's context, since session
+listeners bind once at connect.
+
+The session-level answer is retired. Session cleanup and logging stay;
+request notification is owned solely by the stream-level deliveries, which
+fire for every live stream when a session fails. With a Node-style callback a
+connection failure now notifies **exactly once**. HTTP/1.1, which has no
+session layer, already behaved this way.
+
+### Fixed — handle-mode query errors now reach your `onComplete` listener (#B404) (**action required**)
+
+Every error-path `query#complete` emit is single-argument, mirroring the
+callback form's `callback(err)` contract — but both facades' `(err, data)`
+dispatch dereferenced `data.status` unconditionally. A transport error or
+non-2xx outcome therefore crashed the facade and answered 500 with a marker
+that misattributed the failure to *your* callback, and **the listener never
+fired at all**.
+
+Both facades now deliver the single-argument payload as the error: on failure
+`cb(err)` with `data` undefined — a plain `{status, error}` object for a
+non-2xx status or a transport failure, a native `Error` for a pre-transport
+failure (missing host, unreadable certificate, open circuit) — and on success
+`cb(false, data)`.
+
+**Action required if a handle-mode query can fail:** your listener is **now
+invoked** with the error, where previously the framework answered 500 before
+it could run. The app owns the outcome, exactly as in the callback form —
+make sure the listener handles a failing first argument.
+
+### Fixed — HTTP/2 callback-mode queries now deliver non-5xx error statuses (#B405) (action possible)
+
+The dispatch split 5xx → `callback(data)` and every other deliverable non-2xx
+→ the framework's own error answer. Graceful degradation was therefore
+impossible for, say, a 404 from an HTTP/2 upstream — and, measured, the
+documented `util.promisify(self.query)` idiom **never settled** on any
+non-5xx status: the `await` hung and its continuation was silently abandoned.
+HTTP/1.1 has delivered every non-2xx to the callback since its own earlier
+change.
+
+The split is retired: every body-announced non-2xx with a known status code
+now invokes `callback(data)` on **both** transports, matching the documented
+contract.
+
+**Behaviour change:** an HTTP/2 callback-mode query that previously
+auto-answered the original request with the upstream's non-5xx status now
+invokes **your** callback instead — decide there whether to degrade or
+surface it. The 3xx-with-headers redirect replay is unchanged.
+
+### Fixed — `self.query()`'s JSDoc no longer claims the no-callback form returns a Promise (#B401) (no action required)
+
+The no-callback form returns a **handle** exposing `.onComplete(cb)`, which
+is not a thenable — so `await self.query({...})` resolved immediately with
+the handle and silently dropped the result. The JSDoc and the online guide
+now document the real contract and the supported `await` idiom:
+
+```js
+await require('util').promisify(self.query)(options, {});
+```
+
+…including the rejection shapes, each verified against the runtime: a non-2xx
+status rejects with the plain `{status, error, message}` object, a connection
+failure with a native `Error`.
+
+### Fixed — GET and HEAD query parameters no longer lose backslash-escaped characters (#B407) (no action required)
+
+The query pipeline serialized `request.query` and then stripped every
+backslash from the whole document to support nested-JSON value unwrapping. A
+newline (`%0A`) in a value degraded to the letter `n`, a tab to `t`, a
+backslash vanished — and a double quote or a JSON-array value produced
+invalid JSON that silently dropped **every** query parameter on the request.
+
+Nested-JSON string values (`?filter={"a":1}`) are now unwrapped by parsing
+them individually — the same unwrap intent, validated, and correct even when
+the nested content itself carries escapes, which the old unwrap also
+corrupted — and the query then serializes cleanly. Whole-value
+`true`/`false`/`on`/`null` coercion and plain values are unchanged;
+JSON-array parameters and unparsable `{`-leading values now arrive intact
+where they previously killed the whole query.
+
 ## 0.6.12 → 0.6.13
 
 **One behaviour change to check** — an exception thrown by a controller's
