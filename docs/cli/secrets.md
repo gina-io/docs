@@ -46,9 +46,9 @@ $ gina secrets:scan @myproject
 
 ---
 
-## `secrets:check`
+## `secrets:check` {#secretscheck}
 
-Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then any file declared in [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile) — marking each required key `SET` or `UNSET`. **Exits non-zero when any required key is unset**, so it can gate a CI / pre-deploy step.
+Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then the declared lower tier: a file chain from [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile), or the fetched map from [`settings.secrets.exec`](/guides/secrets#exec-bridge-secrets-settingssecretsexec), whose declared command the check **actually runs** (same timeout as the boot, so the verdict matches what booting would do — expect the fetch to run when the gate does). Each required key is marked `SET` or `UNSET` with the tier that satisfied it. **Exits non-zero when any required key is unset, or when the declaration itself is one the runtime would refuse to boot on** — an unreadable declared file, a malformed entry, a failing exec fetch — so it can gate a CI / pre-deploy step without green-lighting a config that cannot start.
 
 The declaration is read the same way the loader reads it: the project's `shared/config/settings.json` first, with the bundle's own `settings.json` on top, so a project-wide chain is picked up for every bundle and a bundle-level one replaces it.
 
@@ -114,7 +114,7 @@ gina secrets:help
 
 | Option | Commands | Description |
 | ------ | -------- | ----------- |
-| `--format=<text\|json>` | `scan`, `check` | Output format. Default `text`. JSON is machine-readable for tooling; `check`'s exit code still reflects unset keys. |
+| `--format=<text\|json>` | `scan`, `check` | Output format. Default `text`. JSON is machine-readable for tooling; `check`'s exit code still reflects unset keys and boot-refusing declarations. |
 | `--scope=<scope>` | `scan`, `check` | Report the *effective* secrets for a deployment scope: the sibling `config_<scope>/` dirs are read-only overlaid on the base config (deep-merge, scope wins). The scope must be registered (`gina scope:list`). The runtime config loader is unaffected — this is introspection only. |
 | `--env=<env>` | `check` | Which env's block `homedir` is read from when resolving a `settings.secrets.file` path. Defaults to the project's default env. |
 | `--env-file=<path>` | `check` | Stand in for the live `process.env` with a `.env`-style file's vars — e.g. a decrypted SOPS export or a CI-exported env. It occupies the **environment tier**, which outranks the file tier, so it still wins over a declared `settings.secrets.file`. |
@@ -133,7 +133,7 @@ $ gina secrets:scan @myproject --scope=production
 # required keys are all present in it
 $ sops -d secrets.sops.env > /run/secrets.env
 $ gina secrets:check @myproject --scope=production --env-file=/run/secrets.env
-$ echo $?   # 0 if every required key is set, non-zero otherwise
+$ echo $?   # 0 if every required key is set AND the declaration would boot; non-zero otherwise
 ```
 
 `--scope` deep-merges each `config_<scope>/<name>.json` over the base `config/<name>.json` (scope wins on conflicting keys; base values the scope doesn't redefine are preserved) and reports the keys of the *effective* result. The two flags work on **separate axes**: `--scope` selects which config to inspect (and therefore which keys are required), while `--env-file` supplies the environment-tier values to check them against — a single encrypted secrets store is fine here, because scope drives config selection, not which secrets file you decrypt. The framework's runtime config loader stays scope-agnostic **about config directories** — it never reads a `config_<scope>/` sibling, so per-scope config selection remains your deploy's responsibility and this command only inspects it. (`--scope` does one further thing since the file tier shipped: it supplies the `${scope}` token when resolving a declared `settings.secrets.file` path, which the runtime takes from `NODE_SCOPE`. That token alone falls back to the project's default scope, so a scope-templated chain resolves without the flag — the `config_<scope>/` overlay above still requires it explicitly and is never applied by default.)

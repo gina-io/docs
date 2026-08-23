@@ -39,6 +39,39 @@ along now refuses the boot cleanly. If a bundle that used to "start" begins
 aborting after this release, the printed cause was always there — it was
 previously invisible.
 
+### Added — exec-bridge secrets (`settings.secrets.exec`) (opt-in, no action required)
+
+A bundle can declare one command — argv array, no shell — whose stdout
+supplies the secrets map, layered beneath the environment exactly like the
+file tier and mutually exclusive with it. The fetch runs once per bundle at
+boot, bounded by a timeout (default 10s) and SIGKILLed on expiry, so a wedged
+secrets endpoint is a fast, named boot refusal rather than a hung boot. See
+the [secrets guide](/guides/secrets#exec-bridge-secrets-settingssecretsexec)
+for the contract and the SOPS / Vault / Kubernetes recipes. Decrypting at the
+container entrypoint remains the better pattern wherever the entrypoint can
+be controlled.
+
+### Changed — `settings.secrets` refuses unknown keys and non-object values (action possible)
+
+A typo'd tier name (`"flie"`, `"exce"`) or a non-object `secrets` value used
+to be silently ignored, degrading resolution to environment-only without a
+word. Boot now refuses with a named config error. **If a bundle carries junk
+keys inside `settings.secrets`, it will stop booting after this release** —
+the fix is to remove or correct the key, and the error message names it.
+Declaring both `file` and `exec` also refuses (the tiers do not layer); a
+bundle inheriting a project-wide `file` chain opts out with `"file": null`
+beside its own `exec` block.
+
+### Fixed — `secrets:check` exits non-zero on boot-refusing declarations (action possible)
+
+Declaration errors — an unreadable declared file, a malformed entry, a
+failing exec fetch — previously only printed, and the exit code stayed `0`
+whenever the environment happened to carry the required keys, so a CI gate
+could green-light a config the runtime refuses to boot. **If a pipeline
+relied on `secrets:check` exiting `0` despite printed declaration errors, it
+will now fail** — which is the gate doing its job; fix the declaration it
+names.
+
 ## 0.6.12 → 0.6.13
 
 **One behaviour change to check** — an exception thrown by a controller's

@@ -324,13 +324,11 @@ consumes it fails. For SOPS, Vault or a KMS, keep decrypting at the container
 entrypoint so the values land in the environment, which this tier already
 prefers. See [At-rest encryption](#at-rest-encryption-deployment-side-note).
 
-A network-backed backend (Vault, SOPS with a cloud KMS) is not simply
-unimplemented — it is structurally blocked today. `lib/secrets` is fully
-synchronous and the config loader holds a synchronous initialisation
-contract, so such a backend would put a network round-trip inside a
-synchronous boot path, where a KMS hiccup becomes a *hung* boot rather than a
-failed one. The entrypoint decrypt is the right answer for those, and keeping
-it there is what keeps a KMS call off the boot path.
+When the entrypoint cannot be controlled, the
+[exec bridge](#exec-bridge-secrets-settingssecretsexec) below runs your
+decryption command *for* you at boot, with a hard fail-fast bound. The
+entrypoint decrypt remains the better pattern wherever it is available —
+values land in the environment, which every tier already prefers.
 
 ### Behaviour worth knowing
 
@@ -425,6 +423,158 @@ nothing, the broader pattern is the safe one.
 :::
 
 ---
+
+## Exec-bridge secrets (`settings.secrets.exec`)
+
+A bundle can declare **one command** whose output supplies the secrets map —
+your own secrets CLI, run by the framework at boot. It is the sanctioned
+in-process route for SOPS, Vault or Kubernetes Secrets when you cannot
+control the container entrypoint; the framework ships **no vendor SDK and no
+network code** — the vendor's CLI already owns authentication, endpoints and
+configuration.
+
+:::info Prefer the platform-native pattern where you can
+Decrypt at the entrypoint (`sops exec-env`), or let the platform inject the
+values (Kubernetes `envFrom` secretRef, ECS task secrets, Vault
+agent-injector). Values then land in the environment, which every tier
+already prefers, and the fetch stays off the boot path entirely. The exec
+bridge exists for environments where that is not available — it *supports*
+the pattern, it does not replace it.
+:::
+
+```json title="<bundle>/config/settings.json"
+{
+  "secrets": {
+    "exec": {
+      "command": ["sops", "decrypt", "--output-type", "json", "${project}/secrets.enc.json"],
+      "timeout": 10000
+    }
+  }
+}
+```
+
+`command` is an **argv array — no shell**. The first element is the binary
+(resolved through the inherited `PATH`); the ordinary config tokens
+(`${homedir}`, `${scope}`, `${project}`, …) substitute per element. Quoting,
+pipes and redirection are not available; when a pipeline is genuinely needed,
+ship it as a small script file and name that script here. `timeout` is
+optional (milliseconds, default `10000`).
+
+### The output contract
+
+The command's stdout must be a **single flat JSON object of string values**:
+
+```json
+{ "DB_PASSWORD": "s3cret", "TLS_KEY": "-----BEGIN KEY-----\nline1\n-----END KEY-----" }
+```
+
+Multiline values (PEM keys) survive as ordinary JSON strings. Anything else
+— invalid JSON, an array, a nested object at the top level, a non-string
+value — refuses the boot. The output is the secrets payload, so **stdout is
+never echoed** into any error, log or report: a parse failure says so
+without quoting anything, and a non-string value names its key at debug
+level only.
+
+### Fail fast, never hang
+
+The fetch runs **once per bundle at boot**, eagerly, and never per request.
+The child is bounded by `timeout` and killed with `SIGKILL` on expiry —
+`SIGKILL` deliberately, because a wedged child can ignore `SIGTERM` and a
+hung fetch would be a hung boot, the exact failure this bound exists to rule
+out. Every failure refuses that bundle's boot with the cause named:
+
+| Failure | What you see |
+| --- | --- |
+| Timeout | `command timed out after 10000ms and was killed` |
+| Missing binary | `command not found: sops` |
+| Non-zero exit | `command failed (exit N)` + the last stderr lines (never stdout) |
+| Malformed output | `output is not valid JSON …` (no excerpt) |
+
+```mermaid
+flowchart LR
+    B[bundle boot] --> V{secrets block valid?}
+    V -- no --> R[boot refused,\ncause named]
+    V -- yes --> F[run command once\ntimeout + SIGKILL bound]
+    F -- fails --> R
+    F -- flat JSON map --> RES[resolve each key:\nenvironment first,\nfetched map fills gaps]
+```
+
+### The environment still wins
+
+Exactly like the [file tier](#the-environment-always-wins): a **non-empty**
+environment value always beats the fetched map, because every production
+delivery mechanism arrives through the environment and a fetch must never
+shadow the credential the platform injected. A key that is set but *empty*
+in the environment falls through to the fetched map with a warning naming
+the key — the same behaviour, for the same reason.
+
+### One tier or the other, never both
+
+`file` and `exec` are **mutually exclusive** — declaring both refuses the
+boot. No ordering between them has ever been defined, and refusing is
+relaxable later where a shipped ordering would be locked forever. The case
+you will actually meet: the project's *shared* `settings.json` declares a
+`file` chain and one bundle wants `exec` — the config merge folds both into
+that bundle's block. Opt out of the inherited chain explicitly:
+
+```json title="<bundle>/config/settings.json"
+{
+  "secrets": {
+    "file": null,
+    "exec": { "command": ["/opt/app/bin/fetch-secrets"] }
+  }
+}
+```
+
+Also stricter, deliberately: `settings.secrets` now **refuses unknown keys
+and non-object values** at boot instead of silently ignoring them. A typo'd
+tier name used to degrade to environment-only resolution without a word —
+now it is a named config error.
+
+### Recipes
+
+Pass credentials to the command via **environment variables, never argv** —
+argv is visible in `ps`. The child inherits the bundle process's
+environment, which is what lets `VAULT_ADDR`, `KUBECONFIG` or AWS
+credentials reach the vendor CLI. Prefer whole-element tokens
+(`"${project}/secrets.enc.json"`) over tokens embedded mid-element: a token
+that resolves to an empty value inside an element changes the argument
+silently, and the command's own failure is then the only backstop.
+
+**SOPS** — the cleanest fit; on a flat secrets file it emits the contract
+directly:
+
+```json
+"exec": { "command": ["sops", "decrypt", "--output-type", "json", "${project}/secrets.enc.json"] }
+```
+
+**Vault** — `vault kv get -format=json` nests the map under `.data.data`,
+so wrap it in a script (auth via `VAULT_ADDR` / `VAULT_TOKEN` in the
+environment):
+
+```bash title="bin/fetch-secrets.sh"
+#!/bin/sh
+exec vault kv get -format=json secret/myapp | jq '.data.data'
+```
+
+**Kubernetes** — first choice is no exec at all: `envFrom: secretRef` in
+the pod spec puts the Secret straight into the environment and the default
+backend reads it with zero configuration. Where that is not possible,
+`kubectl get secret` returns base64-encoded `.data`, so decode in a wrapper:
+
+```bash title="bin/fetch-secrets.sh"
+#!/bin/sh
+exec kubectl get secret myapp-secrets -o json | jq '.data | map_values(@base64d)'
+```
+
+### `secrets:check` runs it too
+
+[`secrets:check`](/cli/cli-secrets#secretscheck) validates the declaration
+through the *same* shared guards as the boot and then **runs the same
+command with the same timeout**, so its verdict matches what a boot would do
+— a validate-only mirror would report every exec-supplied key `UNSET`.
+Expect the fetch to run when the gate does. Declaration and fetch errors
+fail the gate's exit code (see the CLI page).
 
 ## Fail-closed semantics
 
@@ -682,10 +832,11 @@ decrypt — decrypt at the entrypoint, as below.
 :::
 
 Keep encryption-at-rest out of the bundle's config dir. Populate
-`process.env` from a decrypt step at container entrypoint — which is also
-where SOPS, Vault and KMS belong, since a network-backed backend inside the
-framework's synchronous boot path would turn a KMS hiccup into a hung boot.
-A few common shapes:
+`process.env` from a decrypt step at container entrypoint — still the first
+choice for SOPS, Vault and KMS wherever the entrypoint is yours to control;
+where it is not, the [exec bridge](#exec-bridge-secrets-settingssecretsexec)
+runs the decrypt command for you at boot, timeout-bounded so a KMS hiccup is
+a failed boot rather than a hung one. A few common entrypoint shapes:
 
 ```bash title="entrypoint.sh (SOPS example)"
 #!/bin/sh
