@@ -19,6 +19,26 @@ upward to the target version.
 
 ---
 
+## 0.6.13 → 0.6.14
+
+### Fixed — a crash during bundle bootstrap now aborts loudly instead of hanging (no action required)
+
+A synchronous throw inside the framework's boot callback used to surface as an
+unhandled promise rejection: it was logged at error level, the process neither
+started nor exited, and `gina bundle:start` sat on its 60-second startup timer
+before reporting a timeout — with no cause attached.
+
+The whole boot frame now routes every failure into the framework's boot
+terminal: an emerg-level line the daemon's startup watchdog matches on (it
+kills the child and prints the cause immediately), a synchronous stderr flush
+that survives the exit, and exit code `1`.
+
+**No action is required.** One behaviour change worth knowing: a throw late in
+the boot sequence that previously left a half-initialised process limping
+along now refuses the boot cleanly. If a bundle that used to "start" begins
+aborting after this release, the printed cause was always there — it was
+previously invisible.
+
 ## 0.6.12 → 0.6.13
 
 **One behaviour change to check** — an exception thrown by a controller's
