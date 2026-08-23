@@ -839,7 +839,27 @@ Key options:
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
 
-When the callback is omitted, `self.query()` returns a Promise.
+When the callback is omitted, `self.query()` returns a small handle with an
+`.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
+directly. To use `await`, promisify the call (the framework uses the same idiom
+internally):
+
+```js
+var promisify = require('util').promisify;
+
+var data = await promisify(self.query)({ hostname: 'api-internal', path: '/x' }, {});
+```
+
+A non-2xx upstream status rejects the promisified call with the plain
+`{status, error, message}` object described below; a connection failure rejects
+with a native `Error`.
+
+The `.onComplete(cb)` listener itself is invoked err-first: on success
+`cb(false, data)`; on failure `cb(err)` with `data` undefined — `err` is the
+plain `{status, error}` object for a non-2xx status or a transport failure
+(the connection-failure case arrives status-wrapped here, where the callback
+form receives the bare `Error`), and a native `Error` for a pre-transport
+failure such as a missing host or an unreadable certificate.
 
 **Error shape**
 
@@ -875,25 +895,38 @@ self.query(opt, function(err, data) {
 });
 ```
 
+**Async callbacks are owned too.** If the function you pass — to the callback
+form or to `.onComplete()` — is `async` and its promise rejects, the framework
+answers **500** (carrying the incident `ref`) instead of leaving the request
+hanging. This holds on every delivery: success, non-2xx status, and connection
+failure alike. A callback that already sent a response before rejecting is
+absorbed safely (logged server-side, never a double response). Synchronous
+throws are owned the same way: on every delivery — success, non-2xx, and
+connection failure alike — a throwing callback answers 500 rather than
+escaping.
+
 ---
 
 ## Async actions
 
 Actions can be declared `async`. The router automatically attaches `.catch()` to
 any thenable returned by an action — unhandled rejections become `500` responses
-rather than crashing the process. You can still add an explicit `try/catch` when
+rather than crashing the process. `self.query()` applies the same ownership to
+an `async` callback's rejection (see *Handling errors* above). You can still add an explicit `try/catch` when
 you want to map specific errors to different status codes.
 
 ```js
 // Minimal async action — router handles unhandled rejections automatically
+var promisify = require('util').promisify;
+
 var Controller = function() {
     var self = this;
 
     this.report = async function(req, res, next) {
-        var data = await self.query({
+        var data = await promisify(self.query)({
             hostname : 'api-internal'
           , path     : '/report/' + req.params.id
-        });
+        }, {});
         self.renderJSON(data);
     };
 };
@@ -902,18 +935,20 @@ module.exports = Controller;
 
 ```js
 // Explicit try/catch when you want fine-grained status codes
+var promisify = require('util').promisify;
+
 var Controller = function() {
     var self = this;
 
     this.report = async function(req, res, next) {
         try {
-            var data = await self.query({
+            var data = await promisify(self.query)({
                 hostname : 'api-internal'
               , path     : '/report/' + req.params.id
-            });
+            }, {});
             self.renderJSON(data);
         } catch (err) {
-            self.throwError(res, err.statusCode || 500, err);
+            self.throwError(res, err.status || 500, err);
         }
     };
 };
