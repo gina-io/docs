@@ -19,6 +19,163 @@ upward to the target version.
 
 ---
 
+## 0.6.14 → 0.6.15
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the client-boot,
+> link and popin fixes below would not reach a browser at all.
+
+### Fixed — client handlers now wait for the routing table (action: timing only)
+
+The client routing table arrives only by async fetch — the page deliberately
+whispers an empty stub rather than inlining it — yet `gina.ready` handlers and
+the auto-boot validator released at `DOMContentLoaded`. Anything calling
+`getRoute()` or `toUrl()` during handler or form-bind initialisation therefore
+ran against an empty table.
+
+Loopback wins that race by single-digit milliseconds, which is why development
+and the local test suites never see it. A real deployment loses it by 150ms or
+more on **every** page load, deterministically. A validator form rule naming a
+route then threw inside the init listener, the event dispatch swallowed the
+throw, and that instance's `ready` never fired — silently, with one uncorrelated
+console error as the only artefact.
+
+All three release paths now gate on the routing dependency *settling*: the
+ready-list scheduler, the validator auto-boot poll, and the late-registration
+path (a handler registered after `DOMContentLoaded` previously bypassed the
+scheduler and fired immediately). Settled deliberately means **loaded or
+failed** — a broken routing endpoint still releases your handlers rather than
+hanging the page — and a parse-time 5-second fallback force-settles with a
+console error in degenerate shapes where no fetch is ever issued.
+
+**The only action is to expect different timing.** On deployed tiers your
+`gina.ready` handlers now fire when routing is actually available, typically
+150ms–1.3s later than before. On loopback and in development the difference is
+single-digit milliseconds. Pages that do not use client routing are unaffected
+apart from the timing. If a handler of yours depended on running at
+`DOMContentLoaded` specifically — rather than "as early as possible" — register
+it with a native `DOMContentLoaded` listener instead of `gina.ready`.
+
+### Fixed — client `getRoute()` reports a missing routing table instead of crashing (no action required)
+
+The client `getRouting()` returns `null` by design when nothing matches: an
+empty table before the routing fetch lands, or a bundle with no rules. The bare
+dereference of that `null` sat one line *above* the diagnostic built for the
+degraded-table case — so the very case the diagnostic existed for was the one it
+could never report, surfacing instead as a context-free `TypeError`.
+
+A named guard now throws `bundle X has no routing table for rule Y (client:
+routing config not loaded yet, or empty)`, on both the client and the server.
+
+### Fixed — a failed routing fetch now leaves console evidence (no action required)
+
+The dependency bus fires its event on fetch **failure** as well as success —
+that is what keeps the page booting — but the listener discarded the error it
+carried. A genuinely failed fetch (a non-OK status caught by the response guard)
+booted the framework permanently degraded, with an empty routing table and zero
+console output.
+
+The listener now reads and reports the carried error, naming the consequence:
+client `getRoute()`/`toUrl()` degraded until reload.
+
+### Fixed — a couchbase `COUNT` query can no longer hang the request (action possible)
+
+The `@return {number}` branch parsed the COUNT alias out of the query text and
+dereferenced the match without a guard. `SELECT COUNT(DISTINCT a.b) AS n` — the
+pattern cannot span the space inside the parentheses — and an unaliased
+`SELECT COUNT(*)` both produced a null match and threw.
+
+The severity was not the throw but where it landed: inside the connector's own
+result callback, so no 5xx was ever produced. A promisified caller never
+settled and the request hung until the client or proxy timed out, leaving one
+uncorrelated log line; behind an HTTP/2 inter-bundle client the stall was then
+retried. It was invisible in development too — the dev path strips only the
+first comment block, so a commented-out parsable COUNT elsewhere in the file
+kept the regex satisfied locally while production, which strips every comment,
+threw on the identical file.
+
+The branch now derives the count from the first projected column with no regex
+at all, guarded against empty result sets, empty rows and null payloads —
+exactly as the mysql, postgresql, scylladb and sqlite connectors already did,
+and as the documented contract (first key of the first row) already stated.
+
+**Action if a multi-column projection puts its COUNT anywhere but first:** the
+returned value is now the first column rather than the aliased one, consistent
+with every other connector. Reorder the projection so the count is first, or
+read the row shape directly.
+
+### Fixed — couchbase annotation types are normalised and bounded (action possible)
+
+Both the `@return` type and each `@param` type feed exact-match comparisons
+whose arms are all lowercase — the return type against the branch chain that
+dispatches the declared shape, each param type against the switch in the
+parameter cast. A capitalised or space-padded type such as `{Number}` or
+`{ number }` therefore matched nothing and was silently skipped: the caller
+received the raw row array instead of the declared shape, and the parameter was
+left uncast. Both are now trimmed and lowercased at extraction, as the four
+sibling connectors already did.
+
+Both captures were also greedy, so a second brace pair on the same line bled
+into the extracted type (`@param {a} and {b}` yielded `a} and {b`), which then
+matched no cast arm either. Both are now bounded to the first brace pair.
+
+**Action if any of your couchbase queries carry a capitalised or padded type:**
+annotations that previously fell through silently now reach their branch, so a
+query declaring `@return {Number}` begins returning the declared shape rather
+than the raw row array — which is what it always asked for, but may not be what
+your calling code currently unpacks. `@options` deliberately keeps its greedy
+capture: it holds a nestable object literal rather than a single type token, and
+bounding it would truncate a nested object.
+
+### Fixed — the public link API names its error instead of throwing a bare TypeError (no action required)
+
+Calling `gina.link.request(url)` — or a registered link's `.request(url)` with a
+foreign url — for a url that no link is registered for dereferenced the null
+resolution and threw a bare `TypeError`. It now throws a named error identifying
+the url and the likely cause: never bound, or bound by a later construction that
+the published instance cannot see.
+
+The miss is also detected *before* the supersede step, so a mistyped url no
+longer aborts a legitimate request that is still in flight. Click-driven links
+are unaffected — both click paths always resolve a real registration, so they
+cannot reach the miss.
+
+### Fixed — the popin stylesheet no longer restyles every dialog on the page (ACTION REQUIRED in two cases)
+
+The popin sheet shipped its `::backdrop` rule (dark overlay + blur) unscoped on
+the bare `dialog` element, so gina painted its backdrop on **any** `<dialog>` a
+page opened, related to gina or not. It is now scoped to
+`dialog.gina-popin-container::backdrop`, matching the reduced-motion rules that
+were already scoped.
+
+**Action in two cases:**
+
+1. **A page that relied on the unscoped rule to style its own dialogs** must now
+   style them itself. The previous appearance was
+   `background-color: rgba(0, 0, 0, 0.75); backdrop-filter: blur(6px);` on
+   `dialog::backdrop` — copy that into your own stylesheet if you want it back.
+2. **A popin dialog element supplied by your own markup** (gina adopts an
+   existing element by id rather than creating one) needs the
+   `gina-popin-container` class on the `<dialog>` to keep gina's backdrop.
+   Popins whose element gina creates already carry it.
+
+### Changed — a changelog fragment must cite the tracker id its filename names (contributors only)
+
+Only a fragment's body is rendered into `CHANGELOG.md` and the published
+tarball, so an id carried by the filename and the commit message but missing
+from the body ships an **unnumbered** changelog entry — and anyone triaging by
+id gets a false zero. Measured across all 937 historical fragments, roughly 60
+shipped entries are unnumbered this way. The pre-commit guard now stops the next
+one at commit time rather than at cut time.
+
+Recognised id families are an explicit allowlist rather than a generic
+letters-then-digits pattern, because the generic form false-positives on real
+filenames (`express5`, `npm12`, `s3`) and a false positive would block a commit.
+A filename encoding no recognised id is skipped, never failed.
+
+**This affects contributors to gina itself, not consumers of the framework.**
+
 ## 0.6.13 → 0.6.14
 
 ### Fixed — a crash during bundle bootstrap now aborts loudly instead of hanging (no action required)
