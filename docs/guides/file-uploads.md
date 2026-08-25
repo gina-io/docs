@@ -695,5 +695,10 @@ This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
   `data-gina-form-*` form layer the upload attributes extend.
 - [Storage](/guides/storage) — where uploaded files can go instead of a plain
   directory: content-addressed and sharded layouts, deduplication, size tiering,
-  resumable streams, and HTTP Range serving.
+  resumable streams, and HTTP Range serving. Its
+  [Performance, stated plainly](/guides/storage#performance-stated-plainly)
+  section carries the measured tuning guidance — the 64KB size-tiering knee and
+  the `fsync` throughput crossover — and says which defaults are benchmarked and
+  which are merely reasoned. The upload parser itself exposes only limits, not
+  tuning knobs.
 - [settings.json](/reference/settings) — the `upload` configuration block.
