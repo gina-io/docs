@@ -19,6 +19,110 @@ upward to the target version.
 
 ---
 
+## 0.6.15 → 0.6.16
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the link fix below
+> would not reach a browser at all. `gina.min.js` differs from `0.6.15`;
+> `gina.min.css` and `gina.onload.min.js` are unchanged.
+
+### Security — concurrent uploads of the same filename no longer corrupt one another (ACTION REQUIRED in one case)
+
+The multipart parser derived each file's on-disk destination from the filename
+the client sent — `<upload dir>/<filename>` — with nothing in the path to
+distinguish one part, or one request, from another. Two uploads sharing a
+filename therefore opened two write streams on a single path with independent
+file offsets and interleaved their bytes into one hybrid file matching neither
+upload, while the framework reported success to both callers.
+
+This was measured on a live bundle before the fix, not inferred. Twelve
+concurrent uploads of one filename left **one** corrupted file where twelve
+intact ones were sent. A single request carrying two same-named parts produced
+one file mixing both, with the reported size still that of the first part.
+
+The multipart parse runs **before routing and before any middleware**, so
+reaching it required neither authentication nor a valid route: a POST to an
+unknown url answers `404` to the client and still writes the file to disk. No
+application configuration could avoid it either — the upload schema surface
+carries no uniquify, rename or overwrite key, and a group's `path` is static.
+
+Uploads now stage under a server-generated random name — 32 hex characters plus
+a `.part` suffix — minted once per part. This is the convention multer and
+formidable have always used, and it has two properties an "append a suffix to
+the client's name" scheme does not: client-controlled bytes never reach the
+filesystem, and a long-but-legal client filename cannot be pushed past the
+operating system's filename limit into a request failure.
+
+**Action if your own code derives a display name or a public URL from the
+basename of `req.files[].path`:** read `req.files[].originalFilename` instead.
+That field is unchanged, it is still the name `self.store()` publishes the file
+under, and the documented behaviour of keeping each file's original name is
+unaffected. Only the basename of the *temporary staging* path has changed, and
+that field was always documented as a temporary path.
+
+### Fixed — the documented fluent `store(target).onComplete(cb)` form works again (no action required)
+
+The fluent upload-persistence form this guide documents threw
+`TypeError: self.store(...).onComplete is not a function` on every stable from
+`0.6.0` through `0.6.15`. `store()` was accidentally declared `async`, and an
+`async` function always returns a Promise — so the deliberate `{ onComplete }`
+facade came back wrapped in a Promise that carries no `onComplete`. The first
+worked example on the uploads page was dead code on every release that
+documented it.
+
+The declaration is no longer `async`. Nothing depended on the promise: the body
+contains no `await`, nothing in the framework awaits the call, and the promise
+resolved *before* the upload completed in any case — so it never meant what an
+awaiting caller would assume.
+
+Both forms now behave as documented. The fluent form returns its handle
+synchronously, and the three-argument callback form
+`self.store(target, files, cb)` is byte-unchanged. The TypeScript declaration
+now describes the fluent return shape instead of `Promise<void>`, which had
+documented the bug as the contract.
+
+### Fixed — the page whisper no longer exports the forms mocks group (ACTION REQUIRED in one case)
+
+The RFC5987-encoded `page.environment.forms` export — the one the client loader
+parses into `gina.forms` — shipped the entire bundle forms catalog into every
+page in every environment, mocks group included. Mocks are development fixture
+data walked from a bundle's `forms/mocks/` directory, and the routing exports
+one line above this one were already stubbed to `{}` deliberately, for page
+weight.
+
+The whisper now ships the catalog minus mocks in **every** environment, not just
+outside development. That is deliberate: excluding it only in production would
+manufacture a `gina.forms` shape that differs between environments — a group
+present in development and absent in production — which is the
+works-in-development-fails-in-production class of defect.
+
+Nothing else changes. Rules and custom validators ride the whisper exactly as
+before, and every server-side surface keeps the complete catalog: `page.forms`,
+your templates, server-side validation, and the Inspector's forms catalog card.
+The shared catalog object is never mutated — the exclusion is a shallow copy
+made only to feed the export.
+
+**Action if your own client code read `gina.forms.mocks`:** whisper the data
+yourself from a controller. The framework's own client bundle never consumed
+that group, so if you have not referenced it by name there is nothing to do.
+
+### Fixed — the link API names its error when the anchor has left the DOM (no action required)
+
+Calling the public link API for a registered url whose anchor is no longer in
+the document dereferenced the null lookup and threw a bare `TypeError` carrying
+no context. There is no deregistration path, so a registration outlives its
+element — a page that re-renders its anchors after binding produces exactly this
+state.
+
+It now throws a named error identifying the link id, the url and the cause. The
+miss is also detected beside the unregistered-url guard, **before** the
+supersede step, so it no longer aborts a request that was already in flight nor
+invalidates that request's response handling.
+
+Click-driven links cannot reach this case: both click paths resolve on the
+element that was just operated, so the element is present by construction.
+
 ## 0.6.14 → 0.6.15
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
