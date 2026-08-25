@@ -57,7 +57,7 @@ flowchart LR
 | `size` | Size in bytes. |
 | `encoding` | The part's transfer encoding. |
 | `group` | The upload group the part was tagged with (see [Configuring uploads](#configuring-uploads)). |
-| `path` | The absolute path of the **temporary** file on disk. |
+| `path` | The absolute path of the **temporary** file on disk. Its basename is server-generated and opaque — read `originalFilename` for anything a person will see. |
 
 A minimal controller that accepts an upload and moves it into place:
 
@@ -140,6 +140,15 @@ concurrent reader never observes a partially-written file under the final name, 
 failed move leaves both the staged source file and any pre-existing destination intact.
 (Before 0.6.3, every failure surfaced as `No file to upload` and files were written
 directly to their final name.)
+
+Concurrent uploads that share a filename are safe on the way **in**: each upload
+streams to its own server-generated staging file, so two requests can never write to
+one path, whatever their clients called the file. They are not automatically distinct
+on the way **out** — `store()` publishes each file under its original name, so two
+uploads of `invoice.pdf` into the same target directory resolve to the same
+destination and the second replaces the first. That replacement is atomic (a reader
+never sees a torn file), but it is still a replacement: if you need to keep both, give
+`store()` a different target per upload, or rename the file before storing it.
 
 :::note `store()` moves; it does not validate
 `self.store()` does no size, extension, or count checking — it just relocates
@@ -684,4 +693,12 @@ This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
   `self.throwError()`, and reading the request.
 - [Forms and Validation](/guides/forms-and-validation) — the
   `data-gina-form-*` form layer the upload attributes extend.
+- [Storage](/guides/storage) — where uploaded files can go instead of a plain
+  directory: content-addressed and sharded layouts, deduplication, size tiering,
+  resumable streams, and HTTP Range serving. Its
+  [Performance, stated plainly](/guides/storage#performance-stated-plainly)
+  section carries the measured tuning guidance — the 64KB size-tiering knee and
+  the `fsync` throughput crossover — and says which defaults are benchmarked and
+  which are merely reasoned. The upload parser itself exposes only limits, not
+  tuning knobs.
 - [settings.json](/reference/settings) — the `upload` configuration block.

@@ -696,6 +696,70 @@ Inline objects (`sharded` or `cas` — `stream` never inlines) are in the sharde
 
 ---
 
+## Performance, stated plainly
+
+Two of the defaults below come from measurement; the rest are reasoned. This
+section says which is which, because a tuning knob you cannot attribute is a
+knob you should not turn.
+
+### Size tiering: the 64KB default is a measured knee
+
+`inlineThreshold` defaults to `"64KB"` because that is where the embedded store
+stops winning. Below it, inline puts are **2.7–13x faster** than the
+temp-and-rename file path — one transaction, no filesystem round-trip. Above it,
+the same path becomes unstable. If your objects cluster well under 64KB, raising
+the threshold is the single highest-leverage change available; if they cluster
+just above it, lowering it to `"0B"` (tiering off) removes a branch that never
+pays.
+
+Changing it is **retroactively safe**: reads follow where each object's bytes
+actually live, so existing objects stay readable on either side of the move. The
+tradeoff is visibility, not correctness — sub-threshold objects are not
+individually visible on disk (they live inside `.meta.db`, which any root-level
+backup still carries), and on a connector-backed store they land in that backend.
+
+### `fsync`: about 2% at 100 Mbps, dominant at 10 Gbps
+
+`cas` and `stream` fsync by default. The measured cost of the per-segment flush
+is roughly **2% of network-paced ingest at 100 Mbps** — invisible — but it
+becomes **fsync-dominant on a 10 Gbps LAN**. That crossover is the whole decision:
+on ordinary internet-facing ingest, leave it on. On a fast local network where
+you are moving bulk data and can accept sharded-class durability, `fsync: false`
+is the knob that matters. See [Durability, stated plainly](#durability-stated-plainly)
+for exactly what you give up.
+
+### `chunkSize` sets the write stream's high-water mark
+
+Under `stream`, `chunkSize` (default `"8MB"`) becomes the write stream's
+`highWaterMark` — the same syscall size, with no hand-rolled buffer and no extra
+copy — and is echoed back by `createUpload()` so a client can size its segments
+to match. A client may still send any segment size; this is a tuning knob, not a
+protocol constraint.
+
+:::caution It does not buy you contiguity
+gina neither prevents nor can prevent fragmentation. Node exposes no `fallocate`
+binding, and `ftruncate` produces a fully **sparse** file, so contiguity is a
+filesystem and volume concern (XFS extent hints and the like) — never something
+this key delivers.
+:::
+
+### What is *not* benchmarked
+
+`sweepInterval` and `sessionTtl` are **reasoned defaults, not measurements**.
+`sweepInterval` is a reclaim-latency bound; `sessionTtl` is sized so a
+paused-then-resumed upload over a bad link comfortably fits inside it. Treat
+them as policy, and set them from your own retention and client behaviour rather
+than from a benchmark that does not exist.
+
+### Uploads themselves have no throughput knobs
+
+The multipart receive path streams straight to disk and exposes only *limits*
+(`maxFields`, `maxFieldsSize`, `maxTextFields`, `maxTextFieldSize`) — caps, not
+tuning. If upload throughput is your bottleneck, it is the storage side above,
+or your network, not the parser.
+
+---
+
 ## Maintenance: stats, gc and verify
 
 Three CLI commands operate a bundle's storage, each following the cache-command

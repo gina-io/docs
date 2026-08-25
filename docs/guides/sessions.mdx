@@ -354,7 +354,7 @@ none of them; it receives the open bucket through its constructor (step 2).
 | `host` | — | Cluster hostname(s), comma-separated for multi-node |
 | `database` | — | Bucket dedicated to sessions (recommended). Couchbase's bucket name — the reference field is `database`, not `bucket` |
 | `username` | — | RBAC user |
-| `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+| `password` | — | RBAC password. Supports `${secret:KEY}` substitution |
 
 :::note The Couchbase store is configured through its constructor, not `connectors.json`
 Unlike the SQLite, Redis, MongoDB and ScyllaDB stores — which configure
@@ -557,7 +557,7 @@ Or decomposed form (self-hosted single node):
 | `database` | (required) | Database name |
 | `collection` | `"sessions"` | Collection name |
 | `username` | — | Auth user. URL-encoded automatically when assembling the URI |
-| `password` | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `password` | — | Auth password. Supports `${secret:KEY}` substitution |
 | `authSource` | — | Auth database, when different from `database` |
 | `replicaSet` | — | Replica set name |
 | `ssl` | — | `true` to enable TLS, or an object passed through to the driver as `tlsOptions` |
