@@ -670,7 +670,7 @@ fields as any Couchbase connector entry):
 | `host` | — | Cluster hostname(s), comma-separated for multi-node |
 | `database` | — | Bucket name (the reference field is `database`, not `bucket`) |
 | `username` | — | Bucket / RBAC user |
-| `password` | — | RBAC password. Supports `${ENV_VAR}` substitution |
+| `password` | — | RBAC password. Supports `${secret:KEY}` substitution |
 
 **Store options — passed to the `CouchbaseStore` constructor.** A `ttl` or
 `prefix` key placed in the `connectors.json` entry is silently ignored — the

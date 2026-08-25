@@ -114,7 +114,7 @@ flowchart TD
 | `port` | `5432` | Server port |
 | `database` | (required) | Database name; also names the model directory (`models/<database>/`) |
 | `username` | — | PostgreSQL user |
-| `password` | `""` | Supports `${ENV_VAR}` substitution |
+| `password` | `""` | Supports `${secret:KEY}` substitution |
 | `connectionLimit` | `10` | Maximum pool size (`pg.Pool` `max`) |
 | `idleTimeout` | `30000` | Milliseconds before an idle connection is closed (`idleTimeoutMillis`) |
 | `connectionTimeout` | `2000` | Milliseconds to wait for a connection before timing out (`connectionTimeoutMillis`) |

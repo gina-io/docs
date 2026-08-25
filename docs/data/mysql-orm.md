@@ -114,7 +114,7 @@ flowchart TD
 | `port` | `3306` | Server port |
 | `database` | (required) | Database name; also names the model directory (`models/<database>/`) |
 | `username` | — | MySQL user |
-| `password` | `""` | Supports `${ENV_VAR}` substitution |
+| `password` | `""` | Supports `${secret:KEY}` substitution |
 | `connectionLimit` | `10` | Maximum number of connections in the pool |
 | `ssl` | (none) | SSL options passed directly to `mysql2` |
 

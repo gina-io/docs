@@ -211,10 +211,10 @@ After the write, the exact install command for the matching driver is printed â€
 | `--connector-port=<port>` | Server port. Numeric when possible. Written to the entry under the `port` key. See the **Reserved flag names** note below. |
 | `--database=<name>` | Database, bucket, or keyspace name. |
 | `--username=<name>` | Authentication username. |
-| `--password=<value>` | Authentication password. Supports `${ENV_VAR}` interpolation. |
+| `--password=<value>` | Authentication password. Supports `${secret:KEY}` interpolation. |
 | `--scope=<scope>` | Data isolation scope: `local`, `beta`, `production`, `testing`. |
 | `--model=<id>` | AI connector only. Default model id. |
-| `--api-key=<value>` | AI connector only. API key. Supports `${ENV_VAR}` interpolation. |
+| `--api-key=<value>` | AI connector only. API key. Supports `${secret:KEY}` interpolation. |
 | `--base-url=<url>` | AI connector only. Override the provider base URL (OpenAI-compatible providers). |
 | `--driver-version=<range>` | Optional semver range to pin the driver install (e.g. `^5.0.0`, `>=5.3.0 <6.0.0`). Written to the entry under the `version` key. See the **Reserved flag names** note below. |
 | `--force` | Overwrite an existing entry with the same `<name>`. |

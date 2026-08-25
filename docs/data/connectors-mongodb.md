@@ -171,7 +171,7 @@ Connection options:
 | `port` | `27017` | Server port (decomposed mode only) |
 | `database` | (required) | Database name. Also names the model directory (`models/<database>/`) |
 | `username` | — | Auth user. URL-encoded automatically when assembling the URI |
-| `password` | — | Auth password. Supports `${ENV_VAR}` substitution. URL-encoded automatically |
+| `password` | — | Auth password. Supports `${secret:KEY}` substitution. URL-encoded automatically |
 | `authSource` | — | Auth database, when different from `database` |
 | `replicaSet` | — | Replica set name |
 | `ssl` | — | `true` to enable TLS, or an object whose keys are passed through to the driver as `tlsOptions` |

@@ -208,7 +208,7 @@ for Couchbase Cloud and Capella deployments.
 | `host` | string | Cluster node address(es). Comma-separated for multi-node clusters |
 | `database` | string | Couchbase bucket name |
 | `username` | string | Couchbase RBAC username |
-| `password` | string | RBAC password. Supports `${ENV_VAR}` substitution |
+| `password` | string | RBAC password. Supports `${secret:KEY}` substitution |
 | `ping` | string | Interval to verify cluster connectivity (e.g. `"2m"`, `"30s"`) |
 | `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
 
@@ -271,7 +271,7 @@ connection strings; use decomposed fields for simple single-host setups.
 | `port` | number | `27017` | Server port (decomposed mode only) |
 | `database` | string | — | Database name. Also names the model directory (`models/<database>/`) |
 | `username` | string | — | Auth user. URL-encoded automatically when assembling the URI |
-| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution. URL-encoded automatically |
+| `password` | string | — | Auth password. Supports `${secret:KEY}` substitution. URL-encoded automatically |
 | `authSource` | string | — | Auth database, when different from `database` |
 | `replicaSet` | string | — | Replica set name |
 | `ssl` | boolean \| object | — | `true` to enable TLS, or an object whose keys are passed through to the driver as `tlsOptions` |
@@ -345,7 +345,7 @@ npm install mysql2
 | `port` | number | `3306` | MySQL server port |
 | `database` | string | — | MySQL database name. Also names the model directory (`models/<database>/`) |
 | `username` | string | — | MySQL user |
-| `password` | string | `""` | MySQL password. Supports `${ENV_VAR}` substitution |
+| `password` | string | `""` | MySQL password. Supports `${secret:KEY}` substitution |
 | `connectionLimit` | number | `10` | Maximum number of connections in the pool |
 | `ssl` | object | — | SSL options passed directly to `mysql2`. See [mysql2 SSL docs](https://github.com/sidorares/node-mysql2#ssl-options) |
 
@@ -412,7 +412,7 @@ npm install pg
 | `port` | number | `5432` | PostgreSQL server port |
 | `database` | string | — | PostgreSQL database name. Also names the model directory (`models/<database>/`) |
 | `username` | string | — | PostgreSQL user |
-| `password` | string | `""` | PostgreSQL password. Supports `${ENV_VAR}` substitution |
+| `password` | string | `""` | PostgreSQL password. Supports `${secret:KEY}` substitution |
 | `connectionLimit` | number | `10` | Maximum pool size (`pg.Pool` `max`) |
 | `idleTimeout` | number | `30000` | Milliseconds before an idle connection is closed (`idleTimeoutMillis`) |
 | `connectionTimeout` | number | `2000` | Milliseconds to wait for a connection before timing out (`connectionTimeoutMillis`) |
@@ -535,7 +535,7 @@ controller examples. Field reference below.
 |---|---|---|
 | `connector` | `"ai"` | Selects the AI connector |
 | `protocol` | string | Provider protocol — determines SDK and default base URL |
-| `apiKey` | string | API key. Supports `${ENV_VAR}` substitution. Omit for local Ollama |
+| `apiKey` | string | API key. Supports `${secret:KEY}` substitution. Omit for local Ollama |
 | `model` | string | Default model identifier used when `.complete()` is called without `options.model` |
 | `baseURL` | string | Override the provider's default base URL. Use for custom Ollama ports, corporate proxies, or unlisted OpenAI-compatible endpoints |
 
@@ -627,7 +627,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 | `host` | string | `"127.0.0.1"` | Redis host (standalone mode only) |
 | `port` | number | `6379` | Redis port (standalone mode only) |
 | `db` | number | `0` | Redis DB index |
-| `password` | string | — | `AUTH` password. Supports `${ENV_VAR}` substitution |
+| `password` | string | — | `AUTH` password. Supports `${secret:KEY}` substitution |
 | `tls` | boolean | `false` | Enable TLS. Required for Upstash, ElastiCache, and Cloud Memorystore |
 | `cluster` | array | — | Cluster nodes `[{ host, port }, ...]`. When present, standalone `host` and `port` are ignored |
 | `ttl` | number | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
@@ -739,7 +739,7 @@ store reads nothing from that file.
 | `host` | string | — | Cluster hostname(s), comma-separated for multi-node |
 | `database` | string | — | Bucket name. The field is `database` — **not** `bucket` |
 | `username` | string | — | Bucket / RBAC user |
-| `password` | string | — | RBAC password. Supports `${ENV_VAR}` substitution |
+| `password` | string | — | RBAC password. Supports `${secret:KEY}` substitution |
 
 **Store options** — passed to the `CouchbaseStore` constructor:
 
@@ -819,7 +819,7 @@ A `mongodb+srv://` URI works as-is — use it for Atlas and any SRV-discovered r
 | `port` | number | `27017` | Port (used when `uri` is absent) |
 | `database` | string | — (**required**) | Database name. Construction throws without it — including when `uri` is supplied, so set it in both cases |
 | `username` | string | — | Auth username |
-| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `password` | string | — | Auth password. Supports `${secret:KEY}` substitution |
 | `authSource` | string | — | Authentication database, typically `"admin"` |
 | `replicaSet` | string | — | Replica set name |
 | `ssl` | boolean \| object | — | TLS configuration |
@@ -893,7 +893,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 | `localDataCenter` | string | `"datacenter1"` | Data center name passed to the driver |
 | `keyspace` | string | (falls back to `database`) | CQL keyspace holding the sessions table |
 | `username` | string | — | Auth username |
-| `password` | string | — | Auth password. Supports `${ENV_VAR}` substitution |
+| `password` | string | — | Auth password. Supports `${secret:KEY}` substitution |
 | `credentials` | object | — | `{ username, password }` — an alternative to the flat pair above |
 | `ssl` | object | — | `sslOptions` passed through to the driver |
 | `table` | string | `"sessions"` | Table holding the session rows |
@@ -1002,9 +1002,63 @@ fields unchanged.
 
 ## Credentials and secrets
 
-:::caution Never commit credentials to version control
-Use environment variables or a secrets manager to inject passwords at runtime.
-Reference them using `${ENV_VAR}` syntax in any string field. If the file contains
-literal passwords, add it to `.gitignore` and distribute it out of band — secrets
-manager, deployment pipeline, or manual copy per environment.
+Connector entries are tracked plaintext, so passwords, API keys and tokens must not
+be written into them literally. Replace each sensitive value with a `${secret:KEY}`
+placeholder: the framework substitutes it once, at config-load time, so the connector
+receives the real value while the repository keeps only the key name.
+
+```json title="<bundle>/config/connectors.json"
+{
+  "$schema": "https://gina.io/schema/connectors.json",
+  "myDb": {
+    "connector": "couchbase",
+    "protocol":  "couchbase://",
+    "host":      "localhost",
+    "database":  "api",
+    "username":  "appuser",
+    "password":  "${secret:COUCHBASE_PASSWORD}"
+  }
+}
+```
+
+The placeholder must be the **entire** value of the string field, and `KEY` must match
+`^[A-Z_][A-Z0-9_]*$`. A mixed-content string such as `"prefix-${secret:KEY}"` is passed
+through unchanged — it is not a placeholder.
+
+### Where the value comes from
+
+| Tier | Declared in | Notes |
+| --- | --- | --- |
+| Environment | — | Always active, and always wins. The framework environment is read first, then `process.env`. |
+| Declared files | `settings.json > secrets.file` | Opt-in. `.env`-style files layered **beneath** the environment, so they can only fill a gap the environment leaves. |
+| Exec bridge | `settings.json > secrets.exec` | Opt-in. One operator-declared command whose stdout is a flat JSON string map — the route for Vault, SOPS, a cloud secrets manager. Mutually exclusive with `secrets.file`, and likewise beneath the environment. |
+
+Resolution is **fail-closed**: if a key is unset or empty in every active tier, the
+bundle refuses to start with `Secret resolution failed` rather than connecting with a
+blank or partial credential. The error deliberately omits the key name.
+
+:::danger A bare `${ENV_VAR}` is inert — it is not a placeholder
+Only the `${secret:KEY}` form is substituted. A value written as `"${DB_PASSWORD}"`
+is handed to the connector **verbatim**, as that literal string, and the
+connection fails to authenticate with no indication why. `gina connector:test` reports
+these as *inert `${ENV_VAR}` placeholders*.
+
+Lowercase framework templates (`${bundle}`, `${host}`, `${scope}`, …) are a separate,
+unrelated mechanism and *are* resolved at config load.
 :::
+
+:::caution The connector CLI commands are environment-only
+`connector:infer`, `connector:test` and `connector:models` read a `connectors.json`
+entry directly, outside the bundle-config load path, so they never select a backend —
+a bundle's `secrets.file` or `secrets.exec` tier does **not** apply to them. Export the
+key in the shell you run the command from, or pass an explicit literal override such as
+`--api-key=<value>`.
+:::
+
+If an entry must hold a literal credential for some reason, add the file to
+`.gitignore` and distribute it out of band — secrets manager, deployment pipeline, or a
+manual copy per environment.
+
+See the [Secrets guide](/guides/secrets) for the full resolver contract, the file and
+exec tiers, and adoption steps, and [`gina secrets:check`](/cli/cli-secrets) to verify every
+placeholder in a bundle resolves before you deploy.
