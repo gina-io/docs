@@ -19,6 +19,97 @@ upward to the target version.
 
 ---
 
+## 0.6.16 → 0.6.17
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the validator fix
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.16`;
+> `gina.min.css` and `gina.onload.min.js` are unchanged.
+
+**No action is required for any change in this release.** All three are strict
+improvements over behaviour that previously failed outright.
+
+### Fixed — a rejected route no longer drops the connection once the cache is warm (no action required)
+
+A route whose URL structurally matched but whose `requirements` rejected the
+request was dispatched anyway once the route cache was warm, and the connection
+was closed with **no HTTP response at all** — no status, no body. A client saw a
+dropped connection rather than a `404`.
+
+The route cache is keyed on method and pathname, and on the isaac engine the
+query string is stripped before dispatch, so every query variant of one pathname
+shares a single cache entry. That sharing is deliberate and is why the warm path
+re-evaluates a matched route's `requirements` on each hit — but it then discarded
+the verdict, force-matching the request it had just rejected and dispatching it
+with no routing description. The dispatch target dereference then raised an
+unhandled promise rejection, and the connection went away.
+
+Because the cold path answered correctly, this appeared only on the second and
+subsequent requests to a pathname, which is why it could survive testing: the
+first request through any given route behaved exactly as documented.
+
+The warm path now honours the verdict. A rejecting — or throwing — requirement
+evaluation is treated as a cache miss and falls through to the routing scan,
+which answers correctly: `404` when nothing matches, the sibling rule when one
+does, or a `500` naming the rule when a `validator::` requirement throws (that
+case previously also dropped the connection). The cache entry itself is kept, so
+the query variants the requirements accept stay warm.
+
+As defence in depth, the router now answers a named `500` instead of throwing
+when it is dispatched without a resolved `param.control`.
+
+### Fixed — the `toFloat`, `set` and `format` validator rules are context-safe (no action required)
+
+Three documented validator rules threw on every server-side call.
+
+`toFloat` opened by reading the live DOM element unguarded, so a rule set
+containing it could not coerce a float on the server at all — it raised before
+inspecting any value, valid input included. It now reads the live element only
+when one is reachable, and otherwise uses the submitted value, which on the
+server *is* the raw value the rule needs. In the browser the live value is still
+preferred, because a rendered input may carry a display-formatted value that
+differs from the submitted one. A missing comma in the same statement — which
+leaked `isFloatingWithCommas` as an implicit global onto every page that loaded
+the bundle — is fixed with it.
+
+`set` threw for the same underlying reason: it wrote to the DOM element
+unconditionally, and a field has no element behind it on the server. It now
+assigns the field value in both contexts, which is the part downstream rules and
+the validated payload consume, and reflects that value onto the element only in
+the browser.
+
+`format` already worked in both contexts when chained after `isDate`, as its
+documentation shows — the date-format helper is installed server-side too. What
+it did not do was explain itself when the value was not a `Date`: it raised an
+opaque `val.format is not a function`. It now throws a named rule-authoring
+error identifying the field and pointing at the missing `isDate`.
+
+The [middleware guide](/guides/middleware#reading-configuration-efficiently) has
+also gained a section on reading configuration efficiently — middleware
+instances are constructed once per request, so where a rule set reads its
+configuration matters.
+
+### Fixed — a redirect route no longer floods the log with `source[host] is undefined` (no action required)
+
+A bundle declaring a `redirect` route emitted `JSON.clone(...) possible error
+detected: source[host] is undefined` warnings continuously. One consumer
+measured them at roughly three quarters of that log line's total volume, which
+drowned the genuine warnings the line exists to surface.
+
+Redirect rules are deliberately excluded from the per-rule host and hostname
+defaulting, so those keys are legitimately absent on them. The per-request
+routing copy assigned them unconditionally, which *created* properties holding
+`undefined` on the cached routing clone — and because that clone is kept for the
+lifetime of the process, every later no-arg `getConfig()` re-emitted one `host`
+and one `hostname` warning per redirect rule, indefinitely.
+
+The copy is now existence-guarded: an absent key stays absent, and rules that do
+carry a host or hostname are copied exactly as before. This removes log noise
+rather than a functional defect — the clone had been substituting `null`, which
+every reader already treated the same as absent. Only template and view routes
+reach this path, so API-only bundles were never affected.
+
 ## 0.6.15 → 0.6.16
 
 > **This release changes the browser bundle.** Restart **and** rebuild your

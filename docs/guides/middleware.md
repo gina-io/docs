@@ -203,6 +203,57 @@ The `pauseRequest` / `resumeRequest` / `isHaltedRequest` trio is covered in full
 login-replay flow and a worked example — in
 [Pausing and resuming requests](/guides/controller#pausing-resuming-requests).
 
+### Reading configuration efficiently
+
+Middleware instances are **constructed once per request**, for every middleware in the
+matched route's chain. Anything in the constructor body therefore runs on every request
+that matches the route — before the framework even knows which of your methods it will
+call.
+
+`getConfig()` returns a **defensive copy** so callers cannot mutate live configuration, and
+that copy is a deep one. Two rules follow:
+
+**1. Read configuration inside the method that uses it, not in the constructor.**
+
+```js
+// ✅ paid only when this method actually runs
+function AuthMiddleware() {
+  var self = this;
+
+  this.require = function(req, res, next, done) {
+    var security = self.getConfig('security');
+    // …
+  };
+}
+
+// ❌ paid on every matched request, for every method, used or not
+function AuthMiddleware() {
+  var self     = this;
+  var security = self.getConfig('security');   // runs at construction time
+
+  this.require = function(req, res, next, done) { /* … */ };
+}
+```
+
+Every example in this guide follows the first shape.
+
+**2. Prefer the named form.** `getConfig('security')` copies just that section;
+the bare `getConfig()` copies the **whole** bundle configuration — routing, templates,
+forms, locales and app settings together, which on a large bundle is a substantially
+bigger object.
+
+:::note When you do need the bare form
+`getConfig()` is currently the only accessor that resolves `hostname` and `host` against
+the **per-request** proxy classification (an `X-Forwarded-*` fronted request sees the
+public host, not the internal one). A named call does not carry that pair. So if you need
+the proxy-aware host, call `getConfig()` — inside the method, once, and reuse the value
+for the rest of that call.
+:::
+
+These costs are per request and add up with the length of the chain — see the note under
+[Bundle-local and shared middlewares](#bundle-local-and-shared-middlewares) for the case
+that multiplies them.
+
 ### Reading form validation rules
 
 `self.getFormsRules()` takes **no arguments**. It returns a rule set from the
@@ -363,6 +414,16 @@ This means:
 - Methods defined only in **shared** are available as-is.
 - Methods defined only in **bundle-local** are added on top.
 - Methods defined in **both** use the bundle-local version.
+
+:::caution Both constructors run, on every request
+Inheritance composes the two constructors: instantiating the resolved middleware calls the
+**shared** constructor body and then the **bundle-local** one. Since middlewares are
+constructed once per request, any work placed in either constructor is paid twice per
+request for an inherited middleware.
+
+Keep both constructor bodies to method definitions only, and read configuration inside the
+methods — see [Reading configuration efficiently](#reading-configuration-efficiently).
+:::
 
 A typical pattern is to write the general logic in shared and override only what
 differs per bundle:
