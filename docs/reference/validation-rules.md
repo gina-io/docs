@@ -330,10 +330,12 @@ chain before then.
 Coerces the value to a float rounded to `decimals` places (default `2`),
 handling thousands separators.
 
-:::warning Browser-only
-`toFloat` reads the live DOM element's value, so it runs **only in the browser**
-and will throw on the server. For plain numeric validation that works in both
-contexts, use [`isFloat`](#isfloat) or [`isNumber`](#isnumber) instead.
+:::info Context-safe
+`toFloat` works in **both contexts**. In the browser it prefers the live DOM
+element's value when one is reachable (the rendered input may carry a
+display-formatted value); on the server — where the submitted value **is** the
+raw value — it uses the field value directly. For validation without coercion,
+use [`isFloat`](#isfloat) or [`isNumber`](#isnumber).
 :::
 
 - **Default messages:** *Could not be converted to float* · *Value must be a
@@ -357,9 +359,14 @@ nothing). In a rule file always write `"trim": true`.
 `format(mask, utc)` · JSON: `"format": "isoDateTime"`
 
 Formats a `Date` value to a string using `mask`. It is designed to follow
-[`isDate`](#isdate), which produces the `Date` it consumes.
+[`isDate`](#isdate), which produces the `Date` it consumes — and it works in
+**both contexts** (the date-format helper is installed server-side too).
 
 - **Returns a string** — it is terminal; do not chain another rule after it.
+- **Requires `isDate` first** — on a value that is not a `Date`, `format`
+  throws a named rule-authoring error (`apply isDate(mask) before
+  format(mask)`) rather than formatting anything: chain or declare
+  [`isDate`](#isdate) before it.
 
 ```js
 // fluent form, e.g. inside a custom validator
@@ -379,10 +386,11 @@ validating a value directly.
 
 Sets the field's value and writes it to the element's `value` attribute.
 
-:::warning Browser-only
-`set` always writes to the DOM element, so it runs **only in the browser** and
-throws on the server, where a field has no element behind it — the same
-constraint as [`toFloat`](#tofloat).
+:::info Context-safe
+`set` works in **both contexts**: the field value it assigns is what downstream
+rules and the validated payload consume. The DOM reflection (writing the
+element's `value` attribute) happens only in the browser, where a live element
+exists.
 :::
 
 ### setLabel
