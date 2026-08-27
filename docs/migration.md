@@ -19,6 +19,87 @@ upward to the target version.
 
 ---
 
+## 0.6.18 → 0.6.19
+
+> **Server-side only.** Restart your bundles; no rebuild is needed.
+
+**One change requires action, and only if you use the Couchbase connector.**
+
+### Security — concurrent Couchbase entity reads no longer cross-deliver results
+
+#### Action required
+
+If your project uses the **Couchbase** connector, upgrade. There is no
+configuration change and no code change on your side — but read the impact
+below, because it may have produced wrong data in production.
+
+Before this release, two calls to the **same** entity method that were in flight
+at the same time could each receive the other's rows. The completion signal was
+keyed on the entity and method name only, on an entity object shared for the
+whole process, so the first query to finish woke *every* waiting caller of that
+method with its own result:
+
+```js
+// Two requests hitting this at the same time with different ids could each be
+// answered with the OTHER request's row.
+var user = await db.userEntity.getById(req.routing.param.id);
+```
+
+This affected `await` and `.onComplete()` equally. It was **not** limited to
+queries finishing out of order — it happened when they finished in the order
+they were started, too.
+
+**Why this is filed as a security change, not only a correctness one.** Where
+the method reads a user-scoped or ownership-bearing record, one request could be
+answered with another request's row — so an ownership or permission check
+performed on the returned row could pass for the wrong principal, and one user's
+data could be rendered into another user's response.
+
+**What to check in your own code.** Nothing needs changing, but if you keep
+request logs or audit records, concurrent reads of the same method are where any
+anomaly would have occurred. Errors were affected too: a failing query could
+settle a *different* caller, so an unrelated request could have failed with an
+error that was not its own.
+
+**Not affected:** the explicit trailing-callback form, including
+`util.promisify` — it always settled from its own per-call state:
+
+```js
+db.userEntity.getById(id, function (err, user) { /* … */ });
+```
+
+**Also not affected:** every other connector — MySQL, PostgreSQL, SQLite,
+ScyllaDB, DuckDB and MongoDB all settled per call already.
+
+`bulkInsert` carried the same defect on its own dispatch and is fixed with it.
+
+### Fixed — a failed Couchbase query no longer settles its caller twice (no action required)
+
+Each dispatch chained `.catch(…).then(…)`. A `.catch()` handler that returns
+normally *resolves*, so the trailing `.then()` ran on every error as well and
+delivered a second, bogus empty success. With an explicit callback that meant
+the canonical shape ran **both** branches:
+
+```js
+db.userEntity.getById(id, function (err, user) {
+    if (err) { return next(err); }   // ran with the real error…
+    self.renderJSON(user);           // …and then again with an empty result
+});
+```
+
+On the `await` / `.onComplete()` path the second settlement was discarded (a
+promise settles once), so it was invisible there. Failed `bulkInsert` calls also
+logged a spurious `TypeError: Cannot read properties of undefined (reading
+'rows')`; that is gone.
+
+### Fixed — a Couchbase callback that throws is no longer invoked twice (no action required)
+
+If your own callback body threw, the connector's error handling called that same
+callback again with the identical arguments. The throw is now reported with the
+query name for context and the callback is not re-entered.
+
+---
+
 ## 0.6.17 → 0.6.18
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
