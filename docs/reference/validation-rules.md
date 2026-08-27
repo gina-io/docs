@@ -440,6 +440,50 @@ keeps its resolved label. A field error that is a raw server stack trace — whi
 its own — is replaced with a neutral message outside `local` scope, so backend
 internals never reach the form.
 
+#### Options
+
+| Key | Type | Meaning |
+|---|---|---|
+| `url` | string | Endpoint to call. A gina route name (`name@bundle`) is resolved through the router; anything starting with `http` is used as-is. |
+| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call. |
+| `validIf` | boolean | The response `isValid` the rule treats as a **pass**. Defaults to `true`; set `false` for a "must NOT exist" check such as a uniqueness probe. |
+| `method` | string | HTTP method. Defaults to `GET`. |
+| `headers` | object | Request headers, merged over the defaults. See the caution below. |
+| `withCredentials` | boolean | Send cookies cross-origin. Defaults to `false`. |
+| `isSynchrone` | boolean | Issue the request synchronously. Defaults to `false`; leave it alone unless you know why you need it. |
+| `responseType` | string | Passed through to the `XMLHttpRequest`. |
+
+A rule's own options win over the defaults, so anything you declare here
+overrides the built-in value rather than being merged under it.
+
+:::caution Values containing `+` — declare `Content-Type` explicitly
+The request body is JSON, but on **0.6.17 and earlier** it is labelled
+`application/x-www-form-urlencoded`. The server honours that label and
+url-decodes the body before parsing it, which turns every `+` in a value into a
+space — so a check on an email plus-address such as `alias+tag@example.com` is
+answered for `alias tag@example.com` instead. The body stays well-formed, so
+nothing errors: the endpoint simply returns the wrong answer, and because a
+`query` rule also gates the submit button the visitor cannot submit at all.
+
+Declare the header explicitly to opt out:
+
+```json
+{
+  "username": {
+    "query": {
+      "url": "checkUsername@myBundle",
+      "data": { "account": { "username": "$username" } },
+      "headers": { "Content-Type": "application/json" }
+    }
+  }
+}
+```
+
+Declaring the header explicitly behaves the same way on every version from
+0.5.0 onward — including after the labelling above is corrected — so it is the
+safe form to write regardless.
+:::
+
 ### getValidationContext
 
 `getValidationContext()` → `{ isGFFCtx, self, local, replace }`
