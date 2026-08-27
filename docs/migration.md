@@ -19,6 +19,90 @@ upward to the target version.
 
 ---
 
+## 0.6.17 → 0.6.18
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the validator fix
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.17`;
+> `gina.min.css` and `gina.onload.min.js` are unchanged.
+
+**One change requires action**, and only if your bundle relied on live-check
+request bodies being URL-decoded — see the `%XX` note in the first section below.
+The other change is a strict improvement over behaviour that previously cost you
+CPU and mutated a shared object.
+
+### Fixed — a `query` rule no longer mis-validates a value containing `+`
+
+A field validated by a `query` (live-check) rule got the wrong verdict whenever
+its value contained a `+`. The common case is an email plus-address such as
+`alias+tag@example.com`.
+
+The live-check body is JSON, but the request was labelled
+`application/x-www-form-urlencoded`. The server therefore did the correct thing
+for that content type and url-decoded the body before parsing it — turning every
+`+` into a space. The decoded body was still valid JSON, so nothing raised: the
+endpoint answered `200` with a verdict computed from a corrupted value.
+
+Because a `query` rule also gates the submit trigger, the consequence was not a
+misleading warning but a lockout — an affected visitor could not submit the form
+at all. On a sign-in or password-recovery form, that makes the account
+unreachable.
+
+The live-check request now sends `application/json` when the body is JSON,
+matching what the form-submit and file-removal paths already did. An explicit
+per-rule `headers` override still wins, so a rule that already declares its own
+`Content-Type` behaves exactly as before — including one added as an interim
+workaround for this defect, which remains correct and can be removed once every
+tier you deploy to is running `0.6.18` or later.
+
+#### Action required — `%XX` sequences are no longer decoded
+
+Because the body is no longer labelled as form-encoded, it is no longer
+URL-decoded on the way in. Field values now reach your live-check action
+verbatim: a literal `%20` in a submitted value arrives as `%20` rather than as a
+space, and values are sent raw.
+
+This affects your bundle only if a live-check action relied on that decoding —
+for example, by comparing a submitted value against an already-decoded string.
+If your action simply reads the value it is handed, nothing changes. If it did
+rely on the decode, decode explicitly inside the action (`decodeURIComponent`)
+rather than depending on the transport to do it.
+
+### Fixed — the render data setter no longer walks and rewrites the shared forms catalog (no action required)
+
+The dotted-path data setter behind every render — the one that populates
+`page.view.*`, `page.environment.*`, `page.forms` and their siblings — used to
+build the target path as a JSON string, parse it back into an object, and
+deep-merge the result into the render data.
+
+That merge recursed into every object value it grafted. When the grafted value
+was the bundle's forms catalog, the recursion re-merged each array inside it
+with itself and wrote the resulting copies back into the catalog — the caller's
+own object, shared across the process. So every render paid to walk the catalog,
+and silently replaced its arrays with equal copies. For a bundle with a real
+forms catalog that was roughly 0.4 to 1.5 ms of CPU per request, depending on
+catalog size.
+
+A first write is now stored by reference without being walked, missing
+intermediate levels are created directly, and only a genuine collision at the
+leaf goes through the merge. The value semantics are unchanged: a first write
+still wins, and an object written onto an existing object leaf still deep-fills.
+The catalog is never touched, and the 59 primitive writes of a render cost about
+a fifth of what they did (66.6 → 14.8 µs measured).
+
+One difference is deliberate. Writing an array onto a path that already holds an
+array now merges the two once instead of twice; the old path ran the array merge
+twice and produced duplicate elements. No framework route writes an
+array-bearing path twice, so no built-in behaviour changes — but a bundle that
+wrote the same array-bearing path twice and depended on the duplicated elements
+would now get the single, documented merge.
+
+This is a server-side change, so its own pickup is a bundle restart. It is
+carried by the rebuild the validator fix above already requires.
+
+---
+
 ## 0.6.16 → 0.6.17
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
