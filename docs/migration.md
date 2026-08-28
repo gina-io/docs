@@ -154,6 +154,17 @@ If your own callback body threw, the connector's error handling called that same
 callback again with the identical arguments. The throw is now reported with the
 query name for context and the callback is not re-entered.
 
+### Fixed — a logged `Error` object keeps its message and stack (no action required)
+
+`console.error(err)` used to render `{}` — or only the enumerable extras, such
+as `{"code": "ETIMEDOUT"}` — because both log writers walked enumerable
+properties only, and an Error's `message` and `stack` are not enumerable. An
+`Error` passed to any log method — directly, among other arguments, or nested
+inside a logged object — now renders with its message, stack, own properties
+and `cause` chain, on the levelled methods and on `console.log` alike. Passing
+`err.stack` as a string keeps working unchanged, and the rendered message still
+goes through log redaction.
+
 ---
 
 ## 0.6.17 → 0.6.18

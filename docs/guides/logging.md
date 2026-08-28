@@ -242,6 +242,8 @@ var ContentController = function() {
 module.exports = ContentController;
 ```
 
+Since `0.6.19` you can also pass the `Error` object itself — `console.err('[HOME] Render failed:', err)` — and it renders the way Node's own console does: message, stack, own properties such as `err.code`, and the `cause` chain, whether the error is a direct argument or nested inside a logged object. Passing `err.stack` as a string, as above, works the same as it always has.
+
 ### In models and entities
 
 ```js
