@@ -169,6 +169,18 @@ and `cause` chain, on the levelled methods and on `console.log` alike. Passing
 `err.stack` as a string keeps working unchanged, and the rendered message still
 goes through log redaction.
 
+### Fixed — `merge()` no longer rewrites the object it was given (no action required)
+
+When a source subtree was merged into an existing target level that lacked its
+key, `lib/merge` referenced the subtree and then walked it again as if it were
+being merged into itself: every array inside the caller's object was replaced by
+a copy at every depth, and an array of primitives silently lost its duplicates.
+A subtree that is the same object on both sides is now skipped, so a grafted
+source keeps its arrays and its duplicates and the result references it. Merging
+two different values is unchanged, as is the shallow copy built when the key is
+absent at the root. If you relied on `merge` de-duplicating a shared array as a
+side effect, do it explicitly.
+
 ---
 
 ## 0.6.17 → 0.6.18
