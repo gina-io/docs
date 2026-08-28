@@ -407,6 +407,97 @@ if it is malformed.
 
 ---
 
+## Redacting credentials from logs
+
+The access line logs the request URL as received — `GET [200] /reset?token=…` —
+and so do the error pages, the render delegates and the CSRF filter. A credential
+that travels in a URL (a password-reset link, a signed download link, a one-time
+invite) would therefore reach stdout in plaintext. Gina redacts it **before the
+message is rendered**, at the single point every log message passes through, so
+the masked line is what stdout, `gina tail`, the file transport and the Inspector
+all receive — in text and JSON mode alike.
+
+Redaction is **on by default** and configured per bundle in `settings.json`:
+
+```json
+{
+  "log": {
+    "redact": {
+      "enabled":  true,
+      "defaults": true,
+      "secrets":  true,
+      "patterns": []
+    }
+  }
+}
+```
+
+Two rule sources compose:
+
+- **`defaults`** — the built-in pattern set: JSON Web Tokens; URL userinfo passwords
+  (`https://user:PASSWORD@host` keeps the user); `Bearer` / `Basic` credentials;
+  named credential query keys — `token`, `access_token`, `refresh_token`, `id_token`,
+  `api_key`, `secret`, `client_secret`, `password`, `passwd`, `pwd`, `passcode`, `auth`,
+  `authorization`, `signature`, `sig`, `otp`, `session_token` — with the key kept and
+  the value masked; and api-key style headers (`x-api-key`, `x-auth-token`, …).
+  Generic keys such as `code`, `key` or `session` are left alone, so
+  `?code=FR&sort=name` logs unchanged.
+- **`secrets`** — every value the [secrets resolver](/guides/secrets) substituted for a
+  `${secret:KEY}` placeholder in this bundle's configs is masked verbatim wherever it
+  appears, so a connection string or a connector error can never print a password.
+  Values shorter than 8 characters are skipped (a boot warning names the config path).
+
+```text
+GET [200] /reset?token=[REDACTED]
+proxy target https://svc:[REDACTED]@internal.host:8443/v1
+[ ref 5f2a… ][ req 12 ] GET [ 404 ] /invite?otp=[REDACTED]
+Error: route not found for /invite?otp=[REDACTED]
+```
+
+The last example is the 404 error line: the URL appears twice in one record —
+once in the prefix and once inside the error's own message — and both copies are
+masked, because the rules run over the whole message, not over the URL field alone.
+
+### Adding your own patterns
+
+A bare long-hex path segment is **deliberately not** a default: a content-address
+key served from [storage](/guides/storage) and an opaque 64-character bearer
+credential are the same shape, so no default can tell them apart. If your
+credentials look like that, add one pattern:
+
+```json
+{
+  "log": {
+    "redact": {
+      "patterns": [
+        "\\b[0-9a-f]{64}\\b",
+        { "pattern": "(invite=)[^&\\s]+", "flags": "gi", "replacement": "$1[REDACTED]", "name": "invites" }
+      ]
+    }
+  }
+}
+```
+
+A string entry is a regex source whose whole match becomes `[REDACTED]`; the object
+form lets you keep a capture group (`$1`) and pick the flags — `g` is always added,
+otherwise only the first credential on a line would be masked. A pattern that does
+not compile, or that matches the empty string, **refuses the boot**: a rule dropped
+silently would be a leak. The backtracking behaviour of your own patterns is yours
+to check; every built-in rule is linear and costs about a microsecond per line.
+
+To switch redaction off for a bundle, set `"enabled": false`; to keep only your own
+rules, set `"defaults": false`. When several bundles share one process, the effective
+rule set is the union of every bundle's block — one bundle enabling redaction is
+enough for the whole process to redact.
+
+:::note What it does not cover
+Redaction applies to what the **logger** writes. Data the Inspector captures for its
+own panels (request payloads, query parameters) has its own, dev-only
+[`inspector.redact`](/guides/inspector) rules.
+:::
+
+---
+
 ## Following logs in real time
 
 ```bash

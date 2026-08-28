@@ -23,7 +23,63 @@ upward to the target version.
 
 > **Server-side only.** Restart your bundles; no rebuild is needed.
 
-**One change requires action, and only if you use the Couchbase connector.**
+**Two changes may require action:** one for every project (log redaction is now
+on by default), one only if you use the Couchbase connector.
+
+### Security — credentials in a request URL no longer reach the logs
+
+#### Action required
+
+None to keep the protection — it is **on by default**. Read on if anything of
+yours depends on the raw value being in a log line.
+
+The access line (`GET [200] /reset?token=…`), the error pages, the render
+delegates and the CSRF filter all log the request URL as received. A credential
+that travels in a URL — a password-reset token, a signed download link, a
+one-time invite — was therefore written to stdout in plaintext, with no seam to
+redact it. Every log message is now redacted **before** it is rendered and
+dispatched, at the logger's single pre-render point, so stdout, `gina tail`, the
+file transport and the Inspector all receive the same masked line, in text and
+JSON mode alike:
+
+```text
+GET [200] /reset?token=[REDACTED]
+proxy target https://svc:[REDACTED]@internal.host:8443/v1
+```
+
+The built-in set masks JSON Web Tokens, URL userinfo passwords, `Bearer` /
+`Basic` credentials, named credential query keys (`token`, `access_token`,
+`api_key`, `secret`, `password`, `signature`, `otp`, … — the key is kept, the
+value masked) and api-key style headers; and every value the secrets resolver
+substituted for a `${secret:KEY}` placeholder in your configs is masked verbatim
+wherever it appears. Generic keys such as `code`, `key` or `session` are left
+alone. Measured against 433k real log lines: no false positives, about a
+microsecond per line.
+
+**What may need a change on your side:**
+
+- **Anything that reads a credential back out of a log** — a log-based test, a
+  grep in an ops script, a support workflow that copies a reset link from the
+  logs — will now find `[REDACTED]`. Read the value from the request instead.
+- **Credentials shaped like a bare long-hex path segment** (`/files/<64 hex>`)
+  are **not** masked by default: a content-address key served from
+  [storage](/guides/storage) and an opaque credential are the same shape, so
+  no default can tell them apart. Add one pattern:
+
+  ```json
+  { "log": { "redact": { "patterns": ["\\b[0-9a-f]{64}\\b"] } } }
+  ```
+
+- **If you had wrapped the logger yourself** to mask URLs, drop the wrapper —
+  the seam covers every framework site (both engines, every render delegate,
+  the CSRF filter) and the copy of the URL inside a 404's error message.
+- **To opt out** for a bundle: `{ "log": { "redact": { "enabled": false } } }`.
+
+A malformed block — an unknown key, a non-boolean flag, a pattern that does not
+compile or that matches the empty string — **refuses the boot**, because a rule
+dropped silently would be a leak. Full reference:
+[Logging guide → Redacting credentials](/guides/logging#redacting-credentials-from-logs)
+and [settings.json → `log`](/reference/settings#log).
 
 ### Security — concurrent Couchbase entity reads no longer cross-deliver results
 

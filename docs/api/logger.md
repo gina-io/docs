@@ -64,6 +64,36 @@ for CLI and environment alternatives.
 
 ---
 
+## `console.setRedaction(block, options)`
+
+Installs — or replaces — one bundle's contribution to the process-wide log
+redaction: its `settings.json > log.redact` block plus the secret values the
+secrets resolver substituted for it. Gina calls this for you at config load;
+you only need it when you drive the logger outside a bundle (a script, a
+worker) and want the same masking. The effective rule set is the union of
+every installed bundle, and it is applied to every message before any
+container renders it. See [Redacting credentials from logs](/guides/logging#redacting-credentials-from-logs).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `block` | `object` | The `log.redact` object (`enabled`, `defaults`, `secrets`, `patterns`). Omit for the defaults. |
+| `options.group` | `string` | The bundle this contribution belongs to (default `gina`). Installing the same group again replaces its previous contribution. |
+| `options.secrets` | `Array<{path, value}>` | Resolved secrets to mask verbatim — the shape `lib.secrets.getResolvedValues(conf)` returns. |
+
+Returns `{ enabled, rules, secrets, skippedSecrets, minSecretLength }`. Throws
+on a malformed block (unknown key, non-boolean flag, invalid or empty-matching
+pattern) — nothing is installed in that case.
+
+```js
+var lib     = require('gina').lib;
+var console = lib.logger;
+console.setRedaction({ patterns: ['\\b[0-9a-f]{64}\\b'] }, { group: 'worker@myproject' });
+console.info('GET /files/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08');
+// → GET /files/[REDACTED]
+```
+
+---
+
 ## `console.pauseReporting()` / `console.resumeReporting()`
 
 Temporarily suppresses all output for the default group. Used internally by
