@@ -19,6 +19,35 @@ upward to the target version.
 
 ---
 
+## 0.6.19 → 0.6.20
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the `merge()` fix
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.19`.
+
+### Fixed — `merge()` no longer throws on a mixed primitive/object array (no action required)
+
+Merging a target array that repeats a primitive (`['v2', 'v2']`) with an array
+of objects threw `TypeError: Cannot create property 'id' on string` — and, with
+a `null` in the target, `Cannot read properties of null`. The branch that fills
+a source object into a free index of the target tested for the free index on a
+de-duplicated copy of the target and then wrote into the real one, whose index
+still held the string. Because every configuration overlay travels through
+`merge`, a config that hit the shape killed the boot instead of merging. An
+occupied index is now left alone — as it already was for an object landing on
+one — so the merge completes:
+
+```js
+var merge = require('lib/merge');
+merge(['v2', 'v2'], [{ id: 3 }, { id: 0 }, { id: 3 }]);
+// before: TypeError — now: ['v2', 'v2', { id: 3 }]
+```
+
+Every other array shape merges exactly as it did before.
+
+---
+
 ## 0.6.18 → 0.6.19
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
