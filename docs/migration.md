@@ -23,7 +23,7 @@ upward to the target version.
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
 > bundles (`gina bundle:build`) — a restart alone updates the server half only,
-> and each bundle bakes its own copy of the client assets, so the `merge()` fix
+> and each bundle bakes its own copy of the client assets, so the `merge()` fixes
 > below would not reach a browser at all. `gina.min.js` differs from `0.6.19`.
 
 ### Fixed — `merge()` no longer throws on a mixed primitive/object array (no action required)
@@ -45,6 +45,30 @@ merge(['v2', 'v2'], [{ id: 3 }, { id: 0 }, { id: 3 }]);
 ```
 
 Every other array shape merges exactly as it did before.
+
+### Fixed — `merge()` merges a number array once, and merging the same source twice is a no-op (no action required)
+
+A number the target already held at a different index was pushed again on
+every merge — `merge([9, 1], [1])` gave `[9, 1, 1]`, and `{ ports: [8080, 8124] }`
+merged with `{ ports: [8124] }` gave `[8080, 8124, 8124]` — because the rule
+that lets a source repeat a number (`[25]` + `[25, 25]` gives `[25, 25]`)
+compared positions rather than counts. Below the top level every array was
+also merged twice, once in the level's key loop and once in the recursion that
+follows, so `{ q: { p: [1, 2] } }` merged with `{ q: { p: [3, 4] } }` gave
+`[1, 2, 3, 4, 3, 4]` where the same arrays at the top level gave `[1, 2, 3, 4]`.
+The top-up now compares counts and a nested array is merged once per level:
+
+```js
+merge({ ports: [8080, 8124] }, { ports: [8124] });   // { ports: [8080, 8124] }
+merge({ q: { p: [1, 2] } }, { q: { p: [3, 4] } });  // { q: { p: [1, 2, 3, 4] } }
+```
+
+If a configuration overlay of yours repeats a port, a size or any other number,
+the merged array no longer carries the duplicate — check any code that counted
+on it. Strings, booleans, `null` and id-keyed collections merge exactly as
+before, and an array shared by both sides below the top level is now left
+untouched (it used to be replaced by a de-duplicated copy), closing a residual
+of the 0.6.19 source-mutation fix.
 
 ---
 
