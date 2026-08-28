@@ -19,6 +19,174 @@ upward to the target version.
 
 ---
 
+## 0.6.18 → 0.6.19
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the `merge()` fix
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.18`;
+> `gina.min.css` and `gina.onload.min.js` are unchanged.
+
+**Two changes may require action:** one for every project (log redaction is now
+on by default), one only if you use the Couchbase connector.
+
+### Security — credentials in a request URL no longer reach the logs
+
+#### Action required
+
+None to keep the protection — it is **on by default**. Read on if anything of
+yours depends on the raw value being in a log line.
+
+The access line (`GET [200] /reset?token=…`), the error pages, the render
+delegates and the CSRF filter all log the request URL as received. A credential
+that travels in a URL — a password-reset token, a signed download link, a
+one-time invite — was therefore written to stdout in plaintext, with no seam to
+redact it. Every log message is now redacted **before** it is rendered and
+dispatched, at the logger's single pre-render point, so stdout, `gina tail`, the
+file transport and the Inspector all receive the same masked line, in text and
+JSON mode alike:
+
+```text
+GET [200] /reset?token=[REDACTED]
+proxy target https://svc:[REDACTED]@internal.host:8443/v1
+```
+
+The built-in set masks JSON Web Tokens, URL userinfo passwords, `Bearer` /
+`Basic` credentials, named credential query keys (`token`, `access_token`,
+`api_key`, `secret`, `password`, `signature`, `otp`, … — the key is kept, the
+value masked) and api-key style headers; and every value the secrets resolver
+substituted for a `${secret:KEY}` placeholder in your configs is masked verbatim
+wherever it appears. Generic keys such as `code`, `key` or `session` are left
+alone. Measured against 433k real log lines: no false positives, about a
+microsecond per line.
+
+**What may need a change on your side:**
+
+- **Anything that reads a credential back out of a log** — a log-based test, a
+  grep in an ops script, a support workflow that copies a reset link from the
+  logs — will now find `[REDACTED]`. Read the value from the request instead.
+- **Credentials shaped like a bare long-hex path segment** (`/files/<64 hex>`)
+  are **not** masked by default: a content-address key served from
+  [storage](/guides/storage) and an opaque credential are the same shape, so
+  no default can tell them apart. Add one pattern:
+
+  ```json
+  { "log": { "redact": { "patterns": ["(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])"] } } }
+  ```
+
+  The pattern anchors on the character class rather than `\b` — a leading
+  `\b` never fires when the segment is prefixed, as in `/verify/key_<hex>`
+  (`_` is a word character), and the miss is silent.
+
+- **If you had wrapped the logger yourself** to mask URLs, drop the wrapper —
+  the seam covers every framework site (both engines, every render delegate,
+  the CSRF filter) and the copy of the URL inside a 404's error message.
+- **To opt out** for a bundle: `{ "log": { "redact": { "enabled": false } } }`.
+
+A malformed block — an unknown key, a non-boolean flag, a pattern that does not
+compile or that matches the empty string — **refuses the boot**, because a rule
+dropped silently would be a leak. Full reference:
+[Logging guide → Redacting credentials](/guides/logging#redacting-credentials-from-logs)
+and [settings.json → `log`](/reference/settings#log).
+
+### Security — concurrent Couchbase entity reads no longer cross-deliver results
+
+#### Action required
+
+If your project uses the **Couchbase** connector, upgrade. There is no
+configuration change and no code change on your side — but read the impact
+below, because it may have produced wrong data in production.
+
+Before this release, two calls to the **same** entity method that were in flight
+at the same time could each receive the other's rows. The completion signal was
+keyed on the entity and method name only, on an entity object shared for the
+whole process, so the first query to finish woke *every* waiting caller of that
+method with its own result:
+
+```js
+// Two requests hitting this at the same time with different ids could each be
+// answered with the OTHER request's row.
+var user = await db.userEntity.getById(req.routing.param.id);
+```
+
+This affected `await` and `.onComplete()` equally. It was **not** limited to
+queries finishing out of order — it happened when they finished in the order
+they were started, too.
+
+**Why this is filed as a security change, not only a correctness one.** Where
+the method reads a user-scoped or ownership-bearing record, one request could be
+answered with another request's row — so an ownership or permission check
+performed on the returned row could pass for the wrong principal, and one user's
+data could be rendered into another user's response.
+
+**What to check in your own code.** Nothing needs changing, but if you keep
+request logs or audit records, concurrent reads of the same method are where any
+anomaly would have occurred. Errors were affected too: a failing query could
+settle a *different* caller, so an unrelated request could have failed with an
+error that was not its own.
+
+**Not affected:** the explicit trailing-callback form, including
+`util.promisify` — it always settled from its own per-call state:
+
+```js
+db.userEntity.getById(id, function (err, user) { /* … */ });
+```
+
+**Also not affected:** every other connector — MySQL, PostgreSQL, SQLite,
+ScyllaDB, DuckDB and MongoDB all settled per call already.
+
+`bulkInsert` carried the same defect on its own dispatch and is fixed with it.
+
+### Fixed — a failed Couchbase query no longer settles its caller twice (no action required)
+
+Each dispatch chained `.catch(…).then(…)`. A `.catch()` handler that returns
+normally *resolves*, so the trailing `.then()` ran on every error as well and
+delivered a second, bogus empty success. With an explicit callback that meant
+the canonical shape ran **both** branches:
+
+```js
+db.userEntity.getById(id, function (err, user) {
+    if (err) { return next(err); }   // ran with the real error…
+    self.renderJSON(user);           // …and then again with an empty result
+});
+```
+
+On the `await` / `.onComplete()` path the second settlement was discarded (a
+promise settles once), so it was invisible there. Failed `bulkInsert` calls also
+logged a spurious `TypeError: Cannot read properties of undefined (reading
+'rows')`; that is gone.
+
+### Fixed — a Couchbase callback that throws is no longer invoked twice (no action required)
+
+If your own callback body threw, the connector's error handling called that same
+callback again with the identical arguments. The throw is now reported with the
+query name for context and the callback is not re-entered.
+
+### Fixed — a logged `Error` object keeps its message and stack (no action required)
+
+`console.error(err)` used to render `{}` — or only the enumerable extras, such
+as `{"code": "ETIMEDOUT"}` — because both log writers walked enumerable
+properties only, and an Error's `message` and `stack` are not enumerable. An
+`Error` passed to any log method — directly, among other arguments, or nested
+inside a logged object — now renders with its message, stack, own properties
+and `cause` chain, on the levelled methods and on `console.log` alike. Passing
+`err.stack` as a string keeps working unchanged, and the rendered message still
+goes through log redaction.
+
+### Fixed — `merge()` no longer rewrites the object it was given (no action required)
+
+When a source subtree was merged into an existing target level that lacked its
+key, `lib/merge` referenced the subtree and then walked it again as if it were
+being merged into itself: every array inside the caller's object was replaced by
+a copy at every depth, and an array of primitives silently lost its duplicates.
+A subtree that is the same object on both sides is now skipped, so a grafted
+source keeps its arrays and its duplicates and the result references it. Merging
+two different values is unchanged, as is the shallow copy built when the key is
+absent at the root. If you relied on `merge` de-duplicating a shared array as a
+side effect, do it explicitly.
+
+---
+
 ## 0.6.17 → 0.6.18
 
 > **This release changes the browser bundle.** Restart **and** rebuild your

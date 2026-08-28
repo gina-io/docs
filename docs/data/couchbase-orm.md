@@ -248,25 +248,45 @@ may return stale data.
 
 ---
 
-## EventEmitter-based lifecycle
+## Calling entity methods
 
-Entities extend `EventEmitter`. Method calls emit trigger events, and results are
-delivered through callbacks:
+Entity methods return a native `Promise` with an `.onComplete(cb)` shim kept for
+backward compatibility. `await` is the preferred form:
 
 ```javascript
 // In a controller action (var self = this; declared at constructor top)
-this.showInvoice = function(req, res, next) {
+this.showInvoice = async function(req, res, next) {
     // getModel() is a global -- pass the connectors.json entry name.
     // Entities are exposed on the model object in lower-camel form.
     var db = getModel('myBucket');
 
-    db.invoice.find(req.routing.param.id).onComplete(function(err, invoice) {
-        if (err) return self.throwError(err);
-
+    try {
+        var invoice = await db.invoice.find(req.routing.param.id);
         self.render({ invoice: invoice });
-    });
+    } catch (err) {
+        self.throwError(err);
+    }
 };
 ```
+
+The callback form remains supported:
+
+```javascript
+db.invoice.find(req.routing.param.id).onComplete(function(err, invoice) {
+    if (err) return self.throwError(err);
+
+    self.render({ invoice: invoice });
+});
+```
+
+Each call is settled by that call alone, whichever order concurrent queries
+finish in, so issuing several at once (including with `Promise.all`) is safe.
+
+:::caution Before 0.6.19
+Concurrent calls to the *same* method could receive each other's results. See the
+[Migration Guide](/migration) for the details and for what to check if you ran an
+earlier version in production.
+:::
 
 The flow:
 
@@ -282,31 +302,22 @@ sequenceDiagram
     Entity->>Conn: Execute find.sql with [$1=id]
     Conn->>CB: N1QL query
     CB-->>Conn: Result rows
-    Conn-->>Entity: emit('invoice#find', null, data)
-    Entity-->>Ctrl: .onComplete(cb) fires
+    Conn-->>Entity: settles this call's Promise
+    Entity-->>Ctrl: await resolves / .onComplete(cb) fires
 ```
 
-**Why EventEmitter instead of Promises?**
+**Why is there an `.onComplete(cb)` shim?**
 
-The entity system predates native Promises in Node.js. The `.onComplete(cb)` pattern
-provides a consistent callback interface. For modern code that needs `async/await`,
-use the `onCompleteCall()` global helper:
+The entity system predates native Promises in Node.js, and `.onComplete(cb)` was
+the original interface. Methods now return a real Promise and keep the shim so
+existing callback code continues to work unchanged.
 
-```javascript
-// var self = this; declared at constructor top
-this.showInvoice = async function(req, res, next) {
-    var db = getModel('myBucket');
-
-    try {
-        var invoice = await onCompleteCall(db.invoice.find(req.routing.param.id));
-        self.render({ invoice: invoice });
-    } catch (err) {
-        self.throwError(err);
-    }
-};
-```
-
-See [Async helpers](/globals/async) for details on `onCompleteCall()`.
+:::tip Entities do not need `onCompleteCall()`
+Because entity methods already return a Promise, `await` works on them directly.
+The [`onCompleteCall()`](/globals/async) global is for APIs that expose only an
+`.onComplete(cb)` handle and are *not* thenable — `PathObject` and `Shell`
+operations, for instance. Wrapping an entity call in it is unnecessary.
+:::
 
 ---
 

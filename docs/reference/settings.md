@@ -374,6 +374,41 @@ bundle restart (like `routing.json`, `connectors.json`, and the rest of
 `settings.json`).
 :::
 
+### `log`
+
+Logging options for this bundle. Today it carries one block, `redact` — pre-render
+log redaction. Every log message is redacted **before** it is rendered and
+dispatched, so stdout, `gina tail`, the file transport and the Inspector all receive
+the same masked line, and a JSON-mode line can never be corrupted. **On by default.**
+See the [Logging guide → Redacting credentials](../guides/logging#redacting-credentials-from-logs)
+for what the built-in set covers and how to extend it.
+
+```json
+{
+  "log": {
+    "redact": {
+      "enabled":  true,
+      "defaults": true,
+      "secrets":  true,
+      "patterns": []
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `redact.enabled` | boolean | `true` | Master switch. Strictly boolean — a string `"false"` refuses to boot. Process-wide: when several bundles share one process, one bundle enabling redaction is enough for the whole process to redact |
+| `redact.defaults` | boolean | `true` | Apply the built-in pattern set: JSON Web Tokens, URL userinfo passwords (`scheme://user:PASSWORD@host`), `Bearer` / `Basic` credentials, named credential query keys (`token`, `access_token`, `api_key`, `secret`, `password`, `signature`, `otp`, …) with the key kept and the value masked, and api-key style headers. A bare long-hex path segment is deliberately **not** a default — see the guide |
+| `redact.secrets` | boolean | `true` | Mask, verbatim, every value the [secrets resolver](../guides/secrets) substituted for a `${secret:KEY}` placeholder in this bundle's configs. Values shorter than 8 characters are skipped, with a boot warning naming the config path |
+| `redact.patterns` | array | `[]` | Your own rules, applied to the whole message with the `g` flag. A regex source string (whole match → `[REDACTED]`) or `{ "pattern", "flags", "replacement", "name" }` where `replacement` follows `String.prototype.replace` (`$1` keeps a group). A pattern that does not compile, or that matches the empty string, refuses the boot |
+
+:::note Boot config
+`log` is read once at config load — a change needs a bundle restart. An
+unknown key inside `redact` refuses the boot (a misspelt `pattern` would
+otherwise be ignored silently).
+:::
+
 ### `render`
 
 Selects the template engine `self.render(data)` dispatches to for this bundle.

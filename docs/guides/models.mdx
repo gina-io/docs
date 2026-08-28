@@ -230,6 +230,11 @@ Methods whose body does not reference the trigger string are plain functions and
 wrapped — they have no `.onComplete()` and no Promise return.
 
 :::note Concurrency and per-call identity
+This note describes the **JS-defined emit-style methods** above — the ones you write by
+hand whose body calls `self.emit('<shortName>#<methodName>', …)`. Methods generated from
+`.sql` files behave differently; see
+[Concurrency for SQL-derived methods](#concurrency-for-sql-derived-methods).
+
 When several calls to the **same** emit-style method are in flight at once, the framework
 pairs completions to callers in **arrival order** — the first result emitted goes to the
 first caller still waiting, and so on. Each caller settles (no call is ever left hanging),
@@ -573,6 +578,32 @@ sequenceDiagram
     C->>C: self.renderJSON(user)
 ```
 
+### Concurrency for SQL-derived methods
+
+Each call to a `.sql`-derived method carries **true per-call identity**: the returned
+Promise is settled by that call and no other, whichever order the underlying queries
+finish in. Issuing several at once — including with `Promise.all` — is safe, and the
+callback and `await` forms behave identically.
+
+:::caution Couchbase, before 0.6.19
+This guarantee is **new in 0.6.19** for the Couchbase connector. Earlier versions settled
+these methods from a listener keyed on the entity and method name only, on an entity
+shared process-wide — so the first query to finish woke *every* in-flight caller of that
+method with its own rows, and concurrent callers could receive each other's results. It
+affected `await` and `.onComplete()` equally, and applied even when the queries completed
+in the order they were started.
+
+If you are on an earlier version and cannot upgrade, the explicit trailing-callback form
+was never affected:
+
+```js
+db.userEntity.getById(id, function (err, user) { /* … */ });
+```
+
+The other connectors (MySQL, PostgreSQL, SQLite, ScyllaDB, DuckDB, MongoDB) always carried
+per-call identity and were never affected.
+:::
+
 ### `await` (preferred in async actions)
 
 ```js
@@ -617,6 +648,10 @@ var [user, orders] = await Promise.all([
     db.orderEntity.getByUserId(userId)
 ]);
 ```
+
+Parallel calls are safe, including several calls to the *same* method with different
+arguments — see [Concurrency for SQL-derived methods](#concurrency-for-sql-derived-methods)
+for the guarantee and the Couchbase version note.
 
 ### Transient vs permanent errors
 
