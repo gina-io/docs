@@ -67,8 +67,12 @@ microsecond per line.
   no default can tell them apart. Add one pattern:
 
   ```json
-  { "log": { "redact": { "patterns": ["\\b[0-9a-f]{64}\\b"] } } }
+  { "log": { "redact": { "patterns": ["(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])"] } } }
   ```
+
+  The pattern anchors on the character class rather than `\b` — a leading
+  `\b` never fires when the segment is prefixed, as in `/verify/key_<hex>`
+  (`_` is a word character), and the miss is silent.
 
 - **If you had wrapped the logger yourself** to mask URLs, drop the wrapper —
   the seam covers every framework site (both engines, every render delegate,

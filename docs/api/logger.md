@@ -87,7 +87,7 @@ pattern) — nothing is installed in that case.
 ```js
 var lib     = require('gina').lib;
 var console = lib.logger;
-console.setRedaction({ patterns: ['\\b[0-9a-f]{64}\\b'] }, { group: 'worker@myproject' });
+console.setRedaction({ patterns: ['(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])'] }, { group: 'worker@myproject' });
 console.info('GET /files/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08');
 // → GET /files/[REDACTED]
 ```

@@ -472,7 +472,7 @@ credentials look like that, add one pattern:
   "log": {
     "redact": {
       "patterns": [
-        "\\b[0-9a-f]{64}\\b",
+        "(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])",
         { "pattern": "(invite=)[^&\\s]+", "flags": "gi", "replacement": "$1[REDACTED]", "name": "invites" }
       ]
     }
