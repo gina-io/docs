@@ -21,7 +21,11 @@ upward to the target version.
 
 ## 0.6.18 → 0.6.19
 
-> **Server-side only.** Restart your bundles; no rebuild is needed.
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the `merge()` fix
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.18`;
+> `gina.min.css` and `gina.onload.min.js` are unchanged.
 
 **Two changes may require action:** one for every project (log redaction is now
 on by default), one only if you use the Couchbase connector.
