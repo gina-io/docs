@@ -508,6 +508,23 @@ failures at render time follow the resilience rules described in the
 
 ---
 
+### `model`
+
+Model-layer (entity) settings. *Since 0.6.20.*
+
+```json
+{
+  "model": {
+    "emitTimeout": 30000
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `emitTimeout` | integer (ms) | `0` (no bound) | Bound on a call to an emit-style entity method that never signals completion — the method neither emits its `<shortName>#<method>` trigger nor returns a Promise that settles (typically because something threw inside an asynchronous callback before the `emit`). When exceeded, that call alone rejects with an Error naming the trigger, the bundle logs a warn line, and the call's pending slot is released so later calls are unaffected. Absent or `0`: the call stays pending, as before 0.6.20. Set it above the slowest legitimate operation in the bundle (bulk operations included); it applies to every entity of the bundle and is read once at startup. See the [Models guide's concurrency note](../guides/models#concurrency-and-per-call-identity) |
+
+
 ## settings.server.json {#settingsserverjson}
 
 Server-side-only overrides. These values are available on the server and not

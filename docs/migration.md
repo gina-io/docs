@@ -19,6 +19,113 @@ upward to the target version.
 
 ---
 
+## 0.6.19 → 0.6.20
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets, so the `merge()` fixes
+> below would not reach a browser at all. `gina.min.js` differs from `0.6.19`.
+
+### Security — concurrent calls to an emit-style entity method are paired by call identity (restart; review your entity methods)
+
+One call to a JS-defined entity method that **never signalled completion** — it
+neither emitted its `<shortName>#<method>` trigger nor returned a Promise that
+settled, typically because something threw inside an asynchronous callback
+before the `emit` (swallowed as an unhandled rejection, so nothing else
+reported it) — permanently desynchronised that method's completion queue.
+Completions were paired to callers in arrival order with no call identity, so
+from then on every caller of the method received the **next** caller's record
+and the last one hung; with no overlap every later caller hung; and each further
+lost completion made it one caller worse. Where the method reads a user-scoped or
+ownership-bearing record, a check performed on the returned row could pass for
+the wrong principal — a confidentiality and authorization concern, not only a
+correctness one, and the same shape as the 0.6.19 Couchbase fix. The trigger
+is data-dependent (an unexpected record shape), not load-dependent: it does not
+show up in a load test and does show up in any long-lived process.
+
+Each call now runs in its own async context and every completion is paired to
+the call it came from, whatever the completion order; a completion for a call
+that has already settled is dropped rather than handed to the next caller. This
+also closes the documented out-of-order residual of the 0.6.11 fix. A
+completion that reaches the entity outside every call's context (a native
+driver invoking callbacks from a loop it started at boot) still pairs in arrival
+order, and the bundle now logs `DISPATCH:NO_CONTEXT` at `debug` level when it
+happens.
+
+Two things to check in your own code:
+
+- **A method that returns a Promise was only safe on the entity-context call
+  form.** `util.promisify(entity.method)` discarded the returned Promise, so a
+  Promise-returning method hung there while `await entity.method()` worked. The
+  promisify form now chains on the returned Promise too. If you converted
+  promisify callers to direct awaits to work around this, the conversion stays
+  correct; it is no longer required.
+- **A call that never completes still stays pending by default** — only that
+  call now, the others are unaffected. To bound it, set
+  `settings.json > model.emitTimeout` (milliseconds): the call then rejects with
+  an Error naming the trigger and the bundle logs a warn line. Choose a value
+  above your slowest legitimate operation (bulk operations included); there is
+  no default because a fixed one would fail those.
+
+```json
+{
+  "model": { "emitTimeout": 30000 }
+}
+```
+
+The [Models guide](guides/models#concurrency-and-per-call-identity) example that
+wrapped a synchronous `try/catch` around an asynchronous connector callback has
+been corrected: such a `try/catch` cannot catch a throw raised inside the
+callback, which is exactly the shape that lost the completion. Guard inside the
+callback. Server-side only — a restart picks it up; the browser-bundle rebuild
+above is owed to the `merge()` fixes, not to this one.
+
+### Fixed — `merge()` no longer throws on a mixed primitive/object array (no action required)
+
+Merging a target array that repeats a primitive (`['v2', 'v2']`) with an array
+of objects threw `TypeError: Cannot create property 'id' on string` — and, with
+a `null` in the target, `Cannot read properties of null`. The branch that fills
+a source object into a free index of the target tested for the free index on a
+de-duplicated copy of the target and then wrote into the real one, whose index
+still held the string. Because every configuration overlay travels through
+`merge`, a config that hit the shape killed the boot instead of merging. An
+occupied index is now left alone — as it already was for an object landing on
+one — so the merge completes:
+
+```js
+var merge = require('lib/merge');
+merge(['v2', 'v2'], [{ id: 3 }, { id: 0 }, { id: 3 }]);
+// before: TypeError — now: ['v2', 'v2', { id: 3 }]
+```
+
+Every other array shape merges exactly as it did before.
+
+### Fixed — `merge()` merges a number array once, and merging the same source twice is a no-op (no action required)
+
+A number the target already held at a different index was pushed again on
+every merge — `merge([9, 1], [1])` gave `[9, 1, 1]`, and `{ ports: [8080, 8124] }`
+merged with `{ ports: [8124] }` gave `[8080, 8124, 8124]` — because the rule
+that lets a source repeat a number (`[25]` + `[25, 25]` gives `[25, 25]`)
+compared positions rather than counts. Below the top level every array was
+also merged twice, once in the level's key loop and once in the recursion that
+follows, so `{ q: { p: [1, 2] } }` merged with `{ q: { p: [3, 4] } }` gave
+`[1, 2, 3, 4, 3, 4]` where the same arrays at the top level gave `[1, 2, 3, 4]`.
+The top-up now compares counts and a nested array is merged once per level:
+
+```js
+merge({ ports: [8080, 8124] }, { ports: [8124] });   // { ports: [8080, 8124] }
+merge({ q: { p: [1, 2] } }, { q: { p: [3, 4] } });  // { q: { p: [1, 2, 3, 4] } }
+```
+
+If a configuration overlay of yours repeats a port, a size or any other number,
+the merged array no longer carries the duplicate — check any code that counted
+on it. Strings, booleans, `null` and id-keyed collections merge exactly as
+before, and an array shared by both sides below the top level is now left
+untouched (it used to be replaced by a de-duplicated copy), closing a residual
+of the 0.6.19 source-mutation fix.
+
+---
+
 ## 0.6.18 → 0.6.19
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
