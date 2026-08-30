@@ -19,6 +19,109 @@ upward to the target version.
 
 ---
 
+## 0.6.20 → 0.6.21
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets. `gina.min.js` differs
+> from `0.6.20`.
+
+### Fixed — an outbound `route.request()` now settles its callback on failure (restart and rebuild; review your error handling)
+
+`route.request()` discarded the request object returned by `http(s).get`, so
+nothing could attach an `error` listener to it. A failed outbound call therefore
+took one of two paths, neither of which reached your callback:
+
+- **It never settled.** When the failure code was one the process-level handler
+  deliberately tolerates (`ECONNREFUSED`, `ECONNRESET`, `EPIPE`), the process
+  survived and your callback was simply never invoked — no error, no log line.
+  In anything serialized (a worker at concurrency 1, a queue processor) that is
+  a permanent stall with nothing to diagnose it by.
+- **It killed the bundle.** When the code was not one of those (`ETIMEDOUT`,
+  `EHOSTUNREACH`, `ENETUNREACH` — a peer that stops answering, a route that goes
+  away), the unhandled `error` became an `uncaughtException` and the bundle was
+  terminated.
+
+A response stream that died mid-body behaved like the first case for a different
+reason: the error was recorded and delivery waited on an `end` event that a
+broken stream never emits.
+
+All exit paths now run through a single-settle latch, so the callback is invoked
+**exactly once** on every outcome and can never be invoked twice.
+
+**What to check in your own code.** Any call site that only handled the success
+path will now start receiving error invocations that previously never arrived:
+
+```js
+route.request(false, options, function (err, data) {
+    if (err) { return handleFailure(err); }   // this branch now actually runs
+    use(data);
+});
+```
+
+`err` is an `Error` for a transport failure (it carries the original `code`), a
+string for a broken response stream, and `false` on success. A request sent
+**without** a callback is fire-and-forget: a dial failure is now reported with
+`console.warn` instead of being thrown, so it can no longer take the process
+down.
+
+### Changed — `options.timeout` is honoured (it previously did nothing)
+
+`options.timeout` was already accepted and passed through to `http(s).get`, but
+Node only *emits* a `timeout` event and never destroys the socket — and the
+request object was unreachable, so nothing could act on it. The option was inert.
+
+It now works: on expiry the request is destroyed and the callback settles with an
+`Error` carrying `code === 'ETIMEDOUT'`.
+
+**Action required if you already set it.** If you passed `options.timeout`
+believing it capped the call, it did not, and requests that ran past it are
+running past it today. After this upgrade they will be aborted at that budget.
+Re-check the value against your slowest legitimate response before upgrading, or
+remove the option to keep the previous unbounded behaviour — an absent or falsy
+`timeout` attaches no listener at all.
+
+```js
+route.request(false, { timeout: 5000 }, function (err, data) {
+    if (err && err.code === 'ETIMEDOUT') { return retryOrGiveUp(err); }
+    if (err) { return handleFailure(err); }
+    use(data);
+});
+```
+
+### Fixed — `merge()` no longer throws on a null array element (awareness)
+
+An id-keyed array carrying a `null` element threw
+`TypeError: Cannot read properties of null` from deep inside the merge — on
+either operand, at any index (`typeof null` is `'object'`, so a null element
+passed every type test and the next property access dereferenced it). The
+0.6.20 release fixed the write side of this family; this release fixes the read
+side: entry guards, id-roster loops, the override walk and the per-element
+collection tests all now treat a null element as an element with no key — it
+matches nothing, blocks nothing and contributes nothing.
+
+No action required. Shapes that previously worked are unchanged (the regression
+suite pins them byte-identical); shapes that previously threw now merge, e.g.
+`merge([null, null], [{ id: 1 }, { id: 2 }])` returns `[null, null]` — the
+target's slots win, exactly as they do for a primitive-filled target.
+
+### Fixed — Safari: modifier chords work again on validated `autocomplete="off"` fields (awareness)
+
+On Safari, a live-checked field carrying `autocomplete="off"` (or `"false"`)
+could not be pasted into — and select-all, copy, cut and undo were equally
+dead. Nothing was inserted, no `paste` or `beforeinput` event was dispatched
+anywhere on the page, and typing kept working, so nothing pointed at the
+framework. The form-level keydown proxy was cancelling the native keydown
+before the Safari typing interception could decide anything; it now defers
+that decision to the interception, which deliberately lets modifier chords
+run natively.
+
+No action required. Typing interception, caret integrity and autofill
+suppression on those fields are unchanged. Chromium-family browsers were never
+affected.
+
+---
+
 ## 0.6.19 → 0.6.20
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
