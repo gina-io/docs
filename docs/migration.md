@@ -89,6 +89,22 @@ route.request(false, { timeout: 5000 }, function (err, data) {
 });
 ```
 
+### Fixed — `merge()` no longer throws on a null array element (awareness)
+
+An id-keyed array carrying a `null` element threw
+`TypeError: Cannot read properties of null` from deep inside the merge — on
+either operand, at any index (`typeof null` is `'object'`, so a null element
+passed every type test and the next property access dereferenced it). The
+0.6.20 release fixed the write side of this family; this release fixes the read
+side: entry guards, id-roster loops, the override walk and the per-element
+collection tests all now treat a null element as an element with no key — it
+matches nothing, blocks nothing and contributes nothing.
+
+No action required. Shapes that previously worked are unchanged (the regression
+suite pins them byte-identical); shapes that previously threw now merge, e.g.
+`merge([null, null], [{ id: 1 }, { id: 2 }])` returns `[null, null]` — the
+target's slots win, exactly as they do for a primitive-filled target.
+
 ---
 
 ## 0.6.19 → 0.6.20
