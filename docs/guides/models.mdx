@@ -203,14 +203,17 @@ function UserEntity() {
         rec._scope      = self._scope;
         rec._collection = self._collection;
 
-        try {
-            conn.insert(rec.id, rec, function(err, result) {
+        conn.insert(rec.id, rec, function(err, result) {
+            // Guard INSIDE the callback: a try/catch wrapped around `conn.insert(...)`
+            // cannot see a throw raised in here, and a method that throws before it
+            // emits never signals completion (see the concurrency note below).
+            try {
                 if (err) return self.emit('user#insert', err);
                 self.emit('user#insert', false, rec);
-            });
-        } catch(e) {
-            self.emit('user#insert', e);
-        }
+            } catch (e) {
+                self.emit('user#insert', e);
+            }
+        });
     };
 }
 
@@ -220,44 +223,65 @@ module.exports = UserEntity;
 **Rules for JS-defined methods:**
 
 - The method body must contain the string `<shortName>#<methodName>` (e.g. `user#insert`).
-  The framework scans source text to discover which methods participate in the event system.
+  The framework scans source text to discover which methods participate in the event system —
+  the function's source **as written, comments included**: a comment that merely names the
+  trigger registers the method, and a method that passes the trigger name to a helper is
+  registered too. Removing the last occurrence un-registers it: the method becomes a plain
+  function with no wrapper, no `.onComplete()` and no Promise return, so its callers must move
+  to the returned value in the same change.
 - Call `self.emit('<shortName>#<methodName>', err)` on failure and
   `self.emit('<shortName>#<methodName>', false, result)` on success.
+- **Every path must reach an `emit` (or return a Promise that settles).** A throw inside an
+  asynchronous callback is not caught by a `try/catch` around the call that registered it —
+  it is swallowed as an unhandled rejection, and the call never completes. Guard inside the
+  callback, as above, and consider [`model.emitTimeout`](#concurrency-and-per-call-identity).
 - The framework wraps discovered methods in a Promise with an `.onComplete(cb)` shim —
   callers can use `await` or the callback style interchangeably.
 
 Methods whose body does not reference the trigger string are plain functions and are not
 wrapped — they have no `.onComplete()` and no Promise return.
 
-:::note Concurrency and per-call identity
-This note describes the **JS-defined emit-style methods** above — the ones you write by
+### Concurrency and per-call identity
+
+This section describes the **JS-defined emit-style methods** above — the ones you write by
 hand whose body calls `self.emit('<shortName>#<methodName>', …)`. Methods generated from
 `.sql` files behave differently; see
 [Concurrency for SQL-derived methods](#concurrency-for-sql-derived-methods).
 
-When several calls to the **same** emit-style method are in flight at once, the framework
-pairs completions to callers in **arrival order** — the first result emitted goes to the
-first caller still waiting, and so on. Each caller settles (no call is ever left hanging),
-and when the underlying operations complete in the order they were started, every caller
-receives its own result.
+When several calls to the **same** emit-style method are in flight at once, each completion
+is paired to **the call it came from** (*since 0.6.20*): the framework runs every call inside
+its own async context and matches the `self.emit(...)` to that context, whichever order the
+underlying operations complete in — different keys with different latencies included. A
+completion that reaches the entity outside every call's async context (for example a native
+driver invoking callbacks from a loop it started at boot) is paired in arrival order instead,
+and the bundle logs `DISPATCH:NO_CONTEXT` at `debug` level when that happens — raise the log
+level to `debug` to check whether any of your methods take that path.
 
-If the operations can complete **out of the order they were called** — different keys with
-different latencies, say — arrival-order pairing can hand one caller another's result. When
-that matters, give the method **true per-call identity by returning a Promise** instead of
-emitting:
+A call that **never signals completion** — the method neither emits nor returns a Promise
+that settles, typically because something threw inside an asynchronous callback before the
+`emit` — stays pending, and only that call: every other caller is unaffected. To bound it,
+set `settings.json > model.emitTimeout` (milliseconds; absent or `0` means no bound). The
+call then rejects with an Error naming the trigger and the bundle logs a warn line:
+
+```json
+{
+  "model": { "emitTimeout": 30000 }
+}
+```
+
+Choose a value above the slowest legitimate operation in the bundle (bulk operations
+included) — there is no default precisely because a fixed one would fail those.
+
+Returning a Promise instead of emitting remains a fine way to write a method — the returned
+Promise is chained on for both call forms (`await entity.method()` and
+`util.promisify(entity.method)`) — but it is no longer needed for per-call identity:
 
 ```js
 UserEntity.prototype.getById = function getById(id) {
-    // No emit; the returned Promise is bound to THIS call.
+    // No emit; the returned Promise settles THIS call.
     return this.getConnection().get(id);
 };
 ```
-
-A method that returns a Promise resolves the exact call that made it, regardless of
-completion order. The emit + `.onComplete()` pattern remains fully supported and is correct
-for the common in-order case; reach for the Promise return only when concurrent out-of-order
-completion on one method is a real possibility.
-:::
 
 ---
 

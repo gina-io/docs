@@ -26,6 +26,60 @@ upward to the target version.
 > and each bundle bakes its own copy of the client assets, so the `merge()` fixes
 > below would not reach a browser at all. `gina.min.js` differs from `0.6.19`.
 
+### Security — concurrent calls to an emit-style entity method are paired by call identity (restart; review your entity methods)
+
+One call to a JS-defined entity method that **never signalled completion** — it
+neither emitted its `<shortName>#<method>` trigger nor returned a Promise that
+settled, typically because something threw inside an asynchronous callback
+before the `emit` (swallowed as an unhandled rejection, so nothing else
+reported it) — permanently desynchronised that method's completion queue.
+Completions were paired to callers in arrival order with no call identity, so
+from then on every caller of the method received the **next** caller's record
+and the last one hung; with no overlap every later caller hung; and each further
+lost completion made it one caller worse. Where the method reads a user-scoped or
+ownership-bearing record, a check performed on the returned row could pass for
+the wrong principal — a confidentiality and authorization concern, not only a
+correctness one, and the same shape as the 0.6.19 Couchbase fix. The trigger
+is data-dependent (an unexpected record shape), not load-dependent: it does not
+show up in a load test and does show up in any long-lived process.
+
+Each call now runs in its own async context and every completion is paired to
+the call it came from, whatever the completion order; a completion for a call
+that has already settled is dropped rather than handed to the next caller. This
+also closes the documented out-of-order residual of the 0.6.11 fix. A
+completion that reaches the entity outside every call's context (a native
+driver invoking callbacks from a loop it started at boot) still pairs in arrival
+order, and the bundle now logs `DISPATCH:NO_CONTEXT` at `debug` level when it
+happens.
+
+Two things to check in your own code:
+
+- **A method that returns a Promise was only safe on the entity-context call
+  form.** `util.promisify(entity.method)` discarded the returned Promise, so a
+  Promise-returning method hung there while `await entity.method()` worked. The
+  promisify form now chains on the returned Promise too. If you converted
+  promisify callers to direct awaits to work around this, the conversion stays
+  correct; it is no longer required.
+- **A call that never completes still stays pending by default** — only that
+  call now, the others are unaffected. To bound it, set
+  `settings.json > model.emitTimeout` (milliseconds): the call then rejects with
+  an Error naming the trigger and the bundle logs a warn line. Choose a value
+  above your slowest legitimate operation (bulk operations included); there is
+  no default because a fixed one would fail those.
+
+```json
+{
+  "model": { "emitTimeout": 30000 }
+}
+```
+
+The [Models guide](guides/models#concurrency-and-per-call-identity) example that
+wrapped a synchronous `try/catch` around an asynchronous connector callback has
+been corrected: such a `try/catch` cannot catch a throw raised inside the
+callback, which is exactly the shape that lost the completion. Guard inside the
+callback. Server-side only — a restart picks it up; the browser-bundle rebuild
+above is owed to the `merge()` fixes, not to this one.
+
 ### Fixed — `merge()` no longer throws on a mixed primitive/object array (no action required)
 
 Merging a target array that repeats a primitive (`['v2', 'v2']`) with an array
