@@ -105,6 +105,21 @@ suite pins them byte-identical); shapes that previously threw now merge, e.g.
 `merge([null, null], [{ id: 1 }, { id: 2 }])` returns `[null, null]` — the
 target's slots win, exactly as they do for a primitive-filled target.
 
+### Fixed — Safari: modifier chords work again on validated `autocomplete="off"` fields (awareness)
+
+On Safari, a live-checked field carrying `autocomplete="off"` (or `"false"`)
+could not be pasted into — and select-all, copy, cut and undo were equally
+dead. Nothing was inserted, no `paste` or `beforeinput` event was dispatched
+anywhere on the page, and typing kept working, so nothing pointed at the
+framework. The form-level keydown proxy was cancelling the native keydown
+before the Safari typing interception could decide anything; it now defers
+that decision to the interception, which deliberately lets modifier chords
+run natively.
+
+No action required. Typing interception, caret integrity and autofill
+suppression on those fields are unchanged. Chromium-family browsers were never
+affected.
+
 ---
 
 ## 0.6.19 → 0.6.20
