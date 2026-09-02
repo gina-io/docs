@@ -19,6 +19,71 @@ upward to the target version.
 
 ---
 
+## 0.6.22 → 0.6.23
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets.
+
+### Security headers are now emitted by default (verify, usually no action)
+
+The framework itself now emits seven security headers on every response, on
+both engines: `x-content-type-options`, `x-download-options`,
+`x-permitted-cross-domain-policies`, `x-xss-protection`, `referrer-policy`,
+`x-dns-prefetch-control` and `origin-agent-cluster`. They were chosen because
+none can break a working application, and precedence is first-writer-wins — a
+mounted `#HDR` plugin, an `env.json > server.response.header` entry or an
+upstream proxy that already sets one of these keeps its value untouched.
+
+- Nothing to do for most bundles. If you must reproduce the previous wire
+  format exactly, set `"server": { "securityHeaders": { "enabled": false } }`.
+- Individual headers can be dropped with `"<key>": false`; four more
+  (`xFrameOptions`, `coop`, `corp`, `hsts`) are available opt-in. See
+  [Framework-emitted defaults](/guides/security-headers#framework-emitted-defaults-since-0623).
+
+### `X-Powered-By` is now suppressed by default (action only if you relied on it)
+
+`server.hidePoweredBy` flipped from `false` to `true`: responses no longer
+carry the framework name and version. Set it back to `false` to restore the
+banner. If you run the render/output cache with `server.cache.name` unset, the
+existing boot warning about `Cache-Status` still naming the framework now
+fires under the new default — set any token there to close that disclosure too.
+
+### Non-multipart request bodies are now capped at 64MB (action only above the cap)
+
+`server.maxBodySize` (default `"64MB"`) bounds plain JSON/urlencoded/raw
+bodies, which previously accumulated with no ceiling: a body past the limit is
+answered `413` and the stream is destroyed. Multipart uploads are unaffected
+(they stay under the `upload.*` caps).
+
+- If you legitimately post larger non-multipart bodies, raise the cap or set
+  `0` to disable it.
+- A warn-only companion, `server.maxBodySizeWarn` (default `"2MB"`), logs
+  oversized bodies so you can measure your real distribution before choosing a
+  stricter ceiling.
+
+### Additive — no action required
+
+- **`server.timeout`** is now configurable (ms or `"5m"`-style). It stays `0`
+  (unlimited) by default on purpose: a finite whole-request clock would kill
+  Server-Sent Events and WebSocket connections, and the slow-body case is
+  already closed by the body cap.
+- **Opt-in Subresource Integrity**: `templates.json > "_common" >
+  "sriEnabled": true` adds `integrity` + `crossorigin` attributes to
+  same-origin script and stylesheet tags that resolve on disk. Fail-open —
+  assets that cannot be honestly hashed are emitted unchanged. See the
+  [templates reference](/reference/templates#subresource-integrity-srienabled)
+  before enabling, notably the render-cache flush note.
+- **Hardened inline-script escaping**: server data serialised into inline
+  `<script>` blocks now neutralises `<` itself, closing every script-terminator
+  spelling (`</script >`, `</script/>`, …); escaped output parses back to an
+  identical value, so no data shape changes.
+- A JSON body whose nested object carries a shadowed `constructor` key no
+  longer crashes the merge on the PUT path; the guarded key is still dropped
+  per the 0.6.22 disclosure, sibling fields survive.
+
+---
+
 ## 0.6.21 → 0.6.22
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
