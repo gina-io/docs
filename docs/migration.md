@@ -59,10 +59,12 @@ readers were confirmed by probe:
 - **Safe-method and exemption checks.** A lookup of the form
   `SAFE_HTTP_METHODS[method] === true` could classify `POST` as safe.
 
-**The fix.** Both key paths are now rejected: the data helper refuses
-`__proto__`, `constructor` and `prototype` as key-path segments (in raw and
-percent-encoded form), and `merge()` no longer copies inherited enumerable
-source properties.
+**The fix.** Both sources now reject the same three key names — `__proto__`,
+`constructor` and `prototype` — in raw and percent-encoded form: the data helper
+refuses them as key-path segments, and `merge()` refuses them as source keys.
+Rejecting the key name is what closes this: an *own* `__proto__` (the shape
+`JSON.parse` produces) satisfies an own-property check, so no own-property test
+could have stopped it.
 
 **Action required: none beyond the upgrade.** Those key names have never had a
 legitimate meaning as form field names, so no working request shape changes. The
