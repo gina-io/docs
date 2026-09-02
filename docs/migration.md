@@ -19,6 +19,91 @@ upward to the target version.
 
 ---
 
+## 0.6.23 → 0.6.24
+
+> **This release does not change the browser bundle.** A bundle restart is
+> enough — no rebuild is required. All three changes are server-side, inside the
+> Couchbase connector; projects on other connectors are unaffected.
+
+### `bulkInsert` now rejects on a failed prologue (action if you fire-and-forget)
+
+`bulkInsert`'s outer `try` wraps the method's own body, so a synchronous failure
+raised before the insert was dispatched — a connection that cannot be resolved,
+or either of the two `rec` validations — was caught, written to `console.error`
+and then swallowed: the method fell off the end and returned `undefined`. Both
+documented call shapes broke on that path, in opposite ways:
+
+```js
+// Promise form — resolved with `undefined`, silently
+var rows = await myEntity.bulkInsert({ 'doc-1': { values: { a: 1 } } });
+// rows === undefined, and nothing was inserted
+
+// Callback shim — threw at the call site
+myEntity.bulkInsert({ 'doc-1': { values: { a: 1 } } })
+    .onComplete(function (err, rows) { /* … */ });
+// TypeError: Cannot read properties of undefined (reading 'onComplete')
+```
+
+In both shapes the error existed only in the log: it could not be branched on,
+retried or surfaced to the caller. The promise, its one-shot resolver and the
+`.onComplete` shim are now built before the `try`, so the outer catch settles
+this call — `.onComplete(cb)` receives `(err)` and the Promise form rejects. The
+happy path is unchanged, and a late throw cannot double-settle.
+
+- **If you call `bulkInsert` fire-and-forget** — ignoring both the returned
+  promise and `.onComplete` — a prologue failure now surfaces as an
+  `unhandledRejection` where it previously failed silently. Attach a rejection
+  handler, `await` the call, or use `.onComplete()` wherever you do this.
+- **If you already branch on the error**, nothing needs changing: you simply
+  start receiving errors that were previously lost.
+
+### Scope — the RETURN changed, not what the promise resolves with
+
+Worth reading even if the section above needs no action from you, because it is
+the easy thing to get wrong when updating code or comments around a
+`bulkInsert` call.
+
+The fix moves one axis only: what `bulkInsert` **returns** synchronously. It
+does **not** change what a successful promise **resolves with**. A rows-less
+success still resolves `null`:
+
+```js
+var rows = await myEntity.bulkInsert(rec);
+if (!rows) {
+    // still reachable on SUCCESS — `null` here does not mean the insert failed
+}
+```
+
+A call that does not reject is therefore still **not** proof that rows were
+inserted. Keep any rows-based success check you have. If you have a comment or a
+guard whose stated premise was the old return-`undefined` behaviour, re-read it:
+the premise is now stale while the conclusion is usually still correct.
+
+### Additive — no action required
+
+- **A Couchbase entity that fails to register now names itself.** The catch
+  guarding entity-class construction and `.sql`-derived method attachment used
+  to emit a bare stack, so a failure left the entity partially built — or
+  absent — with nothing identifying which entity or which `.sql` file was
+  responsible; the first symptom was a missing method at request time,
+  arbitrarily far from the cause. The log line now carries the entity, the
+  source file, the method being attached and the underlying cause. Boot
+  behaviour is deliberately unchanged: registration failures remain non-fatal,
+  since making an unbuildable entity fatal would stop projects that boot through
+  a swallowed error today.
+- **The Couchbase reconnect classifier no longer throws.** `gina.onError`'s
+  handler tested `err instanceof couchbase.Error`, but no supported SDK exports
+  a bare `Error` class, so the check raised a `TypeError` the moment the handler
+  ran — replacing the real error with it. Each `instanceof` is now guarded on
+  the class existing. This is a guard, not an activation: the arms it protects
+  stay inert on modern SDKs, and the real error now reaches the handler's
+  designed terminal path instead of being replaced. Note that `gina.onError`
+  listeners only run under the Express engine's four-argument error middleware —
+  on the Isaac engine the listener is never dispatched, so there is no
+  behaviour change there at all.
+
+---
+
 ## 0.6.22 → 0.6.23
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
