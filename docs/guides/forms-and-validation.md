@@ -800,9 +800,36 @@ window.onSignupSuccess = function (event, data) {
 };
 
 window.onSignupError = function (event, data) {
-  // the server returned an error
+  // the submit did not succeed — see the payload shape below
 };
 ```
+
+`data` carries the outcome. Two shapes reach the error callback:
+
+| Failure | `data.status` | `data.transportError` |
+|---|---|---|
+| The server answered with an error status | that status (`500`, `422`, …) | `false` |
+| The request never reached the server — network down, connection refused, DNS failure, server restarting | `408` | `true` |
+
+The second row is why matching on `status >= 400` alone is enough for the common
+case: a transport failure is reported as `408` so existing range checks keep
+working. Branch on `transportError` when you need to tell "the server rejected
+this" apart from "the server was never reached" — for example to offer a retry
+rather than surfacing a validation message:
+
+```js
+window.onSignupError = function (event, data) {
+  if (data && data.transportError) {
+    showRetryBanner('We could not reach the server. Check your connection.');
+    return;
+  }
+  showServerErrors(data);
+};
+```
+
+:::note A genuine request timeout is also `408`
+`transportError` is what separates the two: a timeout reports `408` without it.
+:::
 
 :::warning Use a bare identifier
 The attribute value must be the **name** of a `window` function
@@ -1148,7 +1175,7 @@ anything that must be true before you act on the data.
 | `data-gina-form-live-check-enabled` | Toggle live checking. **On by default** for a rule-bound form; set `"false"` to disable. |
 | `data-gina-form-inherits-data` | URL-encoded JSON merged into the payload before sending. |
 | `data-gina-form-event-on-submit-success` | Bare name of a `window` callback run when the AJAX submit succeeds. |
-| `data-gina-form-event-on-submit-error` | Bare name of a `window` callback run when the submit errors. |
+| `data-gina-form-event-on-submit-error` | Bare name of a `window` callback run when the submit does not succeed — both a server error status and a transport failure that never reached the server. See [Reacting to the result](#declarative-callbacks) for the payload shape. |
 | `data-gina-form-checkbox-value-as-state` | **Deprecated, transitional.** Set `"true"` to restore the pre-0.5.18 behavior where a checkbox's `value` decides its checked state. See [Checkboxes](#checkboxes). |
 
 ### Field-level

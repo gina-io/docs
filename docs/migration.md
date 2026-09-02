@@ -19,6 +19,124 @@ upward to the target version.
 
 ---
 
+## 0.6.21 → 0.6.22
+
+> **This release changes the browser bundle.** Restart **and** rebuild your
+> bundles (`gina bundle:build`) — a restart alone updates the server half only,
+> and each bundle bakes its own copy of the client assets. `gina.min.js` differs
+> from `0.6.21`.
+
+### Security — prototype pollution on the request path (restart and rebuild; no code change needed)
+
+Client-supplied bracket-notation field names reached an unguarded property
+assignment in the data helper's key-path nesting. All of the following wrote to
+`Object.prototype`:
+
+```
+?__proto__[isAdmin]=1
+?constructor[prototype][isAdmin]=1
+?%5F%5Fproto%5F%5F[isAdmin]=1
+```
+
+The write was **silent** — the parsed body came back empty, so nothing about the
+request looked wrong from the application's side.
+
+Separately, `merge()` copied an **own** `__proto__` key through its `for...in`
+loops. An own `__proto__` is exactly what `JSON.parse` produces, so a JSON body
+reached the same outcome by a different route.
+
+The sources were reachable from query strings, urlencoded and JSON request
+bodies, `request.query.inheritedData`, and multipart text-field names.
+
+**What it could reach.** A polluted prototype affects any code that reads a
+property it expects to be *absent* and falls through to a default. Two such
+readers were confirmed by probe:
+
+- **Outbound requests.** `self.query()` resolves host, hostname, port, method and
+  auth from an options object; an absent key read through the prototype chain,
+  so a polluted prototype could redirect an outbound call and force
+  `rejectUnauthorized` to `false`, disabling the TLS certificate check.
+- **Safe-method and exemption checks.** A lookup of the form
+  `SAFE_HTTP_METHODS[method] === true` could classify `POST` as safe.
+
+**The fix.** Both sources now reject the same three key names — `__proto__`,
+`constructor` and `prototype` — in raw and percent-encoded form: the data helper
+refuses them as key-path segments, and `merge()` refuses them as source keys.
+Rejecting the key name is what closes this: an *own* `__proto__` (the shape
+`JSON.parse` produces) satisfies an own-property check, so no own-property test
+could have stopped it.
+
+**Action required — check your field names.** The rejection is by key *name*, at
+any depth of a bracket-notation path, and the field is **dropped silently**:
+throwing on the request-parse path would turn a single bad field into a 500, so
+nothing is logged and the rest of the request parses normally.
+
+`__proto__` was never a usable field name. But `constructor` and `prototype` are
+ordinary English words, and before this release they worked:
+
+```
+# before 0.6.22            ->  { job: { constructor: 'Acme' } }
+# from   0.6.22            ->  {}                        (dropped)
+job[constructor]=Acme
+
+# sibling fields are unaffected
+a=1&b[constructor]=2&c=3   ->  { a: '1', c: '3' }
+```
+
+The same rejection applies to JSON request-body keys, so
+`{"spec":{"prototype":"v1"}}` now parses to `{"spec":{}}`.
+
+**A flat top-level form field of those names is unaffected** — only bracket-notation
+paths and JSON object keys go through the guarded code.
+
+Grep your templates, DTOs and API payloads for `[constructor]`, `[prototype]`,
+and JSON keys `"constructor"` / `"prototype"` before upgrading. If you have one,
+rename the field; there is no opt-out, because the same key path is what the
+security fix closes.
+
+The affected modules also ship in the browser bundle, which is why this needs a
+rebuild and not only a restart.
+
+### Fixed — a form submit that fails at the transport layer now reports it (restart and rebuild; review your error handling)
+
+When the network was down, the connection was refused, or the server was
+restarting, an XHR form submit settled at `readyState 4` with **no HTTP status**.
+The client's error arm excluded that case, so neither `error.<formId>` nor
+`error.<formId>.hform` was dispatched — a handler declared with
+`data-gina-form-event-on-submit-error` never ran.
+
+Meanwhile the submit trigger was still released by the fail-safe, so from the
+visitor's side the form spun, re-enabled itself, and said nothing. The failure
+was indistinguishable from a form that had simply done nothing.
+
+Such a failure now dispatches **both** events with:
+
+```js
+{ status: 408, transportError: true }
+```
+
+- `status: 408` keeps handlers that match on `status >= 400` working unchanged —
+  they will now also catch transport failures, which is the intended behaviour.
+- `transportError: true` is what separates this from a genuine request timeout
+  returned by a server. Branch on it if you want to distinguish "we never
+  reached the server" from "the server took too long".
+
+**What to check in your own code.** A submit-error handler that only ever saw
+HTTP statuses will now also be invoked for transport failures:
+
+```js
+window.onMyFormSubmitError = function (event, result) {
+    if (result.transportError) {
+        return showOffline();          // new: never reached before
+    }
+    showServerError(result.status);
+};
+```
+
+If you branch on `result.status`, a transport failure now enters your error
+branch where previously it entered nothing at all.
+
+---
 ## 0.6.20 → 0.6.21
 
 > **This release changes the browser bundle.** Restart **and** rebuild your
