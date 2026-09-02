@@ -66,9 +66,35 @@ Rejecting the key name is what closes this: an *own* `__proto__` (the shape
 `JSON.parse` produces) satisfies an own-property check, so no own-property test
 could have stopped it.
 
-**Action required: none beyond the upgrade.** Those key names have never had a
-legitimate meaning as form field names, so no working request shape changes. The
-affected modules also ship in the browser bundle, which is why this needs a
+**Action required — check your field names.** The rejection is by key *name*, at
+any depth of a bracket-notation path, and the field is **dropped silently**:
+throwing on the request-parse path would turn a single bad field into a 500, so
+nothing is logged and the rest of the request parses normally.
+
+`__proto__` was never a usable field name. But `constructor` and `prototype` are
+ordinary English words, and before this release they worked:
+
+```
+# before 0.6.22            ->  { job: { constructor: 'Acme' } }
+# from   0.6.22            ->  {}                        (dropped)
+job[constructor]=Acme
+
+# sibling fields are unaffected
+a=1&b[constructor]=2&c=3   ->  { a: '1', c: '3' }
+```
+
+The same rejection applies to JSON request-body keys, so
+`{"spec":{"prototype":"v1"}}` now parses to `{"spec":{}}`.
+
+**A flat top-level form field of those names is unaffected** — only bracket-notation
+paths and JSON object keys go through the guarded code.
+
+Grep your templates, DTOs and API payloads for `[constructor]`, `[prototype]`,
+and JSON keys `"constructor"` / `"prototype"` before upgrading. If you have one,
+rename the field; there is no opt-out, because the same key path is what the
+security fix closes.
+
+The affected modules also ship in the browser bundle, which is why this needs a
 rebuild and not only a restart.
 
 ### Fixed — a form submit that fails at the transport layer now reports it (restart and rebuild; review your error handling)
