@@ -68,6 +68,7 @@ values always win.
 | `routeNameAsFilenameEnabled` | boolean | `true` | When `true`, the route name is used as the default template filename if `param.file` is not set |
 | `ginaEnabled` | boolean | `true` | Include gina's built-in CSS and JS in every page. Set to `false` to exclude them entirely |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
+| `sriEnabled` | boolean | `false` | Opt-in [Subresource Integrity](#subresource-integrity-srienabled): add `integrity="sha384-..."` + `crossorigin="anonymous"` to every same-origin `<script>` and `<link rel="stylesheet">` whose file resolves on disk. *New in 0.6.23* |
 | `stylesheets` | array | gina default | List of stylesheet objects loaded on every page |
 | `javascripts` | array | gina default | List of script objects loaded on every page |
 
@@ -90,6 +91,47 @@ The page-behaviour defaults above (`routeNameAsFilenameEnabled`, `javascriptsDef
 ```
 
 At load time the framework flattens `_common.config.*` back into `_common`, so the block is purely organisational — every field behaves exactly as if declared directly on `_common`. If a field is declared in **both** places, the direct `_common` value wins. Bundles that don't use a `config` block are unaffected.
+
+### Subresource Integrity (`sriEnabled`)
+
+*New in 0.6.23.* With `"sriEnabled": true`, the tags gina builds for your
+declared assets carry an `integrity="sha384-..."` attribute plus
+`crossorigin="anonymous"`, so a tampered or truncated file is refused by the
+browser instead of executed. This covers every same-origin `<script>` and
+`<link rel="stylesheet">` entry — including gina's own `gina.min.js` /
+`gina.min.css`, which ride the framework `_common` baseline through the same
+emission path.
+
+```json
+{
+  "_common": {
+    "sriEnabled": true
+  }
+}
+```
+
+Behaviour worth knowing before enabling it:
+
+- **Fail-open, always.** External URLs (`https://…`, `//cdn…`), paths that
+  don't resolve under the bundle's public directory (or an exact
+  [`statics.json`](/reference/statics) mapping), and unreadable files simply
+  get **no** `integrity` attribute — they load exactly as before. A wrong hash
+  would hard-block the asset, so gina never guesses one.
+- **Hashes follow the file.** Each hash is cached and re-validated against the
+  file's mtime and size on every render, so rebuilding your assets
+  (`gina bundle:build`) takes effect on the next page load with no restart.
+- **Flush the render cache after rebuilding assets.** Pages already stored by
+  the [render/output cache](/guides/caching) keep the hash they were rendered
+  with; after an asset rebuild, flush that cache (or restart) or cached pages
+  will reference the old hash and the browser will refuse the new file.
+- **HTTP/2 preload hints are suppressed** for integrity-checked assets — a
+  preload hint carries no integrity metadata, and a hint the browser cannot
+  match to the checked request would just double-fetch.
+- **Not covered (never blocked, just not enforced):** scripts re-injected by
+  the popin plugin from fetched content, and the stylesheet gina's client
+  loader injects dynamically when a page arrives without it.
+
+The algorithm is fixed at `sha384` on purpose; there is no knob.
 
 ### Stylesheet object
 

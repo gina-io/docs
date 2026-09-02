@@ -36,6 +36,67 @@ sequenceDiagram
 
 Each plugin is idempotent — if an earlier middleware already set the header, the existing value is preserved and `next()` is called immediately. First-writer-wins. Safe to stack with helmet-style upstream gates or with multiple registrations of the same plugin.
 
+## Framework-emitted defaults (since 0.6.23)
+
+Since `0.6.23`, a curated subset of these headers is emitted **by the framework
+itself**, on both engines, configured under `settings.json > server.securityHeaders`
+(note: *not* the top-level `securityHeaders` block, which configures the plugins
+below when you mount them).
+
+Why a framework-level path exists at all: the plugins on this page are Express
+middleware, and gina's default `isaac` engine does not run the Express
+middleware chain for HTTP responses — so on a default install, mounting the
+`SecurityHeaders()` orchestrator emits nothing. The framework-level emitter is
+what actually delivers headers by default; the plugins remain the right tool on
+the `express` engine and wherever you need per-header options.
+
+**On by default** — chosen because none can break a working application:
+`x-content-type-options: nosniff` · `x-download-options: noopen` ·
+`x-permitted-cross-domain-policies: none` · `x-xss-protection: 0` ·
+`referrer-policy: strict-origin-when-cross-origin` ·
+`x-dns-prefetch-control: off` · `origin-agent-cluster: ?1`.
+Turn any of them off with `"<key>": false`.
+
+**Opt-in behind one key each** — each can break a legitimate deployment shape:
+
+```json
+{
+  "server": {
+    "securityHeaders": {
+      "xFrameOptions": true,
+      "coop": true,
+      "corp": true,
+      "hsts": true
+    }
+  }
+}
+```
+
+- `xFrameOptions` — `SAMEORIGIN`; breaks deliberately embedding your app cross-origin.
+- `coop` — severs `window.opener`; breaks OAuth and payment popup flows.
+- `corp` — blocks cross-origin loading of your assets.
+- `hsts` — `max-age=15552000` (the [Hsts plugin](#hsts-hdr4) default, 180 days);
+  commits every HTTPS visitor's browser for the full period, and per the
+  [documented spec deviation](#spec-note--transport-gating) it is emitted over
+  plain HTTP too.
+
+Three properties to rely on:
+
+- **First-writer-wins, same as the plugins.** A header already set by a mounted
+  plugin, an `env.json > server.response.header` entry or an upstream proxy is
+  never overwritten — existing setups keep their tuned values.
+- **The values match the plugins byte-for-byte.** Each framework default is the
+  corresponding plugin's own constant, so the two paths can never diverge.
+- **`/_gina/*` is exempt from `coop`/`corp`** — gina's own metrics, health and
+  Inspector endpoints are deliberately cross-origin, and a cross-origin-isolating
+  header there would break them even for a consumer who opted in knowingly.
+
+One key restores the previous behaviour entirely:
+
+```json
+{ "server": { "securityHeaders": { "enabled": false } } }
+```
+
 ## X-Content-Type-Options (`#HDR1`)
 
 `gina.plugins.XContentTypeOptions()` emits `X-Content-Type-Options: nosniff` on every response. The header instructs browsers to honour the declared `Content-Type` strictly, blocking MIME-sniffing attacks where a `text/plain` response whose body starts with `<script>` could be upgraded to HTML and the script executed in the page's origin.
