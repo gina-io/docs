@@ -139,7 +139,9 @@ Tuning knobs on `server.idempotency`: `ttl`, `inflightTtl`, `maxBodySize`, `retr
 ## Ordering
 
 The gate runs after route authorization and the [rate limiter](/guides/rate-limiting), and
-before request-payload validation: `401 → 429 → 409/422/replay → 422`. A throttled or
+before request-payload validation — [message validation](/guides/message-validation) when
+a route declares it, then DTO field validation: `401 → 429 → 409/422/replay → message
+validation → 422`. A throttled or
 unauthenticated caller never touches the reservation store, and a replayed response never
 re-runs the controller action.
 
