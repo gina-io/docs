@@ -19,6 +19,13 @@ upward to the target version.
 
 ---
 
+## 0.6.24 → 0.6.25
+
+**Additive — no action required.**
+
+- **Exact-money primitive (`lib.money` / `gina.money`).** New dependency-free module for ISO 4217 minor-unit integer arithmetic (BigInt-safe): strict wire-string `parse()`, `add`/`subtract`/`multiply`/`compare` with same-currency guards, canonical `format()`, and an in-lib exponent table (JPY 0, BHD 3, …). Server-side as `require('lib/money')` or `lib.money`; client-side exposed as `gina.money` in the browser bundle. Display formatting stays with `Intl.NumberFormat`. See the [Money guide](/guides/money).
+- **Route-not-found diagnostics now surface in the browser console.** When a rendered page carries a `404:[<METHOD>]<rule>@<bundle>` marker (a template url helper could not resolve a rule), the client now `console.warn`s the composed “route … is called but not found inside your view” message on the first sighting of each missing route; repeats keep counting silently on `gina.notFound`. Server-side render-time logging is unchanged.
+
 ## 0.6.23 → 0.6.24
 
 > **This release does not change the browser bundle.** A bundle restart is
