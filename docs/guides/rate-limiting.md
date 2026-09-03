@@ -37,13 +37,15 @@ flowchart LR
     A[Route match] --> B[Route middleware]
     B --> C["Authorization<br/>(401 / 403)"]
     C --> D["Rate limit<br/>(429)"]
-    D --> E["DTO validation<br/>(422)"]
+    D --> E["Validation<br/>(422)"]
     E --> F[Controller action]
 ```
 
 The gate runs **after route authorization** — authorization is what resolves
-the principal, so the limiter knows who is calling — and **before DTO
-validation**, so a throttled caller never receives a `422` field map (the same
+the principal, so the limiter knows who is calling — and **before the
+validation tier** ([message validation](/guides/message-validation) when a route
+declares it, then [DTO field validation](/guides/dtos)), so a throttled caller
+never receives a validation report (the same
 disclosure ordering that puts the `401` above the `422`). Static assets and
 `/_gina/*` endpoints never reach this band, so health checks and metrics are
 unthrottled by construction.
