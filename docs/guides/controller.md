@@ -287,6 +287,53 @@ this.export = async function(req, res, next) {
 - `x-accel-buffering: no` is set automatically for `text/event-stream` responses to
   disable nginx proxy buffering.
 
+### `self.renderXML(xmlContent, contentType)`
+
+Sends a pre-serialised XML document. The outbound counterpart to
+[XML request bodies](#xml-request-bodies): gina builds no XML any more than it
+parses any, so you serialise with the library of your choice and this method
+handles the wire — content type, charset, HEAD, and the HTTP/2 vs HTTP/1.1 split.
+
+```js
+this.acknowledge = function(req, res, next) {
+    var self = this;
+    var ack  = myXmlBuilder.build({ msgId: 'MSG-001' });
+
+    self.renderXML(ack);
+    // content-type: application/xml; charset=utf-8
+};
+```
+
+The second argument sets the content type when `application/xml` is not what you
+want — the `+xml` suffix family, typically:
+
+```js
+this.feed = function(req, res, next) {
+    this.renderXML(myFeedBuilder.toXml(), 'application/atom+xml');
+};
+
+this.soap = function(req, res, next) {
+    this.renderXML(envelope, 'application/soap+xml');
+};
+```
+
+- **Default content type is `application/xml`**, with the charset taken from your
+  bundle's `encoding`. [RFC 7303](https://www.rfc-editor.org/rfc/rfc7303) §4.1
+  recommends it over `text/xml`.
+- **The status code comes from the response, not the payload.** Unlike
+  `renderJSON`, an XML string carries no `{ status }` envelope, so set
+  `res.statusCode` before rendering, or answer errors with
+  [`self.throwError()`](#selfthrowerrorres-code-err).
+- A non-string is coerced with `toString()`; `null` / `undefined` send an empty body.
+- No XML declaration is added for you — a framework-emitted `encoding=` could
+  contradict the charset you chose, so the document stays exactly as you built it.
+- HEAD requests receive the headers, including a byte-accurate `content-length`,
+  with no body. Upstream response headers are preserved on HTTP/2, and opt-in
+  HTTP/2 trailers registered with `self.sendTrailers(fields)` work as for every
+  other delegate.
+- A route using [idempotency keys](/guides/idempotency) records its response
+  envelope here too, so a retried mutation replays rather than re-executing.
+
 ### `self.renderWithoutLayout(data)`
 
 Same as `self.render()` but skips the layout wrapper. Useful for rendering partial HTML
@@ -569,6 +616,48 @@ var WebhookController = function() {
 
 module.exports = WebhookController;
 ```
+
+### XML request bodies {#xml-request-bodies}
+
+A request whose `Content-Type` is `application/xml`, `text/xml`, or any
+`application/*+xml` type — `application/soap+xml`, `application/atom+xml`, a
+vendor tree such as `application/vnd.acme.order+xml` — reaches your action
+**verbatim**. Gina does not parse XML: it hands you the exact document and steps
+out of the way, so you parse it with the library of your choice.
+
+- `req.body` is the document as a **string**, byte-identical to what the client
+  sent — the same value [`req.rawBody`](#raw-request-body) carries.
+- The method slot (`req.post` / `req.put` / `req.patch`) is an empty object:
+  an XML document has no form fields to expose.
+- Applies to POST, PUT and PATCH. `multipart/form-data` uploads are unaffected
+  and still stream to `req.files`.
+
+```js title="src/api/controllers/controller.payments.js"
+// routing.json: { "url": "/iso20022/pain001", "method": "POST", ... }
+this.receive = function(req, res, next) {
+    var self = this;
+    var doc  = myXmlParser.parse(req.body);   // your library, your rules
+
+    self.renderJSON({ status: 200, messageId: doc.MsgId });
+};
+```
+
+To answer in XML rather than JSON — the usual shape for an ISO 20022-style
+acknowledgement — see [`self.renderXML()`](#selfrenderxmlxmlcontent-contenttype).
+
+:::note Which content types count as XML
+The `+xml` suffix wildcard is scoped to `application/`, matching the convention
+ASP.NET Core, Spring and `type-is` share. So `image/svg+xml` is **not** treated
+as an XML body, and neither are the media types that are not XML *documents* —
+`application/xml-dtd` and `application/xml-external-parsed-entity`. Those keep
+the form-encoded path exactly as before.
+:::
+
+:::caution The parser is yours — so is its hardening
+Because gina never parses XML, it adds no XML attack surface of its own. That
+also means **XXE, entity expansion and schema resolution are your parser's
+concern**: disable external entity resolution in whichever library you choose.
+:::
 
 ### PUT vs PATCH — when to use which
 
