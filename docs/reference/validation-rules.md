@@ -251,6 +251,45 @@ to a real token. Use it to validate shape, not to pass a token through
 unchanged. A non-string value is left untouched and fails the check.
 :::
 
+### isIban
+
+`isIban()` · JSON: `"isIban": true`
+
+Checks an International Bank Account Number (ISO 13616): the shape, the
+official per-country length when the country code is one of the 87 registered
+countries, and the ISO 7064 MOD 97-10 checksum.
+
+- **Default message:** *A valid IBAN is required*
+- The check is a **tolerant read**: case and space/hyphen separators are
+  normalized for validation only — `DE89 3704 0044 0532 0130 00` and
+  `de89370400440532013000` both validate — and the stored value is **never
+  mutated**: the application receives exactly what the user typed.
+- An unknown country code passes on shape + checksum alone, so a registry gap
+  never hard-fails a well-formed IBAN.
+- An empty value is left to [`isRequired`](#isrequired) alone; a non-string
+  value fails the check without being touched.
+
+```json
+"accountIban": { "isRequired": true, "isIban": true }
+```
+
+### isBic
+
+`isBic()` · JSON: `"isBic": true`
+
+Checks a Business Identifier Code (ISO 9362): a 4-letter business party
+prefix, a 2-letter country code, a 2-character alphanumeric location code and
+an optional 3-character branch code — 8 or 11 characters in total.
+
+- **Default message:** *A valid BIC is required*
+- Case-insensitive, and the stored value is never mutated.
+- An empty value is left to [`isRequired`](#isrequired) alone; a non-string
+  value fails the check without being touched.
+
+```json
+"bankBic": { "isRequired": true, "isBic": true }
+```
+
 ### is
 
 `is(condition, errorMessage)` · JSON: `"is": <condition>`
@@ -592,6 +631,8 @@ Override messages three ways:
 | `isDate` | Must be a valid Date |
 | `isString` | Must be a string |
 | `isJsonWebToken` | Must be a valid JSON Web Token |
+| `isIban` | A valid IBAN is required |
+| `isBic` | A valid BIC is required |
 | `isInList` | Must be one of: %s |
 | `query` | Must be a valid response |
 | length (min) — `isString` / `isInteger` / `isNumber` | Should be at least %s characters |
