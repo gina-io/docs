@@ -82,7 +82,7 @@ var jobId = self.startJob(function() {
 Between attempts the job shows as `pending` again, with the last error and a `nextRetryAt` timestamp on the record, and it cannot be swept while retries remain. `failed` is only ever the state after the **last** attempt, and the [completion webhook](#completion-webhooks-opt-in) fires exactly once, after that final outcome. The backoff base is `jobs.retryBackoffMs` (default `1000` ms), doubling on each attempt.
 
 :::note Retries run on the pod that created the job
-The deferred function only exists in the creating process — with a [durable store](#durable-job-records-connector-store), other pods can read the job's state, but only the origin pod re-runs it. If that process dies before the final attempt, the job stays `pending`.
+The deferred function only exists in the creating process — with a [durable store](#durable-job-records-connector-store), other pods can read the job's state, but only the origin pod re-runs it. If that process dies before the final attempt, the record is eventually reclaimed as `failed` by the [orphan-reclaim pass](#orphaned-records) — it does not stay `pending` forever.
 :::
 
 ---
@@ -100,6 +100,8 @@ GET /_gina/jobs/:id
 The endpoint is **state-only** — it never returns the `result` or `error` payload. The job id (an unguessable 21-character token) is the capability to read state; the result is retrieved separately through your own authenticated route (next section).
 
 ---
+
+**Polling always terminates.** A job whose origin process died can never settle on its own; the [orphan-reclaim pass](#orphaned-records) terminalizes such records as `failed` after `orphanTimeout`, so a poll loop is never left waiting forever.
 
 ## Retrieving the result
 
@@ -161,6 +163,7 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
     "sweepInterval": 300,
     "idSize": 21,
     "retryBackoffMs": 1000,
+    "orphanTimeout": 86400,
     "webhookMaxAttempts": 3,
     "webhookBackoffMs": 500,
     "webhookTimeoutMs": 5000,
@@ -176,6 +179,7 @@ The primitive is **always-on** with sane defaults — `self.startJob` works out 
 | `sweepInterval` | `300` | Seconds between sweeps of expired finished jobs. |
 | `idSize` | `21` | Job-id length (base-62 characters). |
 | `retryBackoffMs` | `1000` | Base delay (ms) before retrying a failed attempt when a job opts into `maxAttempts` > 1; doubles on each attempt. |
+| `orphanTimeout` | `86400` | Seconds before a non-terminal record stranded by a dead process is reclaimed as `failed` (`JobOrphanedError`). Durable stores only; `0` disables; floored at 60. See [Orphaned records](#orphaned-records). |
 | `webhookSecret` | — | HMAC-SHA256 signing secret for webhook payloads. Use a [`${secret:KEY}`](/guides/secrets) placeholder rather than hardcoding. |
 | `store` | — | Name of a `connectors.json` entry backing a durable job store (see below). Unset = in-memory. |
 
@@ -194,6 +198,17 @@ By default job records live in memory: a bundle restart forgets them, and a clie
   }
 }
 ```
+
+### Orphaned records
+
+The deferred function is a closure — it cannot be serialised, so it dies with its process. A record left `running` (or `pending` past its scheduled retry) by a crash or an unclean restart would otherwise sit in the store forever: it can never settle, and the TTL sweep only purges *terminal* records.
+
+Since `orphanTimeout` (default **24h**), the sweep is preceded by a reclaim pass on durable stores: a non-terminal record whose last transition is older than the ceiling — or whose scheduled retry is that far overdue — is marked `failed` with error name **`JobOrphanedError`**, and normal `ttl` retention then removes it on schedule. Notes:
+
+- **Durable stores only.** The built-in memory store is exempt: it cannot hold another process's orphans, so reclaim there could only produce false positives.
+- **A slow job self-corrects.** Every origin write wins over the synthetic failure — if the owning process was merely slow and eventually settles, the real outcome overwrites the reclaim. The transient `failed` reading is the disclosed cost of a ceiling; size `orphanTimeout` above your longest legitimate job.
+- **No webhook fires for a reclaim.** Several processes sharing a store may reclaim concurrently, and a self-healing job would emit contradictory notifications — the record itself carries the truth. Webhook consumers who care about orphans should also poll.
+- `0` (or `false`) disables the pass entirely; positive values are floored at 60 seconds.
 
 ### SQLite — single host
 
