@@ -102,6 +102,33 @@ somewhere permanent. `self.store(targetDir)` does that: it creates `targetDir`
 if needed, moves every file in `req.files` into it (keeping each file's original
 name), and reports back.
 
+### Staged file lifecycle
+
+A staged part (a server-generated `.part` file in the landing directory) has
+exactly **two** reclaim paths: the move performed when `self.store()` publishes
+it, and the `autoTmpCleanupTimeout` deletion timer. A part that never reaches
+`store()` — a request refused *after* the multipart parse (authentication,
+validation, a quota gate — the parse runs before routing), or an application
+that consumes the staged file some other way — is otherwise left on disk.
+
+:::info Orphan reclaim across restarts
+The deletion timer is per-upload and in-process, so a restart strands every
+part it was holding. When `autoTmpCleanupTimeout` is **armed**, server boot
+also sweeps each configured landing directory (the global default plus every
+group `path`) for staged-shaped `.part` files older than the configured
+timeout, floored at one hour — the same reclaim policy, applied across process
+lifetimes. The sweep is deliberately conservative: exact server-generated name
+shape only, regular files only, symlinks never followed, non-recursive; a
+client-named file is never touched. A **disabled** timer (the shipped default)
+arms no sweep — removing staged files then remains your own job (a cron, a
+tmpfiles policy, or application code).
+:::
+
+An application may also remove `req.files[].path` itself after consuming the
+staged bytes — the publish path tolerates a vanished source by design (the
+deletion timer already requires that tolerance), so an early unlink is safe
+and supported.
+
 Two call shapes:
 
 ```js
@@ -188,9 +215,9 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
-| `autoTmpCleanupTimeout` | Arms a deletion timer on each landed temp file (e.g. `"30s"`, `"10m"`, `"1h"`; a bare number is milliseconds). `false`, `0` or omitted disables it — the shipped default, in which case removing temp files is your own job. |
+| `autoTmpCleanupTimeout` | Arms a deletion timer on each landed temp file (e.g. `"30s"`, `"10m"`, `"1h"`; a bare number is milliseconds). `false`, `0` or omitted disables it — the shipped default, in which case removing temp files is your own job. When armed, a boot-time sweep also reclaims staged `.part` files a previous process stranded — see [Staged file lifecycle](#staged-file-lifecycle). |
 | `groups` | Named upload groups. A file is checked against its group's rules at parse time. |
-| `groups.<name>.path` | Directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. |
+| `groups.<name>.path` | Parse-time landing (staging) directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. Files do not **live** here — `self.store(targetDir)` or the group's storage `driver` owns final placement; see [Staged file lifecycle](#staged-file-lifecycle). |
 | `groups.<name>.allowedExtensions` | An array of permitted extensions (e.g. `["jpg","png"]`), or `"*"` for any. A disallowed extension is rejected with **HTTP 400**. |
 | `groups.<name>.isMultipleAllowed` | When `false`, a request carrying more than one file for that group is rejected with **HTTP 400**. Omitting it allows multiple files. |
 | `groups.<name>.driver` | Routes this group's `self.store()` step through the named [storage](./storage) driver instead of moving files to the call's target directory. See [Routing a group to a storage driver](#routing-a-group-to-a-storage-driver). |
