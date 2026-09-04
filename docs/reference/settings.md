@@ -241,7 +241,7 @@ can accept files.
 | `maxFields` | number | `1000` | Per-request **file-count** cap (HTTP 400 past it), applied regardless of `isMultipleAllowed`. `0` or unset disables. Block-level only |
 | `maxTextFields` | number | `1000` | Maximum multipart **text** (non-file) fields per request (HTTP 400 past it). `0` or below means no limit |
 | `maxTextFieldSize` | string \| number | `"1MB"` | Per text-field value cap (HTTP 400 on breach). Same unit suffixes; explicit `0` disables |
-| `autoTmpCleanupTimeout` | string \| number \| `false` | `false` | Auto-delete tmp files after this duration (e.g. `"10m"`, `"1h"`, `"500ms"`; a bare number is milliseconds). `false` or `0` disables. Block-level only |
+| `autoTmpCleanupTimeout` | string \| number \| `false` | `false` | Auto-delete tmp files after this duration (e.g. `"10m"`, `"1h"`, `"500ms"`; a bare number is milliseconds). `false` or `0` disables. Block-level only. When armed, boot also sweeps the landing directories for staged `.part` files a previous process stranded (older than this timeout, floored at 1h) |
 | `groups` | object | — | Named upload groups. At least one group required to enable uploads |
 
 **Group fields:**
