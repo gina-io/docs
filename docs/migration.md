@@ -19,6 +19,15 @@ upward to the target version.
 
 ---
 
+## 0.6.26 → 0.6.27
+
+**Additive — no action required.** Both fixes in this release are server-side
+(`lib/archiver` is not part of the browser bundle), so a bundle **restart** is the
+whole pickup and no rebuild is needed.
+
+- **`lib.archiver` calls no longer interfere with each other.** Every `compress()` and `decompress()` completion used to be signalled by emitting one fixed event name on the library's process-wide singleton, so two calls overlapping in one process — two queue consumers, or a request handler beside a worker — both received whichever run finished first: the second caller was released early with the *first* run's archive path, and its own archive was left at 0 bytes. The array form also kept its output stream in an implicit global, so finishing one run closed another's stream. Each call now settles **exactly once** on its own channel for its own `onComplete` listeners and trailing callback; a listener attached after the run has already settled is still delivered; and the documented `archiver-<method>#complete` event is still emitted on the singleton for observers, so code listening there keeps working. If you had serialised calls behind a process-wide mutex to work around this, the mutex can go once every tier runs this version. **Errors on the streams the library opens itself now reach your callback too:** an unreadable input used to either crash the process on an unhandled stream error or hang the run forever — leaving a corrupt partial archive on disk — depending on timing; an unwritable target crashed both the array and directory forms. All of them now arrive at `onComplete` as the stream's error (`err.code === 'EACCES'` and friends). The synchronous error paths (a missing source, a source that is neither a file nor a directory) reach `onComplete` instead of firing before the handle is returned, and both promisify shapes now work: a trailing callback with options lacking `method`, and `compress(src, target, cb)` with options omitted. The single-file form still writes a gzip stream under a `.zip` name — that asymmetry is a separate, tracked question, not part of this fix.
+- **The directory form of `compress()` no longer drops the first entry.** Its top-level walk started at index 1 — the author evidently expected node's `readdir` to return `.` first, which it never does — so every directory-form archive silently lacked one file, and a directory holding a single file archived to an empty zip. The in-tree `project:backup` uses the array form and was never affected; only direct callers of the directory form are.
+
 ## 0.6.25 → 0.6.26
 
 **Additive — no action required.** Every fix in this release is server-side; the
