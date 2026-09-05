@@ -19,6 +19,36 @@ upward to the target version.
 
 ---
 
+## 0.6.27 → 0.6.28
+
+**No action required.** Two fixes to the way a child template's `{% extends %}`
+directive is re-pointed at its cached layout.
+
+If a child mentioned its layout's filename *before* the directive — most often in
+a leading comment — the framework rewrote that first mention instead of the
+directive, and the page went on extending the raw, un-assembled layout rather
+than the assembled copy that carries the injected asset shell. The rewrite is now
+confined to the directive itself, so any other mention of the same filename
+elsewhere in the template is left untouched.
+
+Separately, the directive extraction was greedy. A one-line directive followed by
+another quoted tag ran the match past its own closing delimiter and produced a
+corrupted layout path that matched nothing, so the re-point silently never
+happened:
+
+```html
+{% extends 'layout.html' %}{% block title %}{{ name|default('untitled') }}{% endblock %}
+```
+
+Both quantifiers now stop at the directive they came from.
+
+Templates that already carried the directive ahead of any mention of the layout
+filename, on its own line, behaved correctly before and are unchanged. A
+whitespace-control directive (`{%- extends … -%}`) is matched by neither the old
+nor the new form; that is unchanged by this release.
+
+---
+
 ## 0.6.26 → 0.6.27
 
 **Additive for the array and directory forms; one behaviour change on the
