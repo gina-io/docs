@@ -76,6 +76,11 @@ padding off the stored value. Passing `false` (`"isRequired": false`) marks the
 field optional and short-circuits the check.
 
 - **Default message:** *Cannot be left empty*
+- **Autofill variant:** *Filled in by your browser: click the field to confirm it*
+  — rendered instead of the default when the browser autofilled the control but
+  still withholds its value from script at submit time (label key
+  `isRequiredAutofill`; the control also carries
+  `data-gina-form-autofill-withheld="true"` while in that state). *Since 0.6.27.*
 - **Must come first** — see [Chaining and ordering](#chaining-and-ordering).
 
 ```json
