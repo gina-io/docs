@@ -936,6 +936,12 @@ queries on the same controller each deliver to their own callback,
 fires, a registration made after the call settled fires on the next tick, and
 the handle comes back on every path — a synchronous failure such as a missing
 host reaches `cb(err)` on the next tick instead of throwing at the call site.
+That includes a query issued while the controller is rendering from another
+required controller (`requireController` shares the caller's options, so a
+second render entered on that request deepens its `renderingStack`): the call
+is refused without contacting the upstream, and the callback receives an
+`Error` whose `code` is `NESTED_RENDER` — in-line in the callback form, on the
+next tick through the handle (wrapped as `{status: 500, error}`).
 The controller's `query#complete` event is emitted only when nothing consumed
 the outcome (no callback and no `.onComplete()`), one tick after settlement.
 To use `await`, promisify the call (the framework uses the same idiom
