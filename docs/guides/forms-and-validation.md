@@ -186,6 +186,27 @@ A few behaviours worth knowing:
   classes to taste.
 - **Field labels.** `data-gina-form-field-label` provides the human label used
   in messages — the `%l` placeholder in a message resolves to it.
+- **Autofilled fields are live-checked too (since 0.6.27).** A browser or
+  password-manager fill lands without a keystroke, so nothing used to re-check
+  the form: the submit control kept the gated look it was given at bind time
+  while the user looked at a completed form. Gina's stylesheet now gives every
+  autofilled control (`:autofill` / `:-webkit-autofill`) a 1ms keyframe named
+  `gina-autofill-start`, and the validator treats the resulting
+  `animationstart` as that field's own live check: a readable value is
+  validated like a typed one, so the gate opens or the field shows its error.
+  Chrome keeps an autofilled value away from script until your first click or
+  keystroke on the page; such a field no longer counts against the gate and
+  shows no false "required" error, and the submit-time check still refuses to
+  post it while it is withheld. The hook is an un-layered rule, so a project
+  reset such as `input { animation: none }` does not disable it — but a rule of
+  your own on the same pseudo-class that sets `animation-name` would replace
+  it; keep `gina-autofill-start` there if you restyle autofilled inputs.
+  Submitting while the browser still withholds the value rejects that field
+  with the **`isRequiredAutofill`** label (*Filled in by your browser: click
+  the field to confirm it*) instead of the plain required one, and marks the
+  control `data-gina-form-autofill-withheld="true"` while it is in that state
+  — a hook for your own styling. The key localizes like any other built-in
+  label (see [Localizing built-in error labels](#localizing-built-in-error-labels)).
 
 ### Accessibility
 
@@ -929,6 +950,11 @@ localized labels too.
   variants automatically (a specific key you supply still wins). On earlier
   versions, translate the specific keys directly — `toFloatNAN`,
   `isNumberMinLength`, and so on.
+- **`isRequiredAutofill` is a label key, not a rule.** *New in 0.6.27.* When the
+  browser autofilled a field but still withholds its value at submit time,
+  `isRequired` renders this label instead of its own. Translate it to keep the
+  honest wording in your language; until you do, your translated `isRequired` is
+  used in its place, so the English default never mixes into a localized page.
 - **Numbered `is` aliases share the `is` label.** *Changed in 0.6.1.* A failing
   `is1` / `is2` rule that supplies no text of its own renders the `is` label
   (`Condition not satisfied`) — translate `_validator.is` once to cover every

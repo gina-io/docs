@@ -515,6 +515,12 @@ gina cache:clear @<project>                       # flush every bundle
 gina cache:clear <bundle> @<project> --dry-run    # preview — removes nothing
 ```
 
+:::note The compiled-template cache carries no request data
+
+With `server.cache.enable` on, gina also keeps each view's **compiled swig template** in memory and persists the processed layout under the bundle's `templates/html/.gina-layout-cache/`. Since 0.6.27 neither holds per-request data: the dev Inspector's `window.__ginaData` script and the hidden inputs that carry a popin's data are spliced into the executed HTML *after* the template runs, so a cache hit serves the current request's payload. Earlier releases baked the first request's page data into both, which every later render — and every later process — then served (a cross-request disclosure whenever the Inspector was injected). A layout-cache file left by an earlier release is healed on the next compile; deleting the directory is optional, never required.
+
+:::
+
 It runs two passes: an **offline** reclaim of the on-disk cache directories
 (including the orphaned prior-namespace directories described above), and an
 **in-heap** flush of the running bundle. A bundle that is not running still gets
