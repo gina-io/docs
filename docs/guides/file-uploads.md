@@ -119,8 +119,10 @@ group `path`) for staged-shaped `.part` files older than the configured
 timeout, floored at one hour — the same reclaim policy, applied across process
 lifetimes. The sweep is deliberately conservative: exact server-generated name
 shape only, regular files only, symlinks never followed, non-recursive; a
-client-named file is never touched. A **disabled** timer (the shipped default)
-arms no sweep — removing staged files then remains your own job (a cron, a
+client-named file is never touched. A boot that finds nothing to reclaim logs
+only at `debug`; at the default `info` level a silent boot means no staged part
+was older than the gate, not that the sweep did not run. A **disabled** timer
+(the shipped default) arms no sweep — removing staged files then remains your own job (a cron, a
 tmpfiles policy, or application code).
 :::
 
@@ -215,7 +217,7 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
-| `autoTmpCleanupTimeout` | Arms a deletion timer on each landed temp file (e.g. `"30s"`, `"10m"`, `"1h"`; a bare number is milliseconds). `false`, `0` or omitted disables it — the shipped default, in which case removing temp files is your own job. When armed, a boot-time sweep also reclaims staged `.part` files a previous process stranded — see [Staged file lifecycle](#staged-file-lifecycle). |
+| `autoTmpCleanupTimeout` | Arms a deletion timer on each landed temp file (e.g. `"30s"`, `"10m"`, `"1h"`; a bare number is milliseconds). `false`, `0` or omitted disables it — the shipped default, in which case removing temp files is your own job. When armed, a boot-time sweep also reclaims staged `.part` files a previous process stranded, logging at `info` only when it removed something — see [Staged file lifecycle](#staged-file-lifecycle). |
 | `groups` | Named upload groups. A file is checked against its group's rules at parse time. |
 | `groups.<name>.path` | Parse-time landing (staging) directory for this group's files, overriding the global `tmpPath`. Created automatically if missing. Files do not **live** here — `self.store(targetDir)` or the group's storage `driver` owns final placement; see [Staged file lifecycle](#staged-file-lifecycle). |
 | `groups.<name>.allowedExtensions` | An array of permitted extensions (e.g. `["jpg","png"]`), or `"*"` for any. A disallowed extension is rejected with **HTTP 400**. |
