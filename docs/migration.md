@@ -168,6 +168,17 @@ the boot proceeds. Same-origin embedding was never affected.
 
 ---
 
+**Custom error pages carry their preloads and external plugins.** A custom error page
+(`templates/html/errors/<code>.html`) rendered over HTTP/2 used to reach the browser with a
+final `link` header that listed only the assets parsed out of the compiled page — never the
+CSS and JS declared in `templates.json` — and, if your scripts are not in defer mode,
+without the scripts you had flagged `isExternalPlugin: true` in its head. The error render worked on a copy of the template
+configuration, so what the framework accumulated for it while resolving its assets landed on
+an object the render never read. The error render now shares the request's template object
+and starts its two accumulators from clean, so an error that strikes after the failing
+route's assets were already resolved — a template compilation error — does not double the
+preload entries or the plugin tags. Nothing to change; pickup is a bundle restart.
+
 ## 0.6.26 → 0.6.27
 
 **Additive for the array and directory forms; one behaviour change on the
