@@ -179,6 +179,26 @@ and starts its two accumulators from clean, so an error that strikes after the f
 route's assets were already resolved — a template compilation error — does not double the
 preload entries or the plugin tags. Nothing to change; pickup is a bundle restart.
 
+**Absolute URLs built by `getRoute().toUrl()` no longer inherit another request's proxy
+context.** After one request carrying a port-less `Host` — an orchestrator probe on an
+application route, a sibling-bundle call, any client sending `Host: name` with no port —
+had reached a worker, every later direct request on that worker built its absolute URLs
+from a worker-global: over HTTP/1.1 the port vanished (`http://127.0.0.1/…` for a bundle
+listening on `localhost:9940`), and over HTTP/2 + https the last port-less client's host
+was emitted verbatim — a host that client chose. Your own `getRoute(...).toUrl()` calls
+were the exposed surface; the framework's own redirects and `url` filters had already been
+re-pointed in an earlier release. `getRoute()` now resolves the proxied classification and
+proxy hostname from the request itself, so a direct request builds direct URLs regardless
+of what the worker saw before; only a call with no request in scope (boot, the CLI, a cron
+job) still reads the worker-global. Direct requests no longer rewrite that global either,
+and isaac's port-less scheme now follows the same chain as the router's
+(`X-Forwarded-Proto`, then the proxy scheme, then the bundle's own).
+
+Nothing to change. If you enabled `server.proxy.requireForwardedHeaders` as the
+mitigation, it remains correct and you can keep it. Pickup is a bundle restart **and a
+re-bake**: `lib/routing` ships in the client bundle and its bytes change, although the
+client-side behaviour does not.
+
 ## 0.6.26 → 0.6.27
 
 **Additive for the array and directory forms; one behaviour change on the
