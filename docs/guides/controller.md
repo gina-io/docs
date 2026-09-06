@@ -1062,6 +1062,58 @@ escaping.
 
 ---
 
+## Forwarding a route to another bundle {#forwarding}
+
+`forward` is a ready-made action: a route names it as its `control` and the target
+route in `param.url`, and the framework relays the request and the answer. The
+target is `<rule>` for a route of the current bundle, or `<rule>@<bundle>` for a
+sibling bundle of the same project — the same reference form `redirect()` accepts.
+
+```json
+"upload-relay": {
+  "url": "/upload",
+  "method": "POST",
+  "param": { "control": "forward", "url": "upload-to-tmp@api" },
+  "middleware": ["middlewares.auth.require"]
+}
+```
+
+Every other non-reserved key of `param` is a placeholder value for the target route.
+It is read from the captured URL parameter when the incoming URL provided one, and
+taken as a static value otherwise:
+
+```json
+"invoice-relay": {
+  "url": "/legacy/invoice/:id",
+  "param": { "control": "forward", "url": "invoice-get@api", "id": ":id" }
+}
+```
+
+How it relays:
+
+- The upstream call goes through [`self.query()`](#outgoing-requests). A sibling
+  bundle's host, port, protocol and scheme come from the environment
+  configuration; the resolved route url, webroot included, is the forwarded path.
+- The incoming request's data (`req.get`, `req.post`, …) travels as the query
+  string or the body. `param.method` overrides the forwarded HTTP method.
+- An object answer is relayed with `renderJSON()`; a string answer is relayed
+  verbatim with `renderTEXT()`. `query()` delivers the parsed body only, so a
+  non-JSON answer keeps its bytes but not its content type — forward JSON-answering
+  routes.
+- A non-2xx status, a transport failure or an unknown target route is answered
+  through `throwError()`.
+- `hostname`, `port` and `path` in `param` address a raw host instead of a bundle.
+
+Reserved `param` keys, never forwarded as placeholders: `url`, `urlIndex`, `control`,
+`file`, `title`, `bundle`, `project`, `hostname`, `port`, `path`, `method`.
+
+:::caution Uploads are not relayed
+`query()` has no multipart encoder, so a `multipart/form-data` request forwards its
+fields but never its files: `req.files` do not reach the target.
+:::
+
+---
+
 ## Pushing to connected clients {#pushing-to-connected-clients}
 
 `self.push(payload, option, callback)` sends a Server-Sent Events payload to clients
@@ -1395,7 +1447,7 @@ documented. Methods without a link are described here in one line.
 
 **Flow control**
 
-- [`query`](#outgoing-requests) · [`pauseRequest` / `isHaltedRequest` / `resumeRequest`](#pausing-resuming-requests) · [`push`](#pushing-to-connected-clients) — above.
+- [`query`](#outgoing-requests) · [`pauseRequest` / `isHaltedRequest` / `resumeRequest`](#pausing-resuming-requests) · [`push`](#pushing-to-connected-clients) · [`forward`](#forwarding) — above.
 - `requireController` — load another namespace controller in-process — [Middleware](./middleware).
 
 **Jobs, events, health**
@@ -1413,7 +1465,7 @@ documented. Methods without a link are described here in one line.
 
 Not part of the public contract: the internal accessors `getRequestObject`, `getResponseObject`,
 `getNextCallback` and `isCacheless`; `renderCustomError`, the error-page renderer that
-`throwError()` delegates to; and `forward`, which its own source marks as work in progress.
+`throwError()` delegates to.
 
 ---
 

@@ -42,6 +42,15 @@ happened:
 
 Both quantifiers now stop at the directive they came from.
 
+**`self.forward()` works.** A route declaring `"control": "forward"` with a target in
+`param.url` now relays to the route it resolves. Until now it forwarded to the target
+bundle's webroot alone (or to the port number as the path), substituted the `":id"`
+declaration instead of the captured value, and its source was marked work in progress.
+Placeholder values come from the request, a string answer is relayed verbatim, and an
+unknown target is answered through `throwError()`. Uploads are still not relayed:
+`query()` has no multipart encoder, so `req.files` never reach the target. See the
+[controller guide](/guides/controller#forwarding).
+
 Templates that already carried the directive ahead of any mention of the layout
 filename, on its own line, behaved correctly before and are unchanged. A
 whitespace-control directive (`{%- extends … -%}`) is matched by neither the old
