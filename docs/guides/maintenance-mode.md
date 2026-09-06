@@ -221,8 +221,18 @@ curl -s -X POST http://127.0.0.1:8080/_gina/maintenance \
 }
 ```
 
-Two deliberate behaviours:
+Three deliberate behaviours:
 
+- **`ttlSeconds` is an integer from 1 to 86400 (24 hours), and a value outside
+  that is refused with 400** rather than clamped or ignored — the response names
+  the bound and points at the configuration form for a window that must outlive a
+  day or a restart. Omit it (or send `null`) for no timer. Before 0.6.28 an
+  invalid value was silently dropped and the flip applied *without* a timer, so a
+  request for a bounded window quietly produced an unbounded one; if you script
+  against an older version, read `until` in the response — `null` means no timer
+  was armed. It is refused rather than rounded down on purpose: a shorter window
+  than you asked for reopens the site mid-deploy, so there is no safe direction to
+  round toward.
 - **A runtime flip is not persisted.** A restart returns the bundle to whatever
   `settings.json` says. That is the safe direction — a toggle you forgot cannot
   outlive the process that set it. For a window that must survive restarts, set

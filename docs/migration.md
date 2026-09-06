@@ -81,6 +81,15 @@ alongside it is refused with `BODY_AND_DATA`, and any other body type with
 back as the result. Only unsafe methods were affected, since the methods that
 auto-retry by default carry no body.
 
+**An invalid `ttlSeconds` on `POST /_gina/maintenance` is now refused.** The
+value must be an integer from 1 to 86400; a present value outside that — a
+25-hour window, a float, a numeric string — used to be silently ignored, so the
+flip applied with no timer and a request for a bounded maintenance window
+produced an unbounded one. Both engines now answer **400**, naming the bound and
+the configuration alternative, and leave the state untouched. Omitting it, or
+sending `null`, still means no timer. If a script of yours sends an invalid
+value and expects 200, it was relying on a window it had not asked for.
+
 Templates that already carried the directive ahead of any mention of the layout
 filename, on its own line, behaved correctly before and are unchanged. A
 whitespace-control directive (`{%- extends … -%}`) is matched by neither the old
