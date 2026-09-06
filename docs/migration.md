@@ -19,6 +19,218 @@ upward to the target version.
 
 ---
 
+## 0.6.27 → 0.6.28
+
+**No action required.** Two fixes to the way a child template's `{% extends %}`
+directive is re-pointed at its cached layout.
+
+If a child mentioned its layout's filename *before* the directive — most often in
+a leading comment — the framework rewrote that first mention instead of the
+directive, and the page went on extending the raw, un-assembled layout rather
+than the assembled copy that carries the injected asset shell. The rewrite is now
+confined to the directive itself, so any other mention of the same filename
+elsewhere in the template is left untouched.
+
+Separately, the directive extraction was greedy. A one-line directive followed by
+another quoted tag ran the match past its own closing delimiter and produced a
+corrupted layout path that matched nothing, so the re-point silently never
+happened:
+
+```html
+{% extends 'layout.html' %}{% block title %}{{ name|default('untitled') }}{% endblock %}
+```
+
+Both quantifiers now stop at the directive they came from.
+
+**`self.forward()` works.** A route declaring `"control": "forward"` with a target in
+`param.url` now relays to the route it resolves. Until now it forwarded to the target
+bundle's webroot alone (or to the port number as the path), substituted the `":id"`
+declaration instead of the captured value, and its source was marked work in progress.
+Placeholder values come from the request, a string answer is relayed verbatim, and an
+unknown target is answered through `throwError()`. See the
+[controller guide](/guides/controller#forwarding).
+
+**Uploads are relayed too.** A `multipart/form-data` request forwarded with
+`control: "forward"` used to arrive at the target as a JSON object of its text
+fields, with `req.files` left behind entirely — the one request shape `forward()`
+could not carry. It is now re-encoded and relayed as multipart: the target parses
+it exactly as it would a direct upload, with the same field names, filenames,
+upload group and bytes.
+
+Nothing to change if you already forward non-multipart routes. If you are about to
+put `forward` on an upload route, size it first — **the body is buffered**, so peak
+memory is roughly the cap times the number of relays in flight. The cap is the
+source bundle's `upload.maxFieldsSize` when that setting is configured and 16 MB
+otherwise, checked against the text-field bytes plus the on-disk size of every
+staged file *before* anything is read. A request over the cap answers **413**,
+relaying files under a method that carries no body answers **400**, and a staged
+file already removed by the cleanup timer answers **500**. Staged files are read,
+never deleted, so the source bundle's own cleanup is unaffected. If you relay
+uploads larger than you can afford to buffer, terminate them in the receiving
+bundle instead.
+
+The option that carries it is public: `self.query()` accepts `options.body`, a
+`Buffer` or `string` sent verbatim under your own `headers['content-type']`
+(`application/octet-stream` when you set none). Passing a non-empty `data`
+alongside it is refused with `BODY_AND_DATA`, and any other body type with
+`BODY_TYPE`, both before the upstream is contacted.
+
+**A retried HTTP/1 request now carries its body.** With `retryUnsafe: true`, a
+`query()` retry after a post-send transient failure was re-sent with
+`content-length: 0` and an empty body, and whatever the upstream made of that came
+back as the result. Only unsafe methods were affected, since the methods that
+auto-retry by default carry no body.
+
+**An invalid `ttlSeconds` on `POST /_gina/maintenance` is now refused.** The
+value must be an integer from 1 to 86400; a present value outside that — a
+25-hour window, a float, a numeric string — used to be silently ignored, so the
+flip applied with no timer and a request for a bounded maintenance window
+produced an unbounded one. Both engines now answer **400**, naming the bound and
+the configuration alternative, and leave the state untouched. Omitting it, or
+sending `null`, still means no timer. If a script of yours sends an invalid
+value and expects 200, it was relying on a window it had not asked for.
+
+Templates that already carried the directive ahead of any mention of the layout
+filename, on its own line, behaved correctly before and are unchanged. A
+whitespace-control directive (`{%- extends … -%}`) is matched by neither the old
+nor the new form; that is unchanged by this release.
+
+**The http/2 preload header reaches cache hits.** With `server.cache.enable: true`
+a bundle served over HTTP/2 sent its `Link: <url>; rel=preload` header only on the
+first request of each view: the compiled-template cache-hit path returned before
+the code that built it, and no 103 Early Hints compensated. The header is now
+assembled once per view, memoised on the compiled-template cache entry and
+re-emitted on every hit under the same rules as before — never for an XHR
+request, never in dev. Two visible changes: when the template cache is on, an XHR
+request now computes the preload map too (the entry is shared with every later
+render of the view, so a page first loaded by `fetch()` no longer leaves it
+empty), and an empty `Link` header is no longer sent when nothing qualifies. The
+Inspector's `view.assets` map, restored for the compile path earlier in this
+release, now shows on cache hits as well. Pickup is a bundle restart.
+
+**The automatic 103 Early Hints response now actually fires.** Over HTTP/2 in
+production, `render()` is documented to send a 103 carrying the view's declared
+CSS and JS preloads before the template compiles. It never did: the preload list
+is assembled by the render delegate, which runs *after* the point that read it,
+so the list was always empty and the hint was skipped — in every release since
+the feature was added. The list is now built before the read, and the hint goes
+out. `self.setEarlyHints()` was never affected and has always worked.
+
+Nothing to change. The final `200` response's `Link` header is unchanged —
+byte-for-byte, verified on a live HTTP/2 boot — because the delegate still builds
+it exactly as before. If you added a manual `setEarlyHints()` call for your own
+bundle's CSS/JS to work around this, you can drop it; leaving it in is harmless,
+since a duplicate preload hint is ignored. No hint is sent for XHR/fragment
+requests, in dev mode, or for assets using Subresource Integrity.
+
+**Lenient callback guards now fail at your line.** No action required unless
+you were handing a non-function to a completion handle.
+
+`self.store()` normalised a missing callback only when it was `undefined`, so
+`store(target, files, null)` — or any other non-function — took the callback
+branch instead. The upload ran, its outcome was emitted to an event with no
+listeners, and nothing was ever told the transfer had finished. Any non-function
+callback now returns the fluent handle, exactly as an omitted one does, so
+`store(target, files, null)` starts the upload and delivers to a chained
+`.onComplete()`.
+
+`self.query()`'s fluent `.onComplete()` accepted a non-function too, and only
+failed once the channel settled — from inside the delivery wrapper's own
+`try`/`catch`, which turned it into a 500 that blamed your callback for an
+exception it never raised. Both handles now throw a `TypeError` synchronously at
+the registration site. The call argument is unchanged:
+`query(options, data, null)` still returns the handle.
+
+The same lenience existed outside the controller. The `run()` global (also
+`gna.run`) and `Shell::run()` in `lib/shell` both wrap your callback inside their
+own listener, so a non-function was accepted without complaint: the command ran
+to completion, the resulting `callback is not a function` was caught by the close
+handler and merely logged, and your completion never arrived at all. Both now
+throw a `TypeError` at the caller's line, naming the handle and the type received
+— `Shell::run — onComplete expects a function, got string`, with `null` reported
+as `null` rather than `object`. For `run()`, `null` and `undefined` in the
+*positional* slot still mean "use `.onComplete()`"; only a non-function that is
+neither is refused.
+
+**One dead handle has been removed from entity methods.** Every entity method
+object carried an empty `onComplete` — a leftover of the design in which a method
+returned the entity function itself with the handle hanging off it. Nothing had
+written to it since methods began returning a native Promise, so a callback
+registered on the *method* instead of on the *call* was swallowed and never
+fired:
+
+```js
+// never worked — silently discarded, in every release that had the decoy
+MyEntity.getById.onComplete(function (err, rec) {});
+
+// the supported form, unchanged
+MyEntity.getById(id).onComplete(function (err, rec) {});
+```
+
+The first form now throws `is not a function` at the call site rather than going
+quiet. If you have such a call, it has never delivered anything — the throw is
+the first time it has told you so.
+
+**Two client boot failures — and why this release needs a re-bake.** These two
+live in the browser bundle, so picking them up means rebuilding each bundle's
+baked copy of the client, not just restarting it. (The proxy-context fix below
+also changes the bundle's bytes, though not its behaviour, so one rebuild covers
+both.)
+
+A light page could stay permanently half-booted. `core.js` attached its
+`ginaloaded` listener only after the asynchronous `routing.json` fetch resolved,
+while the module factory that constructs gina and dispatches that event is
+deferred by the loader — so whenever the fetch won that race, the event fired
+with nothing listening. `isFrameworkLoaded` never flipped, the popin, validator
+and nav boot pollers gave up, every `data-gina-nav` hop degraded to a full
+navigation and no form bound. A page registering a `gina.ready()` handler reached
+the loader by a second route and booted normally, which is why the failure looked
+intermittent and why heavier pages were unaffected. The listener is now attached
+at parse time, above the module definition, so it precedes the dispatch by
+construction.
+
+Separately, a page embedded in a **cross-origin iframe** never booted at all.
+`construct()` read `parent.window['gina']` unconditionally to inherit a parent
+frame's instance; across origins that named-property read throws `SecurityError`,
+and because `construct()` is `async` the throw became an unobserved rejection —
+no `ginaloaded`, and nothing in the console beyond the rejection itself. The
+inheritance is optional and is now attempted inside a `try`/`catch`: a
+same-origin parent still shares its instance, a cross-origin one is skipped, and
+the boot proceeds. Same-origin embedding was never affected.
+
+---
+
+**Custom error pages carry their preloads and external plugins.** A custom error page
+(`templates/html/errors/<code>.html`) rendered over HTTP/2 used to reach the browser with a
+final `link` header that listed only the assets parsed out of the compiled page — never the
+CSS and JS declared in `templates.json` — and, if your scripts are not in defer mode,
+without the scripts you had flagged `isExternalPlugin: true` in its head. The error render worked on a copy of the template
+configuration, so what the framework accumulated for it while resolving its assets landed on
+an object the render never read. The error render now shares the request's template object
+and starts its two accumulators from clean, so an error that strikes after the failing
+route's assets were already resolved — a template compilation error — does not double the
+preload entries or the plugin tags. Nothing to change; pickup is a bundle restart.
+
+**Absolute URLs built by `getRoute().toUrl()` no longer inherit another request's proxy
+context.** After one request carrying a port-less `Host` — an orchestrator probe on an
+application route, a sibling-bundle call, any client sending `Host: name` with no port —
+had reached a worker, every later direct request on that worker built its absolute URLs
+from a worker-global: over HTTP/1.1 the port vanished (`http://127.0.0.1/…` for a bundle
+listening on `localhost:9940`), and over HTTP/2 + https the last port-less client's host
+was emitted verbatim — a host that client chose. Your own `getRoute(...).toUrl()` calls
+were the exposed surface; the framework's own redirects and `url` filters had already been
+re-pointed in an earlier release. `getRoute()` now resolves the proxied classification and
+proxy hostname from the request itself, so a direct request builds direct URLs regardless
+of what the worker saw before; only a call with no request in scope (boot, the CLI, a cron
+job) still reads the worker-global. Direct requests no longer rewrite that global either,
+and isaac's port-less scheme now follows the same chain as the router's
+(`X-Forwarded-Proto`, then the proxy scheme, then the bundle's own).
+
+Nothing to change. If you enabled `server.proxy.requireForwardedHeaders` as the
+mitigation, it remains correct and you can keep it. Pickup is a bundle restart **and a
+re-bake**: `lib/routing` ships in the client bundle and its bytes change, although the
+client-side behaviour does not.
+
 ## 0.6.26 → 0.6.27
 
 **Additive for the array and directory forms; one behaviour change on the

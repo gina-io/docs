@@ -345,6 +345,33 @@ this.partialNav = function(req, res, next) {
 };
 ```
 
+### `self.downloadFromLocal(filename)` {#selfdownloadfromlocalfilename}
+
+Streams a file from the local filesystem to the client as an attachment. The
+`content-type` is derived from the file's extension, and the `content-disposition`
+header carries the file's basename as an RFC 6266 quoted-string.
+
+```js
+this.export = function(req, res, next) {
+  var file = '/var/exports/report-' + req.params.id + '.pdf';
+  self.downloadFromLocal(file);
+};
+```
+
+### `self.downloadFromURL(url, options, cb)` {#selfdownloadfromurlurl-options-cb}
+
+Fetches an `http` or `https` resource and streams it to the client. The url must end
+in a filename with an extension, since that is what names the download. By default the
+response is an attachment, with the filename as an RFC 6266 quoted-string; pass
+`{ contentDisposition: 'inline' }` to let the browser display it instead. Any other
+scheme, or a url without a filename, is answered with a `500` through `throwError()`.
+
+```js
+this.logo = function(req, res, next) {
+  self.downloadFromURL('https://example.com/brand/logo.png');
+};
+```
+
 ### `self.redirect(url, ignoreWebRoot)`
 
 Redirects the client. Accepts a path, a full URL, a route name, or a cross-bundle route:
@@ -472,6 +499,21 @@ automatically):
 
 The field is additive and always on — consumers that only read `status` /
 `error` are unaffected until they choose to use it.
+
+### `self.forward404Unless(condition, req, res, next)` {#selfforward404unlesscondition-req-res-next}
+
+A shorthand for the most common `throwError` case: answer `404` unless a condition
+holds. When `condition` is falsy it sends the 404 through `throwError()` and returns the
+`Error` (or hands it to `next` when one is given). When it is truthy it returns `false`
+(or calls `next(false)`), so the action can carry on.
+
+```js
+this.get = async function(req, res, next) {
+  var doc = await db.documentEntity.getById(req.params.id);
+  if (self.forward404Unless(doc, req, res)) return;  // the 404 has already been sent
+  self.renderJSON(doc);
+};
+```
 
 ---
 
@@ -738,8 +780,8 @@ Query-string parameters and URI params are merged in automatically for all metho
 
 ```js
 // GET /search?q=gina&page=2
-var query = req.get.q;    // "gina"
-var page  = req.get.page; // 2  — auto-cast from "2"
+var query = req.get.q;                  // "gina"
+var page  = parseInt(req.get.page, 10); // 2 — values arrive as strings; cast them yourself
 
 // POST { username: "alice", password: "..." }
 var username = req.post.username;
@@ -753,8 +795,10 @@ if (req.post.count() > 0) {
 }
 ```
 
-String values `"null"`, `"true"`, and `"false"` are automatically cast to their
-JavaScript equivalents.
+A few string values are coerced on the way in. `"true"`, `"false"` and `"on"` become
+booleans (`"on"` is what a checked checkbox submits, so it arrives as `true`), and
+`"null"` becomes `null` in request bodies. Nothing else is cast: a numeric value such
+as `"2"` stays a string, so convert it before comparing.
 
 :::note OPTIONS
 `OPTIONS` is reserved for CORS preflight and is handled internally — it never
@@ -810,7 +854,7 @@ sequenceDiagram
 
 | Method | What it does |
 |---|---|
-| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data, params }`) into `requestStorage.haltedRequest`. The `url` is the byte-exact incoming URL, query string included (`req.originalUrl` when the engine preserves it, else `req.url`). `requestStorage` defaults to `req.session`. Returns the storage object. |
+| `self.pauseRequest(data[, requestStorage])` | Snapshots the current request (`{ url, routing, method, data }`) into `requestStorage.haltedRequest`. The `url` is the byte-exact incoming URL, query string included (`req.originalUrl` when the engine preserves it, else `req.url`). `requestStorage` defaults to `req.session`. Returns the storage object. |
 | `self.isHaltedRequest([session])` | `true` when the session (or the passed object) holds a `haltedRequest`. Defaults to `req.session` / `req.session.user`. |
 | `self.resumeRequest([requestStorage])` | Replays the snapshot — restores the original url / method / data / params onto the live request and re-dispatches it, then clears the snapshot. |
 
@@ -897,6 +941,14 @@ var app      = self.getConfig('app');       // app.json
 var conf     = self.getConfig();            // full conf object
 ```
 
+Two predicates answer which scope the bundle is running under, for the rare action
+that has to branch on it:
+
+```js
+if (self.isProductionScope()) { /* production-only behaviour */ }
+if (self.isLocalScope())      { /* local development */ }
+```
+
 ---
 
 ## Outgoing requests
@@ -927,6 +979,7 @@ Key options:
 | `method` | `"GET"` | HTTP method |
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
+| `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
 
 When the callback is omitted, `self.query()` returns a small handle with an
 `.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
@@ -1007,6 +1060,149 @@ absorbed safely (logged server-side, never a double response). Synchronous
 throws are owned the same way: on every delivery — success, non-2xx, and
 connection failure alike — a throwing callback answers 500 rather than
 escaping.
+
+---
+
+## Forwarding a route to another bundle {#forwarding}
+
+`forward` is a ready-made action: a route names it as its `control` and the target
+route in `param.url`, and the framework relays the request and the answer. The
+target is `<rule>` for a route of the current bundle, or `<rule>@<bundle>` for a
+sibling bundle of the same project — the same reference form `redirect()` accepts.
+
+```json
+"orders-facade": {
+  "url": "/v1/orders",
+  "method": "GET",
+  "param": { "control": "forward", "url": "orders-list@api" },
+  "middleware": ["middlewares.auth.require"]
+}
+```
+
+:::info Uploads are relayed since 0.6.28
+A `multipart/form-data` request is re-encoded and relayed as multipart, files
+included: the parsed text fields are re-flattened to bracket notation and the staged
+`req.files` are read back into one body under a fresh boundary, so the target parses
+it exactly as it would a direct upload — same field names, same filenames, same
+upload group, same bytes.
+
+The body is **buffered**, so it is bounded. The cap is the source bundle's
+`upload.maxFieldsSize` when that setting is configured, and 16 MB otherwise; it is
+checked against the text-field bytes plus the on-disk size of every staged file
+*before* anything is read, and a request over it answers **413**. Relaying files
+under a method that carries no body answers **400**, and a staged file that has
+already been swept answers **500**. Staged files are read, never deleted — the
+source bundle's own cleanup still owns them.
+
+Sizing is yours: peak memory is roughly the cap times the number of relays in
+flight. If you relay uploads larger than you can afford to buffer, terminate them
+in the receiving bundle instead of forwarding them.
+
+One edge worth knowing if the source and the target are configured at the *same*
+cap. The check above is made against the **decoded** bytes — the field values plus
+the size of each staged file — while the target receives an ordinary multipart
+request and applies its own `upload.maxFieldsSize` to the **encoded**
+`content-length`, which is larger by the multipart framing (a few hundred bytes:
+roughly 200 per part). So an upload sitting within a few hundred bytes of the cap
+can clear the relay and still be refused **431** by the target. If you see that,
+it is the framing difference, not a corrupted body — raise the target's cap
+slightly above the source's.
+:::
+
+Every other non-reserved key of `param` is a placeholder value for the target route.
+It is read from the captured URL parameter when the incoming URL provided one, and
+taken as a static value otherwise:
+
+```json
+"invoice-relay": {
+  "url": "/legacy/invoice/:id",
+  "param": { "control": "forward", "url": "invoice-get@api", "id": ":id" }
+}
+```
+
+The target route binds its own placeholder the way any parameterised route does —
+`invoice-get@api` above declares `"id": ":id"` in its own `param`. Without that binding
+the framework treats `:id` in the target's url as a literal path segment, and the
+forwarded value travels as request data instead of substituting into the path.
+
+How it relays:
+
+- The upstream call goes through [`self.query()`](#outgoing-requests). A sibling
+  bundle's host, port, protocol and scheme come from the environment
+  configuration; the resolved route url, webroot included, is the forwarded path.
+- The incoming request's data (`req.get`, `req.post`, …) travels as the query
+  string or the body. `param.method` overrides the forwarded HTTP method.
+- An object answer is relayed with `renderJSON()`; a string answer is relayed
+  verbatim with `renderTEXT()`. `query()` delivers the parsed body only, so a
+  non-JSON answer keeps its bytes but not its content type — forward JSON-answering
+  routes.
+- A non-2xx status, a transport failure or an unknown target route is answered
+  through `throwError()`.
+- `hostname`, `port` and `path` in `param` address a raw host instead of a bundle.
+
+Reserved `param` keys, never forwarded as placeholders: `url`, `urlIndex`, `control`,
+`file`, `title`, `bundle`, `project`, `hostname`, `port`, `path`, `method`.
+
+### Forward or redirect? {#forward-or-redirect}
+
+Both accept the same route reference, and that is where the resemblance ends.
+
+| | `self.redirect()` | `control: "forward"` |
+|---|---|---|
+| Who makes the hop | The browser, on the 3xx answer (301 by default) | This bundle, server-to-server through `self.query()` |
+| What the client sees | A second request; the address changes | One request, one answer; the address stays |
+| Who answers the client | The target route, directly | This route, relaying the target's answer: `renderJSON()`, `renderTEXT()`, or `throwError()` on a non-2xx |
+| Session at the target | The browser's cookies travel, so the target sees the user's session | None: `query()` sends no cookies, so the target sees a server-to-server call |
+| Request data | Carried one-shot through the session, or as `?inheritedData=` without one | `req[method]` as the query string or a JSON body; a `multipart/form-data` request is re-encoded and relayed as multipart, files included (buffered and bounded — see the note above) |
+| Targets | A route reference, a relative path, or a full URL | A route reference, or a raw host through `param.hostname`, `port` and `path` |
+| Method at the target | The browser's follow-up request, normally a `GET` | The incoming method, or `param.method` |
+| How you use it | `control: "redirect"` in `routing.json`, or `self.redirect(url, ignoreWebRoot)` from an action | `control: "forward"` in `routing.json` only; the target is the route's own `param.url` |
+
+Redirect to send the user somewhere. Forward to serve another route's answer under this
+route's address, an API facade or a legacy path kept alive.
+
+---
+
+## Pushing to connected clients {#pushing-to-connected-clients}
+
+`self.push(payload, option, callback)` sends a Server-Sent Events payload to clients
+connected to the bundle's push channel. The recipient is decided server-side and can
+never be chosen by the request body: an explicit `option.sessionID` wins, otherwise the
+payload goes to the caller's own session. Reaching every connected client requires
+`option.broadcast` to be strictly `true`, supplied by your code and never inferred from a
+missing value. A call with no resolvable recipient sends nothing and logs a warning,
+because that is a bug rather than a request to broadcast.
+
+```mermaid
+flowchart TD
+    A["self.push(payload, option)"] --> B{"option.broadcast === true?"}
+    B -- yes --> C["every connected client"]
+    B -- no --> D{"option.sessionID given?"}
+    D -- yes --> E["that session"]
+    D -- no --> F{"caller has a session?"}
+    F -- yes --> G["the caller's own session"]
+    F -- no --> H["nothing sent, warning logged"]
+```
+
+| Argument | Description |
+|---|---|
+| `payload` | Data to push. `null` falls back to `req[method].payload`. |
+| `option.sessionID` | Explicit recipient session id. |
+| `option.broadcast` | `true`, strictly, to reach every connected client. |
+| `option.section` | Section stamped onto the payload; falls back to `req[method].section`. |
+| `callback` | `callback(err, result)`. |
+
+```js
+self.push({ event: 'saved' });                                      // the caller's own session
+self.push({ event: 'invited' }, { sessionID: invitee.sessionId });  // a session your code selected
+self.push({ event: 'maintenance' }, { broadcast: true });           // everyone — deliberate, never implicit
+```
+
+:::note Engine
+The push channel is a facility of the built-in engine. Under the Express engine a push
+sends nothing, logs a warning, and reports a `PUSH_CHANNEL_NOT_CONFIGURED` error to the
+callback rather than failing the request.
+:::
 
 ---
 
@@ -1184,6 +1380,7 @@ this.login = function(req, res, next) {
 |---|---|
 | `self.isXMLRequest()` | Request has `X-Requested-With: XMLHttpRequest` |
 | `self.isWithCredentials()` | Request was made with credentials |
+| `self.isPopinContext()` | Request originated from inside a Gina popin |
 
 ---
 
@@ -1196,13 +1393,31 @@ for anything else.
 ### Automatic (zero config)
 
 When `render()` is called over HTTP/2 in production mode, the framework sends a
-103 automatically with the CSS and JS preload links it already collected for
-the page — before `getAssets()` runs and before Swig compiles the template. The
-browser can start loading stylesheet and script files during the entire render
-latency window with no developer action required.
+103 automatically with the page's declared CSS and JS preload links — before the
+template engine compiles the template. The browser can start loading stylesheet
+and script files during the render latency window with no developer action
+required.
 
-The same `Link` headers are also included on the final `200` response for proxies
-and CDNs that may have missed the informational response.
+The hint carries the stylesheets and scripts declared for the view in
+`templates.json`. Assets discovered later by parsing the compiled layout —
+images, fonts, anything `getAssets()` finds — cannot be in it, because at hint
+time the template has not been rendered yet; those still reach the browser
+through the `Link` header on the final `200`, which carries the declared assets
+*and* the parsed ones.
+
+Three cases send no automatic hint: an XHR/fragment request (there is no document
+load to preload for), dev mode, and any asset with
+[Subresource Integrity](/reference/templates#subresource-integrity-srienabled) enabled —
+a preload hint carries no integrity metadata, so a hinted fetch could not be
+matched to the integrity-checked consumer.
+
+:::info Fixed in 0.6.28
+The automatic 103 did not fire in any release before `0.6.28`: the preload list
+was assembled after the point that read it, so the hint was always empty and was
+skipped. `self.setEarlyHints()` below was unaffected and has always worked. If
+you added a manual `setEarlyHints()` call for your bundle's own CSS/JS as a
+workaround, you can drop it — or keep it, since a duplicate hint is harmless.
+:::
 
 ### Manual: `self.setEarlyHints(links)`
 
@@ -1272,6 +1487,52 @@ back to per-request eviction transparently.
 
 > **Do not rely on module-level variables** in controller files or `controller.js` — they are
 > evicted and re-required on each change, resetting any state they hold.
+
+---
+
+## Method index {#method-index}
+
+Every public method on a controller instance, grouped by concern, with where it is
+documented. Methods without a link are described here in one line.
+
+**Responding**
+
+- [`render`](#selfrenderdata) · [`renderWithoutLayout`](#selfrenderwithoutlayoutdata) · [`renderJSON`](#selfrenderjsondata) · [`renderTEXT`](#selfrendertextcontent) · [`renderStream`](#selfrenderstreamasynciterable-contenttype) · [`renderXML`](#selfrenderxmlxmlcontent-contenttype) — above.
+- [`redirect`](#selfredirecturl-ignorewebroot) · [`throwError`](#selfthrowerrorres-code-err) · [`forward404Unless`](#selfforward404unlesscondition-req-res-next) — above.
+- [`downloadFromLocal`](#selfdownloadfromlocalfilename) · [`downloadFromURL`](#selfdownloadfromurlurl-options-cb) — above.
+- [`setEarlyHints`](#103-early-hints) — above. `sendTrailers(fields)` — records opt-in HTTP/2 response trailers, best-effort, sent after the body by every response method.
+- `setTemplate(file, ext)` — override the route's template path or extension at action time — [Templating](/templating).
+
+**Request state**
+
+- [`getConfig`](#configuration) · [`isLocalScope` / `isProductionScope`](#configuration) · [`isXMLRequest` / `isWithCredentials` / `isPopinContext`](#detecting-request-type) — above.
+- `getRequestMethod()` / `setRequestMethod(method, conf)` — read or override the HTTP method the framework treats the current request as.
+- `getRequestMethodParams()` / `setRequestMethodParams(params)` — read or override the parsed params held on `req[method]`.
+- `getLocales(shortCountryCode)` — locale data for a short country code.
+- `t(key, params, culture)` — translate, auto-bound to the request's culture — [Internationalisation](./i18n).
+- `getFormsRules()` — the bundle's form validation rules — [Middleware](./middleware).
+
+**Flow control**
+
+- [`query`](#outgoing-requests) · [`pauseRequest` / `isHaltedRequest` / `resumeRequest`](#pausing-resuming-requests) · [`push`](#pushing-to-connected-clients) · [`forward`](#forwarding) — above.
+- `requireController` — load another namespace controller in-process — [Middleware](./middleware).
+
+**Jobs, events, health**
+
+- [`startJob` / `inferAsync`](#async-actions) — above. `jobStatus(id, cb)` — read a job's state — [Async jobs](./async-jobs).
+- `emitEvent(name, metadata)` — emit a named application event to the dev Inspector — [Inspector](./inspector).
+- `getBundleStatus(req, res, next)` — a ready-made health-check action answering `{ status: 200, isAlive: true }`. `checkBundleStatus(bundle, cb)` — ping a sibling bundle's health-check and report its status.
+
+**Files, storage, security**
+
+- `store(target, files, cb)` — persist uploaded files — [File uploads](./file-uploads).
+- `serveFromStorage(driverName, key, opts)` — serve an object from a storage driver — [Storage](./storage).
+- `hasRole(role)` — `true` when the authenticated caller holds the role — [Route authorization](./route-authorization).
+- `audit(action, data, cb)` — append an audit-trail record — [Audit trail](./audit-trail).
+
+Not part of the public contract: the internal accessors `getRequestObject`, `getResponseObject`,
+`getNextCallback` and `isCacheless`; `renderCustomError`, the error-page renderer that
+`throwError()` delegates to.
 
 ---
 

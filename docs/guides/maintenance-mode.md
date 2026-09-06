@@ -221,8 +221,18 @@ curl -s -X POST http://127.0.0.1:8080/_gina/maintenance \
 }
 ```
 
-Two deliberate behaviours:
+Three deliberate behaviours:
 
+- **`ttlSeconds` is an integer from 1 to 86400 (24 hours), and a value outside
+  that is refused with 400** rather than clamped or ignored — the response names
+  the bound and points at the configuration form for a window that must outlive a
+  day or a restart. Omit it (or send `null`) for no timer. Before 0.6.28 an
+  invalid value was silently dropped and the flip applied *without* a timer, so a
+  request for a bounded window quietly produced an unbounded one; if you script
+  against an older version, read `until` in the response — `null` means no timer
+  was armed. It is refused rather than rounded down on purpose: a shorter window
+  than you asked for reopens the site mid-deploy, so there is no safe direction to
+  round toward.
 - **A runtime flip is not persisted.** A restart returns the bundle to whatever
   `settings.json` says. That is the safe direction — a toggle you forgot cannot
   outlive the process that set it. For a window that must survive restarts, set
@@ -283,6 +293,29 @@ Correct behaviour during a maintenance window is pods that stay **ready** and
 serve the `503` themselves — which is what you get by default. Leave your
 `livenessProbe` and `readinessProbe` pointed at `/_gina/health/check` and change
 nothing.
+
+**If any probe targets an application route instead** — because it
+asserts something the built-in check cannot see — that route sits
+*below* the gate and answers `503` while the window is open. Present
+the bypass key from the probe itself, on **every** probe that targets
+such a route: startup, liveness *and* readiness. A failing readiness
+probe pulls the pod from the Service; a failing liveness or startup
+probe makes the kubelet kill and restart the container.
+
+```yaml
+readinessProbe:          # repeat on any startupProbe / livenessProbe
+  httpGet:               # that targets the same route
+    path: /api/ready
+    port: 8080
+    httpHeaders:
+      - name: x-gina-maintenance-key
+        value: <the key>   # httpHeaders values are literals — no valueFrom
+```
+
+Set `bypassKey` in `settings.json` *before* opening a window: it is
+configuration only, and the runtime toggle cannot add it. The header
+path grants no cookie and redirects nowhere, so it is the right form
+for a probe.
 
 See [Kubernetes & Docker](/guides/k8s-docker) for the probe configuration.
 

@@ -143,6 +143,13 @@ self.store(targetDir).onComplete(function(err, files) {
 self.store(targetDir, req.files, function(err, files) { /* … */ });
 ```
 
+`null` counts as omitted: `self.store(targetDir, req.files, null)` returns the same
+`{ onComplete }` handle as shape 1 and starts the upload when you chain `.onComplete()`
+— it no longer starts an upload whose result is delivered to nobody. Passing anything
+other than a function to `.onComplete()` throws a `TypeError` synchronously at the
+call site, so a wiring mistake surfaces on your line rather than inside a filesystem
+callback.
+
 On success `err` is `false` and `files` is an array describing what was stored:
 
 | Field | What it is |
