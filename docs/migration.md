@@ -123,7 +123,7 @@ bundle's CSS/JS to work around this, you can drop it; leaving it in is harmless,
 since a duplicate preload hint is ignored. No hint is sent for XHR/fragment
 requests, in dev mode, or for assets using Subresource Integrity.
 
-**Two lenient callback guards now fail at your line.** No action required unless
+**Lenient callback guards now fail at your line.** No action required unless
 you were handing a non-function to a completion handle.
 
 `self.store()` normalised a missing callback only when it was `undefined`, so
@@ -141,9 +141,41 @@ exception it never raised. Both handles now throw a `TypeError` synchronously at
 the registration site. The call argument is unchanged:
 `query(options, data, null)` still returns the handle.
 
-**Two client boot failures — and the only re-bake in this release.** These two
+The same lenience existed outside the controller. The `run()` global (also
+`gna.run`) and `Shell::run()` in `lib/shell` both wrap your callback inside their
+own listener, so a non-function was accepted without complaint: the command ran
+to completion, the resulting `callback is not a function` was caught by the close
+handler and merely logged, and your completion never arrived at all. Both now
+throw a `TypeError` at the caller's line, naming the handle and the type received
+— `Shell::run — onComplete expects a function, got string`, with `null` reported
+as `null` rather than `object`. For `run()`, `null` and `undefined` in the
+*positional* slot still mean "use `.onComplete()`"; only a non-function that is
+neither is refused.
+
+**One dead handle has been removed from entity methods.** Every entity method
+object carried an empty `onComplete` — a leftover of the design in which a method
+returned the entity function itself with the handle hanging off it. Nothing had
+written to it since methods began returning a native Promise, so a callback
+registered on the *method* instead of on the *call* was swallowed and never
+fired:
+
+```js
+// never worked — silently discarded, in every release that had the decoy
+MyEntity.getById.onComplete(function (err, rec) {});
+
+// the supported form, unchanged
+MyEntity.getById(id).onComplete(function (err, rec) {});
+```
+
+The first form now throws `is not a function` at the call site rather than going
+quiet. If you have such a call, it has never delivered anything — the throw is
+the first time it has told you so.
+
+**Two client boot failures — and why this release needs a re-bake.** These two
 live in the browser bundle, so picking them up means rebuilding each bundle's
-baked copy of the client, not just restarting it.
+baked copy of the client, not just restarting it. (The proxy-context fix below
+also changes the bundle's bytes, though not its behaviour, so one rebuild covers
+both.)
 
 A light page could stay permanently half-booted. `core.js` attached its
 `ginaloaded` listener only after the asynchronous `routing.json` fetch resolved,
