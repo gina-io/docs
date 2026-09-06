@@ -1070,13 +1070,19 @@ target is `<rule>` for a route of the current bundle, or `<rule>@<bundle>` for a
 sibling bundle of the same project — the same reference form `redirect()` accepts.
 
 ```json
-"upload-relay": {
-  "url": "/upload",
-  "method": "POST",
-  "param": { "control": "forward", "url": "upload-to-tmp@api" },
+"orders-facade": {
+  "url": "/v1/orders",
+  "method": "GET",
+  "param": { "control": "forward", "url": "orders-list@api" },
   "middleware": ["middlewares.auth.require"]
 }
 ```
+
+:::caution Uploads are not relayed
+`query()` has no multipart encoder, so a `multipart/form-data` request forwards its
+fields but never its files: `req.files` do not reach the target. Do not put `forward`
+on an upload route.
+:::
 
 Every other non-reserved key of `param` is a placeholder value for the target route.
 It is read from the captured URL parameter when the incoming URL provided one, and
@@ -1112,10 +1118,23 @@ How it relays:
 Reserved `param` keys, never forwarded as placeholders: `url`, `urlIndex`, `control`,
 `file`, `title`, `bundle`, `project`, `hostname`, `port`, `path`, `method`.
 
-:::caution Uploads are not relayed
-`query()` has no multipart encoder, so a `multipart/form-data` request forwards its
-fields but never its files: `req.files` do not reach the target.
-:::
+### Forward or redirect? {#forward-or-redirect}
+
+Both accept the same route reference, and that is where the resemblance ends.
+
+| | `self.redirect()` | `control: "forward"` |
+|---|---|---|
+| Who makes the hop | The browser, on the 3xx answer (301 by default) | This bundle, server-to-server through `self.query()` |
+| What the client sees | A second request; the address changes | One request, one answer; the address stays |
+| Who answers the client | The target route, directly | This route, relaying the target's answer: `renderJSON()`, `renderTEXT()`, or `throwError()` on a non-2xx |
+| Session at the target | The browser's cookies travel, so the target sees the user's session | None: `query()` sends no cookies, so the target sees a server-to-server call |
+| Request data | Carried one-shot through the session, or as `?inheritedData=` without one | `req[method]` as the query string or a JSON body; `multipart/form-data` files are not relayed |
+| Targets | A route reference, a relative path, or a full URL | A route reference, or a raw host through `param.hostname`, `port` and `path` |
+| Method at the target | The browser's follow-up request, normally a `GET` | The incoming method, or `param.method` |
+| How you use it | `control: "redirect"` in `routing.json`, or `self.redirect(url, ignoreWebRoot)` from an action | `control: "forward"` in `routing.json` only; the target is the route's own `param.url` |
+
+Redirect to send the user somewhere. Forward to serve another route's answer under this
+route's address, an API facade or a legacy path kept alive.
 
 ---
 
