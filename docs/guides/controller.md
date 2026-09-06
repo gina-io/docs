@@ -1097,6 +1097,16 @@ source bundle's own cleanup still owns them.
 Sizing is yours: peak memory is roughly the cap times the number of relays in
 flight. If you relay uploads larger than you can afford to buffer, terminate them
 in the receiving bundle instead of forwarding them.
+
+One edge worth knowing if the source and the target are configured at the *same*
+cap. The check above is made against the **decoded** bytes — the field values plus
+the size of each staged file — while the target receives an ordinary multipart
+request and applies its own `upload.maxFieldsSize` to the **encoded**
+`content-length`, which is larger by the multipart framing (a few hundred bytes:
+roughly 200 per part). So an upload sitting within a few hundred bytes of the cap
+can clear the relay and still be refused **431** by the target. If you see that,
+it is the framing difference, not a corrupted body — raise the target's cap
+slightly above the source's.
 :::
 
 Every other non-reserved key of `param` is a placeholder value for the target route.
