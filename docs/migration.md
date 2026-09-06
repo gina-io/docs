@@ -47,9 +47,39 @@ Both quantifiers now stop at the directive they came from.
 bundle's webroot alone (or to the port number as the path), substituted the `":id"`
 declaration instead of the captured value, and its source was marked work in progress.
 Placeholder values come from the request, a string answer is relayed verbatim, and an
-unknown target is answered through `throwError()`. Uploads are still not relayed:
-`query()` has no multipart encoder, so `req.files` never reach the target. See the
+unknown target is answered through `throwError()`. See the
 [controller guide](/guides/controller#forwarding).
+
+**Uploads are relayed too.** A `multipart/form-data` request forwarded with
+`control: "forward"` used to arrive at the target as a JSON object of its text
+fields, with `req.files` left behind entirely — the one request shape `forward()`
+could not carry. It is now re-encoded and relayed as multipart: the target parses
+it exactly as it would a direct upload, with the same field names, filenames,
+upload group and bytes.
+
+Nothing to change if you already forward non-multipart routes. If you are about to
+put `forward` on an upload route, size it first — **the body is buffered**, so peak
+memory is roughly the cap times the number of relays in flight. The cap is the
+source bundle's `upload.maxFieldsSize` when that setting is configured and 16 MB
+otherwise, checked against the text-field bytes plus the on-disk size of every
+staged file *before* anything is read. A request over the cap answers **413**,
+relaying files under a method that carries no body answers **400**, and a staged
+file already removed by the cleanup timer answers **500**. Staged files are read,
+never deleted, so the source bundle's own cleanup is unaffected. If you relay
+uploads larger than you can afford to buffer, terminate them in the receiving
+bundle instead.
+
+The option that carries it is public: `self.query()` accepts `options.body`, a
+`Buffer` or `string` sent verbatim under your own `headers['content-type']`
+(`application/octet-stream` when you set none). Passing a non-empty `data`
+alongside it is refused with `BODY_AND_DATA`, and any other body type with
+`BODY_TYPE`, both before the upstream is contacted.
+
+**A retried HTTP/1 request now carries its body.** With `retryUnsafe: true`, a
+`query()` retry after a post-send transient failure was re-sent with
+`content-length: 0` and an empty body, and whatever the upstream made of that came
+back as the result. Only unsafe methods were affected, since the methods that
+auto-retry by default carry no body.
 
 Templates that already carried the directive ahead of any mention of the layout
 filename, on its own line, behaved correctly before and are unchanged. A
