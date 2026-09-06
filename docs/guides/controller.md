@@ -1393,13 +1393,31 @@ for anything else.
 ### Automatic (zero config)
 
 When `render()` is called over HTTP/2 in production mode, the framework sends a
-103 automatically with the CSS and JS preload links it already collected for
-the page — before `getAssets()` runs and before Swig compiles the template. The
-browser can start loading stylesheet and script files during the entire render
-latency window with no developer action required.
+103 automatically with the page's declared CSS and JS preload links — before the
+template engine compiles the template. The browser can start loading stylesheet
+and script files during the render latency window with no developer action
+required.
 
-The same `Link` headers are also included on the final `200` response for proxies
-and CDNs that may have missed the informational response.
+The hint carries the stylesheets and scripts declared for the view in
+`templates.json`. Assets discovered later by parsing the compiled layout —
+images, fonts, anything `getAssets()` finds — cannot be in it, because at hint
+time the template has not been rendered yet; those still reach the browser
+through the `Link` header on the final `200`, which carries the declared assets
+*and* the parsed ones.
+
+Three cases send no automatic hint: an XHR/fragment request (there is no document
+load to preload for), dev mode, and any asset with
+[Subresource Integrity](/reference/templates#subresource-integrity-srienabled) enabled —
+a preload hint carries no integrity metadata, so a hinted fetch could not be
+matched to the integrity-checked consumer.
+
+:::info Fixed in 0.6.28
+The automatic 103 did not fire in any release before `0.6.28`: the preload list
+was assembled after the point that read it, so the hint was always empty and was
+skipped. `self.setEarlyHints()` below was unaffected and has always worked. If
+you added a manual `setEarlyHints()` call for your bundle's own CSS/JS as a
+workaround, you can drop it — or keep it, since a duplicate hint is harmless.
+:::
 
 ### Manual: `self.setEarlyHints(links)`
 

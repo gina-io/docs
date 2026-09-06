@@ -99,6 +99,21 @@ empty), and an empty `Link` header is no longer sent when nothing qualifies. The
 Inspector's `view.assets` map, restored for the compile path earlier in this
 release, now shows on cache hits as well. Pickup is a bundle restart.
 
+**The automatic 103 Early Hints response now actually fires.** Over HTTP/2 in
+production, `render()` is documented to send a 103 carrying the view's declared
+CSS and JS preloads before the template compiles. It never did: the preload list
+is assembled by the render delegate, which runs *after* the point that read it,
+so the list was always empty and the hint was skipped — in every release since
+the feature was added. The list is now built before the read, and the hint goes
+out. `self.setEarlyHints()` was never affected and has always worked.
+
+Nothing to change. The final `200` response's `Link` header is unchanged —
+byte-for-byte, verified on a live HTTP/2 boot — because the delegate still builds
+it exactly as before. If you added a manual `setEarlyHints()` call for your own
+bundle's CSS/JS to work around this, you can drop it; leaving it in is harmless,
+since a duplicate preload hint is ignored. No hint is sent for XHR/fragment
+requests, in dev mode, or for assets using Subresource Integrity.
+
 **Two lenient callback guards now fail at your line.** No action required unless
 you were handing a non-function to a completion handle.
 
