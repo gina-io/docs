@@ -198,6 +198,10 @@ endpoint still returns `200`. A drain-aware **readiness** endpoint
 (`/_gina/health/ready`, returning `503` once draining begins) is a planned
 follow-up; until then, give the load balancer a `preStop` sleep so it stops
 routing before `SIGTERM`.
+
+If you build that readiness endpoint yourself and use
+[maintenance windows](/guides/maintenance-mode#kubernetes-and-health-probes),
+every probe that targets it must carry the bypass key.
 :::
 
 ---

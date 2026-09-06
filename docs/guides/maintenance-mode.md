@@ -294,6 +294,29 @@ serve the `503` themselves — which is what you get by default. Leave your
 `livenessProbe` and `readinessProbe` pointed at `/_gina/health/check` and change
 nothing.
 
+**If any probe targets an application route instead** — because it
+asserts something the built-in check cannot see — that route sits
+*below* the gate and answers `503` while the window is open. Present
+the bypass key from the probe itself, on **every** probe that targets
+such a route: startup, liveness *and* readiness. A failing readiness
+probe pulls the pod from the Service; a failing liveness or startup
+probe makes the kubelet kill and restart the container.
+
+```yaml
+readinessProbe:          # repeat on any startupProbe / livenessProbe
+  httpGet:               # that targets the same route
+    path: /api/ready
+    port: 8080
+    httpHeaders:
+      - name: x-gina-maintenance-key
+        value: <the key>   # httpHeaders values are literals — no valueFrom
+```
+
+Set `bypassKey` in `settings.json` *before* opening a window: it is
+configuration only, and the runtime toggle cannot add it. The header
+path grants no cookie and redirects nowhere, so it is the right form
+for a probe.
+
 See [Kubernetes & Docker](/guides/k8s-docker) for the probe configuration.
 
 ---
