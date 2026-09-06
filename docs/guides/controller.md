@@ -1089,6 +1089,11 @@ taken as a static value otherwise:
 }
 ```
 
+The target route binds its own placeholder the way any parameterised route does —
+`invoice-get@api` above declares `"id": ":id"` in its own `param`. Without that binding
+the framework treats `:id` in the target's url as a literal path segment, and the
+forwarded value travels as request data instead of substituting into the path.
+
 How it relays:
 
 - The upstream call goes through [`self.query()`](#outgoing-requests). A sibling
