@@ -979,6 +979,7 @@ Key options:
 | `method` | `"GET"` | HTTP method |
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
+| `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
 
 When the callback is omitted, `self.query()` returns a small handle with an
 `.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
@@ -1078,10 +1079,24 @@ sibling bundle of the same project — the same reference form `redirect()` acce
 }
 ```
 
-:::caution Uploads are not relayed
-`query()` has no multipart encoder, so a `multipart/form-data` request forwards its
-fields but never its files: `req.files` do not reach the target. Do not put `forward`
-on an upload route.
+:::info Uploads are relayed since 0.6.28
+A `multipart/form-data` request is re-encoded and relayed as multipart, files
+included: the parsed text fields are re-flattened to bracket notation and the staged
+`req.files` are read back into one body under a fresh boundary, so the target parses
+it exactly as it would a direct upload — same field names, same filenames, same
+upload group, same bytes.
+
+The body is **buffered**, so it is bounded. The cap is the source bundle's
+`upload.maxFieldsSize` when that setting is configured, and 16 MB otherwise; it is
+checked against the text-field bytes plus the on-disk size of every staged file
+*before* anything is read, and a request over it answers **413**. Relaying files
+under a method that carries no body answers **400**, and a staged file that has
+already been swept answers **500**. Staged files are read, never deleted — the
+source bundle's own cleanup still owns them.
+
+Sizing is yours: peak memory is roughly the cap times the number of relays in
+flight. If you relay uploads larger than you can afford to buffer, terminate them
+in the receiving bundle instead of forwarding them.
 :::
 
 Every other non-reserved key of `param` is a placeholder value for the target route.
@@ -1128,7 +1143,7 @@ Both accept the same route reference, and that is where the resemblance ends.
 | What the client sees | A second request; the address changes | One request, one answer; the address stays |
 | Who answers the client | The target route, directly | This route, relaying the target's answer: `renderJSON()`, `renderTEXT()`, or `throwError()` on a non-2xx |
 | Session at the target | The browser's cookies travel, so the target sees the user's session | None: `query()` sends no cookies, so the target sees a server-to-server call |
-| Request data | Carried one-shot through the session, or as `?inheritedData=` without one | `req[method]` as the query string or a JSON body; `multipart/form-data` files are not relayed |
+| Request data | Carried one-shot through the session, or as `?inheritedData=` without one | `req[method]` as the query string or a JSON body; a `multipart/form-data` request is re-encoded and relayed as multipart, files included (buffered and bounded — see the note above) |
 | Targets | A route reference, a relative path, or a full URL | A route reference, or a raw host through `param.hostname`, `port` and `path` |
 | Method at the target | The browser's follow-up request, normally a `GET` | The incoming method, or `param.method` |
 | How you use it | `control: "redirect"` in `routing.json`, or `self.redirect(url, ignoreWebRoot)` from an action | `control: "forward"` in `routing.json` only; the target is the route's own `param.url` |
