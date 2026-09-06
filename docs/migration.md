@@ -56,6 +56,19 @@ filename, on its own line, behaved correctly before and are unchanged. A
 whitespace-control directive (`{%- extends … -%}`) is matched by neither the old
 nor the new form; that is unchanged by this release.
 
+**The http/2 preload header reaches cache hits.** With `server.cache.enable: true`
+a bundle served over HTTP/2 sent its `Link: <url>; rel=preload` header only on the
+first request of each view: the compiled-template cache-hit path returned before
+the code that built it, and no 103 Early Hints compensated. The header is now
+assembled once per view, memoised on the compiled-template cache entry and
+re-emitted on every hit under the same rules as before — never for an XHR
+request, never in dev. Two visible changes: when the template cache is on, an XHR
+request now computes the preload map too (the entry is shared with every later
+render of the view, so a page first loaded by `fetch()` no longer leaves it
+empty), and an empty `Link` header is no longer sent when nothing qualifies. The
+Inspector's `view.assets` map, restored for the compile path earlier in this
+release, now shows on cache hits as well. Pickup is a bundle restart.
+
 ---
 
 ## 0.6.26 → 0.6.27
