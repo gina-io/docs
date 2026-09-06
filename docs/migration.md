@@ -99,6 +99,49 @@ empty), and an empty `Link` header is no longer sent when nothing qualifies. The
 Inspector's `view.assets` map, restored for the compile path earlier in this
 release, now shows on cache hits as well. Pickup is a bundle restart.
 
+**Two lenient callback guards now fail at your line.** No action required unless
+you were handing a non-function to a completion handle.
+
+`self.store()` normalised a missing callback only when it was `undefined`, so
+`store(target, files, null)` — or any other non-function — took the callback
+branch instead. The upload ran, its outcome was emitted to an event with no
+listeners, and nothing was ever told the transfer had finished. Any non-function
+callback now returns the fluent handle, exactly as an omitted one does, so
+`store(target, files, null)` starts the upload and delivers to a chained
+`.onComplete()`.
+
+`self.query()`'s fluent `.onComplete()` accepted a non-function too, and only
+failed once the channel settled — from inside the delivery wrapper's own
+`try`/`catch`, which turned it into a 500 that blamed your callback for an
+exception it never raised. Both handles now throw a `TypeError` synchronously at
+the registration site. The call argument is unchanged:
+`query(options, data, null)` still returns the handle.
+
+**Two client boot failures — and the only re-bake in this release.** These two
+live in the browser bundle, so picking them up means rebuilding each bundle's
+baked copy of the client, not just restarting it.
+
+A light page could stay permanently half-booted. `core.js` attached its
+`ginaloaded` listener only after the asynchronous `routing.json` fetch resolved,
+while the module factory that constructs gina and dispatches that event is
+deferred by the loader — so whenever the fetch won that race, the event fired
+with nothing listening. `isFrameworkLoaded` never flipped, the popin, validator
+and nav boot pollers gave up, every `data-gina-nav` hop degraded to a full
+navigation and no form bound. A page registering a `gina.ready()` handler reached
+the loader by a second route and booted normally, which is why the failure looked
+intermittent and why heavier pages were unaffected. The listener is now attached
+at parse time, above the module definition, so it precedes the dispatch by
+construction.
+
+Separately, a page embedded in a **cross-origin iframe** never booted at all.
+`construct()` read `parent.window['gina']` unconditionally to inherit a parent
+frame's instance; across origins that named-property read throws `SecurityError`,
+and because `construct()` is `async` the throw became an unobserved rejection —
+no `ginaloaded`, and nothing in the console beyond the rejection itself. The
+inheritance is optional and is now attempted inside a `try`/`catch`: a
+same-origin parent still shares its instance, a cross-origin one is skipped, and
+the boot proceeds. Same-origin embedding was never affected.
+
 ---
 
 ## 0.6.26 → 0.6.27
