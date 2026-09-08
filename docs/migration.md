@@ -19,6 +19,58 @@ upward to the target version.
 
 ---
 
+## 0.6.29 → 0.6.30
+
+### Security — a response could carry a concurrent request's rendering context (restart; no code change)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` resolve their
+per-request context through an internal accessor that reads an
+`AsyncLocalStorage` store first and falls back to a process-wide singleton that
+every per-request filter-factory call stamps. Only the two optional async render
+delegates entered that store. The **default** render path — the one every bundle
+takes unless it opts into a custom async template loader via
+`settings.template.swig.loader` — did not.
+
+Both default delegates are themselves asynchronous and suspend between stamping
+the singleton and invoking the compiled template: the swig delegate reads the
+layout from disk unconditionally between the two. A second request arriving
+inside that window overwrites the singleton, so the first render resumes and
+resolves its filters against the second request's context — emitting another
+in-flight request's negotiated culture, and absolute URLs built from a host that
+other client supplied. Because the last writer wins, N overlapping renders leave
+N−1 responses resolving the wrong context.
+
+Both default delegates now enter the per-request store immediately after building
+the filter context, so the filters read it from the store rather than from the
+shared singleton. The singleton remains only for callers outside a request — a
+bundle's own mail or cron renderer calling the filter factory directly still
+resolves its own context.
+
+**No action is required beyond restarting your bundles.** No configuration
+changes, and the client bundle is untouched, so no rebuild is needed.
+
+:::caution Reproducing this locally will mislead you
+Development mode masks the defect completely: the framework re-requires the
+filter module on every request there, so no singleton is shared and a
+development reproduction reads clean. A clean local run is **not** evidence that
+a deployment was unaffected. Reproduce against a built production release.
+:::
+
+### Bundle templates now render through a per-bundle engine (restart; no code change)
+
+Previously the framework stamped a per-bundle template loader onto the shared
+swig engine once per render. Where several bundles run in one process, a
+concurrent bundle's stamp could reach another render's `{% include %}` and
+`{% extends %}` resolution. Each template root now gets its own engine instance.
+
+A bundle's own `controllers/setup.js` filters continue to work unchanged: the
+engine handed to `setup.js` is the same instance that renders that bundle. If you
+register filters anywhere other than through `this.engine` in `setup.js` — for
+example directly on the swig module you imported yourself — those registrations
+no longer reach bundle template rendering, and should move into `setup.js`.
+
+---
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in
