@@ -19,6 +19,20 @@ upward to the target version.
 
 ---
 
+## 0.6.28 → 0.6.29
+
+**No action required.** `bundle:build` and `project:build` gain an opt-in
+`--skip-unchanged` flag: a release whose bundle source is byte-identical to what
+it was built from keeps its copy instead of being wiped and re-copied (the
+manifest update, the fingerprint stamp, the `node_modules` link and both hooks
+still run, and any doubt rebuilds). Nothing changes without the flag. With it,
+`--dry-run` previews each release's decision, `--format=json` emits one envelope,
+and the `postbuild` hook receives `GINA_BUILD_SKIPPED_BUNDLES` /
+`GINA_BUILD_SKIPPED_ALL`. The marker lives at the release root as
+`.gina-build.json`. See [bundle:build](/cli/cli-bundle#skip-unchanged).
+
+---
+
 ## 0.6.27 → 0.6.28
 
 **No action required.** Two fixes to the way a child template's `{% extends %}`

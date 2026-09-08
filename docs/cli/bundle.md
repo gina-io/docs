@@ -178,21 +178,75 @@ A bundle running inside a Docker container writes its pidfile inside the contain
 
 ## `bundle:build`
 
-Build a bundle for distribution. Compiles assets, applies environment overrides,
-and writes a release to `releases/`.
+Build a bundle's release: wipes `releases/<bundle>/<scope>/<env>/<version>/`,
+copies the bundle source into it verbatim, links the project's `node_modules`
+into the release, and runs the optional `prepare` / `postbuild` hooks declared
+in `manifest.json#buildScripts` before and after. No compilation happens here —
+asset pipelines belong to your hooks.
 
 ```bash
-gina bundle:build <bundle> @<project> [--env=<env>] [--scope=<scope>]
+gina bundle:build <bundle> @<project> --env=<env> --scope=<scope> [--skip-unchanged] [--force] [--dry-run] [--format=json]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--env` | `dev` | Target environment (`dev`, `prod`, or a custom env) |
-| `--scope` | `local` | Target scope (`local`, `production`, or a custom scope) |
+| `--env` | — (required) | Target environment (`dev`, `prod`, or a custom env) |
+| `--scope` | — (required) | Target scope (`local`, `production`, or a custom scope) |
+| `--skip-unchanged` | off | Skip the wipe-and-copy of a release whose source is byte-identical to what it was built from (see below) |
+| `--force` | off | With `--skip-unchanged`: rebuild every release anyway, and still record the marker |
+| `--dry-run` | off | Resolve every release and print what *would* happen — writes nothing, runs no hook |
+| `--format=json` | text | Emit one `{ project, scope, dryRun, skipUnchanged, releases[] }` envelope instead of the text lines |
 
 ```bash
 gina bundle:build frontend @myproject --env=prod --scope=local
 ```
+
+### Skipping the copy when nothing changed {#skip-unchanged}
+
+Opt-in. With `--skip-unchanged`, the build signs the bundle source — the sha1
+of every file's bytes and every symlink's target; timestamps do not count, so a
+fresh checkout or a plain `cp` does not invalidate — and records the signature
+in the release as `.gina-build.json`. When the recorded signature matches, the
+wipe-and-copy is skipped for that release; the manifest update, the fingerprint
+stamp, the `node_modules` link and both hooks still run. The first build with
+the flag always copies: it writes the marker the next build compares against.
+
+Any doubt rebuilds — no marker, a marker written by another spec, a missing
+release directory, a changed, added or removed file, or an error while checking.
+On a source whose timestamps are stable, the whole cost is one extra walk that
+only stats files; a source whose timestamps were rewritten is read once, then
+stat-only again.
+
+```bash
+gina bundle:build frontend @myproject --env=prod --scope=local --skip-unchanged
+# [build] --skip-unchanged: signed `frontend` — 1811 entries, 0 read, 1811 reused from the prior marker
+# [build] release `releases/frontend/local/prod/0.0.1` unchanged since 2026-09-08T00:57:17.924Z (1811 files) — copy skipped
+```
+
+`--dry-run` shows each release's decision and its reason without touching
+anything; `--format=json` emits the same resolution as one envelope:
+
+```bash
+gina bundle:build frontend @myproject --env=prod --scope=local --skip-unchanged --dry-run
+# [ dry-run ] would rebuild releases/frontend/local/prod/0.0.1: 1 file(s) changed
+#     - public/js/app.js
+# [ dry-run ] nothing written
+```
+
+Reasons: `no marker` · `<k> file(s) changed` (the first 10 listed) ·
+`marker spec <s> ≠ <current>` · `release missing` · `--force`.
+
+**Not detected, by design.** Edits made directly inside the release directory
+(the release is a build output — omit the flag or pass `--force` to rebuild),
+file mode changes (the copy never preserved them), and the framework version
+(recorded in the marker for diagnostics only; the release is a verbatim copy of
+the source). Hooks always run: make them idempotent, or read the signal below.
+
+**Postbuild hook signal.** With `--skip-unchanged`, the `postbuild` hook's
+environment carries `GINA_BUILD_SKIPPED_BUNDLES` — the comma-separated bundles
+whose every built env was skipped — and `GINA_BUILD_SKIPPED_ALL`, `1` when that
+is every bundle built this run, else `0`. A hook that bakes its own outputs can
+skip its own work when nothing changed.
 
 :::note Bundles restricted to certain scopes
 If the bundle's `manifest.json` entry carries a `scopes` allow-list that does not
