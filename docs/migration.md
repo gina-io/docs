@@ -31,6 +31,25 @@ and the `postbuild` hook receives `GINA_BUILD_SKIPPED_BUNDLES` /
 `GINA_BUILD_SKIPPED_ALL`. The marker lives at the release root as
 `.gina-build.json`. See [bundle:build](/cli/cli-bundle#skip-unchanged).
 
+### Fixed — an upload form that declares no `[preview][...]` fields no longer posts `preview="[object Object]"` (restart and rebuild; review code keyed on that field's presence)
+
+The staged-upload client layer writes one hidden metadata field per entry into
+your real form and auto-creates any your form did not declare. `preview` — whose
+value is an object, not a string — was auto-created like the others, so a form
+that declared no `[preview][...]` sub-fields got a flat `<prefix>[0][preview]`
+input, and whenever your staging route returned a `preview` object the submit
+posted the literal text `[object Object]`. Such a form now posts **no `preview`
+field at all**, which is the documented field set; the thumbnail still renders.
+A form that declares the `[preview][location|uri|width|height]` sub-fields is
+unchanged — declaring them remains the way to persist the preview, and that
+opt-in is now documented under
+[Persisting the preview](/guides/file-uploads#persisting-the-preview).
+
+**Action:** if server code keyed on the *presence* of a `preview` field for such
+a form, key on its value instead — the field was garbage before and is absent
+now. The fix is in the browser bundle: rebuild (re-bake) your bundles as well as
+restarting them.
+
 ---
 
 ## 0.6.27 → 0.6.28

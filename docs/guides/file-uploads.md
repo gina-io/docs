@@ -467,7 +467,9 @@ with JSON the client understands:
 The client uses each entry to render the preview (`tmpUri`, for `image/*` MIME
 types) and to populate the hidden fields it injects into your real form
 (`name`, `group`, `originalFilename`, `ext`, `encoding`, `size`, `location`,
-`mime`, and `height`/`width` for images). Note the field names the client
+`mime`, and `height`/`width` for images — never `preview`, whose object is
+written only into sub-fields you declare; see
+[Persisting the preview](#persisting-the-preview)). Note the field names the client
 expects — `mime` and `tmpUri` — differ from what `self.store()` returns
 (`type`, `filename`); your staging action maps between them and supplies a
 browse-able `tmpUri` for the preview.
@@ -559,6 +561,57 @@ window.onAvatarReset = function (payload) {
 An exception thrown inside your callback is logged and contained — it never
 interrupts the removal. *The removal callbacks and
 `data-gina-form-upload-hidden-class` are new in 0.5.15.*
+
+### Persisting the preview
+
+Your staging route may describe a separate preview variant — a thumbnail it
+generated — as a nested `preview` object alongside the file's own metadata:
+
+```json
+{
+  "files": [
+    {
+      "originalFilename": "me.png",
+      "mime": "image/png",
+      "ext": "png",
+      "size": 20480,
+      "encoding": "7bit",
+      "location": "/var/tmp/uploads/me.png",
+      "tmpUri": "/media/tmp/me.png",
+      "preview": {
+        "location": "/var/tmp/uploads/me-preview.png",
+        "uri": "/media/previews/me-preview.png",
+        "tmpUri": "/media/tmp/me-preview.png",
+        "width": 320,
+        "height": 240
+      }
+    }
+  ]
+}
+```
+
+When it does, the thumbnail is rendered from `preview.tmpUri` rather than the
+file's own `tmpUri`. The preview's metadata is **not** written into your form by
+default — the generated field set stays the flat list above. To persist it,
+declare the sub-fields you want as hidden inputs under the same prefix; the
+client fills each one from the nested object and the form posts them as a real
+nested structure:
+
+```html
+<input type="hidden" name="avatar[0][preview][location]">
+<input type="hidden" name="avatar[0][preview][uri]">
+<input type="hidden" name="avatar[0][preview][width]">
+<input type="hidden" name="avatar[0][preview][height]">
+```
+
+Declare only the keys your route returns; a declared sub-field the response does
+not carry is left empty.
+
+*Changed in 0.6.29.* A form that declared no `[preview][...]` sub-fields used to
+receive a flat `<prefix>[0][preview]` field holding the literal text
+`[object Object]` whenever the response carried a `preview` object; it now posts
+no `preview` field at all. If your server keyed on that field's presence, key on
+its value instead.
 
 ---
 
