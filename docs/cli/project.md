@@ -246,11 +246,17 @@ Bundles running inside a Docker container write their pidfile inside the contain
 
 ## `project:build`
 
-Build all bundles in a project.
+Build all bundles in a project: each bundle's release is wiped and re-copied
+from its source (the project's dev env excluded), with the same hooks as
+[`bundle:build`](/cli/cli-bundle#bundlebuild).
 
 ```bash
-gina project:build @<project> [--env=<env>] [--scope=<scope>]
+gina project:build @<project> --env=<env> --scope=<scope> [--skip-unchanged] [--force] [--dry-run] [--format=json]
 ```
+
+The flags are those of `bundle:build`, including `--skip-unchanged` and its
+`GINA_BUILD_SKIPPED_BUNDLES` / `GINA_BUILD_SKIPPED_ALL` postbuild signal — see
+[Skipping the copy when nothing changed](/cli/cli-bundle#skip-unchanged).
 
 :::note Bundles restricted to certain scopes
 A bundle whose `manifest.json` entry carries a `scopes` allow-list that does not

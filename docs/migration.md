@@ -19,6 +19,107 @@ upward to the target version.
 
 ---
 
+## 0.6.28 → 0.6.29
+
+**No action required.** `bundle:build` and `project:build` gain an opt-in
+`--skip-unchanged` flag: a release whose bundle source is byte-identical to what
+it was built from keeps its copy instead of being wiped and re-copied (the
+manifest update, the fingerprint stamp, the `node_modules` link and both hooks
+still run, and any doubt rebuilds). Nothing changes without the flag. With it,
+`--dry-run` previews each release's decision, `--format=json` emits one envelope,
+and the `postbuild` hook receives `GINA_BUILD_SKIPPED_BUNDLES` /
+`GINA_BUILD_SKIPPED_ALL`. The marker lives at the release root as
+`.gina-build.json`. See [bundle:build](/cli/cli-bundle#skip-unchanged).
+
+### Security — a failed Couchbase query no longer carries its own result rows into the error it raises (restart; review anything that read rows out of a stack trace)
+
+The couchbase connector built its synthesized query error from the query
+service's response envelope and kept that envelope verbatim on `error.stack` and
+`error.cause.http_body`. The envelope's `results` array is non-empty whenever the
+failing statement had already produced rows — a `RETURNING` DML that loses a CAS
+race carries the documents it was about to return, a SELECT interrupted by a
+query-service timeout carries the rows fetched so far — so every printer of the
+error wrote those documents out. The controller error path logs the stack in all
+scopes and any `console.error(err)` renders the enumerable cause, and both run
+before a bundle's own error handler, so there was no interception point.
+
+Both now carry the envelope with `results` replaced by a row-count marker.
+`errors`, `requestID`, `status`, `signature` and `metrics` are preserved
+verbatim, as are the classifier's `first_error_code` and `retry`; the SDK's own
+error object is copied rather than mutated, and a body the connector cannot parse
+is dropped in favour of a byte-count marker rather than forwarded.
+
+**Action:** none for normal use — this is strictly less data in your logs. If you
+have code that recovered result rows *out of a query error's stack trace or
+cause*, it will no longer find them; read them from a successful query instead.
+Error classifiers that match on `errors[]` content (a `12009` code, a
+`CAS mismatch` or `duplicate key` message) keep working — that part of the
+envelope is preserved deliberately.
+
+### Fixed — a server-side field error now reaches the visible control when a hidden twin of the same name comes first (restart and rebuild)
+
+The client-side error painter walked the form in document order and stopped on
+the first control whose `name` matched, whether or not it could paint it — and a
+bare `type="hidden"` control never can, since every paint gate skips it. So with
+the shape the validator's own source recommends for a control that must render
+disabled yet still post — a visible control plus a hidden twin carrying rule
+`"exclude": false` — a hidden twin listed *first* consumed the error: no message,
+no `aria-invalid`, and on a shared wrapper the error class was set with nothing
+inside it.
+
+A bare hidden control is now skipped when another control of the same name can be
+painted. A hidden control that is the only one of its name keeps the former
+behaviour, and one inside a `form-item-wrapper` is still painted after its
+wrapper.
+
+**Action:** none — this only adds a paint where there was silence. If you
+reordered markup to put the visible control first as a workaround, that ordering
+is no longer required (it also remains harmless). The fix is in the browser
+bundle: rebuild (re-bake) your bundles as well as restarting them.
+
+### Fixed — a path-form `getUrl` route containing `@` no longer renders a 500 (restart)
+
+Both the swig and the nunjucks `getUrl` / `url` filter split every `@`-bearing
+route as `rule@bundle` *before* testing whether it was a path. A path literal
+carrying an at-sign — the retina-asset idiom the filter's own comment cites,
+`'/assets/img/common/header@2x.png'` — was cut into the rule
+`/assets/img/common/header` and the bundle `2x.png`, failed the bundle lookup on
+that remainder and called `throwError(500)` in the middle of the template. Since
+`throwError` renders rather than throws and the call sat outside the filter's
+routing `try`, the page came back as a 500 while the action's own render was
+discarded.
+
+A route that starts with `/` is now treated as a path on both engines and skips
+the split. The `rule@bundle` form still splits, and a bundle passed as the
+filter's base argument still wins.
+
+**Action:** one consequence to know — a path-form route can no longer name a
+bundle in-string (`'/x.png@web'|getUrl`). Pass the bundle as the filter's base
+argument instead: `'/x.png'|getUrl(null, 'web')`, which was already the working
+form and is unchanged.
+
+
+### Fixed — an upload form that declares no `[preview][...]` fields no longer posts `preview="[object Object]"` (restart and rebuild; review code keyed on that field's presence)
+
+The staged-upload client layer writes one hidden metadata field per entry into
+your real form and auto-creates any your form did not declare. `preview` — whose
+value is an object, not a string — was auto-created like the others, so a form
+that declared no `[preview][...]` sub-fields got a flat `<prefix>[0][preview]`
+input, and whenever your staging route returned a `preview` object the submit
+posted the literal text `[object Object]`. Such a form now posts **no `preview`
+field at all**, which is the documented field set; the thumbnail still renders.
+A form that declares the `[preview][location|uri|width|height]` sub-fields is
+unchanged — declaring them remains the way to persist the preview, and that
+opt-in is now documented under
+[Persisting the preview](/guides/file-uploads#persisting-the-preview).
+
+**Action:** if server code keyed on the *presence* of a `preview` field for such
+a form, key on its value instead — the field was garbage before and is absent
+now. The fix is in the browser bundle: rebuild (re-bake) your bundles as well as
+restarting them.
+
+---
+
 ## 0.6.27 → 0.6.28
 
 **No action required.** Two fixes to the way a child template's `{% extends %}`
