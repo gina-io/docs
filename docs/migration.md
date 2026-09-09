@@ -198,7 +198,7 @@ it) and every relayed line is written as one JSON object — `ts`, `level`, `bun
 relay does not carry. Do not set `GINA_LOG_STDOUT=true` in that topology: it
 disables the transport the tail reads. Nothing changes unless the variable is set.
 
-### Fixed — the server-side `query` validation rule wrote into the shared proxy configuration (restart **and a client bundle rebuild**)
+### Fixed — the server-side `query` validation rule wrote into the shared proxy configuration (restart; rebuild for byte parity)
 
 A `query` validation rule whose target names another bundle — `some-rule@otherbundle`
 — bound its request options directly to that bundle's proxy target inside the
@@ -213,11 +213,14 @@ to every other reader of the same configuration, not merely accompanied by two e
 keys. The rule now clones the proxy target before using it. Nothing about the outgoing
 request changes; only what other readers of that configuration observe.
 
-:::caution This is the one 0.6.30 change that needs a client bundle rebuild
-The rule lives in a file the browser bundle carries, so `gina.min.js` changes even
-though the branch that was fixed is server-side only. Every other entry in this
-release is restart-only — this one is not. Restarting without rebuilding leaves your
-baked client bundle on the previous bytes.
+:::note This is the one 0.6.30 change whose bytes reach the client bundle
+The rule lives in a file the browser bundle carries, so `gina.min.js` changes and a
+rebuild keeps your baked copy in step with the release — every other entry in this
+release is restart-only. **No client-side behaviour depends on it, though.** The
+branch that was fixed is server-side only and is not reachable in the browser: the
+client dispatches validation queries to a different function, which never reads proxy
+configuration at all. So restart first for the actual fix, and rebuild at your
+convenience for byte parity — you are not carrying a client-side defect in between.
 :::
 
 You were affected only if you declare `proxy` entries carrying a `path` **and** have
