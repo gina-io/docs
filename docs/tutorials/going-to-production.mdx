@@ -1066,7 +1066,7 @@ Every line becomes one JSON object — this is a real request from this project:
 
 `bundle` + `message` are the canonical keys (`group` + `msg` are back-compat aliases). In JSON mode, request-scoped lines additionally carry `requestId` and `durationMs` — and the `requestId` honours an inbound `X-Request-Id` header and is echoed back on the response, so an id minted at your proxy flows through every log line the request touches.
 
-In a container, prefer `GINA_LOG_STDOUT=true` — same JSON, and it also skips the log-tail transport that has no listener inside a container. The [Logging guide](/guides/logging) covers levels, files, and the resolution order.
+In a container, prefer `GINA_LOG_STDOUT=true` — same JSON, and it also skips the log-tail transport that has no listener inside a container. From 0.6.30 `gina-container` applies that preset itself when the variable is unset, so the explicit `GINA_LOG_STDOUT=true` in the examples below documents the default rather than adding a requirement (`GINA_LOG_STDOUT=false` opts out). The [Logging guide](/guides/logging) covers levels, files, and the resolution order.
 
 ---
 

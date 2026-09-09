@@ -135,6 +135,23 @@ bundle restart; no re-bake.
 
 ---
 
+### Changed — `gina-container` applies the container logging preset by default (restart; no code change)
+
+Bundles launched with `gina-container` — including every image built by
+`gina image:build` — now log JSON lines to stdout and skip the MQ transport by
+default: the launcher sets `GINA_LOG_STDOUT=true` for itself and for the bundle
+unless the variable is already set. Previously an unconfigured container wrote
+ANSI-coloured text into its stdout while both the launcher and the bundle kept
+dialling an MQ listener that cannot exist in that topology — one
+`[MQSpeaker] Error: connect ECONNREFUSED 127.0.0.1:8125` warning each, then a
+silent redial every 30 seconds for the life of the container.
+
+**Action required: none** if you already set `GINA_LOG_STDOUT=true` (the documented
+container preset) or your collector expects JSON. If you relied on the coloured
+text, set `GINA_LOG_FORMAT=text` (the dial stays skipped), or `GINA_LOG_STDOUT=false`
+to restore the previous behaviour in full. Bundles started through a framework
+daemon (`gina start` + `gina bundle:start`) are not affected.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in

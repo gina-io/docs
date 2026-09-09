@@ -364,7 +364,8 @@ bundle process:
   environment. The default is `text`, so interactive output is unchanged unless you
   opt in.
 - **`GINA_LOG_STDOUT=true`** — the container preset: implies JSON output **and**
-  skips the MQ transport (there is no MQ listener inside a container). See
+  skips the MQ transport (there is no MQ listener inside a container). `gina-container`
+  applies it itself when the variable is unset (0.6.30). See
   [Kubernetes &amp; Docker → Stdout logging](/guides/k8s-docker#stdout-logging).
 
 Each line is then a single JSON object:
