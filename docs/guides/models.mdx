@@ -248,7 +248,11 @@ hand whose body calls `self.emit('<shortName>#<methodName>', …)`. Methods gene
 `.sql` files behave differently; see
 [Concurrency for SQL-derived methods](#concurrency-for-sql-derived-methods).
 
-A completion that reaches the entity outside every call's async context (for example a native
+When several calls to the **same** emit-style method are in flight at once, each completion
+is paired to **the call it came from** (*since 0.6.20*): the framework runs every call inside
+its own async context and matches the `self.emit(...)` to that context, whichever order the
+underlying operations complete in — different keys with different latencies included. A
+completion that reaches the entity outside every call's async context (for example a native
 driver invoking callbacks from a loop it started at boot) is paired in arrival order instead,
 and the bundle logs `DISPATCH:NO_CONTEXT` at `debug` level when that happens — whether or not a
 call is pending (*since 0.6.30*; before that the line was silent when nothing was pending, so a
