@@ -125,10 +125,17 @@ concurrent bundle's stamp could reach another render's `{% include %}` and
 `{% extends %}` resolution. Each template root now gets its own engine instance.
 
 A bundle's own `controllers/setup.js` filters continue to work unchanged: the
-engine handed to `setup.js` is the same instance that renders that bundle. If you
-register filters anywhere other than through `this.engine` in `setup.js` — for
-example directly on the swig module you imported yourself — those registrations
-no longer reach bundle template rendering, and should move into `setup.js`.
+engine handed to `setup.js` is the same instance that renders that bundle, and a
+registration made through it also reaches the swig module. So an application that
+compiles a template through the module it imported itself — an entity rendering a
+message outside any request, say — keeps seeing that bundle's filters, as it did
+before.
+
+The reverse is not true, and that is the part to check. Registrations made
+directly on the swig module never reach bundle template rendering: each bundle's
+engine gets its own filter, tag and extension maps at construction, and nothing
+copies later module registrations into them. Anything a template needs must be
+registered through `this.engine` in `setup.js`.
 
 ### Changed — `getConfig()` returns a copy-on-write view (no action for most bundles; opt-out available)
 
