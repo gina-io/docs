@@ -89,6 +89,34 @@ evidence that a deployment was unaffected. Reproduce against a built production
 release.
 :::
 
+### Security — the error response from the global `getConfig()` / `getLib()` helpers no longer carries the stack (restart; no code change)
+
+When the global `getConfig()` or `getLib()` helper cannot resolve a configuration
+slice or a library during a live request — a deployment that leaves a library
+unresolvable, a configuration slice absent for the requested bundle — the error
+builder behind them answered, in **every** scope, with the error's full stack in
+the JSON body (`{ "status": 500, "error": "Error 500. <stack>" }`): the framework's
+install path and version directory, your controllers' paths and line numbers, the
+bundle, environment and library names. It also logged nothing on that path, so an
+operator could neither see it happen nor search for past occurrences. Every
+release from `0.1.0` to `0.6.29` behaves this way.
+
+The builder now follows the same contract as `self.throwError()` and the server
+engine's error path: a six-character incident `ref` is returned as a top-level
+field on the JSON body, one full-detail line (message, stack, cause, request id,
+method, URL) is logged before the response is written, keyed by that `ref`, and
+outside local scope the `error` string carries the message line only. Local scope
+keeps the stack in `error` as before, so the dev toolbar is unaffected. The
+response shape is `{ "status", "error", "ref" }`; a relay-safe `ref` set on the
+thrown error is honoured. Two small corrections ride along: the one-argument
+string form reports the string instead of `undefined`, and the never-reachable
+HTML arm of that path is removed rather than made live.
+
+Nothing to change in a bundle. Pickup: a bundle restart; no re-bake. If your code
+calls the global helpers inside request handlers on an earlier release, wrapping
+those calls and routing failures through `self.throwError()` gives you the
+stripped wire today.
+
 ### Bundle templates now render through a per-bundle engine (restart; no code change)
 
 Previously the framework stamped a per-bundle template loader onto the shared
