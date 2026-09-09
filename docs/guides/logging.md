@@ -343,7 +343,7 @@ Gina calls transports **containers**. Two are built in:
 |-----------|-----------|-------------|:---:|
 | `default` | `logger#default` | `process.stdout` | ✓ |
 | `mq` | `logger#mq` | MQSpeaker → port 8125 → MQListener | ✓ |
-| `file` | `logger#file` | Rotating log files on disk (needs the daemon) | opt-in |
+| `file` | `logger#file` | Rotating log files on disk, one per bundle | opt-in |
 
 The `mq` container is what powers `gina tail`. Every formatted log line is
 broadcast to the MQ listener, which forwards it to any connected tail clients.
@@ -581,16 +581,24 @@ Enable the built-in file container by adding `"file"` to the `flows` array in
 gina restart
 ```
 
-:::caution Requires the framework daemon
-The file container receives its lines over the MQ socket, so it only writes when
-the framework daemon is running. Inside a container there is no daemon, and the
-sink stays silent. For containerised deployments log to stdout and let the
-platform rotate — that is what Kubernetes and Docker already do, and it is the
-[twelve-factor](https://12factor.net/logs) answer.
+Each log group is written to its own file, `<logdir>/<bundle>@<project>.log`,
+so exactly one process writes one file. Lines whose group is not a bundle — the
+CLI's own output and the daemon's — are not filed; they still go to stdout.
+
+The container is **in-process**: it consumes the same event the stdout container
+consumes and writes the lines that process logged, so it opens no socket and
+needs no framework daemon. It works under `gina-container` and inside a container
+as well as under a daemon.
+
+:::tip Containers still prefer stdout
+Even though the file sink works in a container, logging to stdout and letting the
+platform rotate is what Kubernetes and Docker already do, and it is the
+[twelve-factor](https://12factor.net/logs) answer. Reach for the file transport
+when you want a bundle's log on the host's own disk.
 :::
 
-Files are written to `<logdir>/<webroot><host>.log`, so every bundle sharing a
-host and webroot shares one file.
+Records are written without the terminal colour codes, and `GINA_LOG_FORMAT=json`
+is honoured, so the file is as parseable as stdout is.
 
 ### Rotation
 
@@ -621,10 +629,16 @@ kubelet's own `containerLogMaxSize` / `containerLogMaxFiles`. Configure it in
 The live file is **renamed and reopened**, never copied and truncated, so no line
 is lost while rotating.
 
-An invalid value disables rotation for that group and says so loudly on stdout —
-it never falls back to a default, because a rotation policy that quietly did
-something other than what was written is how a disk fills up. Logging itself
-continues either way.
+An invalid value disables rotation and says so loudly — through the log flows,
+so the message reaches stdout and `gina tail` alike. It never falls back to a
+default, because a rotation policy that quietly did something other than what was
+written is how a disk fills up. Logging itself continues either way.
+
+Two bounds worth knowing. Bytes still queued when a process exits can be lost:
+flushing is asynchronous, and making every write synchronous would let a full
+disk block the request loop. And if the file stops draining, the sink drops lines
+past a 4MB buffer rather than growing without bound, warning once per outage —
+the same posture the MQ transport takes.
 
 ---
 
