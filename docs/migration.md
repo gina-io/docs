@@ -137,6 +137,14 @@ engine gets its own filter, tag and extension maps at construction, and nothing
 copies later module registrations into them. Anything a template needs must be
 registered through `this.engine` in `setup.js`.
 
+`self.engine.getOptions()` continues to work; the accessor moved with the engine.
+It now reports the options that bundle's engine was built with — the same
+`autoescape`, `cache` and template loader every previous release returned — as a
+fresh copy on every call, so mutating the result no longer affects the engine or
+a later caller (previous releases handed back one shared object by reference). The
+documented round-trip `self.engine.compile(tpl, self.engine.getOptions())(data)`
+is unchanged, and is equivalent to calling `compile(tpl)` with no second argument.
+
 ### Changed — `getConfig()` returns a copy-on-write view (no action for most bundles; opt-out available)
 
 `self.getConfig()` — the bare form and `getConfig('name')` alike — now returns a per-call
