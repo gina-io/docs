@@ -343,7 +343,7 @@ Gina calls transports **containers**. Two are built in:
 |-----------|-----------|-------------|:---:|
 | `default` | `logger#default` | `process.stdout` | ✓ |
 | `mq` | `logger#mq` | MQSpeaker → port 8125 → MQListener | ✓ |
-| `file` | `logger#file` | Rotating log files on disk | opt-in |
+| `file` | `logger#file` | Rotating log files on disk (needs the daemon) | opt-in |
 
 The `mq` container is what powers `gina tail`. Every formatted log line is
 broadcast to the MQ listener, which forwards it to any connected tail clients.
@@ -580,6 +580,51 @@ Enable the built-in file container by adding `"file"` to the `flows` array in
 ```bash
 gina restart
 ```
+
+:::caution Requires the framework daemon
+The file container receives its lines over the MQ socket, so it only writes when
+the framework daemon is running. Inside a container there is no daemon, and the
+sink stays silent. For containerised deployments log to stdout and let the
+platform rotate — that is what Kubernetes and Docker already do, and it is the
+[twelve-factor](https://12factor.net/logs) answer.
+:::
+
+Files are written to `<logdir>/<webroot><host>.log`, so every bundle sharing a
+host and webroot shares one file.
+
+### Rotation
+
+Rotation is **on by default** at 10MB with 5 files kept — the same shape as the
+kubelet's own `containerLogMaxSize` / `containerLogMaxFiles`. Configure it in
+`~/.gina/user/extensions/logger/file/config.json`:
+
+```json
+{
+    "rotate": {
+        "enabled": true,
+        "when": "daily",
+        "size": "10MB",
+        "count": 5,
+        "maxAge": "30d"
+    }
+}
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Set `false` to append without bound. |
+| `when` | `"daily"` | Rotate at the day boundary. `null` disables the time trigger. |
+| `size` | `"10MB"` | Rotate once the file would exceed this. A **unit is required** — `"10"` is refused, never read as bytes. `null` disables the size trigger. |
+| `count` | `5` | Rotated files kept, as `<name>.log.1` … `.log.N`. |
+| `maxAge` | `null` | Also delete rotated files older than this, e.g. `"30d"`. |
+
+The live file is **renamed and reopened**, never copied and truncated, so no line
+is lost while rotating.
+
+An invalid value disables rotation for that group and says so loudly on stdout —
+it never falls back to a default, because a rotation policy that quietly did
+something other than what was written is how a disk fills up. Logging itself
+continues either way.
 
 ---
 
