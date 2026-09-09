@@ -248,14 +248,20 @@ hand whose body calls `self.emit('<shortName>#<methodName>', …)`. Methods gene
 `.sql` files behave differently; see
 [Concurrency for SQL-derived methods](#concurrency-for-sql-derived-methods).
 
-When several calls to the **same** emit-style method are in flight at once, each completion
-is paired to **the call it came from** (*since 0.6.20*): the framework runs every call inside
-its own async context and matches the `self.emit(...)` to that context, whichever order the
-underlying operations complete in — different keys with different latencies included. A
-completion that reaches the entity outside every call's async context (for example a native
+A completion that reaches the entity outside every call's async context (for example a native
 driver invoking callbacks from a loop it started at boot) is paired in arrival order instead,
-and the bundle logs `DISPATCH:NO_CONTEXT` at `debug` level when that happens — raise the log
-level to `debug` to check whether any of your methods take that path.
+and the bundle logs `DISPATCH:NO_CONTEXT` at `debug` level when that happens — whether or not a
+call is pending (*since 0.6.30*; before that the line was silent when nothing was pending, so a
+count of zero was ambiguous). Raise the log level to `debug` to check whether any of your
+methods take that path.
+
+A method that emits its completion trigger **more than once per call** — once per iteration of
+an internal loop, for instance — settles its caller on the **first** emit. Every later completion
+of that call is a surplus: it is discarded at the entity's `emit` and is never handed to, or
+buffered for, another caller (*since 0.6.30*; before that, the next detached caller of the method
+received the first call's record — see the [migration notes](/migration)). The second completion
+of one call logs `DISPATCH:REPEAT_EMIT <trigger>` once at `debug` level, so the pattern is one
+grep away; a single late completion after a Promise or timeout settle is normal and stays silent.
 
 A call that **never signals completion** — the method neither emits nor returns a Promise
 that settles, typically because something threw inside an asynchronous callback before the
