@@ -152,6 +152,17 @@ text, set `GINA_LOG_FORMAT=text` (the dial stays skipped), or `GINA_LOG_STDOUT=f
 to restore the previous behaviour in full. Bundles started through a framework
 daemon (`gina start` + `gina bundle:start`) are not affected.
 
+### Added — `gina tail` renders JSON when its logger's format is `json` (restart of the tail process; no code change)
+
+A container that runs a framework daemon and keeps itself alive with `gina tail`
+could not get JSON logs at all: the daemon discards a bundle's own stdout once the
+bundle has started, and the relay always rendered the coloured text. Set
+`GINA_LOG_FORMAT=json` on the `gina tail` process (the pod's environment reaches
+it) and every relayed line is written as one JSON object — `ts`, `level`, `bundle`,
+`message`, plus the `group`/`msg` aliases; no `requestId`/`durationMs`, which the
+relay does not carry. Do not set `GINA_LOG_STDOUT=true` in that topology: it
+disables the transport the tail reads. Nothing changes unless the variable is set.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in

@@ -386,6 +386,22 @@ Resolution precedence is `GINA_LOG_FORMAT` → `GINA_LOG_STDOUT` (back-compat al
 → `text` (default). Both the level methods (`self.info`, `self.debug`, …) and plain
 `console.log` honour the mode, so the stream stays uniformly parseable.
 
+### Containers that run a framework daemon
+
+When a container starts a daemon and keeps itself alive with the relay —
+`gina start`, then `gina bundle:start`, then `gina tail` in the foreground — the
+lines that reach `kubectl logs` are `gina tail`'s: the daemon discards a bundle's
+own stdout once the bundle has started, so the MQ relay is the only path a runtime
+line has to the collector, and it must stay on. Two consequences:
+
+- Do **not** set `GINA_LOG_STDOUT=true` there — it disables the transport `gina tail`
+  reads.
+- Set **`GINA_LOG_FORMAT=json` on the `gina tail` process** (the pod's environment
+  reaches it). From 0.6.30 `gina tail` renders every relayed line as one JSON object
+  with the same `ts`/`level`/`bundle`/`message` keys (plus the `group`/`msg`
+  aliases). The relay carries no request context, so `requestId` and `durationMs`
+  are not present on relayed lines.
+
 ### Per-request `requestId` and `durationMs`
 
 In JSON mode, every line emitted **during a request** also carries two per-request
