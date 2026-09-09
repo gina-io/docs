@@ -198,6 +198,31 @@ it) and every relayed line is written as one JSON object — `ts`, `level`, `bun
 relay does not carry. Do not set `GINA_LOG_STDOUT=true` in that topology: it
 disables the transport the tail reads. Nothing changes unless the variable is set.
 
+### Fixed — the server-side `query` validation rule wrote into the shared proxy configuration (restart **and a client bundle rebuild**)
+
+A `query` validation rule whose target names another bundle — `some-rule@otherbundle`
+— bound its request options directly to that bundle's proxy target inside the
+process-wide `app` configuration, because the global two-argument `getConfig()`
+returns its result by reference. It then wrote `method` and `path` onto that shared
+object, and the query path added a `requestTimeout` taken from the calling route's
+`queryTimeout`. All three persisted for the life of the process.
+
+`path` and `requestTimeout` are documented `proxyTarget` properties, so a configured
+`path` prefix was replaced by the last-checked route's url — process-wide, and visible
+to every other reader of the same configuration, not merely accompanied by two extra
+keys. The rule now clones the proxy target before using it. Nothing about the outgoing
+request changes; only what other readers of that configuration observe.
+
+:::caution This is the one 0.6.30 change that needs a client bundle rebuild
+The rule lives in a file the browser bundle carries, so `gina.min.js` changes even
+though the branch that was fixed is server-side only. Every other entry in this
+release is restart-only — this one is not. Restarting without rebuilding leaves your
+baked client bundle on the previous bytes.
+:::
+
+You were affected only if you declare `proxy` entries carrying a `path` **and** have
+`query` rules whose url contains `@`.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in
