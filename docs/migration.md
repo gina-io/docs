@@ -102,6 +102,37 @@ register filters anywhere other than through `this.engine` in `setup.js` — for
 example directly on the swig module you imported yourself — those registrations
 no longer reach bundle template rendering, and should move into `setup.js`.
 
+### Changed — `getConfig()` returns a copy-on-write view (no action for most bundles; opt-out available)
+
+`self.getConfig()` — the bare form and `getConfig('name')` alike — now returns a per-call
+**copy-on-write view** of the configuration instead of a deep clone. Reads pass through
+to the shared configuration at no copy cost, a write lands in the view's own overlay (it
+never reaches the live configuration and no other call sees it), and the first
+enumeration of a node (`Object.keys`, `JSON.stringify`, `for…in`, spread) copies that
+subtree once. Every read, write and serialisation your code did on the clone behaves the
+same way on the view; the bare form was deep-copying the whole resolved configuration —
+445 KB on a minimal scaffold, megabytes on a large bundle — on every call.
+
+Three things a deep clone allowed do not work on a node you have not enumerated yet, and
+are the only reasons to act:
+
+- `structuredClone(result)` throws a `DataCloneError`.
+- `Object.freeze` / `Object.seal` on a node throws a `TypeError` — enumerate its parent
+  first (`Object.keys(conf.content)`), and the node is then a plain copy you can freeze.
+- `console.log(result)` / `util.inspect` print the shared values rather than your writes;
+  property reads and `JSON.stringify` are always truthful.
+
+A bundle whose code relies on one of them opts back into deep clones with a new
+`settings.json` key:
+
+```json
+{ "controller": { "getConfig": { "mode": "clone" } } }
+```
+
+The view also preserves the configuration's `settings` / `content.settings` aliasing
+(`conf.settings === conf.content.settings`), which the clone silently broke. Pickup: a
+bundle restart; no re-bake.
+
 ---
 
 ## 0.6.28 → 0.6.29

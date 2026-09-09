@@ -932,14 +932,20 @@ where the `haltedRequest` snapshot lives.
 
 ## Configuration
 
-`self.getConfig()` returns a deep clone of the bundle configuration. Pass a key to
-read a specific config file:
+`self.getConfig()` returns a private **copy-on-write view** of the bundle configuration —
+reads pass through, your writes stay in the view, and nothing you do to it reaches the live
+configuration or another call. Pass a key to read a specific config file:
 
 ```js
 var settings = self.getConfig('settings');  // settings.json
 var app      = self.getConfig('app');       // app.json
 var conf     = self.getConfig();            // full conf object
 ```
+
+See [Reading configuration efficiently](./middleware#reading-configuration-efficiently)
+for the three things a view cannot do (`structuredClone`, `Object.freeze` before enumerating,
+`console.log`) and the `controller.getConfig.mode: "clone"` opt-out that restores a deep copy
+for a bundle.
 
 Two predicates answer which scope the bundle is running under, for the rare action
 that has to branch on it:
