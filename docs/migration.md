@@ -56,6 +56,39 @@ development reproduction reads clean. A clean local run is **not** evidence that
 a deployment was unaffected. Reproduce against a built production release.
 :::
 
+### Security — a later caller could receive a prior call's record when an entity method emits its completion more than once (restart; no code change)
+
+A hand-written entity method that emits its completion trigger more than once per
+call — once per iteration of an internal loop, for instance — settles its caller on
+the **first** emit, which is the documented behaviour and is unchanged. Every later
+emit of that call, however, reached the entity after its dispatcher had drained the
+queue and removed itself, so it took the legacy buffering path meant for an emit that
+arrives before its listener is ready. The **next** detached caller of the method — a
+`util.promisify` wrapper, or a bare call with a trailing callback — then consumed the
+buffered entry as its own result, and so did the caller after it: each later caller
+received the first call's record, and the buffer grew by one entry per surplus emit
+until the bundle restarted. Measured on a built `--env=prod` release. Entity-context
+callers (`db.entity.method()` returning a Promise) were never affected.
+
+A completion that arrives after its call has settled is now discarded at the
+entity's `emit` — never buffered — and two `debug`-level lines make the shapes
+visible: `DISPATCH:REPEAT_EMIT <trigger>` once per call when a method emits its
+completion a second time, and `DISPATCH:NO_CONTEXT <trigger>` when a completion
+reaches the entity outside any call's async context, now **whether or not** a call
+is pending (that case used to log nothing, so a count of zero was ambiguous).
+Numbered `<trigger>1`, `<trigger>2` loop variants are unaffected.
+
+**No action is required beyond restarting your bundles.** If you want to know which
+of your methods emit more than once per call, raise the log level to `debug` and grep
+for `DISPATCH:REPEAT_EMIT`.
+
+:::caution Reproducing this locally will mislead you
+Development mode masks this defect completely: every wrapped call clears the buffer
+first there, so a development reproduction reads clean. A clean local run is **not**
+evidence that a deployment was unaffected. Reproduce against a built production
+release.
+:::
+
 ### Bundle templates now render through a per-bundle engine (restart; no code change)
 
 Previously the framework stamped a per-bundle template loader onto the shared
