@@ -152,8 +152,18 @@ process** and owns the full shutdown lifecycle:
 gina-container <bundle> @<project>
 ```
 
+Since 0.6.30 the launcher also applies the [container logging preset](#stdout-logging)
+itself: unless `GINA_LOG_STDOUT` is already set in the container's environment, it sets
+it to `true` before its own logger and the bundle's initialise — JSON lines on stdout, no
+MQ transport. There is no MQ listener in this topology; without the preset both the
+launcher and the bundle kept dialling `127.0.0.1:8125`. Set `GINA_LOG_STDOUT=false` to
+keep the transport, or `GINA_LOG_FORMAT=text` to keep the coloured text while the dial
+stays skipped.
+
 | Variable | Default | Description |
 |---|---|---|
+| `GINA_LOG_STDOUT` | `true` (applied by the launcher when unset) | Container logging preset — JSON lines, MQ transport skipped. Set `false` to keep the transport. |
+| `GINA_LOG_FORMAT` | — | `json` or `text` — the explicit output-format override; wins over the preset for the format only. |
 | `GINA_SHUTDOWN_TIMEOUT` | `10000` | Graceful drain window in ms. Keep below `terminationGracePeriodSeconds`. |
 | `NODE_ENV` | project `def_env` | Overrides the runtime environment. |
 | `NODE_SCOPE` | project `def_scope` | Overrides the runtime scope. |
@@ -542,7 +552,9 @@ JSON output:
   `docker logs` is unchanged unless you opt in.
 - **`GINA_LOG_STDOUT=true`** — the container preset: emits JSON **and** skips the
   MQ transport (there is no MQ listener inside a container). Kept for back-compat;
-  it implies JSON output.
+  it implies JSON output. **`gina-container` applies this preset itself when the
+  variable is unset (0.6.30)**, so under that launcher — and in every image built by
+  `gina image:build` — JSON is the default; `GINA_LOG_STDOUT=false` opts out.
 
 ```yaml
 env:
@@ -552,6 +564,15 @@ env:
   # - name: GINA_LOG_FORMAT
   #   value: "json"
 ```
+
+:::caution Containers that run a framework daemon
+If your container starts a daemon (`gina start`, then `gina bundle:start`, with
+`gina tail` as the foreground process), do **not** set `GINA_LOG_STDOUT=true`: the MQ
+transport it disables is the channel `gina tail` reads, and the daemon discards the
+bundle's own stdout once the bundle has started. Set `GINA_LOG_FORMAT=json` on the
+`gina tail` process instead — from 0.6.30 it renders every relayed line as one JSON
+object — see [Logging → containers that run a framework daemon](/guides/logging#containers-that-run-a-framework-daemon).
+:::
 
 Each log line is emitted as one JSON object:
 

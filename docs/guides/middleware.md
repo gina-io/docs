@@ -210,13 +210,18 @@ matched route's chain. Anything in the constructor body therefore runs on every 
 that matches the route — before the framework even knows which of your methods it will
 call.
 
-`getConfig()` returns a **defensive copy** so callers cannot mutate live configuration, and
-that copy is a deep one. Two rules follow:
+`getConfig()` returns a **private copy-on-write view** of the configuration rather than a
+deep copy: reads pass straight through to the live configuration at no copy cost, a write
+lands in the view's own overlay — it never reaches the live configuration, and no other
+call sees it — and the first enumeration of a node (`Object.keys`, `JSON.stringify`,
+`for…in`, spread) copies that subtree once. A constructor-body read therefore costs
+microseconds rather than a whole-configuration copy. Two rules still follow, for clarity
+more than cost:
 
 **1. Read configuration inside the method that uses it, not in the constructor.**
 
 ```js
-// ✅ paid only when this method actually runs
+// ✅ read where it is used
 function AuthMiddleware() {
   var self = this;
 
@@ -226,7 +231,7 @@ function AuthMiddleware() {
   };
 }
 
-// ❌ paid on every matched request, for every method, used or not
+// ❌ read at construction time, for every method, used or not
 function AuthMiddleware() {
   var self     = this;
   var security = self.getConfig('security');   // runs at construction time
@@ -237,10 +242,10 @@ function AuthMiddleware() {
 
 Every example in this guide follows the first shape.
 
-**2. Prefer the named form.** `getConfig('security')` copies just that section;
-the bare `getConfig()` copies the **whole** bundle configuration — routing, templates,
-forms, locales and app settings together, which on a large bundle is a substantially
-bigger object.
+**2. Prefer the named form.** `getConfig('security')` views just that section; the bare
+`getConfig()` views the **whole** bundle configuration — routing, templates, forms, locales
+and app settings together — and is the only form that carries the proxy-aware host pair
+(below).
 
 :::note When you do need the bare form
 `getConfig()` is currently the only accessor that resolves `hostname` and `host` against
@@ -250,9 +255,22 @@ the proxy-aware host, call `getConfig()` — inside the method, once, and reuse 
 for the rest of that call.
 :::
 
-These costs are per request and add up with the length of the chain — see the note under
-[Bundle-local and shared middlewares](#bundle-local-and-shared-middlewares) for the case
-that multiplies them.
+:::info What a view cannot do
+Three things a deep copy allowed do not work on a node you have **not** enumerated yet:
+`structuredClone(conf)` throws a `DataCloneError`; `Object.freeze(conf.section)` /
+`Object.seal` throw a `TypeError` (they would freeze the live object — enumerate the parent
+first, and the section is a plain copy you can freeze); and `console.log(conf)` /
+`util.inspect` print the live values rather than your writes (property reads and
+`JSON.stringify` are always truthful). A bundle whose code relies on one of them opts back
+into deep copies with `settings.json > controller.getConfig.mode: "clone"`.
+:::
+
+The view also keeps the configuration's `settings` and `content.settings` as the same
+object, which the deep copy silently split into two.
+
+A view is cheap, but a chain still constructs every middleware per request — see the note
+under [Bundle-local and shared middlewares](#bundle-local-and-shared-middlewares) for the
+case that multiplies construction.
 
 ### Reading form validation rules
 

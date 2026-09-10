@@ -19,6 +19,320 @@ upward to the target version.
 
 ---
 
+## 0.6.29 → 0.6.30
+
+### Security — a response could carry a concurrent request's rendering context (restart; no code change)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` resolve their
+per-request context through an internal accessor that reads an
+`AsyncLocalStorage` store first and falls back to a process-wide singleton that
+every per-request filter-factory call stamps. Only the two optional async render
+delegates entered that store. The **default** render path — the one every bundle
+takes unless it opts into a custom async template loader via
+`settings.template.swig.loader` — did not.
+
+Both default delegates are themselves asynchronous and suspend between stamping
+the singleton and invoking the compiled template: the swig delegate reads the
+layout from disk unconditionally between the two. A second request arriving
+inside that window overwrites the singleton, so the first render resumes and
+resolves its filters against the second request's context — emitting another
+in-flight request's negotiated culture, and absolute URLs built from a host that
+other client supplied. Because the last writer wins, N overlapping renders leave
+N−1 responses resolving the wrong context.
+
+Both default delegates now enter the per-request store immediately after building
+the filter context, so the filters read it from the store rather than from the
+shared singleton. The singleton remains only for callers outside a request — a
+bundle's own mail or cron renderer calling the filter factory directly still
+resolves its own context.
+
+**No action is required beyond restarting your bundles.** No configuration
+changes, and the client bundle is untouched, so no rebuild is needed.
+
+:::caution Reproducing this locally will mislead you
+Development mode masks the defect completely: the framework re-requires the
+filter module on every request there, so no singleton is shared and a
+development reproduction reads clean. A clean local run is **not** evidence that
+a deployment was unaffected. Reproduce against a built production release.
+:::
+
+### Security — a later caller could receive a prior call's record when an entity method emits its completion more than once (restart; no code change)
+
+A hand-written entity method that emits its completion trigger more than once per
+call — once per iteration of an internal loop, for instance — settles its caller on
+the **first** emit, which is the documented behaviour and is unchanged. Every later
+emit of that call, however, reached the entity after its dispatcher had drained the
+queue and removed itself, so it took the legacy buffering path meant for an emit that
+arrives before its listener is ready. The **next** detached caller of the method — a
+`util.promisify` wrapper, or a bare call with a trailing callback — then consumed the
+buffered entry as its own result, and so did the caller after it: each later caller
+received the first call's record, and the buffer grew by one entry per surplus emit
+until the bundle restarted. Measured on a built `--env=prod` release. Entity-context
+callers (`db.entity.method()` returning a Promise) were never affected.
+
+A completion that arrives after its call has settled is now discarded at the
+entity's `emit` — never buffered — and two `debug`-level lines make the shapes
+visible: `DISPATCH:REPEAT_EMIT <trigger>` once per call when a method emits its
+completion a second time, and `DISPATCH:NO_CONTEXT <trigger>` when a completion
+reaches the entity outside any call's async context, now **whether or not** a call
+is pending (that case used to log nothing, so a count of zero was ambiguous).
+Numbered `<trigger>1`, `<trigger>2` loop variants are unaffected.
+
+**No action is required beyond restarting your bundles.** If you want to know which
+of your methods emit more than once per call, raise the log level to `debug` and grep
+for `DISPATCH:REPEAT_EMIT`.
+
+:::caution Reproducing this locally will mislead you
+Development mode masks this defect completely: every wrapped call clears the buffer
+first there, so a development reproduction reads clean. A clean local run is **not**
+evidence that a deployment was unaffected. Reproduce against a built production
+release.
+:::
+
+### Security — the error response from the global `getConfig()` / `getLib()` helpers no longer carries the stack (restart; no code change)
+
+When the global `getConfig()` or `getLib()` helper cannot resolve a configuration
+slice or a library during a live request — a deployment that leaves a library
+unresolvable, a configuration slice absent for the requested bundle — the error
+builder behind them answered, in **every** scope, with the error's full stack in
+the JSON body (`{ "status": 500, "error": "Error 500. <stack>" }`): the framework's
+install path and version directory, your controllers' paths and line numbers, the
+bundle, environment and library names. It also logged nothing on that path, so an
+operator could neither see it happen nor search for past occurrences. Every
+release from `0.1.0` to `0.6.29` behaves this way.
+
+The builder now follows the same contract as `self.throwError()` and the server
+engine's error path: a six-character incident `ref` is returned as a top-level
+field on the JSON body, one full-detail line (message, stack, cause, request id,
+method, URL) is logged before the response is written, keyed by that `ref`, and
+outside local scope the `error` string carries the message line only. Local scope
+keeps the stack in `error` as before, so the dev toolbar is unaffected. The
+response shape is `{ "status", "error", "ref" }`; a relay-safe `ref` set on the
+thrown error is honoured. Two small corrections ride along: the one-argument
+string form reports the string instead of `undefined`, and the never-reachable
+HTML arm of that path is removed rather than made live.
+
+Nothing to change in a bundle. Pickup: a bundle restart; no re-bake. If your code
+calls the global helpers inside request handlers on an earlier release, wrapping
+those calls and routing failures through `self.throwError()` gives you the
+stripped wire today.
+
+### Bundle templates now render through a per-bundle engine (restart; no code change)
+
+Previously the framework stamped a per-bundle template loader onto the shared
+swig engine once per render. Where several bundles run in one process, a
+concurrent bundle's stamp could reach another render's `{% include %}` and
+`{% extends %}` resolution. Each template root now gets its own engine instance.
+
+A bundle's own `controllers/setup.js` filters continue to work unchanged: the
+engine handed to `setup.js` is the same instance that renders that bundle, and a
+registration made through it also reaches the swig module. So an application that
+compiles a template through the module it imported itself — an entity rendering a
+message outside any request, say — keeps seeing that bundle's filters, as it did
+before.
+
+The reverse is not true, and that is the part to check. Registrations made
+directly on the swig module never reach bundle template rendering: each bundle's
+engine gets its own filter, tag and extension maps at construction, and nothing
+copies later module registrations into them. Anything a template needs must be
+registered through `this.engine` in `setup.js`.
+
+`self.engine.getOptions()` continues to work; the accessor moved with the engine.
+It now reports the options that bundle's engine was built with — the same
+`autoescape`, `cache` and template loader every previous release returned — as a
+fresh copy on every call, so mutating the result no longer affects the engine or
+a later caller (previous releases handed back one shared object by reference). The
+documented round-trip `self.engine.compile(tpl, self.engine.getOptions())(data)`
+is unchanged, and is equivalent to calling `compile(tpl)` with no second argument.
+
+### Changed — `getConfig()` returns a copy-on-write view (no action for most bundles; opt-out available)
+
+`self.getConfig()` — the bare form and `getConfig('name')` alike — now returns a per-call
+**copy-on-write view** of the configuration instead of a deep clone. Reads pass through
+to the shared configuration at no copy cost, a write lands in the view's own overlay (it
+never reaches the live configuration and no other call sees it), and the first
+enumeration of a node (`Object.keys`, `JSON.stringify`, `for…in`, spread) copies that
+subtree once. Every read, write and serialisation your code did on the clone behaves the
+same way on the view; the bare form was deep-copying the whole resolved configuration —
+445 KB on a minimal scaffold, megabytes on a large bundle — on every call.
+
+Three things a deep clone allowed do not work on a node you have not enumerated yet, and
+are the only reasons to act:
+
+- `structuredClone(result)` throws a `DataCloneError`.
+- `Object.freeze` / `Object.seal` on a node throws a `TypeError` — enumerate its parent
+  first (`Object.keys(conf.content)`), and the node is then a plain copy you can freeze.
+- `console.log(result)` / `util.inspect` print the shared values rather than your writes;
+  property reads and `JSON.stringify` are always truthful.
+
+A bundle whose code relies on one of them opts back into deep clones with a new
+`settings.json` key:
+
+```json
+{ "controller": { "getConfig": { "mode": "clone" } } }
+```
+
+The view also preserves the configuration's `settings` / `content.settings` aliasing
+(`conf.settings === conf.content.settings`), which the clone silently broke. Pickup: a
+bundle restart; no re-bake.
+
+---
+
+### Changed — `gina-container` applies the container logging preset by default (restart; no code change)
+
+Bundles launched with `gina-container` — including every image built by
+`gina image:build` — now log JSON lines to stdout and skip the MQ transport by
+default: the launcher sets `GINA_LOG_STDOUT=true` for itself and for the bundle
+unless the variable is already set. Previously an unconfigured container wrote
+ANSI-coloured text into its stdout while both the launcher and the bundle kept
+dialling an MQ listener that cannot exist in that topology — one
+`[MQSpeaker] Error: connect ECONNREFUSED 127.0.0.1:8125` warning each, then a
+silent redial every 30 seconds for the life of the container.
+
+**Action required: none** if you already set `GINA_LOG_STDOUT=true` (the documented
+container preset) or your collector expects JSON. If you relied on the coloured
+text, set `GINA_LOG_FORMAT=text` (the dial stays skipped), or `GINA_LOG_STDOUT=false`
+to restore the previous behaviour in full. Bundles started through a framework
+daemon (`gina start` + `gina bundle:start`) are not affected.
+
+### Added — `gina tail` renders JSON when its logger's format is `json` (restart of the tail process; no code change)
+
+A container that runs a framework daemon and keeps itself alive with `gina tail`
+could not get JSON logs at all: the daemon discards a bundle's own stdout once the
+bundle has started, and the relay always rendered the coloured text. Set
+`GINA_LOG_FORMAT=json` on the `gina tail` process (the pod's environment reaches
+it) and every relayed line is written as one JSON object — `ts`, `level`, `bundle`,
+`message`, plus the `group`/`msg` aliases; no `requestId`/`durationMs`, which the
+relay does not carry. Do not set `GINA_LOG_STDOUT=true` in that topology: it
+disables the transport the tail reads. Nothing changes unless the variable is set.
+
+### Fixed — the logger's opt-in `file` container now writes (opt-in; no action unless you enabled it)
+
+The `file` container connected to the MQ, received every log line and wrote
+nothing to disk: its filename was resolved from an argv-derived bundle list that
+is structurally always empty in a bundle process, because the framework splices
+`process.argv` down to `[node, appPath]` for every process loaded through the
+CLI. It is now an in-process transport consuming the same event the stdout
+container consumes, writing only the lines its own process logged to a file named
+after the log group — `<logdir>/<bundle>@<project>.log`. One writer per file, no
+socket, and no daemon required, so it also works inside a container. Lines whose
+group is not a bundle — the CLI's and the daemon's own output — are not filed.
+Records are written without ANSI escape sequences, `GINA_LOG_FORMAT=json` is
+honoured, and a failed open or write is reported once and retried rather than
+leaving the sink silently dead.
+
+If you have never enabled the `file` flow, nothing changes: the container is
+inert unless it is listed in `flows` in
+`~/.gina/user/extensions/logger/default/config.json`. **If you had enabled it and
+assumed it was writing, it was not** — expect files to start appearing after the
+upgrade, and size the volume accordingly.
+
+### Added — log rotation for the logger's opt-in `file` container (opt-in; defaults apply once the container is enabled)
+
+Rotation is on by default at 10MB with 5 files kept — deliberately the same shape
+as the kubelet's own `containerLogMaxSize` / `containerLogMaxFiles`. Configure it
+under `rotate` in `~/.gina/user/extensions/logger/file/config.json`, where the
+container is already enabled: `enabled` (default `true`), `when` (`"daily"` or
+`null`), `size` (default `"10MB"`), `count` (default `5`) and `maxAge` (e.g.
+`"30d"`, off by default). The live file is renamed and reopened rather than copied
+and truncated, so no line is lost while rotating.
+
+A size or age without an explicit unit is refused rather than guessed — `"10"` is
+never read as bytes — and any invalid value disables rotation with a message
+naming the key, the value and the consequence, reported through the log flows so
+it reaches stdout and `gina tail`, while logging itself continues. Two bounds are
+worth knowing: bytes still queued when a process exits can be lost, because
+flushing is asynchronous; and a file that stops draining past a 4MB buffer drops
+lines with one warning per outage, the same posture the MQ transport already
+takes.
+
+### Fixed — the server-side `query` validation rule wrote into the shared proxy configuration (restart; rebuild for byte parity)
+
+A `query` validation rule whose target names another bundle — `some-rule@otherbundle`
+— bound its request options directly to that bundle's proxy target inside the
+process-wide `app` configuration, because the global two-argument `getConfig()`
+returns its result by reference. It then wrote `method` and `path` onto that shared
+object, and the query path added a `requestTimeout` taken from the calling route's
+`queryTimeout`. All three persisted for the life of the process.
+
+`path` and `requestTimeout` are both documented `proxyTarget` properties, so this
+replaced configuration you had set rather than merely adding two keys beside it. The
+consequential one is `requestTimeout`, because it is the key the framework reads back.
+Once a stale value sits on the shared target, the guard that would fill it in can no
+longer fire, so a later live-check from a **different** route silently runs on the
+earlier route's deadline instead of its own. On HTTP/2 that does more than end the call
+early: the stream-timeout handler evicts and destroys the pooled session for that
+upstream — which is shared with every other request to the same authority — and then
+re-issues the request up to three times. So one route's live-check could degrade
+traffic that never touched the rule. Nothing hangs: a timeout is always armed.
+
+The overwritten `path` is worth being exact about. No part of the framework consumes
+it — the two other readers of a proxy target either overwrite it or ignore it, and
+nothing prepends it to an outgoing request — so its effect is on anything in **your**
+code that reads the proxy configuration back. The rule now clones the proxy target
+before using it. Nothing about the outgoing request changes.
+
+:::note This is the one 0.6.30 change whose bytes reach the client bundle
+The rule lives in a file the browser bundle carries, so `gina.min.js` changes and a
+rebuild keeps your baked copy in step with the release — every other entry in this
+release is restart-only. **No client-side behaviour depends on it, though.** The
+branch that was fixed is server-side only and is not reachable in the browser: the
+client dispatches validation queries to a different function, which never reads proxy
+configuration at all. So restart first for the actual fix, and rebuild at your
+convenience for byte parity — you are not carrying a client-side defect in between.
+:::
+
+You were affected if you have `query` validation rules whose url contains `@` — that
+is the trigger. Note the two halves have **different** conditions, and an earlier draft
+of this note stated only the first: the overwritten `path` needed you to have
+configured a `path`, but the `requestTimeout` behaviour applies to proxy targets that
+leave `requestTimeout` **unset**, which is the default. If you have cross-bundle
+`query` rules, assume the timeout half applied to you.
+
+### Fixed — a req-less `getRoute()` no longer logs a false-positive clone warning (restart; no code change)
+
+On the server, `getRoute()` resolves a caller's proxied classification from the
+request store first and, for a caller outside any request (boot, CLI, cron, a
+bundle's setup hook), from the `isProxyHost` context latch. The boot-time writer
+of that latch runs only when the project's proxy configuration resolved a record
+for the running scope and env, so a bundle whose `proxy.json` exists but carries
+no such record booted with the latch unset — and a req-less `getRoute()` returned
+a route whose `isProxyHost` was `undefined` rather than the documented boolean.
+Nothing read the flag other than by truthiness, so no URL changed; but cloning
+such a route with `JSON.clone` logged a `possible error detected` warning, with a
+stack, for a value that was legitimately unset.
+
+The fallback now reads as `false` when the latch was never set, so
+`route.isProxyHost` is always a boolean and the clone is silent. Request-scoped
+resolution is untouched. `lib/routing` ships in the browser bundle, so the bundle
+is rebuilt — but the client branch never produced the value, so re-baking changes
+bytes, not behaviour. No action is needed.
+
+### Fixed — a framework error could be answered to the wrong request (restart; no code change)
+
+When the global `getConfig()` or `getLib()` helpers raise, the framework writes an
+error response. It resolved which response to write through a process-wide slot that
+the router fills on every routed request and never clears — so it held whichever
+request was routed most recently, not the one whose call failed.
+
+With one request in flight and another routed behind it, a callback resuming after an
+`await` found the later request's response there. It wrote its own failure to that
+client, and its own caller was never answered at all: that request hung until the
+caller's timeout, which presents as an upstream fault rather than an error. The
+incident reference introduced in the previous release did not help here, because it
+derived the request identifier from the same wrong response — so the correlation line
+named a request that had nothing to do with the failure.
+
+Both now come from the per-request context the server establishes for every request on
+both engines, which follows the call across `await`. The process-wide slot remains only
+for callers that have no request context at all — boot, CLI, cron and workers — which
+is what it was there for.
+
+No action is needed, and nothing about a successful request changes. If you have cron
+or scheduled tasks that call `getConfig()` or `getLib()`, note that those run with no
+request context by design and still fall back to the slot; that case is tracked
+separately.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in

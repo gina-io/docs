@@ -274,6 +274,10 @@ gina tail               # shorthand
 gina tail --follow      # reconnect automatically after bundle restarts
 ```
 
+Set `GINA_LOG_FORMAT=json` on the `gina tail` process to get one JSON object per relayed
+line instead of the coloured text (0.6.30) — the switch for a container that keeps itself
+alive with `gina tail`; see [Logging → containers that run a framework daemon](/guides/logging#containers-that-run-a-framework-daemon).
+
 See [Following logs in real time](/guides/logging#following-logs-in-real-time) for
 filtering and workflow tips.
 

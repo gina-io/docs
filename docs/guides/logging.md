@@ -343,7 +343,7 @@ Gina calls transports **containers**. Two are built in:
 |-----------|-----------|-------------|:---:|
 | `default` | `logger#default` | `process.stdout` | ✓ |
 | `mq` | `logger#mq` | MQSpeaker → port 8125 → MQListener | ✓ |
-| `file` | `logger#file` | Rotating log files on disk | opt-in |
+| `file` | `logger#file` | Rotating log files on disk, one per bundle | opt-in |
 
 The `mq` container is what powers `gina tail`. Every formatted log line is
 broadcast to the MQ listener, which forwards it to any connected tail clients.
@@ -364,7 +364,8 @@ bundle process:
   environment. The default is `text`, so interactive output is unchanged unless you
   opt in.
 - **`GINA_LOG_STDOUT=true`** — the container preset: implies JSON output **and**
-  skips the MQ transport (there is no MQ listener inside a container). See
+  skips the MQ transport (there is no MQ listener inside a container). `gina-container`
+  applies it itself when the variable is unset (0.6.30). See
   [Kubernetes &amp; Docker → Stdout logging](/guides/k8s-docker#stdout-logging).
 
 Each line is then a single JSON object:
@@ -384,6 +385,22 @@ Each line is then a single JSON object:
 Resolution precedence is `GINA_LOG_FORMAT` → `GINA_LOG_STDOUT` (back-compat alias)
 → `text` (default). Both the level methods (`self.info`, `self.debug`, …) and plain
 `console.log` honour the mode, so the stream stays uniformly parseable.
+
+### Containers that run a framework daemon
+
+When a container starts a daemon and keeps itself alive with the relay —
+`gina start`, then `gina bundle:start`, then `gina tail` in the foreground — the
+lines that reach `kubectl logs` are `gina tail`'s: the daemon discards a bundle's
+own stdout once the bundle has started, so the MQ relay is the only path a runtime
+line has to the collector, and it must stay on. Two consequences:
+
+- Do **not** set `GINA_LOG_STDOUT=true` there — it disables the transport `gina tail`
+  reads.
+- Set **`GINA_LOG_FORMAT=json` on the `gina tail` process** (the pod's environment
+  reaches it). From 0.6.30 `gina tail` renders every relayed line as one JSON object
+  with the same `ts`/`level`/`bundle`/`message` keys (plus the `group`/`msg`
+  aliases). The relay carries no request context, so `requestId` and `durationMs`
+  are not present on relayed lines.
 
 ### Per-request `requestId` and `durationMs`
 
@@ -580,6 +597,65 @@ Enable the built-in file container by adding `"file"` to the `flows` array in
 ```bash
 gina restart
 ```
+
+Each log group is written to its own file, `<logdir>/<bundle>@<project>.log`,
+so exactly one process writes one file. Lines whose group is not a bundle — the
+CLI's own output and the daemon's — are not filed; they still go to stdout.
+
+The container is **in-process**: it consumes the same event the stdout container
+consumes and writes the lines that process logged, so it opens no socket and
+needs no framework daemon. It works under `gina-container` and inside a container
+as well as under a daemon.
+
+:::tip Containers still prefer stdout
+Even though the file sink works in a container, logging to stdout and letting the
+platform rotate is what Kubernetes and Docker already do, and it is the
+[twelve-factor](https://12factor.net/logs) answer. Reach for the file transport
+when you want a bundle's log on the host's own disk.
+:::
+
+Records are written without the terminal colour codes, and `GINA_LOG_FORMAT=json`
+is honoured, so the file is as parseable as stdout is.
+
+### Rotation
+
+Rotation is **on by default** at 10MB with 5 files kept — the same shape as the
+kubelet's own `containerLogMaxSize` / `containerLogMaxFiles`. Configure it in
+`~/.gina/user/extensions/logger/file/config.json`:
+
+```json
+{
+    "rotate": {
+        "enabled": true,
+        "when": "daily",
+        "size": "10MB",
+        "count": 5,
+        "maxAge": "30d"
+    }
+}
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Set `false` to append without bound. |
+| `when` | `"daily"` | Rotate at the day boundary. `null` disables the time trigger. |
+| `size` | `"10MB"` | Rotate once the file would exceed this. A **unit is required** — `"10"` is refused, never read as bytes. `null` disables the size trigger. |
+| `count` | `5` | Rotated files kept, as `<name>.log.1` … `.log.N`. |
+| `maxAge` | `null` | Also delete rotated files older than this, e.g. `"30d"`. |
+
+The live file is **renamed and reopened**, never copied and truncated, so no line
+is lost while rotating.
+
+An invalid value disables rotation and says so loudly — through the log flows,
+so the message reaches stdout and `gina tail` alike. It never falls back to a
+default, because a rotation policy that quietly did something other than what was
+written is how a disk fills up. Logging itself continues either way.
+
+Two bounds worth knowing. Bytes still queued when a process exits can be lost:
+flushing is asynchronous, and making every write synchronous would let a full
+disk block the request loop. And if the file stops draining, the sink drops lines
+past a 4MB buffer rather than growing without bound, warning once per outage —
+the same posture the MQ transport takes.
 
 ---
 
