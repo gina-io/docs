@@ -215,11 +215,22 @@ returns its result by reference. It then wrote `method` and `path` onto that sha
 object, and the query path added a `requestTimeout` taken from the calling route's
 `queryTimeout`. All three persisted for the life of the process.
 
-`path` and `requestTimeout` are documented `proxyTarget` properties, so a configured
-`path` prefix was replaced by the last-checked route's url — process-wide, and visible
-to every other reader of the same configuration, not merely accompanied by two extra
-keys. The rule now clones the proxy target before using it. Nothing about the outgoing
-request changes; only what other readers of that configuration observe.
+`path` and `requestTimeout` are both documented `proxyTarget` properties, so this
+replaced configuration you had set rather than merely adding two keys beside it. The
+consequential one is `requestTimeout`, because it is the key the framework reads back.
+Once a stale value sits on the shared target, the guard that would fill it in can no
+longer fire, so a later live-check from a **different** route silently runs on the
+earlier route's deadline instead of its own. On HTTP/2 that does more than end the call
+early: the stream-timeout handler evicts and destroys the pooled session for that
+upstream — which is shared with every other request to the same authority — and then
+re-issues the request up to three times. So one route's live-check could degrade
+traffic that never touched the rule. Nothing hangs: a timeout is always armed.
+
+The overwritten `path` is worth being exact about. No part of the framework consumes
+it — the two other readers of a proxy target either overwrite it or ignore it, and
+nothing prepends it to an outgoing request — so its effect is on anything in **your**
+code that reads the proxy configuration back. The rule now clones the proxy target
+before using it. Nothing about the outgoing request changes.
 
 :::note This is the one 0.6.30 change whose bytes reach the client bundle
 The rule lives in a file the browser bundle carries, so `gina.min.js` changes and a
@@ -231,8 +242,12 @@ configuration at all. So restart first for the actual fix, and rebuild at your
 convenience for byte parity — you are not carrying a client-side defect in between.
 :::
 
-You were affected only if you declare `proxy` entries carrying a `path` **and** have
-`query` rules whose url contains `@`.
+You were affected if you have `query` validation rules whose url contains `@` — that
+is the trigger. Note the two halves have **different** conditions, and an earlier draft
+of this note stated only the first: the overwritten `path` needed you to have
+configured a `path`, but the `requestTimeout` behaviour applies to proxy targets that
+leave `requestTimeout` **unset**, which is the default. If you have cross-bundle
+`query` rules, assume the timeout half applied to you.
 
 ### Fixed — a req-less `getRoute()` no longer logs a false-positive clone warning (restart; no code change)
 
