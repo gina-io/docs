@@ -268,6 +268,31 @@ resolution is untouched. `lib/routing` ships in the browser bundle, so the bundl
 is rebuilt — but the client branch never produced the value, so re-baking changes
 bytes, not behaviour. No action is needed.
 
+### Fixed — a framework error could be answered to the wrong request (restart; no code change)
+
+When the global `getConfig()` or `getLib()` helpers raise, the framework writes an
+error response. It resolved which response to write through a process-wide slot that
+the router fills on every routed request and never clears — so it held whichever
+request was routed most recently, not the one whose call failed.
+
+With one request in flight and another routed behind it, a callback resuming after an
+`await` found the later request's response there. It wrote its own failure to that
+client, and its own caller was never answered at all: that request hung until the
+caller's timeout, which presents as an upstream fault rather than an error. The
+incident reference introduced in the previous release did not help here, because it
+derived the request identifier from the same wrong response — so the correlation line
+named a request that had nothing to do with the failure.
+
+Both now come from the per-request context the server establishes for every request on
+both engines, which follows the call across `await`. The process-wide slot remains only
+for callers that have no request context at all — boot, CLI, cron and workers — which
+is what it was there for.
+
+No action is needed, and nothing about a successful request changes. If you have cron
+or scheduled tasks that call `getConfig()` or `getLib()`, note that those run with no
+request context by design and still fall back to the slot; that case is tracked
+separately.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in
