@@ -234,6 +234,25 @@ convenience for byte parity — you are not carrying a client-side defect in bet
 You were affected only if you declare `proxy` entries carrying a `path` **and** have
 `query` rules whose url contains `@`.
 
+### Fixed — a req-less `getRoute()` no longer logs a false-positive clone warning (restart; no code change)
+
+On the server, `getRoute()` resolves a caller's proxied classification from the
+request store first and, for a caller outside any request (boot, CLI, cron, a
+bundle's setup hook), from the `isProxyHost` context latch. The boot-time writer
+of that latch runs only when the project's proxy configuration resolved a record
+for the running scope and env, so a bundle whose `proxy.json` exists but carries
+no such record booted with the latch unset — and a req-less `getRoute()` returned
+a route whose `isProxyHost` was `undefined` rather than the documented boolean.
+Nothing read the flag other than by truthiness, so no URL changed; but cloning
+such a route with `JSON.clone` logged a `possible error detected` warning, with a
+stack, for a value that was legitimately unset.
+
+The fallback now reads as `false` when the latch was never set, so
+`route.isProxyHost` is always a boolean and the clone is silent. Request-scoped
+resolution is untouched. `lib/routing` ships in the browser bundle, so the bundle
+is rebuilt — but the client branch never produced the value, so re-baking changes
+bytes, not behaviour. No action is needed.
+
 ## 0.6.28 → 0.6.29
 
 **No action required.** `bundle:build` and `project:build` gain an opt-in
