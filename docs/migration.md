@@ -206,6 +206,46 @@ it) and every relayed line is written as one JSON object — `ts`, `level`, `bun
 relay does not carry. Do not set `GINA_LOG_STDOUT=true` in that topology: it
 disables the transport the tail reads. Nothing changes unless the variable is set.
 
+### Fixed — the logger's opt-in `file` container now writes (opt-in; no action unless you enabled it)
+
+The `file` container connected to the MQ, received every log line and wrote
+nothing to disk: its filename was resolved from an argv-derived bundle list that
+is structurally always empty in a bundle process, because the framework splices
+`process.argv` down to `[node, appPath]` for every process loaded through the
+CLI. It is now an in-process transport consuming the same event the stdout
+container consumes, writing only the lines its own process logged to a file named
+after the log group — `<logdir>/<bundle>@<project>.log`. One writer per file, no
+socket, and no daemon required, so it also works inside a container. Lines whose
+group is not a bundle — the CLI's and the daemon's own output — are not filed.
+Records are written without ANSI escape sequences, `GINA_LOG_FORMAT=json` is
+honoured, and a failed open or write is reported once and retried rather than
+leaving the sink silently dead.
+
+If you have never enabled the `file` flow, nothing changes: the container is
+inert unless it is listed in `flows` in
+`~/.gina/user/extensions/logger/default/config.json`. **If you had enabled it and
+assumed it was writing, it was not** — expect files to start appearing after the
+upgrade, and size the volume accordingly.
+
+### Added — log rotation for the logger's opt-in `file` container (opt-in; defaults apply once the container is enabled)
+
+Rotation is on by default at 10MB with 5 files kept — deliberately the same shape
+as the kubelet's own `containerLogMaxSize` / `containerLogMaxFiles`. Configure it
+under `rotate` in `~/.gina/user/extensions/logger/file/config.json`, where the
+container is already enabled: `enabled` (default `true`), `when` (`"daily"` or
+`null`), `size` (default `"10MB"`), `count` (default `5`) and `maxAge` (e.g.
+`"30d"`, off by default). The live file is renamed and reopened rather than copied
+and truncated, so no line is lost while rotating.
+
+A size or age without an explicit unit is refused rather than guessed — `"10"` is
+never read as bytes — and any invalid value disables rotation with a message
+naming the key, the value and the consequence, reported through the log flows so
+it reaches stdout and `gina tail`, while logging itself continues. Two bounds are
+worth knowing: bytes still queued when a process exits can be lost, because
+flushing is asynchronous; and a file that stops draining past a 4MB buffer drops
+lines with one warning per outage, the same posture the MQ transport already
+takes.
+
 ### Fixed — the server-side `query` validation rule wrote into the shared proxy configuration (restart; rebuild for byte parity)
 
 A `query` validation rule whose target names another bundle — `some-rule@otherbundle`
