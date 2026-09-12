@@ -210,6 +210,7 @@ for Couchbase Cloud and Capella deployments.
 | `username` | string | Couchbase RBAC username |
 | `password` | string | RBAC password. Supports `${secret:KEY}` substitution |
 | `ping` | string | Interval to verify cluster connectivity (e.g. `"2m"`, `"30s"`) |
+| `readyTimeout` | number (ms) | How long to wait for the connector to become ready at boot before it reports the failure and the bundle exits. Defaults to `50000`. Must stay below the CLI start budget (~64s) to take effect — see [Migration 0.6.30 → 0.6.31](../migration) |
 | `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
 
 ---

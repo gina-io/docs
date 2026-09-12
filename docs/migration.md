@@ -19,6 +19,87 @@ upward to the target version.
 
 ---
 
+## 0.6.30 → 0.6.31
+
+### Fixed — a Couchbase connector that cannot reach its cluster at boot now reports instead of hanging (restart; no code change)
+
+Whatever consumes a connector waits on a one-shot readiness event. Every failure
+path in the Couchbase connector's `connect()` routed to its internal error
+handler, which re-arms a retry and never emits that event — so a cluster that was
+unreachable **at boot** settled nothing. The model layer's readiness gate is
+all-or-nothing, so it never closed, the bundle never signalled that it had
+started, and `gina bundle:start` terminated it after roughly 64 seconds.
+
+Nothing explained why. The connector's retry chatter reached the bundle log, but
+no terminal error was reported on any surface — not the CLI, not the log, not the
+exit status — which made an unreachable cluster indistinguishable from a bundle
+that was merely slow to boot.
+
+`init()` now arms its own readiness deadline. If nothing has settled by then the
+connector reports the failure itself, so the abort path every other connector
+already reached — a logged error plus exit 1 — runs before the CLI gives up. The
+error names the bundle, the connector, the bucket, the host, the timeout it
+waited and the field to raise.
+
+The deadline is **not** a retry cap. Once a connector has become ready its
+uncapped reconnect is unchanged, so a serving bundle still survives a cluster
+blip exactly as it did before.
+
+**No action is required beyond restarting your bundles.** The default deadline is
+50 seconds — inside the CLI start budget, while still allowing the connect
+attempts that can complete within it. Both the SDK v3 and v4 connectors are
+covered; v3 is the one selected when a project pins no `couchbase` dependency.
+
+#### Optional — tuning the deadline
+
+Set `readyTimeout` (milliseconds) on the connector entry to fail faster or wait
+longer:
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol"     : "couchbase://",
+    "host"         : "db1.example.com",
+    "database"     : "myapp",
+    "username"     : "appuser",
+    "password"     : "${COUCHBASE_PASSWORD}",
+    "readyTimeout" : 10000
+  }
+}
+```
+
+A container-orchestrated deployment often wants a short value, so an unreachable
+cluster surfaces as a fast restart loop the scheduler can act on rather than a
+50-second stall on every pod start.
+
+:::caution A value at or above the start budget cannot take effect
+`gina bundle:start` terminates a bundle that has not signalled startup after
+roughly 64 seconds, and it knows nothing about this field. A `readyTimeout` at or
+above that budget is unreachable — the CLI kills the bundle first and you are back
+to the silent termination this fix removes. A non-positive or non-numeric value
+falls back to the 50000 default.
+:::
+
+### Fixed — one failed Couchbase connect attempt now reports once, not twice (restart; no code change)
+
+On failure the Couchbase SDK settles both of its channels: it invokes the
+callback passed to `connect()` **and** rejects the promise it returned. Both
+reached the connector's error handler, so a single failed attempt reported twice
+and armed two competing retry chains — each of which, failing in turn, armed two
+more. It also counted each attempt twice against the reconnect backoff, so the
+delay reached its 60-second ceiling after five real attempts instead of ten.
+
+The same fix closes a shape that one was masking: an SDK rejection that never
+invoked the callback threw inside the error handler before arming any retry, so
+that ordering produced no retry and no report at all — visible only as an
+unhandled promise rejection.
+
+**No action is required beyond restarting your bundles.** A bundle that recovers
+from a cluster outage will now do so on the documented backoff schedule rather
+than a doubled one.
+
+---
+
 ## 0.6.29 → 0.6.30
 
 ### Security — a response could carry a concurrent request's rendering context (restart; no code change)
