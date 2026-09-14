@@ -283,6 +283,17 @@ chain:
 
 **No action is required beyond restarting your bundles.**
 
+### Fixed — two dead external references refreshed (documentation only; no action)
+
+The X-Permitted-Cross-Domain-Policies plugin cited an Adobe specification URL that now
+redirects to a generic documentation portal instead of serving the document; the plugin
+README and the module JSDoc both carried it, and both now name the current, live Adobe
+copy of the same specification. The Couchbase connector cited an N1QL architecture page
+that returns 404 with no migration redirect; it now points at the Query Service page
+Couchbase itself redirects that path to. No runtime or API change.
+
+**No action is required.**
+
 ---
 
 ## 0.6.29 → 0.6.30
