@@ -21,6 +21,40 @@ upward to the target version.
 
 ## 0.6.30 → 0.6.31
 
+### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
+
+gina installs a `count()` helper on `Object.prototype`. The framework reached it as
+`<container>.count()` on containers whose keys **the client chooses**: the parsed request
+body, the query bag, route params, `req.files`, data handed to `self.query()`, a routing
+rule's validator data, and whatever a template pipes through `| length`.
+
+An own property of that name shadows the helper, so the framework called a string instead:
+
+- **Query strings on GET / HEAD / DELETE, and PUT bodies** — that parse is not wrapped, so
+  the `TypeError` reached the process as an `uncaughtException` and **the bundle exited**.
+  One unauthenticated request did it, on *any* URL — including one matching no route at
+  all, because the body parse runs before routing resolves.
+- **POST / PATCH bodies** — parsed inside a `try`, so this surfaced as a 500 and the
+  process survived.
+- **A route param named `count`** — the throw landed inside the async dispatch as an
+  unhandled rejection, leaving the request open until the client gave up.
+
+Every published version is affected. Nested fields (`{"outer": {"count": 1}}`) and
+near-misses (`counter`) were never affected and are unchanged.
+
+**Restart your bundles and rebuild your client bundle.** The rebuild is needed because the
+validator engine is compiled into the browser bundle; its behaviour there does not change.
+
+The framework now reaches the helper through a form no own property can shadow. It is the
+same function body, so every other receiver shape counts exactly as before, and `null` and
+`undefined` still throw exactly as they did. Two things are worth knowing:
+
+- **`x.count()` in your own code is unchanged.** The helper stays on `Object.prototype`;
+  only the framework's own counts over client-keyed containers moved off the shorthand.
+- **A form field, query key or route param named `count` is now ordinary.** If you renamed
+  one to work around this, you can rename it back — though nothing forces you to.
+
+
 ### Security — a queued async job ran under another request's context (restart; no code change)
 
 `lib/job` pumps its queue from the settle chain of the job that just finished. Under
@@ -47,8 +81,9 @@ worker that starts it was freed by a request's job. The global helpers' error pa
 treats a detached context as authoritative: a failing job is logged (fatal) or the error
 is thrown to the job (non-fatal); it is never written to a client.
 
-**No action is required beyond restarting your bundles.** The client bundle is untouched,
-so no rebuild is needed. Two things are worth knowing:
+**No action is required for this change beyond restarting your bundles** — its own bytes do
+not reach the client bundle. (The release as a whole does need a rebuild; see the `count`
+fix below.) Two things are worth knowing:
 
 - A framework error raised **inside a job** — a `getConfig()` / `getLib()` failure —
   used to be answered to some client's response; a fatal one is now an `emerg` log line,
