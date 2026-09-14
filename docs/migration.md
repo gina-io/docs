@@ -21,6 +21,32 @@ upward to the target version.
 
 ## 0.6.30 → 0.6.31
 
+### Added — RFC 9218 request priorities: `req.priority`, outbound propagation, `self.setPriority()`, urgency-ordered jobs (restart; no code change)
+
+Every request now carries `req.priority` — `{ urgency, incremental, present }`,
+parsed once from the `Priority` header on both engines, with the RFC's own defaults
+(`urgency` 3, `incremental` false) when the header is absent or malformed.
+`self.query()` and `self.forward()` propagate a present inbound header to the bundle
+they call, `self.setPriority({ urgency, incremental })` emits the response header, and
+`self.startJob(fn, { urgency })` orders the async-job queue lowest urgency first,
+first-in-first-out within a class.
+
+**No action is required beyond restarting your bundles.** Two things are worth
+knowing:
+
+- An upstream you call with `self.query()` while serving a request that carried a
+  `Priority` header now receives that header too (RFC 9218 is end to end). Pass
+  `priority: false` to send none, or set `headers.priority` yourself — a caller-set
+  header is never touched.
+- Async jobs that never pass `urgency` keep their exact current order: every such job
+  is in the default class, and the worker is first-in-first-out within a class. The
+  urgency is never inherited from the request — pass `req.priority.urgency` explicitly
+  when that is what you want.
+
+The header is advisory and client-supplied; the framework carries the signal and never
+reorders its own response writes. Guide:
+[Request priorities (RFC 9218)](/guides/http2-native#request-priorities-rfc-9218).
+
 ### Fixed — a Couchbase connector that cannot reach its cluster at boot now reports instead of hanging (restart; no code change)
 
 Whatever consumes a connector waits on a one-shot readiness event. Every failure

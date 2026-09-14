@@ -821,6 +821,23 @@ this.dashboard = function(req, res, next) {
 };
 ```
 
+### Request priority — `req.priority` {#request-priority}
+
+Since 0.6.31 every request carries the parsed RFC 9218 `Priority` header —
+`{ urgency: 0-7, incremental: boolean, present: boolean }`, with the RFC defaults
+(`3`, `false`) and `present: false` when the header is absent or malformed. It is
+client-supplied and advisory: read it to yield, never to grant more.
+
+```js
+this.feed = function(req, res, next) {
+    var lowPriority = req.priority.present && req.priority.urgency >= 5;
+    self.renderJSON(lowPriority ? cachedFeed() : freshFeed());
+};
+```
+
+Full contract, propagation on outbound calls and the response header:
+[Request priorities (RFC 9218)](/guides/http2-native#request-priorities-rfc-9218).
+
 ---
 
 ## Pausing and resuming requests {#pausing-resuming-requests}
@@ -986,6 +1003,7 @@ Key options:
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
 | `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
+| `priority` | the inbound `req.priority`, when present | Since 0.6.31: the RFC 9218 `Priority` header of the outbound call — `{ urgency, incremental }`, a wire string such as `'u=5, i'`, or `false` to send none. Omitted, a present inbound header propagates as is (RFC 9218 is end to end); a `headers.priority` you set yourself always wins — [Request priorities](/guides/http2-native#request-priorities-rfc-9218) |
 
 When the callback is omitted, `self.query()` returns a small handle with an
 `.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
@@ -1475,6 +1493,31 @@ cache eviction, not the preload list).
 
 ---
 
+## Response priority — `self.setPriority(spec)` {#response-priority}
+
+Emit an RFC 9218 `Priority` **response** header — the origin's own view of how the
+response should be prioritised, for intermediaries that honour it (browsers ignore it).
+
+```js
+this.export = function(req, res, next) {
+    self.setPriority({ urgency: 6, incremental: true }); // Priority: u=6, i
+    self.renderStream(rows);
+};
+```
+
+`spec` is `{ urgency?: 0-7, incremental?: boolean }`. An explicit `urgency` is always
+emitted — including `3` — because on a response only an explicit member overrides the
+client's value; `incremental` is emitted as `i` when `true`. Out-of-range values are
+dropped rather than thrown, and the call is a silent no-op once headers have been sent.
+Returns `self` for chaining.
+
+The framework cannot reorder its own writes on the strength of this header — Node has
+no API for it — so this is signalling, never a scheduling promise. Reading the client's
+header and propagating it on outbound calls is covered in
+[Request priorities (RFC 9218)](/guides/http2-native#request-priorities-rfc-9218).
+
+---
+
 ## Dev mode hot-reload
 
 In dev mode (`NODE_ENV_IS_DEV=true`) the framework automatically starts `WatcherService`
@@ -1506,7 +1549,7 @@ documented. Methods without a link are described here in one line.
 - [`render`](#selfrenderdata) · [`renderWithoutLayout`](#selfrenderwithoutlayoutdata) · [`renderJSON`](#selfrenderjsondata) · [`renderTEXT`](#selfrendertextcontent) · [`renderStream`](#selfrenderstreamasynciterable-contenttype) · [`renderXML`](#selfrenderxmlxmlcontent-contenttype) — above.
 - [`redirect`](#selfredirecturl-ignorewebroot) · [`throwError`](#selfthrowerrorres-code-err) · [`forward404Unless`](#selfforward404unlesscondition-req-res-next) — above.
 - [`downloadFromLocal`](#selfdownloadfromlocalfilename) · [`downloadFromURL`](#selfdownloadfromurlurl-options-cb) — above.
-- [`setEarlyHints`](#103-early-hints) — above. `sendTrailers(fields)` — records opt-in HTTP/2 response trailers, best-effort, sent after the body by every response method.
+- [`setEarlyHints`](#103-early-hints) · [`setPriority`](#response-priority) — above. `sendTrailers(fields)` — records opt-in HTTP/2 response trailers, best-effort, sent after the body by every response method.
 - `setTemplate(file, ext)` — override the route's template path or extension at action time — [Templating](/templating).
 
 **Request state**

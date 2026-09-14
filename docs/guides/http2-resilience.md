@@ -170,3 +170,10 @@ The `/_gina/info` endpoint includes HTTP/2 session metrics (`activeSessions`,
 Every `self.query()` call also forwards the request's correlation id as
 `x-request-id` (see [Request correlation](/guides/observability#request-correlation)),
 so a retried or fanned-out inter-bundle request stays traceable across bundles.
+
+Since 0.6.31 the same holds for the request's RFC 9218 `Priority` header: when the
+inbound request carried one, `self.query()` resolves the outbound value **once, before
+dispatch**, so every retry attempt — and every request sent on a freshly validated
+session — carries the same `Priority`. Pass `priority: false` to send none, or
+`priority: { urgency, incremental }` to override it for one call; see
+[Request priorities](/guides/http2-native#request-priorities-rfc-9218).
