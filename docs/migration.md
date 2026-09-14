@@ -21,6 +21,48 @@ upward to the target version.
 
 ## 0.6.30 → 0.6.31
 
+### Security — a queued async job ran under another request's context (restart; no code change)
+
+`lib/job` pumps its queue from the settle chain of the job that just finished. Under
+load, the next job therefore started inside the per-request context of the request
+whose job had just freed the worker — not the request that created it. Measured on a
+single-worker bundle: a job created by request B executed seeing request A's context,
+response objects included.
+
+Everything that reads that context then attributed the job to the wrong request:
+
+- an absolute URL the job built with `getRoute().toUrl()` used the other request's
+  proxy context and host (this reader arrived in 0.6.28);
+- a framework error the job raised through the global `getConfig()` / `getLib()`
+  helpers was handled as that other request's — written to its response, or handed to
+  its middleware chain once the response had gone out (this reader arrived in 0.6.30);
+- a JSON log line the job wrote carried the other request's id (since 0.4.5, where the
+  per-request context first appeared).
+
+A job now runs inside a **detached copy** of the context of the request that created it —
+its id and proxy context, never its `req` / `res` / `next` — for its whole lifecycle:
+record transitions, the deferred function, a retry it arms, its completion webhook. A
+job created outside any request runs with no request context at all, even when the
+worker that starts it was freed by a request's job. The global helpers' error path
+treats a detached context as authoritative: a failing job is logged (fatal) or the error
+is thrown to the job (non-fatal); it is never written to a client.
+
+**No action is required beyond restarting your bundles.** The client bundle is untouched,
+so no rebuild is needed. Two things are worth knowing:
+
+- A framework error raised **inside a job** — a `getConfig()` / `getLib()` failure —
+  used to be answered to some client's response; a fatal one is now an `emerg` log line,
+  and a non-fatal one is thrown inside the job, so the job fails with that error and its
+  record reports it.
+- Nothing about the job **record** changed: the context lives on the in-process queue
+  entry only, so durable stores (SQLite, MongoDB, Redis) serialise exactly what they did.
+
+:::caution Reproducing this locally
+The bleed needs a **busy** worker: with an idle worker a job starts from its own
+creator's context and a reproduction reads clean. Reproduce with
+`jobs.maxConcurrency: 1` and two overlapping requests, as the framework's own test does.
+:::
+
 ### Added — RFC 9218 request priorities: `req.priority`, outbound propagation, `self.setPriority()`, urgency-ordered jobs (restart; no code change)
 
 Every request now carries `req.priority` — `{ urgency, incremental, present }`,

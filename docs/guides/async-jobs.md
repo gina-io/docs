@@ -45,6 +45,10 @@ A job moves through `pending → running → completed | failed`. The deferred f
 The deferred function runs **after** the request has completed, so it must not reference `req` / `res` (the controller releases those at response exit). Capture plain values instead — as the examples below do.
 :::
 
+:::info Request context
+A job runs inside a **detached copy** of the request context that created it: the request's id and its proxy context (the host it was addressed at, whether it arrived through a proxy) — never its `req` / `res` / `next`. So a log line the job writes carries the creating request's id, an absolute URL it builds with `getRoute().toUrl()` uses that request's host, and a framework error it raises through the global `getConfig()` / `getLib()` helpers is logged (fatal) or thrown to the job (non-fatal) rather than written to any client. The copy covers the job's whole lifecycle — the deferred function, a retry, the completion webhook. A job started outside a request (boot, a cron task) runs with no request context at all. Before 0.6.31 a job ran under whichever request's job had just freed the worker slot; see the [0.6.31 migration note](/migration#0630--0631).
+:::
+
 ---
 
 ## Starting a job
