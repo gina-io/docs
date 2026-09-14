@@ -123,6 +123,104 @@ In practice, this means:
 
 ---
 
+## Request priorities (RFC 9218)
+
+[RFC 9218](https://www.rfc-editor.org/rfc/rfc9218) replaces the HTTP/2 stream-priority
+tree (deprecated by RFC 9113) with one request header, `Priority`, carrying an
+**urgency** `u` (`0` = most urgent … `7`, default `3`) and an **incremental** flag `i`
+(the response is usable as it arrives). Browsers send it over HTTP/2 — Chrome tells
+the document (`u=0, i`), render-blocking CSS (`u=0`), blocking scripts (`u=1`),
+`fetch()` (`u=1, i`) and images (`u=2, i`) apart — and it survives a reverse proxy such
+as nginx unchanged. Over HTTP/1.1 browsers send nothing, but the header is
+transport-neutral: gina reads it on any request, on both engines.
+
+Since 0.6.31 gina carries the signal end to end:
+
+```mermaid
+flowchart LR
+    C["Browser<br/>Priority: u=1, i"] -->|"HTTP/2"| W["web bundle<br/>req.priority.urgency = 1"]
+    W -->|"self.query() / self.forward()<br/>Priority: u=1, i — propagated"| A["api bundle<br/>req.priority.urgency = 1"]
+    A -->|"self.startJob(fn, { urgency: 1 })"| J["job queue<br/>lowest urgency starts first"]
+    W -->|"self.setPriority(...)"| R["response<br/>Priority: u=6, i"]
+
+    style W fill:#1a1a2e,stroke:#f2af0d
+    style A fill:#1a1a2e,stroke:#f2af0d
+```
+
+### Reading it — `req.priority`
+
+Every request carries a parsed `req.priority` on both engines — routed actions, static
+files and the built-in `/_gina/*` endpoints alike:
+
+```js
+this.dashboard = function(req, res, next) {
+    // { urgency: 0-7, incremental: boolean, present: boolean }
+    if (req.priority.present && req.priority.urgency >= 6) {
+        // a background prefetch: serve the cached copy rather than recompute
+    }
+    self.render(data);
+};
+```
+
+`present` is `true` when the client sent a header the parser could read. The RFC's
+rules apply exactly: an unknown member, an out-of-range `u` or a member of the wrong
+type is ignored on its own (`u=9, i` reads `{ urgency: 3, incremental: true, present:
+true }`), while a field that does not parse at all — `U=1`, a trailing comma — is
+ignored whole and reads as absent. Several `Priority` lines combine as one field.
+
+### Propagating it — `self.query()` and `self.forward()`
+
+RFC 9218 is end to end: a sub-request made on behalf of a `u=0` page is itself `u=0`.
+When the inbound request carried a header, every outbound call made while serving it
+sends the same value — over HTTP/1.1 and HTTP/2, on every retry, and through
+`control: "forward"` routes. The `priority` option overrides that:
+
+```js
+// an explicit priority for this call — an object or a wire string
+self.query({ hostname: 'api-internal', path: '/report', priority: { urgency: 5 } }, cb);
+self.query({ hostname: 'api-internal', path: '/report', priority: 'u=5, i' }, cb);
+
+// send nothing, whatever the inbound request said
+self.query({ hostname: 'api-internal', path: '/report', priority: false }, cb);
+```
+
+A `Priority` header you set yourself in `options.headers` is always left alone.
+
+### Emitting it — `self.setPriority()`
+
+An origin can state its own view of a response's priority; an intermediary that honours
+the response header merges it with the client's. Browsers ignore it, so this is
+signalling for the path between origin and client:
+
+```js
+this.export = function(req, res, next) {
+    self.setPriority({ urgency: 6, incremental: true }); // → Priority: u=6, i
+    self.renderStream(rows);
+};
+```
+
+`setPriority` returns `self` for chaining, is a silent no-op once headers are sent, and
+always emits an explicit urgency — including `3` — because on a response only an
+explicit member overrides the client's value.
+
+### Scheduling with it — async jobs
+
+The one queue gina owns is the async-job worker: `self.startJob(fn, { urgency:
+req.priority.urgency })` starts the lowest-urgency queued job first. The urgency is
+never inherited automatically — a client-supplied ordering hint is the application's
+decision to apply. See [Async jobs — Urgency](/guides/async-jobs#urgency-opt-in).
+
+:::caution Advisory, and client-supplied
+The header is a suggestion the client makes about itself. Read `req.priority` to
+**yield** — serve a cached copy, defer, queue behind more urgent work — never to grant
+more. And gina does not reorder its own response writes on its strength: Node exposes
+no `PRIORITY_UPDATE` frame API and no send-scheduler hook, so the framework carries the
+signal and leaves stream scheduling to the runtime. The circuit breaker and the rate
+limiter do not consult it either.
+:::
+
+---
+
 ## 103 Early Hints
 
 Isaac supports [103 Early Hints](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/103)

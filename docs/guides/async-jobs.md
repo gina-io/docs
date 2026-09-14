@@ -3,7 +3,7 @@ title: Async jobs
 sidebar_label: Async jobs
 sidebar_position: 2.8
 description: Run slow work out-of-band in Gina with self.startJob, self.inferAsync, the built-in /_gina/jobs/:id status endpoint, opt-in completion webhooks, and durable SQLite-, MongoDB-, or Redis-backed job records. Keep 1-30s LLM calls off the request pipeline.
-keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store, failed job retry, maxAttempts]
+keywords: [gina async jobs, background jobs, job queue, self.startJob, self.inferAsync, jobStatus, llm latency, webhook, node.js background work, durable jobs, sqlite job store, mongodb job store, redis job store, failed job retry, maxAttempts, job urgency, RFC 9218]
 level: intermediate
 prereqs:
   - '[Controllers](/guides/controller)'
@@ -45,6 +45,10 @@ A job moves through `pending → running → completed | failed`. The deferred f
 The deferred function runs **after** the request has completed, so it must not reference `req` / `res` (the controller releases those at response exit). Capture plain values instead — as the examples below do.
 :::
 
+:::info Request context
+A job runs inside a **detached copy** of the request context that created it: the request's id and its proxy context (the host it was addressed at, whether it arrived through a proxy) — never its `req` / `res` / `next`. So a log line the job writes carries the creating request's id, an absolute URL it builds with `getRoute().toUrl()` uses that request's host, and a framework error it raises through the global `getConfig()` / `getLib()` helpers is logged (fatal) or thrown to the job (non-fatal) rather than written to any client. The copy covers the job's whole lifecycle — the deferred function, a retry, the completion webhook. A job started outside a request (boot, a cron task) runs with no request context at all. Before 0.6.31 a job ran under whichever request's job had just freed the worker slot; see the [0.6.31 migration note](/migration#0630--0631).
+:::
+
 ---
 
 ## Starting a job
@@ -84,6 +88,30 @@ Between attempts the job shows as `pending` again, with the last error and a `ne
 :::note Retries run on the pod that created the job
 The deferred function only exists in the creating process — with a [durable store](#durable-job-records-connector-store), other pods can read the job's state, but only the origin pod re-runs it. If that process dies before the final attempt, the record is eventually reclaimed as `failed` by the [orphan-reclaim pass](#orphaned-records) — it does not stay `pending` forever.
 :::
+
+### Urgency (opt-in)
+
+Since 0.6.31 the worker starts queued jobs in **urgency order** — the RFC 9218 scale,
+`0` most urgent to `7`, default `3` — first-in-first-out within a class. Pass `urgency`
+to place a job ahead of, or behind, the default class:
+
+```js
+// let the page's own request priority order its background work — explicit, never automatic
+var jobId = self.startJob(function() {
+    return buildExpensiveReport(reportId);
+}, { urgency: req.priority.urgency });
+```
+
+A value that is not an integer `0`–`7` falls back to `3`. A retried attempt re-enters
+the queue with the urgency it was created with, and a running job is never pre-empted —
+the urgency decides which **queued** job starts next, nothing more. Jobs created in one
+synchronous burst are all queued before the worker picks any up, so the burst itself
+starts in urgency order. The value lives on the in-process queue entry, not on the
+record: it does not appear in `/_gina/jobs/:id` and needs no store migration.
+
+The urgency is never inherited from the request that created the job —
+[`req.priority`](/guides/http2-native#request-priorities-rfc-9218) is client-supplied,
+so applying it is the application's decision.
 
 ---
 

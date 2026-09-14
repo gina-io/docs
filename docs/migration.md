@@ -19,6 +19,283 @@ upward to the target version.
 
 ---
 
+## 0.6.30 → 0.6.31
+
+### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
+
+gina installs a `count()` helper on `Object.prototype`. The framework reached it as
+`<container>.count()` on containers whose keys **the client chooses**: the parsed request
+body, the query bag, route params, `req.files`, data handed to `self.query()`, a routing
+rule's validator data, and whatever a template pipes through `| length`.
+
+An own property of that name shadows the helper, so the framework called a string instead:
+
+- **Query strings on GET / HEAD / DELETE, and PUT bodies** — that parse is not wrapped, so
+  the `TypeError` reached the process as an `uncaughtException` and **the bundle exited**.
+  One unauthenticated request did it, on *any* URL — including one matching no route at
+  all, because the body parse runs before routing resolves.
+- **POST / PATCH bodies** — parsed inside a `try`, so this surfaced as a 500 and the
+  process survived.
+- **A route param named `count`** — the throw landed inside the async dispatch as an
+  unhandled rejection, leaving the request open until the client gave up.
+
+Every published version is affected. Nested fields (`{"outer": {"count": 1}}`) and
+near-misses (`counter`) were never affected and are unchanged.
+
+**Restart your bundles and rebuild your client bundle.** The rebuild is needed because the
+validator engine is compiled into the browser bundle; its behaviour there does not change.
+
+The framework now reaches the helper through a form no own property can shadow. It is the
+same function body, so every other receiver shape counts exactly as before, and `null` and
+`undefined` still throw exactly as they did. Two things are worth knowing:
+
+- **`x.count()` in your own code is unchanged.** The helper stays on `Object.prototype`;
+  only the framework's own counts over client-keyed containers moved off the shorthand.
+- **A form field, query key or route param named `count` is now ordinary.** If you renamed
+  one to work around this, you can rename it back — though nothing forces you to.
+
+
+### Security — a queued async job ran under another request's context (restart; no code change)
+
+`lib/job` pumps its queue from the settle chain of the job that just finished. Under
+load, the next job therefore started inside the per-request context of the request
+whose job had just freed the worker — not the request that created it. Measured on a
+single-worker bundle: a job created by request B executed seeing request A's context,
+response objects included.
+
+Everything that reads that context then attributed the job to the wrong request:
+
+- an absolute URL the job built with `getRoute().toUrl()` used the other request's
+  proxy context and host (this reader arrived in 0.6.28);
+- a framework error the job raised through the global `getConfig()` / `getLib()`
+  helpers was handled as that other request's — written to its response, or handed to
+  its middleware chain once the response had gone out (this reader arrived in 0.6.30);
+- a JSON log line the job wrote carried the other request's id (since 0.4.5, where the
+  per-request context first appeared).
+
+A job now runs inside a **detached copy** of the context of the request that created it —
+its id and proxy context, never its `req` / `res` / `next` — for its whole lifecycle:
+record transitions, the deferred function, a retry it arms, its completion webhook. A
+job created outside any request runs with no request context at all, even when the
+worker that starts it was freed by a request's job. The global helpers' error path
+treats a detached context as authoritative: a failing job is logged (fatal) or the error
+is thrown to the job (non-fatal); it is never written to a client.
+
+**No action is required for this change beyond restarting your bundles** — its own bytes do
+not reach the client bundle. (The release as a whole does need a rebuild; see the `count`
+fix below.) Two things are worth knowing:
+
+- A framework error raised **inside a job** — a `getConfig()` / `getLib()` failure —
+  used to be answered to some client's response; a fatal one is now an `emerg` log line,
+  and a non-fatal one is thrown inside the job, so the job fails with that error and its
+  record reports it.
+- Nothing about the job **record** changed: the context lives on the in-process queue
+  entry only, so durable stores (SQLite, MongoDB, Redis) serialise exactly what they did.
+
+:::caution Reproducing this locally
+The bleed needs a **busy** worker: with an idle worker a job starts from its own
+creator's context and a reproduction reads clean. Reproduce with
+`jobs.maxConcurrency: 1` and two overlapping requests, as the framework's own test does.
+:::
+
+### Added — RFC 9218 request priorities: `req.priority`, outbound propagation, `self.setPriority()`, urgency-ordered jobs (restart; no code change)
+
+Every request now carries `req.priority` — `{ urgency, incremental, present }`,
+parsed once from the `Priority` header on both engines, with the RFC's own defaults
+(`urgency` 3, `incremental` false) when the header is absent or malformed.
+`self.query()` and `self.forward()` propagate a present inbound header to the bundle
+they call, `self.setPriority({ urgency, incremental })` emits the response header, and
+`self.startJob(fn, { urgency })` orders the async-job queue lowest urgency first,
+first-in-first-out within a class.
+
+**No action is required beyond restarting your bundles.** Two things are worth
+knowing:
+
+- An upstream you call with `self.query()` while serving a request that carried a
+  `Priority` header now receives that header too (RFC 9218 is end to end). Pass
+  `priority: false` to send none, or set `headers.priority` yourself — a caller-set
+  header is never touched.
+- Async jobs that never pass `urgency` keep their exact current order: every such job
+  is in the default class, and the worker is first-in-first-out within a class. The
+  urgency is never inherited from the request — pass `req.priority.urgency` explicitly
+  when that is what you want.
+
+The header is advisory and client-supplied; the framework carries the signal and never
+reorders its own response writes. Guide:
+[Request priorities (RFC 9218)](/guides/http2-native#request-priorities-rfc-9218).
+
+### Fixed — a Couchbase connector that cannot reach its cluster at boot now reports instead of hanging (restart; no code change)
+
+Whatever consumes a connector waits on a one-shot readiness event. Every failure
+path in the Couchbase connector's `connect()` routed to its internal error
+handler, which re-arms a retry and never emits that event — so a cluster that was
+unreachable **at boot** settled nothing. The model layer's readiness gate is
+all-or-nothing, so it never closed, the bundle never signalled that it had
+started, and `gina bundle:start` terminated it after roughly 64 seconds.
+
+Nothing explained why. The connector's retry chatter reached the bundle log, but
+no terminal error was reported on any surface — not the CLI, not the log, not the
+exit status — which made an unreachable cluster indistinguishable from a bundle
+that was merely slow to boot.
+
+`init()` now arms its own readiness deadline. If nothing has settled by then the
+connector reports the failure itself, so the abort path every other connector
+already reached — a logged error plus exit 1 — runs before the CLI gives up. The
+error names the bundle, the connector, the bucket, the host, the timeout it
+waited and the field to raise.
+
+The deadline is **not** a retry cap. Once a connector has become ready its
+uncapped reconnect is unchanged, so a serving bundle still survives a cluster
+blip exactly as it did before.
+
+**No action is required beyond restarting your bundles.** The default deadline is
+50 seconds — inside the CLI start budget, while still allowing the connect
+attempts that can complete within it. Both the SDK v3 and v4 connectors are
+covered; v3 is the one selected when a project pins no `couchbase` dependency.
+
+#### Optional — tuning the deadline
+
+Set `readyTimeout` (milliseconds) on the connector entry to fail faster or wait
+longer:
+
+```json title="src/api/config/connectors.json"
+{
+  "couchbase": {
+    "protocol"     : "couchbase://",
+    "host"         : "db1.example.com",
+    "database"     : "myapp",
+    "username"     : "appuser",
+    "password"     : "${COUCHBASE_PASSWORD}",
+    "readyTimeout" : 10000
+  }
+}
+```
+
+A container-orchestrated deployment often wants a short value, so an unreachable
+cluster surfaces as a fast restart loop the scheduler can act on rather than a
+50-second stall on every pod start.
+
+:::caution A value at or above the start budget cannot take effect
+`gina bundle:start` terminates a bundle that has not signalled startup after
+roughly 64 seconds, and it knows nothing about this field. A `readyTimeout` at or
+above that budget is unreachable — the CLI kills the bundle first and you are back
+to the silent termination this fix removes. A non-positive or non-numeric value
+falls back to the 50000 default.
+:::
+
+### Fixed — one failed Couchbase connect attempt now reports once, not twice (restart; no code change)
+
+On failure the Couchbase SDK settles both of its channels: it invokes the
+callback passed to `connect()` **and** rejects the promise it returned. Both
+reached the connector's error handler, so a single failed attempt reported twice
+and armed two competing retry chains — each of which, failing in turn, armed two
+more. It also counted each attempt twice against the reconnect backoff, so the
+delay reached its 60-second ceiling after five real attempts instead of ten.
+
+The same fix closes a shape that one was masking: an SDK rejection that never
+invoked the callback threw inside the error handler before arming any retry, so
+that ordering produced no retry and no report at all — visible only as an
+unhandled promise rejection.
+
+**No action is required beyond restarting your bundles.** A bundle that recovers
+from a cluster outage will now do so on the documented backoff schedule rather
+than a doubled one.
+
+### Fixed — one bundle without a release `config/` no longer moves every other bundle's config root (restart; no code change)
+
+When a registered bundle's release tree carries no `config/` directory, gina falls
+back to reading that bundle's configuration from its source tree. That fallback
+also did two things that outlived the single bundle it was recovering: it wrote
+that bundle's own directory into the process-wide `bundles` path — the value the
+rest of the framework treats as the directory *containing* all bundles — and it
+overwrote the shared value the same loop hands to every bundle loaded after it.
+
+So in a non-development environment, a later and perfectly healthy bundle loaded
+its **source** configuration instead of its release configuration, with nothing
+logged to say so.
+
+Where the two resolved to different paths entirely, the boot died instead —
+because that shared value was derived by stripping the manifest key out of a path
+built from the source directory name, using an unanchored, unescaped regular
+expression. The strip produced a wrong path whenever:
+
+- a bundle's manifest key differs from its `src` directory name;
+- the project path repeats the bundle's name earlier in it — a bundle named
+  `demo` under `/srv/demo-x/app` lost the `/demo` from `/demo-x`;
+- the bundle name contains a regular-expression metacharacter.
+
+The fallback is now scoped to the bundle it recovers: the process-wide value is
+left alone, and the per-bundle container is the parent directory of the source
+tree rather than a text substitution.
+
+**No action is required beyond restarting your bundles.** If a bundle has been
+serving its source configuration where you expected its release configuration,
+the restart is what corrects it — so it is worth confirming that the values now in
+effect are the ones you expect.
+
+:::note A manifest key that is not its source directory name
+This fallback is the one path that does not resolve through the bundle's
+`bundles/<name>` link, so a bundle whose manifest key differs from its `src`
+directory name still cannot be recovered from source. What changed is that it now
+refuses by name instead of reading from a spliced path. Keep each bundle's
+manifest key and its `src` directory name the same.
+:::
+
+### Fixed — a config directory that cannot be read now names the bundle (restart; no code change)
+
+Three failures ended a boot with a bare `ENOENT` and nothing else: no bundle name,
+no environment, and no indication of which directory had been tried. The
+configuration load is shared across the whole project, so any one of them takes
+down every bundle — which makes "which one?" the first question, and the error
+could not answer it.
+
+All three now refuse in the same shape as the existing `routing.json` refusal,
+naming the bundle, the environment and the path. The last of them — reached when
+neither the release tree nor the source tree has a readable `config/` — reports
+both paths, in the order they were tried:
+
+```text
+[ api ][ prod ] no readable config/ in the release tree (/srv/app/bundles/api) nor in the source tree (/srv/app/src/api) — ENOENT: no such file or directory, scandir '/srv/app/src/api/config'; refusing to start
+```
+
+### Fixed — an aborted startup reports its reason instead of an opaque type error (restart; no code change)
+
+Configuration initialisation is synchronous, so when it fails it does so inside the
+constructor, while the process exit it schedules is still only pending. Anything
+that asked for the configuration in that window got there first — and rather than
+reporting the failure, it merged whatever the global context held and returned
+that. On a worker process the context carries the configuration class itself, so
+the result was something that merely resembled a configuration, and the boot died
+on:
+
+```text
+TypeError: Cannot set properties of undefined (setting 'parent')
+```
+
+which named neither the bundle nor the file, and repeated on every later call.
+
+The reason is now retained and reported by name, so one message carries the whole
+chain:
+
+```text
+[ CONFIG ] initialisation failed — [ api ][ prod ] config directory not readable at /srv/app/src/api/config — ENOENT: no such file or directory, scandir '/srv/app/src/api/config'; refusing to start
+```
+
+**No action is required beyond restarting your bundles.**
+
+### Fixed — two dead external references refreshed (documentation only; no action)
+
+The X-Permitted-Cross-Domain-Policies plugin cited an Adobe specification URL that now
+redirects to a generic documentation portal instead of serving the document; the plugin
+README and the module JSDoc both carried it, and both now name the current, live Adobe
+copy of the same specification. The Couchbase connector cited an N1QL architecture page
+that returns 404 with no migration redirect; it now points at the Query Service page
+Couchbase itself redirects that path to. No runtime or API change.
+
+**No action is required.**
+
+---
+
 ## 0.6.29 → 0.6.30
 
 ### Security — a response could carry a concurrent request's rendering context (restart; no code change)
