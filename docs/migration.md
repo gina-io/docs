@@ -5834,7 +5834,11 @@ safe — it is rebuilt as bundles start.
 
 ### Added — SQLite works under the Bun runtime
 
-The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly. The MongoDB connector remains unavailable under Bun (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
+The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun below 1.4 does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly.
+
+Bun 1.4 and later ship `node:sqlite` themselves. On those versions Gina resolves it directly and the `bun:sqlite` adapter is never used — again with nothing to change on your side. The adapter stays in place for Bun 1.2 and 1.3, which remain inside the supported range (`engines.bun` is `>= 1.2`).
+
+The MongoDB connector remains unavailable under Bun, on 1.4 as on earlier versions (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
 
 ### Added — DuckDB connector
 
@@ -8483,7 +8487,7 @@ A new `connector:test` CLI command probes a project's configured connectors for 
 
 Gina now runs on the [Bun](https://bun.sh) runtime as a supported, CI-tested target. Install it globally with `bun add -g gina` (Bun `>= 1.2`), alongside the usual `npm install -g gina`. Bun skips dependency install scripts by default, but Gina needs no extra setup — it self-bootstraps on first run, so there is no `trustedDependencies` entry to add. Node.js (`>= 22, < 27`) is unchanged and remains fully supported.
 
-One caveat applies only if you host a bundle on Bun **and** opt into WebSocket-over-HTTP/2 (off by default): Bun does not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against it. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged.
+One caveat applies only if you host a bundle on Bun **below 1.4** and opt into WebSocket-over-HTTP/2 (off by default): those Bun versions do not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against them. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged. Bun 1.4 and later advertise the capability.
 
 **No action required** — additive. See [Installation](/getting-started/installation).
 
