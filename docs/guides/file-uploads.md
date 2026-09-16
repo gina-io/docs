@@ -301,9 +301,19 @@ back. Persist the key exactly as given (never parse or rebuild one) and read the
 object through the driver:
 
 ```js
+// the protocol — conditional GET, Range, content-type — handled for you
+self.serveFromStorage('assets', savedKey);
+```
+
+Stream it yourself only for custom protocol handling, using the action's **own
+`res` argument** (the controller keeps `res` private and publishes no
+`self.res`):
+
+```js
+// inside an action: function (req, res, next) { … }
 gina.storage('assets').get(savedKey, function(err, stream) {
   if (err) { return self.throwError(404); }
-  stream.pipe(self.res);
+  stream.pipe(res);
 });
 ```
 

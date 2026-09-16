@@ -108,6 +108,17 @@ gina bundle:restart @myproject
 
 ## What's next?
 
+You have a bundle serving the scaffolded page. The natural next step is to build
+something of your own — routes you wrote, a controller action, real data:
+
+- **[Start the tutorials →](/tutorials)** — begin with the
+  [Notes API](/tutorials/notes-api), a REST API in about 15 minutes with no
+  database.
+
+Or read up on the pieces you have just used:
+
+- [Routing →](../guides/routing)
+- [Controllers →](../guides/controller)
 - [Environments →](../concepts/environments)
 - [HTTPS & HTTP/2 →](../guides/https)
 - [Logging →](../guides/logging)

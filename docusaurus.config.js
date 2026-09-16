@@ -164,17 +164,9 @@ const config = {
             });
           },
         },
-        blog: {
-          showReadingTime: true,
-          feedOptions: {
-            type: ['rss', 'atom'],
-            xslt: true,
-          },
-          editUrl: 'https://github.com/gina-io/docs/tree/main/',
-          onInlineTags: 'warn',
-          onInlineAuthors: 'warn',
-          onUntruncatedBlogPosts: 'warn',
-        },
+        // No blog on this site. It was left enabled from the Docusaurus
+        // scaffold and published four boilerplate posts at /docs/blog.
+        blog: false,
         theme: {
           customCss: './src/css/custom.css',
         },

@@ -773,6 +773,28 @@ On submit it re-collects the fields, validates them once more, and:
   [inherited data](#inheriting-data-into-the-payload) first);
 - **if invalid**, moves focus to the first invalid field and shows the errors.
 
+### What goes on the wire
+
+The payload is **JSON**, not URL-encoded — this catches people out, because
+URL-encoded is the native HTML default:
+
+| Form contains | Body | `Content-Type` |
+| --- | --- | --- |
+| no file input with a selected file | `JSON.stringify` of the field map | `application/json; charset=UTF-8` |
+| a selected `File` | `multipart/form-data` body Gina assembles itself | `multipart/form-data; boundary=…` |
+
+Two consequences worth knowing:
+
+- **Do not set `enctype` on a validator-bound form.** An explicit `enctype`
+  attribute overrides the header *while the body is still JSON*, so the server
+  URL-decodes a JSON string and corrupts values — an email `+alias` becomes a
+  space. Leave the attribute off and let Gina choose.
+- **Set `method`.** Without a `method` attribute the submit goes out as `GET`,
+  which also means no CSRF header (see below).
+
+Your action reads the result exactly as it would any JSON body: `req.post` for a
+`POST`, parsed verbatim, with no URL-decoding or type coercion.
+
 ### CSRF
 
 On mutating methods (`POST` / `PUT` / `PATCH` / `DELETE`), Gina automatically
