@@ -151,7 +151,9 @@ page loads, Gina:
 If you omit `data-gina-form-rule`, Gina also matches the **form's `id`**
 (with `-` treated as `.`) against your rule-set names. A `<form id="signup">`
 with no `data-gina-form-rule` still picks up `forms/rules/signup.json`.
-A form with neither a matching rule set nor the attribute is left untouched.
+A form with neither a matching rule set nor any `data-gina-form-*` attribute is
+left untouched — it keeps its native submit, even on a page that declares rules
+for other forms.
 :::
 
 ---
