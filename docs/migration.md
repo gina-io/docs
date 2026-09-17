@@ -19,6 +19,27 @@ upward to the target version.
 
 ---
 
+## 0.6.31 → 0.6.32
+
+### Fixed — the client validator binds only forms the page opted in (restart and re-bake; behaviour change)
+
+Once a bundle declared any `forms/rules/*.json`, the validator's boot scan bound **every**
+`<form>` on every page — minting a generated id for id-less ones — and turned their native
+submit into an always-XHR JSON submit. Plain login or signup forms with no gina attribute
+were hijacked too. The scan now binds a form only when the page opted it in: any
+`data-gina-form-*` attribute (`data-gina-form-rule`, the submit event handlers, a
+submit-method/action override, upload staging…), an existing `id` naming a registered rule
+(`-` read as `.`), or a virtual `gina-upload-*` id. Any other form is left untouched and
+submits natively, as the [forms guide](/guides/forms-and-validation) always stated.
+Explicit `validateFormById()` / `getFormById()` calls are unchanged.
+
+**What to check:** a form with **no** `data-gina-form-*` attribute and no rule of its own that
+you relied on being submitted over XHR — for example page JavaScript listening for the
+validator's `success.<id>` event on it — now submits natively. Add `data-gina-form-rule`
+(or any `data-gina-form-*` attribute) to keep it bound. The change is in the browser
+bundle: restart the bundle **and** run `gina bundle:build` so pages pick up the new
+`gina.min.js`.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
