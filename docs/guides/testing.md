@@ -232,6 +232,30 @@ Run all tests in a directory:
 node --test test/core/
 ```
 
+### Running them under Bun
+
+Gina also supports the [Bun](https://bun.sh) runtime, and the same tests run
+under `bun test`. Two differences come from the test runner rather than from
+Gina:
+
+```bash
+bun test --isolate
+```
+
+- **Pass `--isolate`.** `bun test` shares a single process across test files,
+  where `node --test` forks a fresh one per file. A suite that mutates
+  `global`, `require.cache` or other process-wide state therefore leaks it
+  between files, and its pass count can drift between otherwise identical
+  runs. `--isolate` gives each file a fresh global object. Note that
+  `process.env` is shared either way.
+- **`bun test` sets `NODE_ENV=test`**, with no way to opt out. This matters
+  only if your tests boot bundle configuration: Gina reads the active
+  environment from `process.env.NODE_ENV` first and falls back to the
+  configured environment only when that is unset, so config overlays and port
+  allocations keyed `dev` or `prod` resolve to `test` instead. Set `NODE_ENV`
+  explicitly for the run in that case. The injection APIs above do not load
+  bundle configuration, so tests written against them are unaffected.
+
 ---
 
 ## See also
