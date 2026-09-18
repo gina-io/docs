@@ -51,6 +51,40 @@ An entity that sets `hasOwnEvents` opts out of the event wiring and is not repor
 Server-side: **restart the bundle**. No rebuild needed.
 
 
+### Security — credentials are no longer carried across a redirect (restart; no rebuild)
+
+`self.redirect()` carries the request's parameters to the redirect target so the next
+action can read them — on the session as `inheritedData` when the bundle has a session, or
+in the target URL when it does not. For a `POST` that container is the parsed body
+**verbatim**, so a login form's plaintext password was carried along with the fields you
+actually wanted.
+
+Where the bundle has a session, that wrote the password into your **session store**, and on
+an authenticated flow it was still there after the redirect target had rendered. Where the
+bundle has no session it went into the **redirect URL** instead — and so into access logs,
+proxy logs, browser history, and any `Referer` the target sends onward. A *rejected* login
+attempt was carried the same way.
+
+Fields whose names match the framework's existing redaction list are now dropped from what
+is carried. That is the same maintained, tokenising matcher the Inspector already uses to
+mask these values in its own pane, so it covers `password`, `secret`, `token`, `apikey`,
+`authorization`, `credentials` and their case and separator variants (`apiKey`, `api_key`).
+Everything else travels exactly as before, and keys that merely *describe* rules or
+configuration — `passwordRules`, `tokenFormat` — are deliberately still carried.
+
+**What to check:** if your application deliberately carried a field named for a credential
+across a redirect, it no longer arrives at the target — pass it by another route. Reading
+ordinary fields on the target, the pattern shown in
+[Carrying request data across the redirect](/guides/controller#redirect-data-carry), is
+unaffected.
+
+**What this does not change:** if you are storing anything else sensitive in a form that
+crosses a redirect, it still crosses. The filter is a name-based safety net over a
+known-credential list, not a general classifier.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
 ### Security — a request parameter can no longer decide whether a redirect happens (restart; no rebuild)
 
 `self.redirect()` read the incoming request parameters for a key named `error` and, when it
