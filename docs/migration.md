@@ -21,6 +21,38 @@ upward to the target version.
 
 ## 0.6.31 → 0.6.32
 
+### Security — the built-in error pages escape the text they render (restart; no code change)
+
+A crafted link could run script in your application's origin. `self.redirect()` treats a
+request-supplied `error` key as an instruction to raise an error, so a `GET` to **any** route
+whose action redirects — carrying `?error=<img src=x onerror=...>` — answered a 500 whose
+body contained that tag **raw** and executed it. The built-in fallback error page built its
+HTML by concatenation and escaped nothing, in every scope: only the stack-trace block was
+scope-gated, and the title, error and message blocks rendered unconditionally. A newly
+scaffolded bundle configures no `errorFiles`, so it served exactly that page.
+
+Every value those pages render is now HTML-escaped (`&`, `<`, `>`, `"`, `'`). The same
+escaping is applied to the engine-level error page — whose text its 404, 403 and 500 callers
+build from the request path — and to the three
+[nunjucks](/templating/nunjucks) error-document fallbacks, including the status in their
+`<title>`. The scope gate on stack traces is unchanged: a stack is still rendered only in
+`local` scope.
+
+**What to check:** if your application deliberately passes HTML in an error title or message
+— say `self.throwError(500, '<b>Payment declined</b>')` — expecting the error page to render
+it as markup, it now appears as literal text. That reflection was the vulnerability, so there
+is no opt-out. Pass plain text, or configure your own
+[custom error page](/guides/error-pages) via `templates.json` `errorFiles` — the framework
+hands that template the error data and leaves the markup to you.
+
+**Note on custom error pages.** If you already render a custom error template, the values you
+interpolate there are still yours to escape — `settings.json` `swig.autoescape` defaults to
+`false`, so `{{ data.message }}` in your own error view emits raw. This release changes only
+the framework's built-in pages.
+
+The change is server-side: **restart the bundle**. No rebuild is needed — none of the three
+files is part of the browser bundle.
+
 ### Fixed — the client validator binds only forms the page opted in (restart and re-bake; behaviour change)
 
 Once a bundle declared any `forms/rules/*.json`, the validator's boot scan bound **every**
