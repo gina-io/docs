@@ -216,6 +216,50 @@ when you pick this up, or it will shift the date the other way.
 The change is in the browser bundle: restart the bundle **and** run `gina bundle:build`
 so pages pick up the new `gina.min.js`.
 
+
+### Fixed — an XHR redirect over HTTP/2 now delivers the session cookie it rotated (restart; no rebuild)
+
+Signing a user in and answering with an XHR redirect left them signed out, on HTTP/2 only.
+
+`self.redirect()` has two exits: a `303` for an ordinary form post, and a JSON
+`{ isXhrRedirect: true, location }` payload for a request the browser made with `fetch` or
+`XMLHttpRequest` — which is what the framework's own form validator sends once any form
+rule exists in the bundle. The `303` answered through Node's response object. The JSON exit
+wrote straight to the raw HTTP/2 stream.
+
+That difference mattered because a session middleware does not write its cookie at the
+moment you call `req.login()`. It writes it later, from a hook on `res.writeHead`, and it
+saves the session from a wrapper on `res.end`. The raw HTTP/2 stream path calls neither. So
+the rotated session was created and stored, the previous id was discarded, and the
+replacement cookie was never sent — the browser kept presenting an id that no longer
+existed, and the next request arrived unauthenticated. The same code on HTTP/1.1 answered
+through the response object and always worked, which is why this only ever appeared on
+HTTP/2, and why testing the form post with `curl` could not reproduce it.
+
+Both JSON exits — the plain one and the popin form — now answer through the response
+object, exactly as the `303` exit always has.
+
+The same release also makes the redirect's one-shot data carry clean up after itself. The
+`inheritedData` the router hands to the next action was deleted from the session in memory
+but never written back on HTTP/2, so it stayed in the stored record for the rest of the
+session. It is now saved explicitly.
+
+**What to check:** nothing, if your sign-in already worked. If you added a workaround — a
+manual `req.session.save()` after `req.login()`, a forced full-page navigation in place of
+the XHR redirect, or a throwaway second request to make the session stick — you can remove
+it.
+
+**Still true, and worth knowing.** On an ordinary HTTP/2 **render** — a page or JSON
+response that is not a redirect — a session middleware's cookie hook and its save-on-end
+wrapper still do not fire. Two consequences follow. A `rolling` session expiry does not
+roll, so the cookie keeps its original expiry however active the user is. And any change
+you make to `req.session` while rendering is not persisted. If you mutate the session in an
+action that renders, call `req.session.save()` yourself. `req.login()`, `req.logout()`,
+`req.session.destroy()` and `req.session.regenerate()` are unaffected — they write to the
+store directly rather than through the response.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
