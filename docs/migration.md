@@ -102,6 +102,56 @@ validator's `success.<id>` event on it — now submits natively. Add `data-gina-
 bundle: restart the bundle **and** run `gina bundle:build` so pages pick up the new
 `gina.min.js`.
 
+### Fixed — a date field no longer submits the previous day east of UTC (restart and re-bake; payload shape changes)
+
+A field validated with [`isDate`](/reference/validation-rules#isdate) put the parsed
+`Date` **object** into the submitted payload. Every validator normalises the payload to
+the value it just validated — `isEmail` lowercases, `isBoolean` yields a real boolean —
+so `isDate` doing the same was consistent. The problem is narrower: a `Date` is the one
+normalised type that does not survive JSON. `JSON.stringify` renders it through
+`toISOString()`, which produces a UTC **instant**, and local midnight at any positive UTC
+offset falls on the previous day in UTC.
+
+So a browser in Paris where the user picked `2026-09-18` submitted:
+
+```json
+{ "birthdate": "2026-09-17T22:00:00.000Z" }
+```
+
+Anything that read the date part of that string — a `substring(0, 10)`, a SQL `DATE`
+column, a report grouped by day — stored **the 17th**. Nothing errored, because the
+instant was perfectly well-formed, and a server or CI running in UTC never saw it.
+
+The payload now carries a plain calendar date, whatever the input mask:
+
+```json
+{ "birthdate": "2026-09-18" }
+```
+
+The mask governs how input is *parsed*, not what is submitted — and gina already
+described these fields as `{ "type": "string", "format": "date" }` in both its routing
+introspection and its [DTO](/guides/dtos) type emission, so the payload now matches the
+schema it was already publishing.
+
+**Unchanged:** the field itself still holds the parsed `Date`, so the documented chain
+`field.isDate(mask).format('isoDateTime')` renders exactly as before, and an invalid date
+still fails validation.
+
+**What to check** — two consumer-visible differences:
+
+- **`req.body.<field>` is a string, not a `Date`.** Code calling `.getTime()`,
+  `.getFullYear()` or any `Date` method on it directly must parse it first.
+- **`new Date('2026-09-18')` resolves to UTC midnight**, because JavaScript parses a
+  date-only string as UTC while `new Date(2026, 8, 18)` is local midnight. If you
+  reconstruct a `Date` from the payload and then read local components, split the string
+  instead — `new Date(y, m - 1, d)` — or keep working with the date string.
+
+If you were already compensating for the day shift server-side, remove that correction
+when you pick this up, or it will shift the date the other way.
+
+The change is in the browser bundle: restart the bundle **and** run `gina bundle:build`
+so pages pick up the new `gina.min.js`.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
