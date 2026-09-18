@@ -21,6 +21,36 @@ upward to the target version.
 
 ## 0.6.31 → 0.6.32
 
+### Fixed — two connectors in one bundle no longer fight over an entity class name (restart; may now refuse to boot)
+
+The framework registers each entity's singleton in a process-wide table that was
+keyed on the entity's class name alone. That name is unique only *within* one model:
+every connector loads its classes from `models/<database>/entities/`, so when two
+connectors of one bundle declared a class of the same name, they shared one slot. The
+connector whose connection became ready **second** was handed the first one's instance
+and never attached its own entities — its `getModel()` returned a bare
+`{ _connection, getConnection }`. The bundle still started and served, so every call on
+a missing entity failed later, at request time.
+
+Two connectors sharing a `database` value hit this every time, but the trigger is the
+**class name**, not the database: two different databases that each contain a `user.js`
+collide the same way. Which connector lost depended on connection timing, so it could
+differ between replicas of one release — and a development boot could not reproduce it
+at all, because each connector reloads the entity module and gets a fresh table.
+
+The table is now keyed per bundle, model and class name, so each connector keeps its own
+entities.
+
+**What to check:** as a safety net, a bundle whose declared entity class did not reach
+its model now **refuses to start** and names the class, instead of serving a half-built
+model layer. If you were unknowingly affected, a bundle that used to boot will now stop
+with a message naming the colliding class and the connector. The fix is to give each
+connector its own `models/<database>/entities/` directory, or rename the colliding class.
+An entity that sets `hasOwnEvents` opts out of the event wiring and is not reported.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
 ### Security — the built-in error pages escape the text they render (restart; no code change)
 
 A crafted link could run script in your application's origin. `self.redirect()` treats a
