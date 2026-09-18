@@ -51,10 +51,40 @@ An entity that sets `hasOwnEvents` opts out of the event wiring and is not repor
 Server-side: **restart the bundle**. No rebuild needed.
 
 
+### Security — a request parameter can no longer decide whether a redirect happens (restart; no rebuild)
+
+`self.redirect()` read the incoming request parameters for a key named `error` and, when it
+found one, raised an error carrying that value instead of redirecting. The container it read
+is the client's: query-string parameters on a `GET`, body fields on a `POST`. So any
+unauthenticated request to **any** route whose action redirects could turn that route into a
+500 by adding `?error=` — on both engines, with no route opt-in, in every released version.
+
+An **empty** value was worse. `?error=` with nothing after the `=` left the request
+**unanswered**: the empty string is falsy, so the guard that protects `self.throwError()`
+from running against an already-released response mistook it for exactly that case, logged
+`ignoring late error:` with nothing after the colon, and returned without writing anything.
+Nothing reaps such a request — `server.timeout` defaults to `0` deliberately, so that
+Server-Sent Events and WebSocket responses are not cut off — so the connection stayed open
+for as long as the client held it.
+
+The key is now an ordinary request parameter. It rides the redirect in `inheritedData` like
+every other one, which is what
+[Carrying request data across the redirect](/guides/controller#redirect-data-carry) has
+always documented — that example could not work as written while the gate stood, because it
+assigns `error` on the request and then redirects one line later.
+
+**What to check:** if you relied on `?error=` producing an error page, it no longer does —
+raise the error explicitly with `self.throwError()` instead. Reading the key on the redirect
+*target*, the classic POST-redirect-GET shape, is unaffected and now works as documented.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
 ### Security — the built-in error pages escape the text they render (restart; no code change)
 
-A crafted link could run script in your application's origin. `self.redirect()` treats a
-request-supplied `error` key as an instruction to raise an error, so a `GET` to **any** route
+A crafted link could run script in your application's origin. `self.redirect()` *used to treat* a
+request-supplied `error` key as an instruction to raise an error (removed outright — see the next
+section), so a `GET` to **any** route
 whose action redirects — carrying `?error=<img src=x onerror=...>` — answered a 500 whose
 body contained that tag **raw** and executed it. The built-in fallback error page built its
 HTML by concatenation and escaped nothing, in every scope: only the stack-trace block was
