@@ -278,8 +278,11 @@ middleware invokes only once its store write has finished — so a response can 
 the browser ahead of the session record it depends on.
 
 The shim is transparent: a response no delegate has claimed keeps its original methods, so
-redirects, static files, error pages and the built-in `/_gina/*` endpoints behave exactly as
-before.
+redirects, cached responses and the built-in `/_gina/*` endpoints behave exactly as before.
+Error pages answer through the same base since a follow-up commit in this release — an error
+answered over HTTP/2 now carries the session cookie it rotated and persists a session mutation
+made while handling it — and static files are covered by the security entry below: they now
+answer with their own request's headers.
 
 **Not changed — `renderStream()`.** It writes chunk by chunk from an async iterable, and
 buffering that would change how SSE and Range responses behave, so it still answers on the raw
