@@ -249,14 +249,46 @@ manual `req.session.save()` after `req.login()`, a forced full-page navigation i
 the XHR redirect, or a throwaway second request to make the session stick — you can remove
 it.
 
-**Still true, and worth knowing.** On an ordinary HTTP/2 **render** — a page or JSON
-response that is not a redirect — a session middleware's cookie hook and its save-on-end
-wrapper still do not fire. Two consequences follow. A `rolling` session expiry does not
-roll, so the cookie keeps its original expiry however active the user is. And any change
-you make to `req.session` while rendering is not persisted. If you mutate the session in an
-action that renders, call `req.session.save()` yourself. `req.login()`, `req.logout()`,
-`req.session.destroy()` and `req.session.regenerate()` are unaffected — they write to the
-store directly rather than through the response.
+**The render path is fixed too, in this same release.** When this entry was written an
+ordinary HTTP/2 render still fired neither hook; the next entry closes that. `req.login()`,
+`req.logout()`, `req.session.destroy()` and `req.session.regenerate()` were never affected —
+they write to the store directly rather than through the response.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — a session survives an ordinary HTTP/2 render (restart; no rebuild)
+
+On HTTP/2, a `rolling` session cookie did not roll on a rendered response, and a change you
+made to `req.session` while rendering was not persisted.
+
+The cause is the one described in the previous entry, on the path that entry left open. Every
+render delegate answers on the raw HTTP/2 stream and calls neither `res.writeHead` nor
+`res.end`. A session middleware writes its cookie from a hook on the first and saves from a
+wrapper on the second, so on a render neither ran: no cookie was emitted, so a rolling expiry
+kept its original value however active the user was, and a mutation made during the render was
+dropped.
+
+This was never specific to sessions. Any middleware that installs itself by wrapping
+`res.writeHead` or `res.end` was inert on a rendered HTTP/2 response.
+
+The framework now installs its own `writeHead`/`write`/`end` on the response before your
+bundle's middleware runs, so that middleware wraps the framework's base rather than methods
+nothing calls. Each render delegate hands its HTTP/2 send to that base `end`, which a session
+middleware invokes only once its store write has finished — so a response can no longer reach
+the browser ahead of the session record it depends on.
+
+The shim is transparent: a response no delegate has claimed keeps its original methods, so
+redirects, static files, error pages and the built-in `/_gina/*` endpoints behave exactly as
+before.
+
+**Not changed — `renderStream()`.** It writes chunk by chunk from an async iterable, and
+buffering that would change how SSE and Range responses behave, so it still answers on the raw
+stream. A `rolling` cookie will not roll on a streamed response.
+
+**What to check:** if you added a `req.session.save()` purely to work around this in an action
+that renders, you can drop it. Keeping it is harmless.
+
+HTTP/1.1 was never affected on either engine.
 
 Server-side: **restart the bundle**. No rebuild needed.
 
