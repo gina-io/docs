@@ -28,7 +28,7 @@ Gina on a public HTTP/2 endpoint.
 | [CVE-2024-27983](https://nvd.nist.gov/vuln/detail/CVE-2024-27983) | CONTINUATION flood (Node.js) | **High** | Node.js patch | ≥ 20.12.1 |
 | [CVE-2019-9514](https://nvd.nist.gov/vuln/detail/CVE-2019-9514) | RST flood | **High** | `maxSessionRejectedStreams` | any |
 | — | HPACK bomb | Medium | `maxHeaderListSize: 65536` | any |
-| — | Server push abuse | Low | `enablePush: false` | any |
+| — | Server push abuse | Low | Not implemented since `0.6.32` (the push code was removed; `enablePush: false` is still advertised) | any |
 | — | Static-asset path traversal | **High** | Fixed in `0.5.7` — resolver paths canonicalised and confined to their mapping target | any |
 | — | Internal-host disclosure on reverse proxies | Low | Fixed in `0.5.9` — proxied clients receive a public host-only origin and a host-stripped `routing.json`; the internal `scheme://host:port` is no longer serialized to the browser | any |
 
@@ -119,10 +119,13 @@ exceed the limit receive a `COMPRESSION_ERROR` stream error.
 
 ---
 
-## Server push disabled
+## Server push not implemented
 
 HTTP/2 server push was deprecated in Chrome 106 (October 2022) and removed in Firefox 132.
-The RFC 9113 revision also relaxes the requirement. Gina disables it unconditionally:
+The RFC 9113 revision also relaxes the requirement. Since 0.6.32 the framework does not
+implement server push at all — the push branch earlier versions carried was removed together
+with the static-file listener it lived in, so a request never opens a push stream — and the
+server's SETTINGS still advertise it off:
 
 ```js
 http2Options.settings = {
@@ -131,8 +134,11 @@ http2Options.settings = {
 };
 ```
 
-This eliminates an entire attack surface (push cache poisoning, resource amplification)
-at zero cost to legitimate use cases.
+The advertisement alone never prevented pushing: `SETTINGS_ENABLE_PUSH` is the *client's*
+setting and Node's `stream.pushAllowed` reflects the peer's value, so before 0.6.32 a
+push-capable client (a default `node:http2` session, for instance) could still reach the push
+code. Removing the code is what eliminates the attack surface (push cache poisoning, resource
+amplification), at no cost to legitimate use cases.
 
 ---
 

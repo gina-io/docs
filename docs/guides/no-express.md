@@ -224,8 +224,8 @@ impossible to retrofit:
 
 ### Native HTTP/2
 
-The Isaac engine uses `node:http2` directly. HTTP/2 multiplexing, server push, ALPN
-negotiation, and 103 Early Hints all work without adapters. See
+The Isaac engine uses `node:http2` directly. HTTP/2 multiplexing, ALPN negotiation, and 103 Early Hints
+all work without adapters (server push is not implemented — browsers dropped it). See
 [Native HTTP/2](/guides/http2-native).
 
 ### Multi-bundle process isolation

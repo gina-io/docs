@@ -292,6 +292,51 @@ HTTP/1.1 was never affected on either engine.
 
 Server-side: **restart the bundle**. No rebuild needed.
 
+### Security — an HTTP/2 static file no longer carries another request's response headers (restart; no rebuild)
+
+Over HTTP/2, the built-in engine served static files through a listener registered once per
+server, from inside the first static request after boot. That listener kept the first
+request's response object for the life of the process and served every later static file
+through it, so the headers it emitted were folded from that captured response: its
+`Set-Cookie`, its request id and its CORS headers reached every other client that asked for a
+static file. Any middleware that sets a header before the response is written — the
+framework's own CSRF plugin does — made this a cross-user cookie delivery: whoever's request
+armed the listener had their cookie handed to everyone else until the bundle restarted, and
+an attacker who arms it plants their own. The same listener served an HTML file it had not
+seen before as a raw binary (no loader injection in dev), and once a directory URL had been
+requested, its index URL — the one the directory's own `301` sends the browser to — answered
+with a destroyed stream for the rest of the process's life.
+
+The listener and its server-push branch are gone. Every HTTP/2 static file is now served by
+the static handler on the request's own stream, which is what already happened for the first
+request of every URL: it carries that request's headers, the dev `cache-control: no-store`
+set, and in production an `ETag` and `Last-Modified` with `304` support — none of which the
+listener path emitted.
+
+HTTP/2 server push is no longer implemented. Browsers dropped it years ago (Chrome 106,
+Firefox 132) and the framework's own HTTP/2 client never enabled it; only a push-capable
+client such as a default `node:http2` session could reach the branch, and what it received
+was a push of the very path it had just requested.
+
+**What to check:** nothing, for a browser-facing bundle. If you relied on HTTP/2 push from a
+non-browser client, it is gone. If a bundle of yours serves static files over HTTP/2 behind
+middleware that sets per-user cookies before the response is written, treat sessions minted
+on the affected versions as you would after any cookie exposure — this release closes the
+leak; it cannot recall a cookie already delivered. HTTP/1.1 was never affected, on either
+engine.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — an HTML file in `public/` no longer answers 500 on a bundle without templates (restart; no rebuild)
+
+In dev, the static handler injects the gina loader into an HTML file served from `public/`,
+and did so by reading the bundle's `content.templates._common` block. A bundle that never ran
+`view:add` — any API-only bundle — has no such block, so the read threw and the request
+answered 500 with a `TypeError`. The loader is now injected only when the bundle carries one;
+otherwise the file is served exactly as it is on disk, which is what production always did.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)

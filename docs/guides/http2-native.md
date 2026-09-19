@@ -2,7 +2,7 @@
 title: Native HTTP/2 Server in Node.js
 sidebar_label: HTTP/2 Native
 sidebar_position: 6.6
-description: Gina is a Node.js HTTP/2 framework with a built-in server engine (Isaac) that uses node:http2 directly — no Express, no adapters, full multiplexing and server push support.
+description: Gina is a Node.js HTTP/2 framework with a built-in server engine (Isaac) that uses node:http2 directly — no Express, no adapters, full multiplexing without adapters.
 level: intermediate
 prereqs:
   - '[HTTPS & HTTP/2](/guides/https)'
@@ -14,7 +14,6 @@ keywords:
   - node.js http2 without express
   - isaac http2 engine
   - http2 multiplexing node.js
-  - node.js server push
   - http2 native node
   - alpn negotiation node.js
 ---
@@ -55,7 +54,7 @@ flowchart LR
 | Capability | Express + adapter | Gina Isaac |
 |---|---|---|
 | HTTP/2 multiplexing | Partial — adapter translates to HTTP/1.1 semantics | Native — streams handled directly |
-| Server push | Not supported by adapter | Supported (disabled by default) |
+| Server push | Not supported by adapter | Not implemented — removed in 0.6.32 (browsers dropped it; the advertised `enablePush: false` alone never stopped a push-capable client) |
 | ALPN negotiation | Manual TLS config | Built-in with `allowHTTP1` fallback |
 | 103 Early Hints | Not available | Supported via `self.setEarlyHints()` |
 | Stream priority | Lost in translation | Preserved |
