@@ -212,6 +212,8 @@ curl -s -X POST http://127.0.0.1:8080/_gina/maintenance \
 ```json
 {
   "bundle": "frontend",
+  "pid": 4242,
+  "hostname": "frontend-7c9d8f-x2k4q",
   "active": true,
   "source": "runtime",
   "retryAfter": 120,
@@ -327,5 +329,31 @@ Maintenance is **per bundle**. Each bundle serves from its own server instance,
 so closing one bundle of a multi-bundle project leaves its siblings serving —
 including when several bundles share a single process. To close a whole project,
 apply it to each bundle.
+
+### Replicas
+
+The runtime override is also **per process**. It lives in the memory of the
+process that received the `POST` — it is neither written anywhere nor
+broadcast. With more than one process serving the same logical bundle —
+replicas behind a load balancer, several pods of one deployment — a `POST`
+closes the one process it reached while every other replica keeps serving, and
+a replica that restarts mid-window comes back in its configured state. That is
+a consequence of the design above (boot-resolved, not persisted), and the
+contract you can build on is:
+
+- each replica answers `GET` / `POST /_gina/maintenance` for **itself only**;
+- the payload carries `pid` and `hostname` — under Kubernetes `hostname` is
+  the pod name — so you can see which process answered;
+- coherence across a deployment is yours to produce: fan the `POST` out to
+  every replica (per-pod `kubectl exec`, a headless service, or your ingress's
+  own maintenance switch) and read `hostname` back from each reply until the
+  set matches your replica list;
+- for a window that must be coherent **and** survive restarts, use the durable
+  form — `enabled: true` in configuration, rolled out to every replica — rather
+  than the runtime toggle.
+
+The bypass grant is the exception: the cookie is stateless and keyed on
+`bypassKey`, so a grant minted by one replica is accepted by every replica that
+shares the key.
 
 See [Multi-bundle projects](/guides/multi-bundle).
