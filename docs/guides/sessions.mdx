@@ -669,6 +669,9 @@ Worth knowing:
   read it before the call and re-set it inside the callback.
 - **CSRF tokens survive** — they are derived from the current session id, and
   the next response re-issues automatically after the id changes.
+- **Cookie lifetime belongs inside the callback** — rotation rebuilds the
+  cookie, so a `req.session.cookie.maxAge` set before this call is thrown away.
+  See ["Remember me"](#remember-me).
 - **Role elevation**: re-call `req.login()` with the elevated user — a
   privilege change deserves the same rotation as a login.
 - **Before 0.6.0** the shim threw `passport.initialize() middleware not in
@@ -797,6 +800,77 @@ How it behaves:
 
 ---
 
+## "Remember me" — a lifetime the user picks {#remember-me}
+
+The two clocks above are yours, set once for the whole deployment. A "remember
+me" checkbox is a third: a lifetime chosen per login, by the person logging in.
+
+There is deliberately no configuration key for it, because it is not a
+deployment-wide value — it belongs to one session, and is decided while that
+session is being created. `express-session` already models this. Every session
+carries its own `cookie` object and the framework never rewrites it, so
+assigning `req.session.cookie.maxAge` in your login action is the whole
+mechanism:
+
+```js title="src/api/controllers/controller.auth.js"
+this.login = function(req, res) {
+    var remember = (req.body.remember === true);   // your checkbox
+
+    req.login(user, function(err) {
+        if (err) return self.throwError(res, 500, err);
+
+        // 30 days when ticked; null = a cookie that dies with the browser
+        req.session.cookie.maxAge = remember ? 2592000000 : null;
+
+        self.redirect('/dashboard');
+    });
+};
+```
+
+Four things decide whether that works, and three of them fail silently.
+
+**Set it inside the callback, never before it.** `req.login()` rotates the
+session id, and rotation builds a fresh cookie from the options you configured.
+A `maxAge` assigned before the call is discarded, and the browser is sent your
+configured default instead of the user's choice, with nothing logged.
+
+**`null` is the unticked branch, not a small number.** It drops `Expires`
+altogether, which is what makes a cookie last exactly as long as the browser
+stays open. The store record for such a session still lives for one day — the
+last-resort TTL above — so the browser forgets it well before the record does.
+
+**Do not pin the store's `ttl` below it.** A record's lifetime is the
+`connectors.json` `ttl` when one is set, and follows the cookie only when it is
+not. Pair a one-day `ttl` with a thirty-day cookie and the browser keeps
+presenting a valid id to a record that died three weeks earlier. Leave `ttl`
+unset when the cookie should drive expiry, or raise it to the remembered
+duration.
+
+**Use a store that survives a restart.** A long-lived cookie against an
+in-process store signs everyone out on the next deploy regardless. See
+[Choosing a store](#choosing-a-store).
+
+You do **not** need to call `req.session.save()` afterwards: the rotation
+already makes `express-session` write the session again at the end of the
+response, and the record picks up the new lifetime with it. An explicit save is
+harmless if you prefer it spelled out.
+
+`absoluteTimeout` still wins. A thirty-day remember-me under an eight-hour
+absolute cap is an eight-hour session — the cap is deliberately independent of
+what the user asked for.
+
+:::caution HTTP/2 on the built-in engine, before 0.6.32
+On `isaac` over HTTP/2, rendered and redirected responses did not run the
+session middleware's cookie step, so a login answered that way reached the
+browser with no `Set-Cookie` at all — remembered or not. Measured on 0.6.31:
+the user is bound and the record is written correctly, and the next request
+still arrives anonymous. Fixed in 0.6.32. On earlier releases, confirm that a
+plain login survives one page load before adding a remember-me box on top of
+it.
+:::
+
+---
+
 ## Cookie options
 
 | Option | Recommended (prod) | Notes |
@@ -804,7 +878,7 @@ How it behaves:
 | `secure` | `true` | Only sends cookie over HTTPS. Set `false` behind an HTTP reverse proxy if TLS terminates there. |
 | `httpOnly` | `true` (default) | Blocks client-side JS from reading the cookie. |
 | `sameSite` | `'lax'` | Protects against CSRF on same-origin requests. Use `'none'` only for cross-origin with `secure: true`. |
-| `maxAge` | `86400000` | Expiry in milliseconds. Must match the store TTL in seconds (`maxAge / 1000`). |
+| `maxAge` | `86400000` | Expiry in milliseconds. Must match the store TTL in seconds (`maxAge / 1000`). A single session can override it at login — see ["Remember me"](#remember-me). |
 
 ```js
 cookie: {
