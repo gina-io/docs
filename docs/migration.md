@@ -45,6 +45,26 @@ on a development host with a daemon already running, a value set on a later
 Server-side: **restart the bundle**. No rebuild needed.
 
 
+### Added — maintenance mode can stay coherent across replicas through a shared kv namespace (restart; no rebuild)
+
+Point `server.maintenance.store` at a declared [kv namespace](/guides/kv) and every
+`POST /_gina/maintenance` writes its runtime override there, while each process polls it
+(`pollInterval`, default 2000 ms) — so one `POST` anywhere closes or reopens every replica
+within one interval, and a replica joining mid-window follows the shared state. The request
+gate keeps reading local memory synchronously. A store outage freezes each replica in its
+last-known state and never reopens a closed site; a `ttlSeconds` window expires
+deployment-wide. Full contract: [Replicas](/guides/maintenance-mode#replicas).
+
+**What to check:** nothing changes without `store`. With it, two new boot refusals exist by
+design — a `store` naming a namespace the kv primitive cannot hand out, or a namespace running
+`failMode: "open"`, stops the bundle with a message naming the fix. A memory-backed namespace
+boots with a warning that replicas will not follow each other. `GET /_gina/maintenance` gains
+a `sync` field and a `POST` reply a `store: { written, error }` field; scripts that compare
+the payload shape exactly need the two additions.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
 ### Fixed — two connectors in one bundle no longer fight over an entity class name (restart; may now refuse to boot)
 
 The framework registers each entity's singleton in a process-wide table that was
