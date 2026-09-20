@@ -193,6 +193,15 @@ Two behaviours to know:
 - **It applies to the current API only.** A legacy `data-gina-popin-name` trigger
   carrying `data-gina-dialog-target` does a full replace.
 
+:::note The form attributes behave the opposite way
+A form places its answer with
+[`data-gina-form-target` / `-swap` / `-select`](/guides/forms-and-validation#swapping-the-answer-into-the-page),
+which take the same CSS-selector idea but **refuse the submit** when the target
+cannot be resolved, instead of falling back. The difference is deliberate: a
+popin open is a read the user can retry, while a submit has already changed
+something on the server — there, working-but-wrong is the worse outcome.
+:::
+
 ## What happens to the content
 
 Injected popin content follows the same contract as any HTML inserted through
@@ -224,6 +233,13 @@ With one, each form in the content is bound through
 [validation](/guides/forms-and-validation) and gains a `close` method. Because a
 form in a modal popin lives inside a `showModal()` dialog — where everything
 outside is inert — its validation live region stays inside the form itself.
+
+A contained form's `text/html` answer replaces **this popin's** content — the
+popin is chosen by containment, not by whichever one happens to be open. A form
+that declares its own
+[`data-gina-form-target`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+overrides that: the answer goes to the declared element, inside the popin or
+outside it, and the popin's content is left alone.
 
 ## Loading state
 

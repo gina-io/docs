@@ -886,16 +886,115 @@ not registered.
 ### HTML answers and popins
 
 A `text/html` answer reaches the success callback as `{ contentType, content, status }`
-— the raw markup, inserted nowhere: what to do with it is yours. One case is handled for
-you: a form rendered **inside a popin** whose action answers with `renderWithoutLayout()`
-has that popin's content replaced by the answer, and its callback receives the **parsed
-xhr-data** (the object the action rendered) instead of the raw markup.
+— the raw markup, inserted nowhere: what to do with it is yours. Two cases are handled
+for you. The first is a form rendered **inside a popin** whose action answers with
+`renderWithoutLayout()`: that popin's content is replaced by the answer, and its callback
+receives the **parsed xhr-data** (the object the action rendered) instead of the raw
+markup. The second is a form that declares where its answer goes — see
+[Swapping the answer into the page](#swapping-the-answer-into-the-page) below, which
+takes precedence over the popin.
 
 Which popin, if any, is decided by **containment**: the popin the submitting form is
 inside, captured at submit and honoured only while that popin is still open and still
 contains the form. A form that is not inside a popin keeps its answer, whatever popins
 are open at the time — in dev mode the console says so when an older rule would have
 routed it elsewhere. A JSON answer is never routed to a popin.
+
+:::note The parsed xhr-data is a dev-mode convenience
+The two hidden inputs the popin branch reads are spliced into a layoutless render
+**only in development**. On any other boot they are absent and the callback receives
+`{ status }` instead — the popin still loads. Production data belongs in a JSON answer
+(`renderJSON()`) or in the markup itself.
+:::
+
+### Swapping the answer into the page
+
+A form can put its own `text/html` answer into any element of the page — no callback,
+no `innerHTML` by hand. Three attributes on the `<form>`, resolved **at submit, from the
+form**:
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend">
+```
+
+| Attribute | Value | Default |
+|---|---|---|
+| `data-gina-form-target` | `this` (the form) · `closest <selector>` (nearest ancestor **or the form itself**) · `find <selector>` (first descendant) · any CSS selector (first match in the document) | absent — no swap: the raw answer goes to the callback, or into the containing popin |
+| `data-gina-form-swap` | `innerHTML` · `outerHTML` · `textContent` · `beforebegin` · `afterbegin` · `beforeend` · `afterend` · `delete` · `none` | `innerHTML` |
+| `data-gina-form-select` | a CSS selector applied to the parsed answer; **every** match is swapped, in document order | absent — the whole answer |
+
+`next` and `previous` are **reserved** and refused today, so adding them later cannot
+change the meaning of markup that works now.
+
+A declared target **wins over the popin** the form sits in: a form inside a popin that
+declares a target swaps into that target — inside the popin or outside it — and the
+popin's own content is left alone.
+
+#### A target that cannot be honoured refuses the submit
+
+If the target matches nothing, the selector is invalid, or the swap strategy is unknown,
+**nothing is sent**. The error callback runs instead, the submit control is released, and
+the form is submittable again:
+
+```js
+{ status: 422, reason: 'targetError', transportError: false,
+  attribute: 'data-gina-form-target', value: '#nowhere',
+  error: 'data-gina-form-target: no element matches `#nowhere`' }
+```
+
+This is deliberately the opposite of the popin's
+[`data-gina-dialog-target`](/guides/popin#partial-swaps), which falls back to a full
+replace silently. A form submit has side effects on the server; failing loudly **before**
+the request is the safer default.
+
+#### What the callback receives
+
+On a swap the success payload keeps its existing keys and adds five:
+
+| Key | Value |
+|---|---|
+| `contentType`, `content`, `status` | unchanged — the raw answer and its status |
+| `target` | the element that was swapped |
+| `swap` | the strategy applied |
+| `swapped` | `true` when the DOM was written; `false` when it was not — `swap="none"`, a `select` that matched nothing, or a target that left the document while the request was in flight |
+| `data`, `view` | the action's data when the answer carries the dev-mode hidden inputs, `null` otherwise (see the note above) |
+
+A `swapped: false` is never an error: the request succeeded, and the callback still runs.
+
+#### Two events
+
+| Event | When | Detail |
+|---|---|---|
+| `beforeswap` | before the DOM is written | `{ target, content, strategy, select }` — **cancelable**: `preventDefault()` skips the swap (`swapped: false`), and rewriting `detail.content` changes what lands |
+| `afterswap` | after the region is bound | `{ target, strategy, swapped }` |
+
+```js
+gina.validator.$forms['add-row'].on('beforeswap', function (event) {
+  event.detail.content = decorate(event.detail.content);
+});
+```
+
+`afterswap` also has a declarative form, like the submit callbacks:
+
+```html
+<form … data-gina-form-event-on-swap="onRowsSwapped">
+```
+
+#### The swapped region is live
+
+Swapped content goes through the same region policy as
+[fragment navigation](/guides/client-navigation#after-a-swap): `src`-bearing scripts the
+document does not already have are re-created once, forms that **opt in** are bound, and
+`data-gina-link` anchors are registered. Inline scripts never execute — the `innerHTML`
+contract.
+
+:::note A swap that replaces the submitting form
+With `outerHTML` or `delete` on a target containing the form itself, the form's own
+listeners are kept until its `success` callback has run; the replacement is bound
+immediately afterwards. A same-id replacement therefore works on the next submit.
+:::
 
 ### Programmatic API and events
 
@@ -1240,6 +1339,10 @@ anything that must be true before you act on the data.
 | `data-gina-form-inherits-data` | URL-encoded JSON merged into the payload before sending. |
 | `data-gina-form-event-on-submit-success` | Bare name of a `window` callback run when the AJAX submit succeeds. |
 | `data-gina-form-event-on-submit-error` | Bare name of a `window` callback run when the submit does not succeed — both a server error status and a transport failure that never reached the server. See [Reacting to the result](#declarative-callbacks) for the payload shape. |
+| `data-gina-form-target` | Where the `text/html` answer is swapped: `this`, `closest <selector>`, `find <selector>`, or a CSS selector. A target that cannot be resolved refuses the submit. See [Swapping the answer into the page](#swapping-the-answer-into-the-page). |
+| `data-gina-form-swap` | How the answer is written into the target — `innerHTML` (default), `outerHTML`, `textContent`, `beforebegin`, `afterbegin`, `beforeend`, `afterend`, `delete`, `none`. |
+| `data-gina-form-select` | CSS selector picking the part of the answer to swap; every match is used, in document order. Defaults to the whole answer. |
+| `data-gina-form-event-on-swap` | Bare name of a `window` callback run after a swap, once the swapped region is bound. |
 | `data-gina-form-checkbox-value-as-state` | **Deprecated, transitional.** Set `"true"` to restore the pre-0.5.18 behavior where a checkbox's `value` decides its checked state. See [Checkboxes](#checkboxes). |
 
 ### Field-level
@@ -1285,3 +1388,7 @@ documented in its own chapter — see [File uploads](/guides/file-uploads).
   responding with `self.throwError()`.
 - [Client-side components](/guides/client-components) — the custom-element
   authoring model that form-associated elements build on.
+- [Popins](/guides/popin) — the dialog a contained form answers into, and its own
+  `data-gina-dialog-target` partial swap.
+- [SPA navigation](/guides/client-navigation) — GET navigation over the same region
+  policy a form swap binds its content through.

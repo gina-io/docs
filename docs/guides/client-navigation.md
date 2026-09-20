@@ -174,9 +174,16 @@ A successful fragment swap does more than set `innerHTML`:
   **Inline scripts are never executed** — the same `innerHTML` contract popin
   content has always had. Anything a fragment needs must be a `src`-bearing
   script or already on the page.
-- **Forms** — id-bearing forms in the new content are rebound through the live
-  [validator](/guides/forms-and-validation), so validation rules keyed by form
-  id keep working. Id-less forms are skipped (no rule can target them).
+- **Forms** — forms in the new content that **opt in** are bound through the
+  live [validator](/guides/forms-and-validation), so validation rules keyed by
+  form id keep working. Opting in means carrying a `data-gina-form-*`
+  attribute, or an id naming a rule set — the same gate the initial page
+  applies, so a plain `<form>` behaves identically whether it arrived with the
+  page or with a fragment. A bare form keeps its native submit.
+
+  This is the same region policy a form's own
+  [answer swap](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+  uses: one rule for injected HTML, wherever it came from.
 - **Popins** — an open [popin](/guides/popin) is closed: a real navigation
   would have unloaded it, and after a swap it would sit over content it no
   longer belongs to.
@@ -250,27 +257,36 @@ Events, observable with `gina.nav.on('<event>', handler)`:
 
 Gina's navigation is not htmx — but if hypermedia, *HTML over the wire* and
 server-rendered fragments are what brought you here, it is the same
-philosophy with a different division of labour: **the opt-in lives in the
-routing table, not in per-element attributes.**
+philosophy with a different division of labour: **for navigation the opt-in
+lives in the routing table, not in per-element attributes.** Forms are the
+other half, and they *do* take attributes — the table below says which side
+each habit lands on.
 
 | htmx habit | The Gina equivalent |
 |---|---|
 | `hx-boost` on the body | one `data-gina-nav` region in the layout |
-| `hx-get` + `hx-target` per element | a plain `<a href>` — the *route* opts in via `negotiate: true`, the region is fixed |
+| `hx-get` + `hx-target` per element | for navigation, a plain `<a href>` — the *route* opts in via `negotiate: true`, the region is fixed. For a **form**, `data-gina-form-target` takes the same grammar |
 | `hx-push-url="true"` | automatic — history, scroll and focus are managed |
-| `hx-select` to trim the response | unnecessary — the server renders the fragment shape |
+| `hx-swap` strategy per element | for navigation, always the region's `innerHTML`. For a **form**, `data-gina-form-swap` takes the nine htmx strategies |
+| `hx-select` to trim the response | for navigation, unnecessary — the server renders the fragment shape. For a **form**, `data-gina-form-select` trims the answer |
 | a second endpoint for partials | the same URL, negotiated by request header |
 
 Honest differences, so you can pick the right tool:
 
-- **One swap region per page.** htmx targets arbitrary elements with
-  per-element swap strategies; `gina/nav` swaps one region. For finer-grained
-  server-driven updates inside a page, Gina's answer is
+- **One swap region per *navigation*.** htmx targets arbitrary elements with
+  per-element swap strategies; `gina/nav` swaps one region, because a
+  navigation replaces the page's content by definition. Targeting an arbitrary
+  element is a **form**'s job in Gina:
+  [`data-gina-form-target` / `-swap` / `-select`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+  carry the htmx grammar for a submit's answer. For updates driven by the
+  server rather than by a user action, see
   [Web Components that refetch their own fragment](/guides/client-components)
   and the [popin pattern](/guides/popin).
 - **GET navigation only.** htmx issues any verb from any element; in Gina,
-  forms go through the [validator's XHR submit](/guides/forms-and-validation)
-  with its own lifecycle.
+  `gina/nav` handles GET navigation and forms go through the
+  [validator's XHR submit](/guides/forms-and-validation) with its own
+  lifecycle — validation, CSRF, loading state — and their own target
+  attributes on top.
 - **No polling or SSE swap attributes.** For live content, see
   [Client Components — live connections](/guides/client-components) (WebSocket
   / EventSource patterns).
@@ -278,9 +294,10 @@ Honest differences, so you can pick the right tool:
   those fetch the *full* page and extract the interesting part client-side;
   Gina's server sends only the fragment.
 
-And unlike all of them, there is no third-party script and no attribute
-vocabulary to spread through templates: one flag per route, one marker per
-layout.
+And unlike all of them, there is no third-party script, and **navigation**
+needs no attribute vocabulary spread through templates: one flag per route,
+one marker per layout. A form that wants its answer placed somewhere specific
+opts into three attributes of its own — on the form, not on every element.
 
 ## Related
 

@@ -38,8 +38,9 @@ popin loads into that popin.
 
 **What to check:** a page that *deliberately* fed a non-modal popin from a page form's HTML
 answer relied on the old rule. In dev mode the console now names the popin the old rule would
-have targeted (`[FormValidator][popin] …`); render the form inside the popin to keep that
-behaviour. New public accessor: `gina.popin.getPopinContaining(el)` — the popin whose dialog
+have targeted (`[FormValidator][popin] …`). To keep that behaviour, say so explicitly with
+[`data-gina-form-target`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+pointing at the dialog — or render the form inside the popin. New public accessor: `gina.popin.getPopinContaining(el)` — the popin whose dialog
 contains `el`, or `null` ([reference](/guides/popin#the-ginapopin-api)).
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
@@ -99,6 +100,68 @@ attribute's presence.
 **What to check:** nothing on the modal path (legacy triggers, `data-gina-dialog-modal="true"`),
 which was already tolerated by the engine. A pre-opened, modeless-declared popin keeps the
 shell's modal presentation, as before.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Added — a form can swap its HTML answer into any element of the page (restart and re-bake; additive)
+
+A form places its own `text/html` answer with three attributes, resolved at submit from the
+form itself: `data-gina-form-target` (the `hx-target` grammar — `this`, `closest <selector>`,
+`find <selector>`, or a CSS selector; `next`/`previous` are reserved and refused),
+`data-gina-form-swap` (`innerHTML` by default, plus `outerHTML`, `textContent`, the four
+`insertAdjacentHTML` positions, `delete` and `none`) and `data-gina-form-select` (a selector
+trimming the answer; every match, in document order).
+
+The success payload keeps `contentType` / `content` / `status` and **adds** `target`, `swap`,
+`swapped`, `data` and `view`. Two events are emitted on the form — `beforeswap` (cancelable
+with `preventDefault()`; `detail.content` may be rewritten) and `afterswap`, the latter with a
+declarative `data-gina-form-event-on-swap` hook. The swapped region is bound through the same
+policy fragment navigation uses.
+
+A target or strategy that cannot be honoured **refuses the submit before anything is sent**,
+with `{ status: 422, reason: 'targetError', attribute, value }` on the error channel and the
+submit control released. That is deliberately the opposite of `data-gina-dialog-target`'s
+silent full-replace fallback: a submit has side effects on the server.
+
+**What to check:** nothing — no existing markup carries these attributes, and a form without
+them behaves exactly as before. A declared target takes precedence over the popin a form sits
+in. Full reference:
+[Swapping the answer into the page](/guides/forms-and-validation#swapping-the-answer-into-the-page).
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Changed — a navigated fragment's forms are bound only when they opt in (restart and re-bake; behaviour change)
+
+`gina/nav` now binds a swapped region through the shared policy the form-answer swap uses. For
+scripts and `data-gina-link` anchors nothing changes. For **forms** it does: a fragment's forms
+are bound only when the markup **opts in** — a `data-gina-form-*` attribute, an id naming a
+registered rule set, or a `gina-upload-*` id — which is the gate the initial page has applied
+since 0.6.29. A bare id-bearing form inside a navigated fragment used to be bound regardless,
+and its submit silently became an XHR.
+
+**What to check:** a form that arrives inside a navigated fragment, carries an `id`, and has no
+`data-gina-form-*` attribute and no matching rule set. It now keeps its **native** submit — a
+real form POST and a page load, not an XHR. Add `data-gina-form-rule` (or any
+`data-gina-form-*` attribute) to opt it back in. Forms that already carry a rule are unaffected,
+as are id-less forms, which were never bound.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a popin answer outside dev mode no longer reports a false 422 (restart and re-bake)
+
+The popin branch of both XHR handlers read two hidden inputs
+(`gina-without-layout-xhr-data` / `-view`) that the server splices into a layoutless render
+**only when `NODE_ENV_IS_DEV` is true**. On any other boot they are absent, the branch
+dereferenced a missing element, and the resulting `TypeError` surfaced as an `error` callback
+carrying `422` — *after* a successful server write — with the popin never loaded.
+
+Both branches now go through one tolerant parse. The callback receives the parsed data when the
+inputs are present and an object carrying `status` when they are not, and the two inputs are
+stripped from content swapped into the page so a repeated swap cannot duplicate their ids.
+
+**What to check:** a popin-answering form on a non-development boot that appeared to fail while
+the write had in fact succeeded. It now succeeds visibly. In production the data channel remains
+`renderJSON()` or the markup itself — the hidden inputs are a development convenience.
 
 Browser-bundled: **restart the bundle and re-bake**.
 
