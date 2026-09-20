@@ -209,6 +209,24 @@ dialog keeps its own content instead of being blanked. Full reference:
 
 Browser-bundled: **restart the bundle and re-bake**.
 
+### Added — a server can retarget, reswap or reselect a form's HTML answer (restart and re-bake; additive)
+
+Three response headers — `X-Gina-Retarget`, `X-Gina-Reswap`, `X-Gina-Reselect` — override
+a form's `data-gina-form-target` / `-swap` / `-select` at settle time: htmx's `HX-Retarget`,
+`HX-Reswap` and `HX-Reselect`. A `Retarget` creates a target where none was declared and
+wins over the popin a form sits in; one that cannot be resolved means no swap at all (the
+success callback runs with `swapped: false` and `reason: 'retargetError'`, never an error
+callback); an invalid `Reswap` or `Reselect` is ignored and the declared value kept. The
+success payload gains `overrides` only when an answer carried one of the headers, and
+`beforeswap`'s detail carries the same object. See
+[Server-driven overrides](/guides/forms-and-validation#server-driven-overrides).
+
+**What to check:** nothing, unless an action already sets a response header by one of
+these names — the client now reads them. They are same-origin unless exposed through
+`Access-Control-Expose-Headers`.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
 ### Changed — a navigated fragment's forms are bound only when they opt in (restart and re-bake; behaviour change)
 
 `gina/nav` now binds a swapped region through the shared policy the form-answer swap uses. For

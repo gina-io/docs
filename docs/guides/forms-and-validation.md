@@ -1053,6 +1053,52 @@ addressed nothing but out-of-band elements, the dialog keeps its own content
 rather than being blanked — the dialog analogue of htmx's `hx-swap="none"`.
 :::
 
+#### Server-driven overrides
+
+The server can have the last word on where a `text/html` answer goes and how, with
+three response headers — htmx's `HX-Retarget`, `HX-Reswap` and `HX-Reselect`:
+
+| Header | Value | Effect |
+|---|---|---|
+| `X-Gina-Retarget` | the `data-gina-form-target` grammar — `this`, `closest <selector>`, `find <selector>`, a CSS selector | becomes the target, whether or not the form declared one; a form inside a popin is retargeted onto the page and the popin is left alone |
+| `X-Gina-Reswap` | one of the nine strategies | replaces the declared strategy |
+| `X-Gina-Reselect` | a CSS selector | replaces `data-gina-form-select` |
+
+They are read once the answer is known to be HTML — a JSON answer is never swapped —
+and **before** `beforeswap`, whose listener sees the final `target` and `strategy` and
+keeps the last word. From an action, set them on the response object:
+
+```js
+self.getResponseObject().setHeader('X-Gina-Retarget', '#totals');
+self.renderWithoutLayout(data);
+```
+
+The invalid-value rule is deliberately asymmetric:
+
+- A `Retarget` that matches nothing (or names a reserved keyword) means **no swap at
+  all** — not into the declared target, not into the popin. The server plainly meant
+  somewhere else, and writing the answer into the wrong place is worse than writing it
+  nowhere. The success callback still runs, with `swapped: false` and
+  `reason: 'retargetError'`; there is no error callback, because the request succeeded.
+- A `Reswap` or `Reselect` that fails validation is **ignored** and the declared value
+  kept: it is a modifier on a known target, and the declared value is a safe default.
+  Either one without any target — declared or retargeted — is ignored the same way.
+
+Every refused or ignored value is named in a dev-mode console notice, and the success
+payload carries an `overrides` key, present only when the answer carried at least one
+of the headers: one entry per header, `{ value, applied }`, plus `reason` when it was
+not applied (`noTarget`, an unknown strategy, an invalid selector, or why the target did
+not resolve). `beforeswap`'s detail carries the same `overrides` object. A form inside a
+popin whose answer stays in the popin receives its parsed data verbatim, as before, so an
+ignored override there is reported in the console only.
+
+:::note Same origin only
+A page on another origin cannot read custom response headers unless the server lists
+them in `Access-Control-Expose-Headers`. Gina emits no such header on its own; a
+cross-origin setup adds it under `server.response.header` in the bundle's server
+settings, like any other response header.
+:::
+
 ### Programmatic API and events
 
 For finer control, the live instance is published as `window.gina.validator`
