@@ -165,6 +165,7 @@ stays skipped.
 | `GINA_LOG_STDOUT` | `true` (applied by the launcher when unset) | Container logging preset — JSON lines, MQ transport skipped. Set `false` to keep the transport. |
 | `GINA_LOG_FORMAT` | — | `json` or `text` — the explicit output-format override; wins over the preset for the format only. |
 | `GINA_SHUTDOWN_TIMEOUT` | `10000` | Graceful drain window in ms. Keep below `terminationGracePeriodSeconds`. |
+| `GINA_MAINTENANCE` | — | `1` or `true` boots the bundle with [maintenance mode](/guides/maintenance-mode#turning-it-on) ON, exactly as `server.maintenance.enabled: true` would; close-only — `0`, `false` or unset leave the configured state. Since 0.6.32. |
 | `NODE_ENV` | project `def_env` | Overrides the runtime environment. |
 | `NODE_SCOPE` | project `def_scope` | Overrides the runtime scope. |
 

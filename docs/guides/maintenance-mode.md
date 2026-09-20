@@ -47,6 +47,32 @@ Restart the bundle and every visitor gets the maintenance page. `enabled` must b
 a **strict boolean** — `"true"` (a string) leaves it off, on purpose, so a typo
 cannot silently close your site.
 
+For a process that must come up closed **without** a configuration edit — a
+replacement pod created during a window is the case — set the environment
+variable instead (available since 0.6.32):
+
+```bash
+GINA_MAINTENANCE=1 gina bundle:start frontend @myproject    # or GINA_MAINTENANCE=true
+```
+
+It is folded into the configuration layer at boot, so everything below applies
+unchanged: the runtime toggle still reopens the process, and the status payload
+reports `source: "env"`. Three rules: `1` and `true` (any case) are the only
+values that close; `0`, `false` or an unset variable leave the configured state
+in place — **the variable can only close a bundle, never open one**, because a
+rollout-time variable must not be able to open a site the release's
+configuration deliberately closed; any other value is ignored with a boot
+warning naming the accepted values.
+
+:::note Which environment the bundle sees
+Under the daemon (`gina bundle:start`) a bundle receives the environment of the
+process that **started the daemon** — a pod's init script, so under Kubernetes
+the Deployment's `env` just works. On a development host with a daemon already
+running, a variable set on a later `gina bundle:start` does not reach the bundle
+until the daemon is restarted. Under `gina-container` the container's own
+environment reaches the bundle directly.
+:::
+
 To flip it without editing configuration, use the
 [runtime toggle](#flipping-it-at-runtime) instead.
 
@@ -318,6 +344,23 @@ Set `bypassKey` in `settings.json` *before* opening a window: it is
 configuration only, and the runtime toggle cannot add it. The header
 path grants no cookie and redirects nowhere, so it is the right form
 for a probe.
+
+### Replacement pods during a window
+
+A pod created or restarted while a window is open boots in its **configured**
+state — the runtime toggle is per process and not persisted. To make new pods
+come up closed without a configuration rollout, set the variable on the
+Deployment for the duration of the window and remove it when you reopen:
+
+```yaml
+env:
+  - name: GINA_MAINTENANCE
+    value: "1"           # close-only: removing it (or "0") reverts to configuration
+```
+
+Pods that were already running keep whatever the toggle told them; pods that
+start during the window read the variable at boot. The toggle still works on
+every pod either way.
 
 See [Kubernetes & Docker](/guides/k8s-docker) for the probe configuration.
 

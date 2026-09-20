@@ -21,6 +21,30 @@ upward to the target version.
 
 ## 0.6.31 → 0.6.32
 
+### Added — `GINA_MAINTENANCE` boots a bundle with maintenance mode on (restart; no rebuild)
+
+A bundle started with `GINA_MAINTENANCE=1` (or `true`, any case) boots with its
+[maintenance gate](/guides/maintenance-mode#turning-it-on) closed, exactly as if
+`server.maintenance.enabled` were `true` in `settings.json` — for replacement pods created
+during a window, or any process that must come up closed without a configuration edit. It
+is folded into the configuration layer, so the runtime toggle keeps its meaning:
+`POST /_gina/maintenance {"enable":false}` still reopens the process, and
+`GET /_gina/maintenance` reports `source: "env"` for a closure that came from the variable.
+
+The variable can only **close** a bundle, never open one: `0`, `false` or an unset value
+leave the configured state in place, and any other value is ignored with a boot warning
+naming the accepted values.
+
+**What to check:** nothing changes for a bundle that does not set the variable. Under the
+daemon (`gina bundle:start`) the variable must be present in the environment of the process
+that **started the daemon** — a pod's init script, so a Deployment `env` entry just works;
+on a development host with a daemon already running, a value set on a later
+`gina bundle:start` does not reach the bundle until the daemon restarts. Under
+`gina-container` the container's own environment reaches the bundle directly.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
 ### Fixed — two connectors in one bundle no longer fight over an entity class name (restart; may now refuse to boot)
 
 The framework registers each entity's singleton in a process-wide table that was
