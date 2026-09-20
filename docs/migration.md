@@ -103,6 +103,48 @@ shell's modal presentation, as before.
 
 Browser-bundled: **restart the bundle and re-bake**.
 
+### Fixed — reloading an open popin no longer blanks it (restart and re-bake)
+
+`gina.popin.load(name, url)` on a `data-gina-dialog` popin that was already open wrote the
+new body into the dialog and then wiped it: the landing fires the popin's `loaded` event
+with the popin object as its detail — the form the legacy trigger's listener only binds
+on — and the declarative trigger's listener applied that detail as if it were the body,
+which for a non-string is nothing. No error was reported. The listener now applies nothing
+for a non-string detail, so the reloaded body stays. Present since 0.4.6.
+
+**What to check:** nothing on the legacy `data-gina-popin-*` triggers, which were never
+affected. A page that worked around the blank by calling `loadContent()` after `load()`
+can drop the workaround.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a pre-opened popin's loading shell is a state you can close, load into, or lose to a failed load (restart and re-bake; behaviour change)
+
+A `preOpen: true` popin shows its shell before its content arrives, and until now the
+framework had no name for that window: `isOpen` was `false`, so `loadContent()` on the
+popin threw `is not open !`, `close()` returned without closing, a failed load left the
+skeleton up with nothing to dismiss it, and a native Escape closed the dialog behind the
+plugin's back — the content landing afterwards re-opened it. The window is now the
+popin's `isLoading` state.
+
+**What to check — three visible changes:**
+
+- `loadContent()` on a loading popin no longer throws: it injects into the shell and
+  completes the open (`open` fires once). Code that relied on the throw to detect "not
+  ready yet" should read `isLoading` instead.
+- `close()` and `destroy()` on a loading popin now close it — the load is cancelled, its
+  content dropped, and `close` fires — where they used to do nothing. An Escape during
+  the load does the same.
+- A failed load now closes the shell after `error`, unless an `error` listener called
+  `loadContent()` on the popin. A page that showed its own message by loading content
+  from the listener keeps that behaviour; one that left the skeleton up will now see the
+  dialog close.
+
+A popin without `preOpen` is unaffected: it shows nothing while it loads and never enters
+the state. `getActivePopin()` still returns open popins only.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
 ### Added — a form can swap its HTML answer into any element of the page (restart and re-bake; additive)
 
 A form places its own `text/html` answer with three attributes, resolved at submit from the

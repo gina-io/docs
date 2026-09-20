@@ -275,6 +275,17 @@ gated on `prefers-reduced-motion`) which you can replace entirely. For a popin
 that should appear instantly and fill afterwards, construct it with
 `preOpen: true` and optionally your own `loadingShell` markup.
 
+A pre-opened popin is in an explicit **loading state** — `isLoading` is `true` on the
+popin object — from the moment its shell shows until its content lands and the real
+open runs (`isOpen` stays `false` until then). While it loads, `close()` and `destroy()`
+cancel the load and take the shell down: the content still in flight is dropped, a
+transport still in flight is aborted without firing `error`, and a dismissed dialog never
+comes back when its answer arrives. A native Escape on the shell takes the same path. If
+the load fails, `error` fires first — a listener that calls `loadContent()` on the popin
+keeps the dialog open with its own content — and the shell closes if nothing handled it,
+so a failed load never leaves a spinner behind. A popin without `preOpen` shows nothing
+while it loads and never enters the state.
+
 ## The `gina.popin` API
 
 ```js
@@ -291,13 +302,18 @@ gina.popin.destroy(name);
 
 The registry is shared across every popin instance, so a form in one popin can
 redirect into another. `gina.popin.activePopinId` and `gina.popin.$popins` expose
-the live state.
+the live state, and each popin object carries `isOpen` and — for a `preOpen: true`
+popin — `isLoading` (see [Loading state](#loading-state)).
 
 `open()` throws if the name is unknown, `loadContent()` throws if the popin is
-not open, and `load()` throws if the name cannot be resolved — so guard calls
-whose names come from data. Called on a popin instance —
+neither open nor loading, and `load()` throws if the name cannot be resolved — so
+guard calls whose names come from data. Called on a popin instance —
 `gina.popin.getPopinByName('details').loadContent(html)` — `loadContent()` loads
 into **that** popin; called on `gina.popin` itself it loads into the active one.
+Called on a popin that is still **loading**, it injects into the shell and completes
+the open — `open` fires once, from that completion — and the content still in flight
+lands afterwards as any later `loadContent()` would. `gina.popin.loadContent(html)`
+reaches open popins only, since a loading popin is not the active one.
 
 `getActivePopin()` returns **open** popins only: with two open it returns the most
 recently opened one, and a popin that is registered but not yet open — during its
