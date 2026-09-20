@@ -260,8 +260,9 @@ that should appear instantly and fill afterwards, construct it with
 gina.popin.open(name);              // opens MODAL — see the caution above
 gina.popin.close(name);
 gina.popin.load(name, url, options);
-gina.popin.loadContent(html);       // inject content you already have
-gina.popin.getActivePopin();        // the popin on top, or null
+gina.popin.loadContent(html);       // inject content you already have (into the active popin)
+gina.popin.getActivePopin();        // the most recently opened OPEN popin, or null
+gina.popin.getPopinContaining(el);  // the popin whose dialog contains el, or null
 gina.popin.getPopinByName(name);
 gina.popin.getPopinById(id);
 gina.popin.destroy(name);
@@ -273,9 +274,16 @@ the live state.
 
 `open()` throws if the name is unknown, `loadContent()` throws if the popin is
 not open, and `load()` throws if the name cannot be resolved — so guard calls
-whose names come from data. With two non-modal popins open, `getActivePopin()`
-returns whichever it reaches first; prefer looking a popin up by name when you
-know which one you mean.
+whose names come from data. Called on a popin instance —
+`gina.popin.getPopinByName('details').loadContent(html)` — `loadContent()` loads
+into **that** popin; called on `gina.popin` itself it loads into the active one.
+
+`getActivePopin()` returns **open** popins only: with two open it returns the most
+recently opened one, and a popin that is registered but not yet open — during its
+own click-time load, for instance — is never returned. Prefer looking a popin up
+by name when you know which one you mean, and `getPopinContaining(el)` when what
+you know is an element inside it — that is how the validator decides where a
+form's HTML answer goes (see [Reacting to the result](/guides/forms-and-validation#html-answers-and-popins)).
 
 **Events**, observable with `gina.popin.on('<event>', handler)`:
 

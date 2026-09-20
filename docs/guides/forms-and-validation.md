@@ -883,6 +883,20 @@ call-expression form is rejected with a console warning and the handler is
 not registered.
 :::
 
+### HTML answers and popins
+
+A `text/html` answer reaches the success callback as `{ contentType, content, status }`
+— the raw markup, inserted nowhere: what to do with it is yours. One case is handled for
+you: a form rendered **inside a popin** whose action answers with `renderWithoutLayout()`
+has that popin's content replaced by the answer, and its callback receives the **parsed
+xhr-data** (the object the action rendered) instead of the raw markup.
+
+Which popin, if any, is decided by **containment**: the popin the submitting form is
+inside, captured at submit and honoured only while that popin is still open and still
+contains the form. A form that is not inside a popin keeps its answer, whatever popins
+are open at the time — in dev mode the console says so when an older rule would have
+routed it elsewhere. A JSON answer is never routed to a popin.
+
 ### Programmatic API and events
 
 For finer control, the live instance is published as `window.gina.validator`

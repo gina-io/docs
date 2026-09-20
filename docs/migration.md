@@ -21,6 +21,87 @@ upward to the target version.
 
 ## 0.6.31 → 0.6.32
 
+### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
+
+A form's `text/html` XHR answer used to be routed by "the active popin": a page form whose
+answer arrived while a popin was open had that popin's content **replaced** by the answer,
+and one whose answer arrived while a popin was still loading got a **false `422` error
+callback** (`Popin x is not open !`) after a successful server write — reachable through a
+trigger opted out of preload, a programmatic load, or a click landing before the hover warm.
+With two popins open, the answer landed in whichever open one had been registered first.
+
+The answer now goes to the popin the **submitting form is inside**, decided at submit and
+honoured only while that popin is still open and still contains the form. A form that is not
+inside a popin gets its answer delivered to its own handler, whatever popins are open; a form
+inside a popin still loads its answer into that popin; `gina.popin.loadContent()` called on a
+popin loads into that popin.
+
+**What to check:** a page that *deliberately* fed a non-modal popin from a page form's HTML
+answer relied on the old rule. In dev mode the console now names the popin the old rule would
+have targeted (`[FormValidator][popin] …`); render the form inside the popin to keep that
+behaviour. New public accessor: `gina.popin.getPopinContaining(el)` — the popin whose dialog
+contains `el`, or `null` ([reference](/guides/popin#the-ginapopin-api)).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a form or link answering into a popin now runs its declared success callback (restart and re-bake; additive)
+
+`data-gina-form-event-on-submit-success` and `data-gina-link-event-on-success` never ran
+when the `text/html` answer was loaded into a popin: the popin branch of both XHR handlers
+returned before the companion event those attributes are bound to, so only a programmatic
+`success.<id>` listener ever saw the answer. The declared callback now runs there too, with
+the **parsed xhr-data** (the object the action passed to `renderWithoutLayout`) as its `data`
+— not the raw `{ contentType, content, status }` a page form receives — and
+`$form.eventData.success` is set as on every other path.
+
+**What to check:** a form inside a popin that declares a success callback will start seeing it
+called. That is additive — nothing else about the popin path changes.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Changed — popin context is decided by containment, not by "the active popin" (restart and re-bake; behaviour change)
+
+Four consequences of the routing fix above, each a narrowing of what a popin is allowed to
+capture:
+
+1. **Request headers.** `X-Gina-Popin-Id` / `X-Gina-Popin-Name` — and so
+   `self.isPopinContext()`, `Setup.isPopinContext`, and the popin-style XHR redirect
+   `self.redirect()` produces from them — are sent only for a form rendered inside a popin,
+   not for a page form submitted while a popin happened to be open.
+2. **XHR redirects.** A plain `location` redirect answering a **page** form navigates the page
+   instead of being loaded into an open popin (it used to do both: load into the popin, then
+   navigate), and a name-less `location` redirect arriving after its popin was closed no longer
+   reopens it. A named `popin` redirect is unchanged.
+3. **`getActivePopin()`** returns open popins only, preferring the most recently opened one.
+   A registered-but-not-open popin is never returned, so a no-argument
+   `gina.popin.close()` / `destroy()` / `unbind()` during a popin's own click-time load window
+   is a no-op; with two popins open the *most recently opened* is the active one rather than
+   the first registered.
+4. A name-less `{ popin: { close: true } }` answer with nothing open to close is a no-op rather
+   than a `422`.
+
+**What to check:** server code that read `self.isPopinContext()` to pick a layout for a page
+form submitted while a popin was open now sees `false` there — which is the correct reading.
+Nothing changes for forms rendered inside popins.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a pre-opened popin opened modeless reaches its open state (restart and re-bake)
+
+A `preOpen: true` popin opened through the declarative `data-gina-dialog` trigger with the
+default (modeless) modal resolution never reached `isOpen = true`: the loading shell is born
+modal, and `popinOpen`'s re-entry guard read the resulting empty `open` attribute as absent,
+so it called `show()` on an already-modal dialog, the engine threw `InvalidStateError`, and
+the popin stayed visibly open while the framework recorded it closed — `close()` returned
+early and a form inside it was routed as outside any popin. The guard now reads the
+attribute's presence.
+
+**What to check:** nothing on the modal path (legacy triggers, `data-gina-dialog-modal="true"`),
+which was already tolerated by the engine. A pre-opened, modeless-declared popin keeps the
+shell's modal presentation, as before.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
 ### Added — `GINA_MAINTENANCE` boots a bundle with maintenance mode on (restart; no rebuild)
 
 A bundle started with `GINA_MAINTENANCE=1` (or `true`, any case) boots with its
