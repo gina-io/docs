@@ -446,7 +446,9 @@ What the store changes, and what it does not:
   namespace keeps its last-known state and logs the outage once (and once more
   when the store answers again); `sync.lastError` on the status payload shows
   it. A `POST` whose write fails still applies locally and answers `200` with
-  `store.written: false`.
+  `store.written: false` — and that local flip is superseded by the next
+  successful poll, because the shared record wins; re-issue the `POST` once
+  the store answers again.
 - **Replacement pods still boot in their configured state** until their first
   poll completes — for pods that must come up closed from the first request,
   combine the store with [`GINA_MAINTENANCE`](#turning-it-on).
