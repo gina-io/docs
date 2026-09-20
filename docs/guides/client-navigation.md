@@ -268,6 +268,7 @@ each habit lands on.
 | `hx-get` + `hx-target` per element | for navigation, a plain `<a href>` — the *route* opts in via `negotiate: true`, the region is fixed. For a **form**, `data-gina-form-target` takes the same grammar |
 | `hx-push-url="true"` | automatic — history, scroll and focus are managed |
 | `hx-swap` strategy per element | for navigation, always the region's `innerHTML`. For a **form**, `data-gina-form-swap` takes the nine htmx strategies |
+| `hx-swap-oob` in the response | for a **form**, `data-gina-swap-oob` on any element of the answer — same meaning, [out-of-band swaps](/guides/forms-and-validation#out-of-band-swaps) |
 | `hx-select` to trim the response | for navigation, unnecessary — the server renders the fragment shape. For a **form**, `data-gina-form-select` trims the answer |
 | a second endpoint for partials | the same URL, negotiated by request header |
 

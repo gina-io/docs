@@ -996,6 +996,63 @@ listeners are kept until its `success` callback has run; the replacement is boun
 immediately afterwards. A same-id replacement therefore works on the next submit.
 :::
 
+#### Out-of-band swaps
+
+An answer can also update elements **anywhere else in the page**, independently of
+where the answer itself goes. Any element of the answer carrying
+`data-gina-swap-oob` is swapped into the page element with the same `id`:
+
+```html
+<!-- the answer to "add a row" -->
+<tr id="row-42"><td>Ada</td><td>42</td></tr>
+<span id="rows-total" data-gina-swap-oob="true">18 rows</span>
+```
+
+The `<tr>` goes where `data-gina-form-target` says; the `<span>` replaces
+`#rows-total` on its own. This is htmx's `hx-swap-oob`, with the same meaning.
+
+| Value | What happens to the page element with that `id` |
+|---|---|
+| `true`, or empty | it is **replaced** by the out-of-band element (`outerHTML`); the attribute is stripped on landing |
+| a strategy name — `innerHTML` · `textContent` · `beforebegin` · `afterbegin` · `beforeend` · `afterend` · `delete` · `none` | applied with the out-of-band element's **content**; the wrapper is dropped, so `innerHTML` cannot nest a duplicate `id` |
+| `<strategy>:<selector>` | **reserved** — refused today, so adding it later cannot change the meaning of markup that works now |
+
+Rules worth knowing:
+
+- **They never stay in the answer.** Every out-of-band element is removed whether
+  or not it swapped, so it can never land a second time through the main swap.
+- **They run before `data-gina-form-select`**, so an element outside the selection
+  still lands. Where both address the same element, the main swap wins.
+- **They work on all three answer paths** — a declared target, a form inside a
+  popin, and a form with neither. An answer carrying *nothing but* out-of-band
+  elements still updates the page.
+- **A refusal is never an error.** A missing `id`, no matching element, a reserved
+  or unknown value: the element is dropped, reported, and named in a dev-mode
+  console notice. The submit still succeeds.
+- **A `<template>` wrapper is honoured**, and one emptied of its out-of-band
+  elements is dropped with them.
+
+The success payload gains two keys, both **absent** when the answer carried no
+out-of-band element:
+
+| Key | Value |
+|---|---|
+| `oob` | one entry per element — `{ id, strategy, swapped }`, plus `reason` when it did not swap (`noId`, `noTarget`, `reserved`, `unknownStrategy`, `cancelled`) |
+| `remainder` | the answer **without** the out-of-band elements — what to insert yourself, since `content` stays the raw answer and would land them twice |
+
+And two events, fired **per element**, mirroring the main pair:
+
+| Event | When | Detail |
+|---|---|---|
+| `oobbeforeswap` | before that element is written | `{ target, content, strategy, oob: true, oobId }` — **cancelable**, and `detail.content` may be rewritten |
+| `oobafterswap` | after its region is bound | `{ target, strategy, swapped, oob: true, oobId }` |
+
+:::note A form inside a popin
+A contained form updates the page **behind** the dialog this way. When the answer
+addressed nothing but out-of-band elements, the dialog keeps its own content
+rather than being blanked — the dialog analogue of htmx's `hx-swap="none"`.
+:::
+
 ### Programmatic API and events
 
 For finer control, the live instance is published as `window.gina.validator`

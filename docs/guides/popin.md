@@ -241,6 +241,11 @@ that declares its own
 overrides that: the answer goes to the declared element, inside the popin or
 outside it, and the popin's content is left alone.
 
+An element of the answer carrying
+[`data-gina-swap-oob`](/guides/forms-and-validation#out-of-band-swaps) updates the
+page **behind** the dialog, wherever the rest of the answer goes. If the answer
+held nothing else, the dialog keeps its own content rather than being blanked.
+
 ## Loading state
 
 While a popin loads, the trigger carries a loading attribute and the container

@@ -113,9 +113,9 @@ form itself: `data-gina-form-target` (the `hx-target` grammar — `this`, `close
 trimming the answer; every match, in document order).
 
 The success payload keeps `contentType` / `content` / `status` and **adds** `target`, `swap`,
-`swapped`, `data` and `view`. Two events are emitted on the form — `beforeswap` (cancelable
-with `preventDefault()`; `detail.content` may be rewritten) and `afterswap`, the latter with a
-declarative `data-gina-form-event-on-swap` hook. The swapped region is bound through the same
+`swapped`, `data` and `view`. Two events are emitted on the form for the main swap —
+`beforeswap` (cancelable with `preventDefault()`; `detail.content` may be rewritten) and
+`afterswap`, the latter with a declarative `data-gina-form-event-on-swap` hook. The swapped region is bound through the same
 policy fragment navigation uses.
 
 A target or strategy that cannot be honoured **refuses the submit before anything is sent**,
@@ -127,6 +127,43 @@ silent full-replace fallback: a submit has side effects on the server.
 them behaves exactly as before. A declared target takes precedence over the popin a form sits
 in. Full reference:
 [Swapping the answer into the page](/guides/forms-and-validation#swapping-the-answer-into-the-page).
+
+One fix rides with it: an answer whose top-level elements are **table rows or cells** used to
+lose them. The answer was parsed as a whole document, so the HTML parser moved a top-level
+`<tr>` or `<td>` out of existence — a swap into a `<tbody>` wrote the cell *text* instead of
+the row, and a `data-gina-form-select` on `tr` matched nothing. Answers are now parsed as a
+fragment, so any element survives at the top level, and a full-page answer drops its `<head>`
+rather than placing its `<title>` in the swap. Answers that already parsed correctly are
+byte-identical, and a `<template>` wrapper — the usual workaround — is still honoured.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Added — an answer can update elements anywhere in the page, out of band (restart and re-bake; additive)
+
+Any element of a form's `text/html` answer carrying `data-gina-swap-oob` is swapped into the
+page element with the **same `id`**, independently of where the answer itself goes — htmx's
+`hx-swap-oob`, same meaning. `true` or an empty value replaces that element; a strategy name
+(`innerHTML`, `textContent`, the four `insertAdjacentHTML` positions, `delete`, `none`)
+applies the element's *content* and drops the wrapper; `<strategy>:<selector>` is reserved.
+
+Out-of-band elements are always removed from the answer, so the main swap never receives them
+twice, and they run **before** `data-gina-form-select` narrows it — an element outside the
+selection still lands. They work on all three answer paths (a declared target, a form inside a
+popin, a form with neither), so an answer carrying nothing else still updates the page. A
+missing `id`, no matching element, a reserved or unknown value: the element is dropped and
+reported with a `reason`, never thrown, and named in a dev-mode console notice.
+
+The success payload gains `oob` (one entry per element) and `remainder` (the answer without
+them — what to insert yourself, since `content` stays raw and would land them twice); both are
+absent when the answer carried none. Two events fire per element: `oobbeforeswap` (cancelable,
+`detail.content` rewritable) and `oobafterswap`.
+
+**What to check:** nothing — the attribute is new, so no existing answer carries it, and an
+answer without it takes exactly the path it did before. If your handler inserts `content`
+itself, switch to `remainder` once you start emitting out-of-band elements. A form inside a
+popin updates the page behind the dialog this way; when the answer held nothing else, the
+dialog keeps its own content instead of being blanked. Full reference:
+[Out-of-band swaps](/guides/forms-and-validation#out-of-band-swaps).
 
 Browser-bundled: **restart the bundle and re-bake**.
 
