@@ -528,6 +528,74 @@ otherwise the file is served exactly as it is on disk, which is what production 
 
 Server-side: **restart the bundle**. No rebuild needed.
 
+### Fixed — an environment config overlay now overrides its base file (restart; behaviour change)
+
+A `<name>.<env>.json` overlay was merged **before** its base file and lost to it on every key
+both declared. Keys that existed only in the overlay were added, so overlays appeared to work —
+but an actual override was silently dropped, which is the one thing an overlay exists to do.
+Base-wins has held since the loader's first cut, while every reference page described the
+opposite.
+
+The overlay now wins on every key it declares.
+
+**What to check before upgrading.** Read your `*.<env>.json` files and ask, for each key they
+share with their base file, whether the overlay's value is the one you actually want — because
+from now on it is the one you get. Two cases deserve a second look:
+
+- **Values you never saw take effect.** A credential, host list, provider name or interval that
+  you put in an overlay and that never appeared to apply was being dropped. It will apply now.
+- **Compensations.** If you worked around the old behaviour by editing the base file instead,
+  the overlay may now override that edit back.
+
+Two further consequences, both observable:
+
+- An overlay **array replaces** the base array; it is not unioned into it.
+- A `null` in an overlay **overrides** the base value, rather than being ignored.
+
+Unaffected: bundles with no overlay file, and the `settings.*` template path, which is a
+separate mechanism with its own environment handling and is unchanged.
+
+### Added — per-bundle login session cookie lifetimes from `security.json` (restart; additive)
+
+A bundle can declare how long a login lasts, and the framework applies it at `req.login()`:
+
+```json title="src/dashboard/config/security.json"
+{
+  "session": {
+    "expires"  : "3h",
+    "remember" : "15d"
+  }
+}
+```
+
+`session.expires` is the cookie lifetime for an ordinary login, `session.remember` for one that
+asked to be remembered. Both are unit-suffixed duration strings — the unit is required. A login
+counts as remembered when the caller passes `{ remember: true }` to `req.login()`, or when the
+login request carries a truthy `remember` field (`on`, `1`, `true`, `yes`); an explicit option
+always wins over the field.
+
+Both keys are optional and **a bundle that declares neither behaves exactly as before**. Nothing
+else about the cookie is written: your own `req.session.cookie.maxAge` set inside the login
+callback still wins, `absoluteTimeout` still caps the total lifetime, and a store's `ttl` still
+governs the server-side record.
+
+**What to check before upgrading.** These two keys were documented but interpreted by nothing
+before 0.6.32, so a value already sitting in one may not be a duration string — an arithmetic
+expression or a number of milliseconds that your own code evaluated is common. Such a value is
+**reported at boot and then ignored**, naming the bundle, environment and key; the bundle keeps
+the cookie lifetime it already had and the boot is never refused. Nothing breaks, but the
+lifetime you meant will not be applied until the value is rewritten in duration form:
+
+```
+"expires": "60000*15"   →   "expires": "15m"
+"remember": "60000*60*24*15"   →   "remember": "15d"
+```
+
+If your application already applies these keys itself, it keeps working and keeps winning —
+the framework's assignment happens first. You can retire your own handling when convenient.
+
+Full reference: [`security.json`](/reference/security).
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)

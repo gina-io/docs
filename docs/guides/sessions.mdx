@@ -805,12 +805,34 @@ How it behaves:
 The two clocks above are yours, set once for the whole deployment. A "remember
 me" checkbox is a third: a lifetime chosen per login, by the person logging in.
 
-There is deliberately no configuration key for it, because it is not a
-deployment-wide value — it belongs to one session, and is decided while that
-session is being created. `express-session` already models this. Every session
-carries its own `cookie` object and the framework never rewrites it, so
-assigning `req.session.cookie.maxAge` in your login action is the whole
-mechanism:
+Since **0.6.32** the framework can apply it for you. Declare the two durations
+in the bundle's [`security.json`](/reference/security) and gina sets the cookie
+at `req.login()`:
+
+```json title="src/api/config/security.json"
+{
+  "session": {
+    "expires"  : "3h",
+    "remember" : "15d"
+  }
+}
+```
+
+A login counts as remembered when you say so explicitly —
+`req.login(user, { remember: true }, done)` — or when the login request carries
+a truthy `remember` field (`on`, `1`, `true`, `yes`), which is what an ordinary
+HTML checkbox sends. The explicit option always wins over the field, so a
+decision your server makes cannot be overridden by the client.
+
+Both keys are optional and a bundle that declares neither behaves exactly as
+before. A value that is not a duration string is reported at boot — naming the
+bundle, environment and key — and then ignored: the bundle keeps the cookie
+lifetime it already had, and the boot is never refused.
+
+You can still set the lifetime by hand, and doing so still wins. Every session
+carries its own `cookie` object, and an assignment inside your login callback
+runs after the framework's, so it overrides whatever `security.json` declared.
+Reach for it when the lifetime depends on something only your action knows:
 
 ```js title="src/api/controllers/controller.auth.js"
 this.login = function(req, res) {
@@ -862,11 +884,12 @@ what the user asked for.
 :::caution HTTP/2 on the built-in engine, before 0.6.32
 On `isaac` over HTTP/2, rendered and redirected responses did not run the
 session middleware's cookie step, so a login answered that way reached the
-browser with no `Set-Cookie` at all — remembered or not. Measured on 0.6.31:
-the user is bound and the record is written correctly, and the next request
-still arrives anonymous. Fixed in 0.6.32. On earlier releases, confirm that a
-plain login survives one page load before adding a remember-me box on top of
-it.
+browser with no `Set-Cookie` at all — remembered or not. The user is bound and
+the record is written correctly, and the next request still arrives anonymous.
+Measured on 0.6.31, but **not a 0.6.31 regression** — every earlier release
+behaves the same way, so pinning back is not a workaround. Fixed in 0.6.32. On
+earlier releases, confirm that a plain login survives one page load before
+adding a remember-me box on top of it.
 :::
 
 ---
