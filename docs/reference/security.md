@@ -150,6 +150,20 @@ day before.
 One unusable key does not discard its sibling: if `expires` is unparseable and
 `remember` is a valid duration, remembered logins still get their lifetime.
 
+:::caution Migrating a value your own code parses
+The framework's tolerance protects the *boot*; it does not protect *your* code. If your
+application reads these keys itself — an arithmetic expression it evaluates, a number of
+milliseconds it parses — then rewriting the value into duration form hands that code something it
+cannot read, and it will typically throw at bundle initialisation rather than degrade.
+
+Retire or update your own handling **first**, rewrite the values **second**. And audit every call
+site before scoping the change: a shared `security.json` is read by every bundle that does not
+override it, so one rewrite can reach bundles you were not thinking about, and a per-request
+session refresh lives away from the login path. The [migration
+note](/migration#added--per-bundle-login-session-cookie-lifetimes-from-securityjson-restart-additive)
+has the full sequence.
+:::
+
 ---
 
 ## What does NOT belong here

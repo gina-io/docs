@@ -591,8 +591,34 @@ lifetime you meant will not be applied until the value is rewritten in duration 
 "remember": "60000*60*24*15"   →   "remember": "15d"
 ```
 
-If your application already applies these keys itself, it keeps working and keeps winning —
-the framework's assignment happens first. You can retire your own handling when convenient.
+**⚠️ If your application parses these keys itself, the rewrite above will break it — change
+the code first.** While the values keep their old shape your own handling keeps working and keeps
+winning, because the framework assigns first and your login callback runs after. But the moment a
+value becomes a duration string, code that evaluated the old shape is handed something it cannot
+read: an arithmetic evaluator throws, a `parseInt` yields `NaN`, and a hand-rolled parser usually
+returns `undefined`. The framework's own tolerance does not help you here — it ignores a value it
+cannot parse, whereas your code was written to succeed on it.
+
+So the order is not optional:
+
+1. Retire your own handling of these two keys, or make it duration-aware.
+2. Then rewrite the values.
+3. Then restart.
+
+The other order fails at bundle initialisation, before anything serves a request — and depending
+on how your bootstrap treats a throw there, the bundle may be left running but never bound to its
+port rather than exiting loudly, which is a considerably worse way to find out.
+
+**Audit every call site before you start, not just the obvious one.** Two shapes are routinely
+missed: a *shared* `security.json` is read by every bundle that does not override it, so a single
+value rewrite reaches bundles you were not thinking about; and a per-request session refresh that
+re-derives the expiry on each request lives away from the login path. Grep both key names across
+the whole source tree and count what comes back before you scope the change.
+
+**If your tiers run different gina versions, retire per tier, not globally.** Your source is
+shared but the capability arrives with each tier's gina: retiring your handling on a tier still
+running an older release means nothing sets the lifetime at all, and remember-me degrades
+silently instead of failing. Retire only where gina is 0.6.32 or newer.
 
 Full reference: [`security.json`](/reference/security).
 
