@@ -8,7 +8,7 @@
     "start": "docusaurus start",
     "prebuild": "node scripts/sync-versions.js && node scripts/generate-api-docs.js",
     "build": "docusaurus build",
-    "postbuild": "node scripts/build-offline-zip.js",
+    "postbuild": "node scripts/check-nav-icons.js && node scripts/build-offline-zip.js",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
