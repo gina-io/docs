@@ -1093,10 +1093,16 @@ popin whose answer stays in the popin receives its parsed data verbatim, as befo
 ignored override there is reported in the console only.
 
 :::note Same origin only
-A page on another origin cannot read custom response headers unless the server lists
-them in `Access-Control-Expose-Headers`. Gina emits no such header on its own; a
-cross-origin setup adds it under `server.response.header` in the bundle's server
-settings, like any other response header.
+The three headers are honoured only from a response whose origin is the page's own — the
+transport's `responseURL` (the URL after redirects) against `location.origin`. A responder
+elsewhere may neither choose the element its answer lands in nor reshape or trim the swap
+the form declared: a cross-origin `Retarget` is refused exactly like an unresolvable one (no
+swap, `reason: 'crossOrigin'`), a cross-origin `Reswap` or `Reselect` is ignored and the
+declared value kept, and a transport that cannot say where the answer came from reads as
+not-same-origin. Exposing the headers through `Access-Control-Expose-Headers` therefore
+changes nothing for these three. htmx has no such read because `selfRequestsOnly` refuses
+the cross-origin request itself; a Gina form posts to its raw `action`, so the gate lives
+where the headers are read.
 :::
 
 #### When two submits race for one region
