@@ -1189,6 +1189,15 @@ hook for `abort` for the same reason — nothing went wrong. `drop` and `queue` 
 reported in a dev-mode console notice only — as is a supersede the default decided on its
 own, which names the swap strategy it read.
 
+:::caution A superseded request may already have been saved
+Superseding cancels the **client's wait**, not the **server's work**. The request was already
+in flight, so it may have reached the server — and if it did, its side effects stand. Never
+read `abort` / `superseded` as *"it was not saved"* and resubmit: on a feature whose premise
+is that a submit is a POST with side effects, that is a duplicate write. A page that must know
+the outcome of a submit it may supersede has to ask the server for it, not infer it from the
+event.
+:::
+
 The [loading state](#loading-state) follows the same logic. A submit **turned away** by
 `drop` releases the `data-gina-loading` its own click armed, because it will never reach a
 request whose settle could release it. A **queued** submit keeps it: it is pending, not
