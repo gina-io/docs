@@ -17,7 +17,16 @@ const config = {
   favicon: 'img/favicon.ico',
 
   future: {
-    v4: true,
+    // Pinned explicitly rather than the `v4: true` shortcut: that shortcut is
+    // forward-opting, so a minor upgrade silently adopts whatever sub-flags the
+    // new version adds to the v4 set. 3.10 added three (siteStorageNamespacing,
+    // fasterByDefault, mdx1CompatDisabledByDefault); each is a deliberate
+    // decision, not an upgrade side effect. These two are what `v4: true`
+    // already meant on 3.9.2, so behaviour is unchanged.
+    v4: {
+      removeLegacyPostBuildHeadAttribute: true,
+      useCssCascadeLayers: true,
+    },
   },
 
   markdown: {
