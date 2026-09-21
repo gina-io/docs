@@ -186,20 +186,43 @@ the matching region in it, and replaces **the contents of** the matching element
 in the open dialog — the element itself survives, which is what preserves chrome
 and its event bindings.
 
-Two behaviours to know:
+The selector is applied on **both** sides — it finds the region in the response
+*and* the slot in the open dialog — so there are two ways it can miss, and each
+has its own fallback:
 
-- **A selector that matches nothing falls back to a full replace, silently.** A
-  typo produces working-but-wrong output with no warning.
-- **It applies to the current API only.** A legacy `data-gina-popin-name` trigger
-  carrying `data-gina-dialog-target` does a full replace.
+- **Nothing matches in the open dialog** — including a selector the browser
+  refuses as malformed — and the whole dialog is replaced, as if no target had
+  been given.
+- **Nothing matches in the response** and the whole response body goes into the
+  slot.
 
-:::note The form attributes behave the opposite way
-A form places its answer with
-[`data-gina-form-target` / `-swap` / `-select`](/guides/forms-and-validation#swapping-the-answer-into-the-page),
-which take the same CSS-selector idea but **refuse the submit** when the target
-cannot be resolved, instead of falling back. The difference is deliberate: a
-popin open is a read the user can retry, while a submit has already changed
-something on the server — there, working-but-wrong is the worse outcome.
+Both fallbacks are deliberate: a popin open is a read the user can retry, so
+working-but-wrong beats refusing. Neither is visible from the outside, so each
+one now **logs a console warning in dev mode**, naming the popin, the selector
+and which fallback ran. Production stays silent.
+
+**It applies to the current API only.** A *pure* legacy trigger — one carrying
+`data-gina-popin-name` / `data-gina-popin-url` and **neither**
+`data-gina-dialog` nor `data-gina-dialog-src` — keeps its own open path and does
+a full replace. A mixed trigger, one given `data-gina-dialog-src` alongside the
+legacy attributes, goes through the current path and **does** get the partial
+swap.
+
+:::note How this compares to the form attributes
+`data-gina-dialog-target` is the dialog-scoped sibling of
+[`data-gina-form-select`](/guides/forms-and-validation#swapping-the-answer-into-the-page),
+not of `data-gina-form-target`: it is **one plain selector applied on both
+sides**, and there is nothing here to resolve relative to an element, so the
+`this` / `closest x` / `find x` / `next x` grammar a form target accepts does not
+apply here. All four spellings happen to be valid CSS in their own right, so
+writing one here matches nothing and takes the fallback above rather than
+reporting a mistake.
+
+The form attributes also behave the opposite way on a miss: they **refuse the
+submit** when the target cannot be resolved, instead of falling back. The
+difference is deliberate — a popin open is a read the user can retry, while a
+submit has already changed something on the server, and there
+working-but-wrong is the worse outcome.
 :::
 
 ## What happens to the content
@@ -352,7 +375,10 @@ matter when you convert:
 - **Modal mode.** A legacy trigger is always modal; the current API defaults to
   non-modal. If you rely on modal behaviour, add `data-gina-dialog-modal` when
   you convert.
-- **Partial swaps.** `data-gina-dialog-target` has no effect on a legacy trigger.
+- **Partial swaps.** `data-gina-dialog-target` has no effect on a *pure* legacy
+  trigger — one carrying neither `data-gina-dialog` nor `data-gina-dialog-src`.
+  Adding `data-gina-dialog-src` moves the trigger onto the current open path,
+  and the partial swap starts working.
 - **Setup.** Legacy triggers only work when your code constructs the matching
   popin (`new Popin({ name: '…' })`); the current API needs no setup at all.
 

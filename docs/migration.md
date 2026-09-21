@@ -145,6 +145,27 @@ the state. `getActivePopin()` still returns open popins only.
 
 Browser-bundled: **restart the bundle and re-bake**.
 
+### Fixed — a malformed `data-gina-dialog-target` falls back instead of throwing (restart and re-bake)
+
+A popin's partial swap takes one CSS selector and applies it on both sides — it picks the
+region out of the response and names the slot it replaces in the open dialog. A selector the
+browser refuses as malformed (`#slot >`, `[`) used to throw an uncaught `SyntaxError` out of
+the load handler, so the dialog kept its previous content and nothing said why. It now takes
+the same full-replace fallback a selector that simply matches nothing has always taken.
+
+The guide described one fallback while the code had two; both are now documented and, more
+usefully, both **announce themselves in dev mode**. A console warning names the popin, the
+selector and which of the three cases ran: the selector was refused, it matched nothing in the
+open dialog (whole dialog replaced), or it matched nothing in the response (whole response body
+written into the slot). Production is unchanged and stays silent.
+
+**What to check:** nothing is required. A page that was relying on the throw to surface a typo
+now gets the dev-mode warning instead — and in production, where the throw was never visible
+anyway, the swap now completes rather than leaving the dialog stale. The four target-grammar
+keywords a form target accepts (`this`, `closest x`, `find x`, `next x`) are valid CSS type
+selectors, so they were never the throwing case: written here they match nothing and take the
+fallback. See [Partial swaps](/guides/popin#partial-swaps).
+
 ### Added — a form can swap its HTML answer into any element of the page (restart and re-bake; additive)
 
 A form places its own `text/html` answer with three attributes, resolved at submit from the

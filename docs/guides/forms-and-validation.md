@@ -1165,6 +1165,30 @@ yields. The derived default sits *after* the global rule, so a form that declare
 keeps it for its own re-submits and gains coordination only against **other** forms.
 :::
 
+##### Writing the value from a route parameter
+
+The attribute is read off the markup at submit time, so a template can decide it — but
+it has to write the attribute **or nothing at all**, never an empty one:
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend"
+      {% if page.view.params and page.view.params.sync %} data-gina-form-sync="{{ page.view.params.sync }}"{% endif %}>
+```
+
+Both halves of that guard earn their place:
+
+- **An empty attribute is refused, not ignored.** The gate that hands a form its own
+  overlap decision tests whether the attribute is *absent*, and `""` is not absent — so
+  `data-gina-form-sync=""` reaches the parser, is rejected as an empty value, and
+  **refuses the submit before anything is sent**, exactly like any other value Gina will
+  not honour. Writing the whole attribute conditionally is what keeps a parameterless
+  request on the derived default.
+- **`page.view.params` does not exist on a bare route.** It is set only when the route
+  resolved at least one parameter, so testing `page.view.params.sync` on its own fails on
+  any request that arrives without parameters. Test the object first, as above.
+
 ##### A superseded request is not an error
 
 When a submit takes the region over — derived or declared — the request it replaced
