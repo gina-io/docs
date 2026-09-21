@@ -1099,6 +1099,123 @@ cross-origin setup adds it under `server.response.header` in the bundle's server
 settings, like any other response header.
 :::
 
+#### When two submits race for one region
+
+Two forms whose answers land in the same region will race: whichever reply arrives last
+wins, and that is not necessarily the one submitted last.
+
+**Gina settles that on its own, with nothing to declare.** A form already says, at submit
+time, where its answer goes and what it does when it gets there — and that is the whole
+of what the decision needs:
+
+| What `data-gina-form-swap` does to the region | What a second submit into the same target does |
+|---|---|
+| **replaces** it — `innerHTML` (the default), `outerHTML`, `textContent`, `delete` | the request still in flight is **superseded**. Its answer was about to be overwritten, so it is moot, and the region ends up showing the server's latest render |
+| **adds** to it — `beforebegin`, `afterbegin`, `beforeend`, `afterend` — or writes nothing (`none`) | **both land.** Every row the server wrote appears, and their order is the server's to decide |
+
+A form that declares no `data-gina-form-target` has no region to conflict over, and keeps
+the module-wide one-request-at-a-time rule it has always had.
+
+This is the decision neither htmx nor Turbo is in a position to make for you. htmx knows
+nothing about the answer until it arrives, so it asks you to declare the coordination on
+each element; Turbo treats every submit as a navigation, so the newest one always wins —
+including over an unrelated form elsewhere on the page.
+
+##### Saying it yourself
+
+`data-gina-form-sync` on the `<form>` takes that decision over, on the same key:
+
+| Value | What a submit does while the region is already owned |
+|---|---|
+| `replace` | the running request is aborted and this one takes its place — the derived default, written out |
+| `drop` | nothing is sent |
+| `queue` | the submit waits, and is re-sent once the running request settles. One waits per region: a later submit replaces the one already waiting |
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend"
+      data-gina-form-sync="queue">
+```
+
+That one is an override with real work to do: an insertion coordinates on nothing by
+default, and `queue` makes these appends arrive in the order they were submitted.
+
+Three htmx spellings are **refused**, each with a message naming what to write instead —
+the same fail-loud treatment a target that cannot be honoured gets:
+
+| Refused | Why |
+|---|---|
+| `abort` | in htmx it means *anything that comes next may cancel me* — the idiom for a disposable GET, like a live search on an input. A Gina submit is a validated POST with side effects; `replace` and `drop` cover both halves of the intent |
+| `queue first` · `queue last` · `queue all` | htmx has the modifiers because its trigger spec has `queue:` modifiers too. Gina has no trigger spec, and one submit waiting per region is the only thing that region can act on |
+| `<selector>:<strategy>` | it names the element to coordinate on. Gina already knows it — the resolved swap target |
+
+:::note It replaces the global one-at-a-time rule, for that form
+Without the attribute, a form is limited to one request at a time by the module-wide
+`withRateLimit` option (set through `gina.setOptions()`). That option is global — there is
+no per-form version of it — so `replace` and `queue` would be unreachable underneath it:
+when `data-gina-form-sync` is declared it owns that form's decision and the global rule
+yields. The derived default sits *after* the global rule, so a form that declares nothing
+keeps it for its own re-submits and gains coordination only against **other** forms.
+:::
+
+##### A superseded request is not an error
+
+When a submit takes the region over — derived or declared — the request it replaced
+releases everything it held (its submit control, its loading state, its accessibility
+state) and then stops. It fires an `abort` event on the form and goes no further:
+
+```js
+gina.validator.$forms['add-row'].on('abort', function (e, detail) {
+  // { status: 0, reason: 'superseded', sync: 'replace', derived: true }
+});
+```
+
+`derived` says where the rule came from: `true` when it was read from the swap strategy,
+`false` when the form declared `data-gina-form-sync`. It is there because the default
+needs no attribute — so a page seeing this event may find nothing in its own markup that
+asked for it.
+
+It deliberately never reaches the `error` channel, and `data-gina-form-event-on-submit-error`
+never sees it: an aborted transport settles the same way a connection failure does, and
+reporting a deliberate supersede as a failed submit would be a lie. There is no declarative
+hook for `abort` for the same reason — nothing went wrong. `drop` and `queue` decisions are
+reported in a dev-mode console notice only — as is a supersede the default decided on its
+own, which names the swap strategy it read.
+
+The [loading state](#loading-state) follows the same logic. A submit **turned away** by
+`drop` releases the `data-gina-loading` its own click armed, because it will never reach a
+request whose settle could release it. A **queued** submit keeps it: it is pending, not
+abandoned, and the state carries through to the settle of the request it eventually becomes.
+
+#### Disabling controls while a request runs
+
+`data-gina-form-disabled-elt` holds elements disabled for the life of a request, so a user
+cannot act on what the answer is about to change. It takes a comma-separated list, each part
+in the [`data-gina-form-target` grammar](#swapping-the-answer-into-the-page):
+
+```html
+<form … data-gina-form-disabled-elt="closest fieldset, #delete-all">
+```
+
+The elements are disabled before the request is opened and released at the single settle that
+covers **success, server error, abort and timeout** alike. Each is refcounted, so two
+overlapping requests naming the same element release it once, and each carries
+`data-gina-disabled-by="<form id>"` while held. An element the page had *already* disabled is
+left alone and never cleared — only what Gina set is ever removed.
+
+`this` resolves to the form, which is inert: a `<form>` is not a disableable element in HTML.
+Use `closest fieldset` or `find …` to reach the controls.
+
+:::note A part that resolves to nothing refuses the submit
+Unlike htmx, which skips an unmatched `hx-disabled-elt` silently, an unresolvable part —
+and a `data-gina-form-sync` value Gina will not honour — refuses the submit before anything is sent,
+through the same pre-send refusal a bad `data-gina-form-target` gets: the error callback runs
+with `{ status: 422, reason: 'targetError' }` and an `attribute` key naming which attribute
+was at fault. The attribute exists so a user cannot act twice; a typo that quietly disables
+nothing is the failure it was added to prevent.
+:::
+
 ### Programmatic API and events
 
 For finer control, the live instance is published as `window.gina.validator`
@@ -1446,6 +1563,8 @@ anything that must be true before you act on the data.
 | `data-gina-form-swap` | How the answer is written into the target — `innerHTML` (default), `outerHTML`, `textContent`, `beforebegin`, `afterbegin`, `beforeend`, `afterend`, `delete`, `none`. |
 | `data-gina-form-select` | CSS selector picking the part of the answer to swap; every match is used, in document order. Defaults to the whole answer. |
 | `data-gina-form-event-on-swap` | Bare name of a `window` callback run after a swap, once the swapped region is bound. |
+| `data-gina-form-sync` | Overrides what a submit does when another request already owns the region its answer is bound for: `replace`, `drop`, `queue`. Rarely needed — the default is derived from `data-gina-form-swap`. See [When two submits race for one region](#when-two-submits-race-for-one-region). |
+| `data-gina-form-disabled-elt` | Comma-separated list of elements — in the `data-gina-form-target` grammar — held disabled for the life of the request. A part that resolves to nothing refuses the submit. See [Disabling controls while a request runs](#disabling-controls-while-a-request-runs). |
 | `data-gina-form-checkbox-value-as-state` | **Deprecated, transitional.** Set `"true"` to restore the pre-0.5.18 behavior where a checkbox's `value` decides its checked state. See [Checkboxes](#checkboxes). |
 
 ### Field-level

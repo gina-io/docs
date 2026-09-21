@@ -271,6 +271,8 @@ each habit lands on.
 | `hx-swap-oob` in the response | for a **form**, `data-gina-swap-oob` on any element of the answer — same meaning, [out-of-band swaps](/guides/forms-and-validation#out-of-band-swaps) |
 | `hx-select` to trim the response | for navigation, unnecessary — the server renders the fragment shape. For a **form**, `data-gina-form-select` trims the answer |
 | `HX-Retarget` / `HX-Reswap` / `HX-Reselect` response headers | for a **form**, `X-Gina-Retarget` / `X-Gina-Reswap` / `X-Gina-Reselect`, read before `beforeswap` — [server-driven overrides](/guides/forms-and-validation#server-driven-overrides) |
+| `hx-sync` to stop requests racing | for a **form**, usually nothing to write: two answers replacing one region already coordinate, derived from the swap strategy the form declared. `data-gina-form-sync` (`replace` · `drop` · `queue`) overrides that, and `abort`, the `queue` modifiers and `<selector>:<strategy>` are refused with a reason — Gina knows the key, and a submit is not a disposable GET — [when two submits race](/guides/forms-and-validation#when-two-submits-race-for-one-region) |
+| `hx-disabled-elt` while a request runs | for a **form**, `data-gina-form-disabled-elt`, taking the same target grammar — though an unresolvable part refuses the submit instead of being skipped — [disabling controls](/guides/forms-and-validation#disabling-controls-while-a-request-runs) |
 | a second endpoint for partials | the same URL, negotiated by request header |
 
 Honest differences, so you can pick the right tool:
@@ -299,7 +301,8 @@ Honest differences, so you can pick the right tool:
 And unlike all of them, there is no third-party script, and **navigation**
 needs no attribute vocabulary spread through templates: one flag per route,
 one marker per layout. A form that wants its answer placed somewhere specific
-opts into three attributes of its own — on the form, not on every element.
+opts into three attributes of its own — on the form, not on every element — and
+none at all to keep two such answers from racing.
 
 ## Related
 

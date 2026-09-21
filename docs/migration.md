@@ -227,6 +227,49 @@ these names — the client now reads them. They are same-origin unless exposed t
 
 Browser-bundled: **restart the bundle and re-bake**.
 
+### Changed — two form answers replacing the same region no longer race (restart and re-bake; behaviour change)
+
+Two forms whose answers land in the same element used to race, last reply winning whether
+or not it was the one submitted last. They now coordinate **with nothing declared**: when a
+form's `data-gina-form-swap` *replaces* the region it targets — `innerHTML` (the default),
+`outerHTML`, `textContent` or `delete` — a newer submit into the same target **supersedes**
+the request still in flight, whose answer was about to be overwritten anyway. A swap that
+*adds* to the region (`beforebegin`, `afterbegin`, `beforeend`, `afterend`) or writes
+nothing (`none`) has no conflict to resolve: both land, as before. A form declaring no
+`data-gina-form-target` is untouched — the module-wide `withRateLimit` rule still governs
+it, including its own re-submits.
+
+`data-gina-form-sync` on the `<form>` overrides that decision — `replace`, `drop` or
+`queue` — and, when declared, takes over from the global `withRateLimit` rule for that
+form. The superseded request releases its submit control, loading state and accessibility
+state, then fires an `abort` event, `{ status: 0, reason: 'superseded', sync, derived }`.
+It never reaches the `error` channel, so an aborted transport is not reported as a failed
+submit; `derived` says whether the rule came from the swap strategy or from the attribute.
+
+`data-gina-form-disabled-elt` holds elements disabled for the life of a request: a
+comma-separated list in the `data-gina-form-target` grammar, refcounted, marked
+`data-gina-disabled-by`, and released at the one settle that covers success, error, abort
+and timeout. An element the page had already disabled is left alone. See
+[When two submits race for one region](/guides/forms-and-validation#when-two-submits-race-for-one-region)
+and [Disabling controls while a request runs](/guides/forms-and-validation#disabling-controls-while-a-request-runs).
+
+**What to check:** if you have **two or more forms targeting one element** with a replacing
+swap and you were relying on both answers arriving, they no longer both arrive — the older
+one is aborted. That reliance was already unsound (the order was the network's to decide),
+but it is worth a look. Declare `data-gina-form-sync="queue"` on the later form to serialise
+them instead, or switch to an insertion swap if what you wanted was both. Everything else is
+unchanged: one form on its own, a form with no target, and any inserting swap all behave
+exactly as before.
+
+Three htmx `hx-sync` spellings are **refused** rather than parsed, so an `hx-sync` habit
+does not transfer silently: `abort` (its disposable-GET idiom — use `replace` or `drop`),
+the `queue first|last|all` modifiers, and `<selector>:<strategy>`. Each refusal names the
+alternative, and — like an unresolvable `data-gina-form-disabled-elt` part — stops the
+submit before anything is sent, with `{ status: 422, reason: 'targetError' }` and an
+`attribute` key naming the offender.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
 ### Changed — a navigated fragment's forms are bound only when they opt in (restart and re-bake; behaviour change)
 
 `gina/nav` now binds a swapped region through the shared policy the form-answer swap uses. For
