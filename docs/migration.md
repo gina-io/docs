@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.6.32 → 0.6.33
+
+### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
+
+Logging in rotates the session id: `req.login()` and Passport 0.6 or later call
+`req.session.regenerate()`, and express-session's `regenerate()` deletes the
+pre-login session from the store before it issues a new one. When that session
+was never saved — `saveUninitialized: false`, with nothing written before the
+login — it is not in the bucket, and the Couchbase store reported deleting it as
+an error (`DocumentNotFoundError`), so the login answered `500`.
+
+Deleting a session that is not in the bucket is now a successful delete, as it
+already was on every other session store gina ships. Every other error — a
+timeout, a lost connection — still reaches the callback, so a logout never
+reports a session gone that is still stored.
+
+**What to check:** if you wrapped the store's `destroy` to treat
+`DocumentNotFoundError` as success, you can remove that wrapper after upgrading;
+it is harmless in the meantime. Nothing else changes.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
