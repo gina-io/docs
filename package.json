@@ -34,7 +34,7 @@
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/types": "3.10.2",
     "adm-zip": "^0.6.0",
-    "gina": "^0.6.31",
+    "gina": "^0.6.32",
     "jsdoc-to-markdown": "^9.1.3"
   },
   "browserslist": {
