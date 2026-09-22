@@ -41,6 +41,40 @@ it is harmless in the meantime. Nothing else changes.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — a malformed `${secret:…}` reference now refuses the bundle at config load (restart; behaviour change)
+
+A config value that is **nothing but** a `${secret:…}` token whose key breaks
+the placeholder grammar `^[A-Z_][A-Z0-9_]*$` — a lowercase or dotted key
+(`${secret:db_password}`, `${secret:config.db.password}`), an empty one
+(`${secret:}`) — or a valid token padded with surrounding whitespace
+(`"${secret:DB_PASSWORD} "`) used to be **passed through unchanged**: the
+literal placeholder text reached its consumer as a credential, and the only
+symptom was that consumer's own failure much later (a database driver reporting
+an authentication error). Such a value is always a mistake.
+
+It is now a **malformed reference**: the resolver refuses it at bundle start,
+exactly like a missing key, with an error naming the config path and the
+grammar (``Secret reference malformed at `connectors.db.password`: …``) — never
+the offending text, which the internal logger names at debug level only.
+`gina secrets:check` reports each one (`! MALFORMED reference at …`) and exits
+non-zero; `gina secrets:scan` lists them under `Malformed references`. Genuine
+mixed content (`"https://${secret:HOST}/v1"`) still passes through unchanged.
+See [Secrets — Syntax](/guides/secrets#syntax).
+
+**What to check:** a bundle that boots today with such a literal in any
+`config/*.json` will refuse to start after upgrading. Run
+`gina secrets:check @<project>` before the restart — it names every offending
+entry with its file and path — and fix each reference by naming the environment
+variable that carries the secret. Do not try to "escape" it: the whole-value
+form is always read as a reference. `connector:test`, `connector:infer` and
+`connector:models` now name the path too, instead of reporting
+`secret resolution failed for \`<unknown>\``.
+
+For tooling: `lib.secrets` gains `getMalformedReferences(config)` (read-only,
+beside `getRequiredKeys`) and exports `MALFORMED_RE` beside `SECRET_RE`.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
