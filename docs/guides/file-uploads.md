@@ -425,6 +425,14 @@ flowchart TD
     E --> F["User submits the real form<br/>(ordinary request, no binary)"]
 ```
 
+The hidden fields go into **the form the file input belongs to**, and the virtual
+form that carries the staging request lives with it — inside the popin that form
+is rendered in, or on the page when it is inside none. Which popin, if any, is
+decided by **containment** at selection time, never by whichever popin happens to
+be open — the same rule that routes a form's HTML answer (see
+[Forms inside popins](/guides/popin#forms-inside-popins)). In dev mode the console
+says so when the older rule would have placed a page form's upload elsewhere.
+
 ### Wire it up
 
 Mark the file input with the attributes you need. At minimum, an upload action

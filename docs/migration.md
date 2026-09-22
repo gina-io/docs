@@ -166,6 +166,25 @@ keywords a form target accepts (`this`, `closest x`, `find x`, `next x`) are val
 selectors, so they were never the throwing case: written here they match nothing and take the
 fallback. See [Partial swaps](/guides/popin#partial-swaps).
 
+### Fixed — a page form's staged upload is placed with its own form (restart and re-bake)
+
+The client upload layer decided which popin a chosen file belonged to by asking whether *some*
+popin was open. A file input in a **page** form whose file was chosen while an unrelated popin
+was open — a popin opening while the OS file picker was already up, or a script assigning
+`input.files` — had its virtual upload form appended inside that popin: the staging POST
+succeeded, none of the generated hidden metadata fields reached the form, the form then saved
+**without the file**, and the staging request claimed that popin's `X-Gina-Popin-Id`. Nothing
+reported it. The page `inert` marking blocked only the click-driven path.
+
+The upload now follows the same containment rule as a form's HTML answer: the popin the real
+form is inside, captured once at selection, or the page when it is inside none. A form rendered
+inside a popin keeps the placement it always had. In dev mode the console names the popin the
+former rule would have used.
+
+**What to check:** nothing is required. A page that worked around the loss — re-attaching the
+metadata by hand, or keeping popins closed around an upload — can drop the workaround. See
+[The client upload layer](/guides/file-uploads#the-client-upload-layer).
+
 ### Added — a form can swap its HTML answer into any element of the page (restart and re-bake; additive)
 
 A form places its own `text/html` answer with three attributes, resolved at submit from the

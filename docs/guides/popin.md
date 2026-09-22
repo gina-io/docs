@@ -262,7 +262,11 @@ popin is chosen by containment, not by whichever one happens to be open. A form
 that declares its own
 [`data-gina-form-target`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
 overrides that: the answer goes to the declared element, inside the popin or
-outside it, and the popin's content is left alone.
+outside it, and the popin's content is left alone. The same containment rule
+places a contained form's
+[staged uploads](/guides/file-uploads#the-client-upload-layer): the virtual
+upload form and its staging request belong to the popin the real form is inside,
+and a page form's upload stays with the page whatever popins are open.
 
 An element of the answer carrying
 [`data-gina-swap-oob`](/guides/forms-and-validation#out-of-band-swaps) updates the
