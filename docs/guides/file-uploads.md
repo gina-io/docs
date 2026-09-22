@@ -301,9 +301,19 @@ back. Persist the key exactly as given (never parse or rebuild one) and read the
 object through the driver:
 
 ```js
+// the protocol — conditional GET, Range, content-type — handled for you
+self.serveFromStorage('assets', savedKey);
+```
+
+Stream it yourself only for custom protocol handling, using the action's **own
+`res` argument** (the controller keeps `res` private and publishes no
+`self.res`):
+
+```js
+// inside an action: function (req, res, next) { … }
 gina.storage('assets').get(savedKey, function(err, stream) {
   if (err) { return self.throwError(404); }
-  stream.pipe(self.res);
+  stream.pipe(res);
 });
 ```
 
@@ -414,6 +424,14 @@ flowchart TD
     C --> E["Hidden metadata fields written<br/>into your real form"]
     E --> F["User submits the real form<br/>(ordinary request, no binary)"]
 ```
+
+The hidden fields go into **the form the file input belongs to**, and the virtual
+form that carries the staging request lives with it — inside the popin that form
+is rendered in, or on the page when it is inside none. Which popin, if any, is
+decided by **containment** at selection time, never by whichever popin happens to
+be open — the same rule that routes a form's HTML answer (see
+[Forms inside popins](/guides/popin#forms-inside-popins)). In dev mode the console
+says so when the older rule would have placed a page form's upload elsewhere.
 
 ### Wire it up
 

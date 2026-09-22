@@ -151,7 +151,9 @@ page loads, Gina:
 If you omit `data-gina-form-rule`, Gina also matches the **form's `id`**
 (with `-` treated as `.`) against your rule-set names. A `<form id="signup">`
 with no `data-gina-form-rule` still picks up `forms/rules/signup.json`.
-A form with neither a matching rule set nor the attribute is left untouched.
+A form with neither a matching rule set nor any `data-gina-form-*` attribute is
+left untouched — it keeps its native submit, even on a page that declares rules
+for other forms.
 :::
 
 ---
@@ -773,6 +775,28 @@ On submit it re-collects the fields, validates them once more, and:
   [inherited data](#inheriting-data-into-the-payload) first);
 - **if invalid**, moves focus to the first invalid field and shows the errors.
 
+### What goes on the wire
+
+The payload is **JSON**, not URL-encoded — this catches people out, because
+URL-encoded is the native HTML default:
+
+| Form contains | Body | `Content-Type` |
+| --- | --- | --- |
+| no file input with a selected file | `JSON.stringify` of the field map | `application/json; charset=UTF-8` |
+| a selected `File` | `multipart/form-data` body Gina assembles itself | `multipart/form-data; boundary=…` |
+
+Two consequences worth knowing:
+
+- **Do not set `enctype` on a validator-bound form.** An explicit `enctype`
+  attribute overrides the header *while the body is still JSON*, so the server
+  URL-decodes a JSON string and corrupts values — an email `+alias` becomes a
+  space. Leave the attribute off and let Gina choose.
+- **Set `method`.** Without a `method` attribute the submit goes out as `GET`,
+  which also means no CSRF header (see below).
+
+Your action reads the result exactly as it would any JSON body: `req.post` for a
+`POST`, parsed verbatim, with no URL-decoding or type coercion.
+
 ### CSRF
 
 On mutating methods (`POST` / `PUT` / `PATCH` / `DELETE`), Gina automatically
@@ -857,6 +881,378 @@ The attribute value must be the **name** of a `window` function
 (`"onSignupSuccess"`), not a call expression (`"onSignupSuccess()"`). The
 call-expression form is rejected with a console warning and the handler is
 not registered.
+:::
+
+### HTML answers and popins
+
+A `text/html` answer reaches the success callback as `{ contentType, content, status }`
+— the raw markup, inserted nowhere: what to do with it is yours. Two cases are handled
+for you. The first is a form rendered **inside a popin** whose action answers with
+`renderWithoutLayout()`: that popin's content is replaced by the answer, and its callback
+receives the **parsed xhr-data** (the object the action rendered) instead of the raw
+markup. The second is a form that declares where its answer goes — see
+[Swapping the answer into the page](#swapping-the-answer-into-the-page) below, which
+takes precedence over the popin.
+
+Which popin, if any, is decided by **containment**: the popin the submitting form is
+inside, captured at submit and honoured only while that popin is still open and still
+contains the form. A form that is not inside a popin keeps its answer, whatever popins
+are open at the time — in dev mode the console says so when an older rule would have
+routed it elsewhere. A JSON answer is never routed to a popin.
+
+:::note The parsed xhr-data is a dev-mode convenience
+The two hidden inputs the popin branch reads are spliced into a layoutless render
+**only in development**. On any other boot they are absent and the callback receives
+`{ status }` instead — the popin still loads. Production data belongs in a JSON answer
+(`renderJSON()`) or in the markup itself.
+:::
+
+### Swapping the answer into the page
+
+A form can put its own `text/html` answer into any element of the page — no callback,
+no `innerHTML` by hand. Three attributes on the `<form>`, resolved **at submit, from the
+form**:
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend">
+```
+
+| Attribute | Value | Default |
+|---|---|---|
+| `data-gina-form-target` | `this` (the form) · `closest <selector>` (nearest ancestor **or the form itself**) · `find <selector>` (first descendant) · any CSS selector (first match in the document) | absent — no swap: the raw answer goes to the callback, or into the containing popin |
+| `data-gina-form-swap` | `innerHTML` · `outerHTML` · `textContent` · `beforebegin` · `afterbegin` · `beforeend` · `afterend` · `delete` · `none` | `innerHTML` |
+| `data-gina-form-select` | a CSS selector applied to the parsed answer; **every** match is swapped, in document order | absent — the whole answer |
+
+`next` and `previous` are **reserved** and refused today, so adding them later cannot
+change the meaning of markup that works now.
+
+A declared target **wins over the popin** the form sits in: a form inside a popin that
+declares a target swaps into that target — inside the popin or outside it — and the
+popin's own content is left alone.
+
+#### A target that cannot be honoured refuses the submit
+
+If the target matches nothing, the selector is invalid, or the swap strategy is unknown,
+**nothing is sent**. The error callback runs instead, the submit control is released, and
+the form is submittable again:
+
+```js
+{ status: 422, reason: 'targetError', transportError: false,
+  attribute: 'data-gina-form-target', value: '#nowhere',
+  error: 'data-gina-form-target: no element matches `#nowhere`' }
+```
+
+This is deliberately the opposite of the popin's
+[`data-gina-dialog-target`](/guides/popin#partial-swaps), which falls back to a full
+replace silently. A form submit has side effects on the server; failing loudly **before**
+the request is the safer default.
+
+#### What the callback receives
+
+On a swap the success payload keeps its existing keys and adds five:
+
+| Key | Value |
+|---|---|
+| `contentType`, `content`, `status` | unchanged — the raw answer and its status |
+| `target` | the element that was swapped |
+| `swap` | the strategy applied |
+| `swapped` | `true` when the DOM was written; `false` when it was not — `swap="none"`, a `select` that matched nothing, or a target that left the document while the request was in flight |
+| `data`, `view` | the action's data when the answer carries the dev-mode hidden inputs, `null` otherwise (see the note above) |
+
+A `swapped: false` is never an error: the request succeeded, and the callback still runs.
+
+#### Two events
+
+| Event | When | Detail |
+|---|---|---|
+| `beforeswap` | before the DOM is written | `{ target, content, strategy, select }` — **cancelable**: `preventDefault()` skips the swap (`swapped: false`), and rewriting `detail.content` changes what lands |
+| `afterswap` | after the region is bound | `{ target, strategy, swapped }` |
+
+```js
+gina.validator.$forms['add-row'].on('beforeswap', function (event) {
+  event.detail.content = decorate(event.detail.content);
+});
+```
+
+`afterswap` also has a declarative form, like the submit callbacks:
+
+```html
+<form … data-gina-form-event-on-swap="onRowsSwapped">
+```
+
+#### The swapped region is live
+
+Swapped content goes through the same region policy as
+[fragment navigation](/guides/client-navigation#after-a-swap): `src`-bearing scripts the
+document does not already have are re-created once, forms that **opt in** are bound, and
+`data-gina-link` anchors are registered. Inline scripts never execute — the `innerHTML`
+contract.
+
+:::note A swap that replaces the submitting form
+With `outerHTML` or `delete` on a target containing the form itself, the form's own
+listeners are kept until its `success` callback has run; the replacement is bound
+immediately afterwards. A same-id replacement therefore works on the next submit.
+:::
+
+#### Out-of-band swaps
+
+An answer can also update elements **anywhere else in the page**, independently of
+where the answer itself goes. Any element of the answer carrying
+`data-gina-swap-oob` is swapped into the page element with the same `id`:
+
+```html
+<!-- the answer to "add a row" -->
+<tr id="row-42"><td>Ada</td><td>42</td></tr>
+<span id="rows-total" data-gina-swap-oob="true">18 rows</span>
+```
+
+The `<tr>` goes where `data-gina-form-target` says; the `<span>` replaces
+`#rows-total` on its own. This is htmx's `hx-swap-oob`, with the same meaning.
+
+| Value | What happens to the page element with that `id` |
+|---|---|
+| `true`, or empty | it is **replaced** by the out-of-band element (`outerHTML`); the attribute is stripped on landing |
+| a strategy name — `innerHTML` · `textContent` · `beforebegin` · `afterbegin` · `beforeend` · `afterend` · `delete` · `none` | applied with the out-of-band element's **content**; the wrapper is dropped, so `innerHTML` cannot nest a duplicate `id` |
+| `<strategy>:<selector>` | **reserved** — refused today, so adding it later cannot change the meaning of markup that works now |
+
+Rules worth knowing:
+
+- **They never stay in the answer.** Every out-of-band element is removed whether
+  or not it swapped, so it can never land a second time through the main swap.
+- **They run before `data-gina-form-select`**, so an element outside the selection
+  still lands. Where both address the same element, the main swap wins.
+- **They work on all three answer paths** — a declared target, a form inside a
+  popin, and a form with neither. An answer carrying *nothing but* out-of-band
+  elements still updates the page.
+- **A refusal is never an error.** A missing `id`, no matching element, a reserved
+  or unknown value: the element is dropped, reported, and named in a dev-mode
+  console notice. The submit still succeeds.
+- **A `<template>` wrapper is honoured**, and one emptied of its out-of-band
+  elements is dropped with them.
+
+The success payload gains two keys, both **absent** when the answer carried no
+out-of-band element:
+
+| Key | Value |
+|---|---|
+| `oob` | one entry per element — `{ id, strategy, swapped }`, plus `reason` when it did not swap (`noId`, `noTarget`, `reserved`, `unknownStrategy`, `cancelled`) |
+| `remainder` | the answer **without** the out-of-band elements — what to insert yourself, since `content` stays the raw answer and would land them twice |
+
+And two events, fired **per element**, mirroring the main pair:
+
+| Event | When | Detail |
+|---|---|---|
+| `oobbeforeswap` | before that element is written | `{ target, content, strategy, oob: true, oobId }` — **cancelable**, and `detail.content` may be rewritten |
+| `oobafterswap` | after its region is bound | `{ target, strategy, swapped, oob: true, oobId }` |
+
+:::note A form inside a popin
+A contained form updates the page **behind** the dialog this way. When the answer
+addressed nothing but out-of-band elements, the dialog keeps its own content
+rather than being blanked — the dialog analogue of htmx's `hx-swap="none"`.
+:::
+
+#### Server-driven overrides
+
+The server can have the last word on where a `text/html` answer goes and how, with
+three response headers — htmx's `HX-Retarget`, `HX-Reswap` and `HX-Reselect`:
+
+| Header | Value | Effect |
+|---|---|---|
+| `X-Gina-Retarget` | the `data-gina-form-target` grammar — `this`, `closest <selector>`, `find <selector>`, a CSS selector | becomes the target, whether or not the form declared one; a form inside a popin is retargeted onto the page and the popin is left alone |
+| `X-Gina-Reswap` | one of the nine strategies | replaces the declared strategy |
+| `X-Gina-Reselect` | a CSS selector | replaces `data-gina-form-select` |
+
+They are read once the answer is known to be HTML — a JSON answer is never swapped —
+and **before** `beforeswap`, whose listener sees the final `target` and `strategy` and
+keeps the last word. From an action, set them on the response object:
+
+```js
+self.getResponseObject().setHeader('X-Gina-Retarget', '#totals');
+self.renderWithoutLayout(data);
+```
+
+The invalid-value rule is deliberately asymmetric:
+
+- A `Retarget` that matches nothing (or names a reserved keyword) means **no swap at
+  all** — not into the declared target, not into the popin. The server plainly meant
+  somewhere else, and writing the answer into the wrong place is worse than writing it
+  nowhere. The success callback still runs, with `swapped: false` and
+  `reason: 'retargetError'`; there is no error callback, because the request succeeded.
+- A `Reswap` or `Reselect` that fails validation is **ignored** and the declared value
+  kept: it is a modifier on a known target, and the declared value is a safe default.
+  Either one without any target — declared or retargeted — is ignored the same way.
+
+Every refused or ignored value is named in a dev-mode console notice, and the success
+payload carries an `overrides` key, present only when the answer carried at least one
+of the headers: one entry per header, `{ value, applied }`, plus `reason` when it was
+not applied (`noTarget`, an unknown strategy, an invalid selector, or why the target did
+not resolve). `beforeswap`'s detail carries the same `overrides` object. A form inside a
+popin whose answer stays in the popin receives its parsed data verbatim, as before, so an
+ignored override there is reported in the console only.
+
+:::note Same origin only
+The three headers are honoured only from a response whose origin is the page's own — the
+transport's `responseURL` (the URL after redirects) against `location.origin`. A responder
+elsewhere may neither choose the element its answer lands in nor reshape or trim the swap
+the form declared: a cross-origin `Retarget` is refused exactly like an unresolvable one (no
+swap, `reason: 'crossOrigin'`), a cross-origin `Reswap` or `Reselect` is ignored and the
+declared value kept, and a transport that cannot say where the answer came from reads as
+not-same-origin. Exposing the headers through `Access-Control-Expose-Headers` therefore
+changes nothing for these three. htmx has no such read because `selfRequestsOnly` refuses
+the cross-origin request itself; a Gina form posts to its raw `action`, so the gate lives
+where the headers are read.
+:::
+
+#### When two submits race for one region
+
+Two forms whose answers land in the same region will race: whichever reply arrives last
+wins, and that is not necessarily the one submitted last.
+
+**Gina settles that on its own, with nothing to declare.** A form already says, at submit
+time, where its answer goes and what it does when it gets there — and that is the whole
+of what the decision needs:
+
+| What `data-gina-form-swap` does to the region | What a second submit into the same target does |
+|---|---|
+| **replaces** it — `innerHTML` (the default), `outerHTML`, `textContent`, `delete` | the request still in flight is **superseded**. Its answer was about to be overwritten, so it is moot, and the region ends up showing the server's latest render |
+| **adds** to it — `beforebegin`, `afterbegin`, `beforeend`, `afterend` — or writes nothing (`none`) | **both land.** Every row the server wrote appears, and their order is the server's to decide |
+
+A form that declares no `data-gina-form-target` has no region to conflict over, and keeps
+the module-wide one-request-at-a-time rule it has always had.
+
+This is the decision neither htmx nor Turbo is in a position to make for you. htmx knows
+nothing about the answer until it arrives, so it asks you to declare the coordination on
+each element; Turbo treats every submit as a navigation, so the newest one always wins —
+including over an unrelated form elsewhere on the page.
+
+##### Saying it yourself
+
+`data-gina-form-sync` on the `<form>` takes that decision over, on the same key:
+
+| Value | What a submit does while the region is already owned |
+|---|---|
+| `replace` | the running request is aborted and this one takes its place — the derived default, written out |
+| `drop` | nothing is sent |
+| `queue` | the submit waits, and is re-sent once the running request settles. One waits per region: a later submit replaces the one already waiting |
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend"
+      data-gina-form-sync="queue">
+```
+
+That one is an override with real work to do: an insertion coordinates on nothing by
+default, and `queue` makes these appends arrive in the order they were submitted.
+
+Three htmx spellings are **refused**, each with a message naming what to write instead —
+the same fail-loud treatment a target that cannot be honoured gets:
+
+| Refused | Why |
+|---|---|
+| `abort` | in htmx it means *anything that comes next may cancel me* — the idiom for a disposable GET, like a live search on an input. A Gina submit is a validated POST with side effects; `replace` and `drop` cover both halves of the intent |
+| `queue first` · `queue last` · `queue all` | htmx has the modifiers because its trigger spec has `queue:` modifiers too. Gina has no trigger spec, and one submit waiting per region is the only thing that region can act on |
+| `<selector>:<strategy>` | it names the element to coordinate on. Gina already knows it — the resolved swap target |
+
+:::note It replaces the global one-at-a-time rule, for that form
+Without the attribute, a form is limited to one request at a time by the module-wide
+`withRateLimit` option (set through `gina.setOptions()`). That option is global — there is
+no per-form version of it — so `replace` and `queue` would be unreachable underneath it:
+when `data-gina-form-sync` is declared it owns that form's decision and the global rule
+yields. The derived default sits *after* the global rule, so a form that declares nothing
+keeps it for its own re-submits and gains coordination only against **other** forms.
+:::
+
+##### Writing the value from a route parameter
+
+The attribute is read off the markup at submit time, so a template can decide it — but
+it has to write the attribute **or nothing at all**, never an empty one:
+
+```html
+<form id="add-row" data-gina-form-rule="add-row"
+      data-gina-form-target="#rows"
+      data-gina-form-swap="beforeend"
+      {% if page.view.params and page.view.params.sync %} data-gina-form-sync="{{ page.view.params.sync }}"{% endif %}>
+```
+
+Both halves of that guard earn their place:
+
+- **An empty attribute is refused, not ignored.** The gate that hands a form its own
+  overlap decision tests whether the attribute is *absent*, and `""` is not absent — so
+  `data-gina-form-sync=""` reaches the parser, is rejected as an empty value, and
+  **refuses the submit before anything is sent**, exactly like any other value Gina will
+  not honour. Writing the whole attribute conditionally is what keeps a parameterless
+  request on the derived default.
+- **`page.view.params` does not exist on a bare route.** It is set only when the route
+  resolved at least one parameter, so testing `page.view.params.sync` on its own fails on
+  any request that arrives without parameters. Test the object first, as above.
+
+##### A superseded request is not an error
+
+When a submit takes the region over — derived or declared — the request it replaced
+releases everything it held (its submit control, its loading state, its accessibility
+state) and then stops. It fires an `abort` event on the form and goes no further:
+
+```js
+gina.validator.$forms['add-row'].on('abort', function (e, detail) {
+  // { status: 0, reason: 'superseded', sync: 'replace', derived: true }
+});
+```
+
+`derived` says where the rule came from: `true` when it was read from the swap strategy,
+`false` when the form declared `data-gina-form-sync`. It is there because the default
+needs no attribute — so a page seeing this event may find nothing in its own markup that
+asked for it.
+
+It deliberately never reaches the `error` channel, and `data-gina-form-event-on-submit-error`
+never sees it: an aborted transport settles the same way a connection failure does, and
+reporting a deliberate supersede as a failed submit would be a lie. There is no declarative
+hook for `abort` for the same reason — nothing went wrong. `drop` and `queue` decisions are
+reported in a dev-mode console notice only — as is a supersede the default decided on its
+own, which names the swap strategy it read.
+
+:::caution A superseded request may already have been saved
+Superseding cancels the **client's wait**, not the **server's work**. The request was already
+in flight, so it may have reached the server — and if it did, its side effects stand. Never
+read `abort` / `superseded` as *"it was not saved"* and resubmit: on a feature whose premise
+is that a submit is a POST with side effects, that is a duplicate write. A page that must know
+the outcome of a submit it may supersede has to ask the server for it, not infer it from the
+event.
+:::
+
+The [loading state](#loading-state) follows the same logic. A submit **turned away** by
+`drop` releases the `data-gina-loading` its own click armed, because it will never reach a
+request whose settle could release it. A **queued** submit keeps it: it is pending, not
+abandoned, and the state carries through to the settle of the request it eventually becomes.
+
+#### Disabling controls while a request runs
+
+`data-gina-form-disabled-elt` holds elements disabled for the life of a request, so a user
+cannot act on what the answer is about to change. It takes a comma-separated list, each part
+in the [`data-gina-form-target` grammar](#swapping-the-answer-into-the-page):
+
+```html
+<form … data-gina-form-disabled-elt="closest fieldset, #delete-all">
+```
+
+The elements are disabled before the request is opened and released at the single settle that
+covers **success, server error, abort and timeout** alike. Each is refcounted, so two
+overlapping requests naming the same element release it once, and each carries
+`data-gina-disabled-by="<form id>"` while held. An element the page had *already* disabled is
+left alone and never cleared — only what Gina set is ever removed.
+
+`this` resolves to the form, which is inert: a `<form>` is not a disableable element in HTML.
+Use `closest fieldset` or `find …` to reach the controls.
+
+:::note A part that resolves to nothing refuses the submit
+Unlike htmx, which skips an unmatched `hx-disabled-elt` silently, an unresolvable part —
+and a `data-gina-form-sync` value Gina will not honour — refuses the submit before anything is sent,
+through the same pre-send refusal a bad `data-gina-form-target` gets: the error callback runs
+with `{ status: 422, reason: 'targetError' }` and an `attribute` key naming which attribute
+was at fault. The attribute exists so a user cannot act twice; a typo that quietly disables
+nothing is the failure it was added to prevent.
 :::
 
 ### Programmatic API and events
@@ -1202,6 +1598,12 @@ anything that must be true before you act on the data.
 | `data-gina-form-inherits-data` | URL-encoded JSON merged into the payload before sending. |
 | `data-gina-form-event-on-submit-success` | Bare name of a `window` callback run when the AJAX submit succeeds. |
 | `data-gina-form-event-on-submit-error` | Bare name of a `window` callback run when the submit does not succeed — both a server error status and a transport failure that never reached the server. See [Reacting to the result](#declarative-callbacks) for the payload shape. |
+| `data-gina-form-target` | Where the `text/html` answer is swapped: `this`, `closest <selector>`, `find <selector>`, or a CSS selector. A target that cannot be resolved refuses the submit. See [Swapping the answer into the page](#swapping-the-answer-into-the-page). |
+| `data-gina-form-swap` | How the answer is written into the target — `innerHTML` (default), `outerHTML`, `textContent`, `beforebegin`, `afterbegin`, `beforeend`, `afterend`, `delete`, `none`. |
+| `data-gina-form-select` | CSS selector picking the part of the answer to swap; every match is used, in document order. Defaults to the whole answer. |
+| `data-gina-form-event-on-swap` | Bare name of a `window` callback run after a swap, once the swapped region is bound. |
+| `data-gina-form-sync` | Overrides what a submit does when another request already owns the region its answer is bound for: `replace`, `drop`, `queue`. Rarely needed — the default is derived from `data-gina-form-swap`. See [When two submits race for one region](#when-two-submits-race-for-one-region). |
+| `data-gina-form-disabled-elt` | Comma-separated list of elements — in the `data-gina-form-target` grammar — held disabled for the life of the request. A part that resolves to nothing refuses the submit. See [Disabling controls while a request runs](#disabling-controls-while-a-request-runs). |
 | `data-gina-form-checkbox-value-as-state` | **Deprecated, transitional.** Set `"true"` to restore the pre-0.5.18 behavior where a checkbox's `value` decides its checked state. See [Checkboxes](#checkboxes). |
 
 ### Field-level
@@ -1247,3 +1649,7 @@ documented in its own chapter — see [File uploads](/guides/file-uploads).
   responding with `self.throwError()`.
 - [Client-side components](/guides/client-components) — the custom-element
   authoring model that form-associated elements build on.
+- [Popins](/guides/popin) — the dialog a contained form answers into, and its own
+  `data-gina-dialog-target` partial swap.
+- [SPA navigation](/guides/client-navigation) — GET navigation over the same region
+  policy a form swap binds its content through.

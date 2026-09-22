@@ -19,6 +19,864 @@ upward to the target version.
 
 ---
 
+## 0.6.31 → 0.6.32
+
+### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
+
+A form's `text/html` XHR answer used to be routed by "the active popin": a page form whose
+answer arrived while a popin was open had that popin's content **replaced** by the answer,
+and one whose answer arrived while a popin was still loading got a **false `422` error
+callback** (`Popin x is not open !`) after a successful server write — reachable through a
+trigger opted out of preload, a programmatic load, or a click landing before the hover warm.
+With two popins open, the answer landed in whichever open one had been registered first.
+
+The answer now goes to the popin the **submitting form is inside**, decided at submit and
+honoured only while that popin is still open and still contains the form. A form that is not
+inside a popin gets its answer delivered to its own handler, whatever popins are open; a form
+inside a popin still loads its answer into that popin; `gina.popin.loadContent()` called on a
+popin loads into that popin.
+
+**What to check:** a page that *deliberately* fed a non-modal popin from a page form's HTML
+answer relied on the old rule. In dev mode the console now names the popin the old rule would
+have targeted (`[FormValidator][popin] …`). To keep that behaviour, say so explicitly with
+[`data-gina-form-target`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+pointing at the dialog — or render the form inside the popin. New public accessor: `gina.popin.getPopinContaining(el)` — the popin whose dialog
+contains `el`, or `null` ([reference](/guides/popin#the-ginapopin-api)).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a form or link answering into a popin now runs its declared success callback (restart and re-bake; additive)
+
+`data-gina-form-event-on-submit-success` and `data-gina-link-event-on-success` never ran
+when the `text/html` answer was loaded into a popin: the popin branch of both XHR handlers
+returned before the companion event those attributes are bound to, so only a programmatic
+`success.<id>` listener ever saw the answer. The declared callback now runs there too, with
+the **parsed xhr-data** (the object the action passed to `renderWithoutLayout`) as its `data`
+— not the raw `{ contentType, content, status }` a page form receives — and
+`$form.eventData.success` is set as on every other path.
+
+**What to check:** a form inside a popin that declares a success callback will start seeing it
+called. That is additive — nothing else about the popin path changes.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Changed — popin context is decided by containment, not by "the active popin" (restart and re-bake; behaviour change)
+
+Four consequences of the routing fix above, each a narrowing of what a popin is allowed to
+capture:
+
+1. **Request headers.** `X-Gina-Popin-Id` / `X-Gina-Popin-Name` — and so
+   `self.isPopinContext()`, `Setup.isPopinContext`, and the popin-style XHR redirect
+   `self.redirect()` produces from them — are sent only for a form rendered inside a popin,
+   not for a page form submitted while a popin happened to be open.
+2. **XHR redirects.** A plain `location` redirect answering a **page** form navigates the page
+   instead of being loaded into an open popin (it used to do both: load into the popin, then
+   navigate), and a name-less `location` redirect arriving after its popin was closed no longer
+   reopens it. A named `popin` redirect is unchanged.
+3. **`getActivePopin()`** returns open popins only, preferring the most recently opened one.
+   A registered-but-not-open popin is never returned, so a no-argument
+   `gina.popin.close()` / `destroy()` / `unbind()` during a popin's own click-time load window
+   is a no-op; with two popins open the *most recently opened* is the active one rather than
+   the first registered.
+4. A name-less `{ popin: { close: true } }` answer with nothing open to close is a no-op rather
+   than a `422`.
+
+**What to check:** server code that read `self.isPopinContext()` to pick a layout for a page
+form submitted while a popin was open now sees `false` there — which is the correct reading.
+Nothing changes for forms rendered inside popins.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a pre-opened popin opened modeless reaches its open state (restart and re-bake)
+
+A `preOpen: true` popin opened through the declarative `data-gina-dialog` trigger with the
+default (modeless) modal resolution never reached `isOpen = true`: the loading shell is born
+modal, and `popinOpen`'s re-entry guard read the resulting empty `open` attribute as absent,
+so it called `show()` on an already-modal dialog, the engine threw `InvalidStateError`, and
+the popin stayed visibly open while the framework recorded it closed — `close()` returned
+early and a form inside it was routed as outside any popin. The guard now reads the
+attribute's presence.
+
+**What to check:** nothing on the modal path (legacy triggers, `data-gina-dialog-modal="true"`),
+which was already tolerated by the engine. A pre-opened, modeless-declared popin keeps the
+shell's modal presentation, as before.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — reloading an open popin no longer blanks it (restart and re-bake)
+
+`gina.popin.load(name, url)` on a `data-gina-dialog` popin that was already open wrote the
+new body into the dialog and then wiped it: the landing fires the popin's `loaded` event
+with the popin object as its detail — the form the legacy trigger's listener only binds
+on — and the declarative trigger's listener applied that detail as if it were the body,
+which for a non-string is nothing. No error was reported. The listener now applies nothing
+for a non-string detail, so the reloaded body stays. Present since 0.4.6.
+
+**What to check:** nothing on the legacy `data-gina-popin-*` triggers, which were never
+affected. A page that worked around the blank by calling `loadContent()` after `load()`
+can drop the workaround.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a pre-opened popin's loading shell is a state you can close, load into, or lose to a failed load (restart and re-bake; behaviour change)
+
+A `preOpen: true` popin shows its shell before its content arrives, and until now the
+framework had no name for that window: `isOpen` was `false`, so `loadContent()` on the
+popin threw `is not open !`, `close()` returned without closing, a failed load left the
+skeleton up with nothing to dismiss it, and a native Escape closed the dialog behind the
+plugin's back — the content landing afterwards re-opened it. The window is now the
+popin's `isLoading` state.
+
+**What to check — three visible changes:**
+
+- `loadContent()` on a loading popin no longer throws: it injects into the shell and
+  completes the open (`open` fires once). Code that relied on the throw to detect "not
+  ready yet" should read `isLoading` instead.
+- `close()` and `destroy()` on a loading popin now close it — the load is cancelled, its
+  content dropped, and `close` fires — where they used to do nothing. An Escape during
+  the load does the same.
+- A failed load now closes the shell after `error`, unless an `error` listener called
+  `loadContent()` on the popin. A page that showed its own message by loading content
+  from the listener keeps that behaviour; one that left the skeleton up will now see the
+  dialog close.
+
+A popin without `preOpen` is unaffected: it shows nothing while it loads and never enters
+the state. `getActivePopin()` still returns open popins only.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a malformed `data-gina-dialog-target` falls back instead of throwing (restart and re-bake)
+
+A popin's partial swap takes one CSS selector and applies it on both sides — it picks the
+region out of the response and names the slot it replaces in the open dialog. A selector the
+browser refuses as malformed (`#slot >`, `[`) used to throw an uncaught `SyntaxError` out of
+the load handler, so the dialog kept its previous content and nothing said why. It now takes
+the same full-replace fallback a selector that simply matches nothing has always taken.
+
+The guide described one fallback while the code had two; both are now documented and, more
+usefully, both **announce themselves in dev mode**. A console warning names the popin, the
+selector and which of the three cases ran: the selector was refused, it matched nothing in the
+open dialog (whole dialog replaced), or it matched nothing in the response (whole response body
+written into the slot). Production is unchanged and stays silent.
+
+**What to check:** nothing is required. A page that was relying on the throw to surface a typo
+now gets the dev-mode warning instead — and in production, where the throw was never visible
+anyway, the swap now completes rather than leaving the dialog stale. The four target-grammar
+keywords a form target accepts (`this`, `closest x`, `find x`, `next x`) are valid CSS type
+selectors, so they were never the throwing case: written here they match nothing and take the
+fallback. See [Partial swaps](/guides/popin#partial-swaps).
+
+### Fixed — a page form's staged upload is placed with its own form (restart and re-bake)
+
+The client upload layer decided which popin a chosen file belonged to by asking whether *some*
+popin was open. A file input in a **page** form whose file was chosen while an unrelated popin
+was open — a popin opening while the OS file picker was already up, or a script assigning
+`input.files` — had its virtual upload form appended inside that popin: the staging POST
+succeeded, none of the generated hidden metadata fields reached the form, the form then saved
+**without the file**, and the staging request claimed that popin's `X-Gina-Popin-Id`. Nothing
+reported it. The page `inert` marking blocked only the click-driven path.
+
+The upload now follows the same containment rule as a form's HTML answer: the popin the real
+form is inside, captured once at selection, or the page when it is inside none. A form rendered
+inside a popin keeps the placement it always had. In dev mode the console names the popin the
+former rule would have used.
+
+**What to check:** nothing is required. A page that worked around the loss — re-attaching the
+metadata by hand, or keeping popins closed around an upload — can drop the workaround. See
+[The client upload layer](/guides/file-uploads#the-client-upload-layer).
+
+### Added — a form can swap its HTML answer into any element of the page (restart and re-bake; additive)
+
+A form places its own `text/html` answer with three attributes, resolved at submit from the
+form itself: `data-gina-form-target` (the `hx-target` grammar — `this`, `closest <selector>`,
+`find <selector>`, or a CSS selector; `next`/`previous` are reserved and refused),
+`data-gina-form-swap` (`innerHTML` by default, plus `outerHTML`, `textContent`, the four
+`insertAdjacentHTML` positions, `delete` and `none`) and `data-gina-form-select` (a selector
+trimming the answer; every match, in document order).
+
+The success payload keeps `contentType` / `content` / `status` and **adds** `target`, `swap`,
+`swapped`, `data` and `view`. Two events are emitted on the form for the main swap —
+`beforeswap` (cancelable with `preventDefault()`; `detail.content` may be rewritten) and
+`afterswap`, the latter with a declarative `data-gina-form-event-on-swap` hook. The swapped region is bound through the same
+policy fragment navigation uses.
+
+A target or strategy that cannot be honoured **refuses the submit before anything is sent**,
+with `{ status: 422, reason: 'targetError', attribute, value }` on the error channel and the
+submit control released. That is deliberately the opposite of `data-gina-dialog-target`'s
+silent full-replace fallback: a submit has side effects on the server.
+
+**What to check:** nothing — no existing markup carries these attributes, and a form without
+them behaves exactly as before. A declared target takes precedence over the popin a form sits
+in. Full reference:
+[Swapping the answer into the page](/guides/forms-and-validation#swapping-the-answer-into-the-page).
+
+One fix rides with it: an answer whose top-level elements are **table rows or cells** used to
+lose them. The answer was parsed as a whole document, so the HTML parser moved a top-level
+`<tr>` or `<td>` out of existence — a swap into a `<tbody>` wrote the cell *text* instead of
+the row, and a `data-gina-form-select` on `tr` matched nothing. Answers are now parsed as a
+fragment, so any element survives at the top level, and a full-page answer drops its `<head>`
+rather than placing its `<title>` in the swap. Answers that already parsed correctly are
+byte-identical, and a `<template>` wrapper — the usual workaround — is still honoured.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Added — an answer can update elements anywhere in the page, out of band (restart and re-bake; additive)
+
+Any element of a form's `text/html` answer carrying `data-gina-swap-oob` is swapped into the
+page element with the **same `id`**, independently of where the answer itself goes — htmx's
+`hx-swap-oob`, same meaning. `true` or an empty value replaces that element; a strategy name
+(`innerHTML`, `textContent`, the four `insertAdjacentHTML` positions, `delete`, `none`)
+applies the element's *content* and drops the wrapper; `<strategy>:<selector>` is reserved.
+
+Out-of-band elements are always removed from the answer, so the main swap never receives them
+twice, and they run **before** `data-gina-form-select` narrows it — an element outside the
+selection still lands. They work on all three answer paths (a declared target, a form inside a
+popin, a form with neither), so an answer carrying nothing else still updates the page. A
+missing `id`, no matching element, a reserved or unknown value: the element is dropped and
+reported with a `reason`, never thrown, and named in a dev-mode console notice.
+
+The success payload gains `oob` (one entry per element) and `remainder` (the answer without
+them — what to insert yourself, since `content` stays raw and would land them twice); both are
+absent when the answer carried none. Two events fire per element: `oobbeforeswap` (cancelable,
+`detail.content` rewritable) and `oobafterswap`.
+
+**What to check:** nothing — the attribute is new, so no existing answer carries it, and an
+answer without it takes exactly the path it did before. If your handler inserts `content`
+itself, switch to `remainder` once you start emitting out-of-band elements. A form inside a
+popin updates the page behind the dialog this way; when the answer held nothing else, the
+dialog keeps its own content instead of being blanked. Full reference:
+[Out-of-band swaps](/guides/forms-and-validation#out-of-band-swaps).
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Added — a server can retarget, reswap or reselect a form's HTML answer (restart and re-bake; additive)
+
+Three response headers — `X-Gina-Retarget`, `X-Gina-Reswap`, `X-Gina-Reselect` — override
+a form's `data-gina-form-target` / `-swap` / `-select` at settle time: htmx's `HX-Retarget`,
+`HX-Reswap` and `HX-Reselect`. A `Retarget` creates a target where none was declared and
+wins over the popin a form sits in; one that cannot be resolved means no swap at all (the
+success callback runs with `swapped: false` and `reason: 'retargetError'`, never an error
+callback); an invalid `Reswap` or `Reselect` is ignored and the declared value kept. The
+success payload gains `overrides` only when an answer carried one of the headers, and
+`beforeswap`'s detail carries the same object. See
+[Server-driven overrides](/guides/forms-and-validation#server-driven-overrides).
+
+**What to check:** nothing, unless an action already sets a response header by one of
+these names — the client now reads them. They are same-origin unless exposed through
+`Access-Control-Expose-Headers`.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Changed — two form answers replacing the same region no longer race (restart and re-bake; behaviour change)
+
+Two forms whose answers land in the same element used to race, last reply winning whether
+or not it was the one submitted last. They now coordinate **with nothing declared**: when a
+form's `data-gina-form-swap` *replaces* the region it targets — `innerHTML` (the default),
+`outerHTML`, `textContent` or `delete` — a newer submit into the same target **supersedes**
+the request still in flight, whose answer was about to be overwritten anyway. A swap that
+*adds* to the region (`beforebegin`, `afterbegin`, `beforeend`, `afterend`) or writes
+nothing (`none`) has no conflict to resolve: both land, as before. A form declaring no
+`data-gina-form-target` is untouched — the module-wide `withRateLimit` rule still governs
+it, including its own re-submits.
+
+`data-gina-form-sync` on the `<form>` overrides that decision — `replace`, `drop` or
+`queue` — and, when declared, takes over from the global `withRateLimit` rule for that
+form. The superseded request releases its submit control, loading state and accessibility
+state, then fires an `abort` event, `{ status: 0, reason: 'superseded', sync, derived }`.
+It never reaches the `error` channel, so an aborted transport is not reported as a failed
+submit; `derived` says whether the rule came from the swap strategy or from the attribute.
+
+`data-gina-form-disabled-elt` holds elements disabled for the life of a request: a
+comma-separated list in the `data-gina-form-target` grammar, refcounted, marked
+`data-gina-disabled-by`, and released at the one settle that covers success, error, abort
+and timeout. An element the page had already disabled is left alone. See
+[When two submits race for one region](/guides/forms-and-validation#when-two-submits-race-for-one-region)
+and [Disabling controls while a request runs](/guides/forms-and-validation#disabling-controls-while-a-request-runs).
+
+**What to check:** if you have **two or more forms targeting one element** with a replacing
+swap and you were relying on both answers arriving, they no longer both arrive — the older
+one is aborted. That reliance was already unsound (the order was the network's to decide),
+but it is worth a look. Declare `data-gina-form-sync="queue"` on the later form to serialise
+them instead, or switch to an insertion swap if what you wanted was both. Everything else is
+unchanged: one form on its own, a form with no target, and any inserting swap all behave
+exactly as before.
+
+Three htmx `hx-sync` spellings are **refused** rather than parsed, so an `hx-sync` habit
+does not transfer silently: `abort` (its disposable-GET idiom — use `replace` or `drop`),
+the `queue first|last|all` modifiers, and `<selector>:<strategy>`. Each refusal names the
+alternative, and — like an unresolvable `data-gina-form-disabled-elt` part — stops the
+submit before anything is sent, with `{ status: 422, reason: 'targetError' }` and an
+`attribute` key naming the offender.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Changed — a navigated fragment's forms are bound only when they opt in (restart and re-bake; behaviour change)
+
+`gina/nav` now binds a swapped region through the shared policy the form-answer swap uses. For
+scripts and `data-gina-link` anchors nothing changes. For **forms** it does: a fragment's forms
+are bound only when the markup **opts in** — a `data-gina-form-*` attribute, an id naming a
+registered rule set, or a `gina-upload-*` id — which is the gate the initial page has applied
+since 0.6.29. A bare id-bearing form inside a navigated fragment used to be bound regardless,
+and its submit silently became an XHR.
+
+**What to check:** a form that arrives inside a navigated fragment, carries an `id`, and has no
+`data-gina-form-*` attribute and no matching rule set. It now keeps its **native** submit — a
+real form POST and a page load, not an XHR. Add `data-gina-form-rule` (or any
+`data-gina-form-*` attribute) to opt it back in. Forms that already carry a rule are unaffected,
+as are id-less forms, which were never bound.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Fixed — a popin answer outside dev mode no longer reports a false 422 (restart and re-bake)
+
+The popin branch of both XHR handlers read two hidden inputs
+(`gina-without-layout-xhr-data` / `-view`) that the server splices into a layoutless render
+**only when `NODE_ENV_IS_DEV` is true**. On any other boot they are absent, the branch
+dereferenced a missing element, and the resulting `TypeError` surfaced as an `error` callback
+carrying `422` — *after* a successful server write — with the popin never loaded.
+
+Both branches now go through one tolerant parse. The callback receives the parsed data when the
+inputs are present and an object carrying `status` when they are not, and the two inputs are
+stripped from content swapped into the page so a repeated swap cannot duplicate their ids.
+
+**What to check:** a popin-answering form on a non-development boot that appeared to fail while
+the write had in fact succeeded. It now succeeds visibly. In production the data channel remains
+`renderJSON()` or the markup itself — the hidden inputs are a development convenience.
+
+Browser-bundled: **restart the bundle and re-bake**.
+
+### Added — `GINA_MAINTENANCE` boots a bundle with maintenance mode on (restart; no rebuild)
+
+A bundle started with `GINA_MAINTENANCE=1` (or `true`, any case) boots with its
+[maintenance gate](/guides/maintenance-mode#turning-it-on) closed, exactly as if
+`server.maintenance.enabled` were `true` in `settings.json` — for replacement pods created
+during a window, or any process that must come up closed without a configuration edit. It
+is folded into the configuration layer, so the runtime toggle keeps its meaning:
+`POST /_gina/maintenance {"enable":false}` still reopens the process, and
+`GET /_gina/maintenance` reports `source: "env"` for a closure that came from the variable.
+
+The variable can only **close** a bundle, never open one: `0`, `false` or an unset value
+leave the configured state in place, and any other value is ignored with a boot warning
+naming the accepted values.
+
+**What to check:** nothing changes for a bundle that does not set the variable. Under the
+daemon (`gina bundle:start`) the variable must be present in the environment of the process
+that **started the daemon** — a pod's init script, so a Deployment `env` entry just works;
+on a development host with a daemon already running, a value set on a later
+`gina bundle:start` does not reach the bundle until the daemon restarts. Under
+`gina-container` the container's own environment reaches the bundle directly.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
+### Added — maintenance mode can stay coherent across replicas through a shared kv namespace (restart; no rebuild)
+
+Point `server.maintenance.store` at a declared [kv namespace](/guides/kv) and every
+`POST /_gina/maintenance` writes its runtime override there, while each process polls it
+(`pollInterval`, default 2000 ms) — so one `POST` anywhere closes or reopens every replica
+within one interval, and a replica joining mid-window follows the shared state. The request
+gate keeps reading local memory synchronously. A store outage freezes each replica in its
+last-known state and never reopens a closed site; a `ttlSeconds` window expires
+deployment-wide. Full contract: [Replicas](/guides/maintenance-mode#replicas).
+
+**What to check:** nothing changes without `store`. With it, two new boot refusals exist by
+design — a `store` naming a namespace the kv primitive cannot hand out, or a namespace running
+`failMode: "open"`, stops the bundle with a message naming the fix. A memory-backed namespace
+boots with a warning that replicas will not follow each other. `GET /_gina/maintenance` gains
+a `sync` field and a `POST` reply a `store: { written, error }` field; scripts that compare
+the payload shape exactly need the two additions.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
+### Fixed — two connectors in one bundle no longer fight over an entity class name (restart; may now refuse to boot)
+
+The framework registers each entity's singleton in a process-wide table that was
+keyed on the entity's class name alone. That name is unique only *within* one model:
+every connector loads its classes from `models/<database>/entities/`, so when two
+connectors of one bundle declared a class of the same name, they shared one slot. The
+connector whose connection became ready **second** was handed the first one's instance
+and never attached its own entities — its `getModel()` returned a bare
+`{ _connection, getConnection }`. The bundle still started and served, so every call on
+a missing entity failed later, at request time.
+
+Two connectors sharing a `database` value hit this every time, but the trigger is the
+**class name**, not the database: two different databases that each contain a `user.js`
+collide the same way. Which connector lost depended on connection timing, so it could
+differ between replicas of one release — and a development boot could not reproduce it
+at all, because each connector reloads the entity module and gets a fresh table.
+
+The table is now keyed per bundle, model and class name, so each connector keeps its own
+entities.
+
+**What to check:** as a safety net, a bundle whose declared entity class did not reach
+its model now **refuses to start** and names the class, instead of serving a half-built
+model layer. If you were unknowingly affected, a bundle that used to boot will now stop
+with a message naming the colliding class and the connector. The fix is to give each
+connector its own `models/<database>/entities/` directory, or rename the colliding class.
+An entity that sets `hasOwnEvents` opts out of the event wiring and is not reported.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
+### Security — credentials are no longer carried across a redirect (restart; no rebuild)
+
+`self.redirect()` carries the request's parameters to the redirect target so the next
+action can read them — on the session as `inheritedData` when the bundle has a session, or
+in the target URL when it does not. For a `POST` that container is the parsed body
+**verbatim**, so a login form's plaintext password was carried along with the fields you
+actually wanted.
+
+Where the bundle has a session, that wrote the password into your **session store**, and on
+an authenticated flow it was still there after the redirect target had rendered. Where the
+bundle has no session it went into the **redirect URL** instead — and so into access logs,
+proxy logs, browser history, and any `Referer` the target sends onward. A *rejected* login
+attempt was carried the same way.
+
+Fields whose names match the framework's existing redaction list are now dropped from what
+is carried. That is the same maintained, tokenising matcher the Inspector already uses to
+mask these values in its own pane, so it covers `password`, `secret`, `token`, `apikey`,
+`authorization`, `credentials` and their case and separator variants (`apiKey`, `api_key`).
+Everything else travels exactly as before, and keys that merely *describe* rules or
+configuration — `passwordRules`, `tokenFormat` — are deliberately still carried.
+
+**What to check:** if your application deliberately carried a field named for a credential
+across a redirect, it no longer arrives at the target — pass it by another route. Reading
+ordinary fields on the target, the pattern shown in
+[Carrying request data across the redirect](/guides/controller#redirect-data-carry), is
+unaffected.
+
+**What this does not change:** if you are storing anything else sensitive in a form that
+crosses a redirect, it still crosses. The filter is a name-based safety net over a
+known-credential list, not a general classifier.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
+### Security — a request parameter can no longer decide whether a redirect happens (restart; no rebuild)
+
+`self.redirect()` read the incoming request parameters for a key named `error` and, when it
+found one, raised an error carrying that value instead of redirecting. The container it read
+is the client's: query-string parameters on a `GET`, body fields on a `POST`. So any
+unauthenticated request to **any** route whose action redirects could turn that route into a
+500 by adding `?error=` — on both engines, with no route opt-in, in every released version.
+
+An **empty** value was worse. `?error=` with nothing after the `=` left the request
+**unanswered**: the empty string is falsy, so the guard that protects `self.throwError()`
+from running against an already-released response mistook it for exactly that case, logged
+`ignoring late error:` with nothing after the colon, and returned without writing anything.
+Nothing reaps such a request — `server.timeout` defaults to `0` deliberately, so that
+Server-Sent Events and WebSocket responses are not cut off — so the connection stayed open
+for as long as the client held it.
+
+The key is now an ordinary request parameter. It rides the redirect in `inheritedData` like
+every other one, which is what
+[Carrying request data across the redirect](/guides/controller#redirect-data-carry) has
+always documented — that example could not work as written while the gate stood, because it
+assigns `error` on the request and then redirects one line later.
+
+**What to check:** if you relied on `?error=` producing an error page, it no longer does —
+raise the error explicitly with `self.throwError()` instead. Reading the key on the redirect
+*target*, the classic POST-redirect-GET shape, is unaffected and now works as documented.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+
+### Security — the built-in error pages escape the text they render (restart; no code change)
+
+A crafted link could run script in your application's origin. `self.redirect()` *used to treat* a
+request-supplied `error` key as an instruction to raise an error (removed outright — see the next
+section), so a `GET` to **any** route
+whose action redirects — carrying `?error=<img src=x onerror=...>` — answered a 500 whose
+body contained that tag **raw** and executed it. The built-in fallback error page built its
+HTML by concatenation and escaped nothing, in every scope: only the stack-trace block was
+scope-gated, and the title, error and message blocks rendered unconditionally. A newly
+scaffolded bundle configures no `errorFiles`, so it served exactly that page.
+
+Every value those pages render is now HTML-escaped (`&`, `<`, `>`, `"`, `'`). The same
+escaping is applied to the engine-level error page — whose text its 404, 403 and 500 callers
+build from the request path — and to the three
+[nunjucks](/templating/nunjucks) error-document fallbacks, including the status in their
+`<title>`. The scope gate on stack traces is unchanged: a stack is still rendered only in
+`local` scope.
+
+**What to check:** if your application deliberately passes HTML in an error title or message
+— say `self.throwError(500, '<b>Payment declined</b>')` — expecting the error page to render
+it as markup, it now appears as literal text. That reflection was the vulnerability, so there
+is no opt-out. Pass plain text, or configure your own
+[custom error page](/guides/error-pages) via `templates.json` `errorFiles` — the framework
+hands that template the error data and leaves the markup to you.
+
+**Note on custom error pages.** If you already render a custom error template, the values you
+interpolate there are still yours to escape — `settings.json` `swig.autoescape` defaults to
+`false`, so `{{ data.message }}` in your own error view emits raw. This release changes only
+the framework's built-in pages.
+
+The change is server-side: **restart the bundle**. No rebuild is needed — none of the three
+files is part of the browser bundle.
+
+### Fixed — the client validator binds only forms the page opted in (restart and re-bake; behaviour change)
+
+Once a bundle declared any `forms/rules/*.json`, the validator's boot scan bound **every**
+`<form>` on every page — minting a generated id for id-less ones — and turned their native
+submit into an always-XHR JSON submit. Plain login or signup forms with no gina attribute
+were hijacked too. The scan now binds a form only when the page opted it in: any
+`data-gina-form-*` attribute (`data-gina-form-rule`, the submit event handlers, a
+submit-method/action override, upload staging…), an existing `id` naming a registered rule
+(`-` read as `.`), or a virtual `gina-upload-*` id. Any other form is left untouched and
+submits natively, as the [forms guide](/guides/forms-and-validation) always stated.
+Explicit `validateFormById()` / `getFormById()` calls are unchanged.
+
+**What to check:** a form with **no** `data-gina-form-*` attribute and no rule of its own that
+you relied on being submitted over XHR — for example page JavaScript listening for the
+validator's `success.<id>` event on it — now submits natively. Add `data-gina-form-rule`
+(or any `data-gina-form-*` attribute) to keep it bound. The change is in the browser
+bundle: restart the bundle **and** run `gina bundle:build` so pages pick up the new
+`gina.min.js`.
+
+### Fixed — a date field no longer submits the previous day east of UTC (restart and re-bake; payload shape changes)
+
+A field validated with [`isDate`](/reference/validation-rules#isdate) put the parsed
+`Date` **object** into the submitted payload. Every validator normalises the payload to
+the value it just validated — `isEmail` lowercases, `isBoolean` yields a real boolean —
+so `isDate` doing the same was consistent. The problem is narrower: a `Date` is the one
+normalised type that does not survive JSON. `JSON.stringify` renders it through
+`toISOString()`, which produces a UTC **instant**, and local midnight at any positive UTC
+offset falls on the previous day in UTC.
+
+So a browser in Paris where the user picked `2026-09-18` submitted:
+
+```json
+{ "birthdate": "2026-09-17T22:00:00.000Z" }
+```
+
+Anything that read the date part of that string — a `substring(0, 10)`, a SQL `DATE`
+column, a report grouped by day — stored **the 17th**. Nothing errored, because the
+instant was perfectly well-formed, and a server or CI running in UTC never saw it.
+
+The payload now carries a plain calendar date, whatever the input mask:
+
+```json
+{ "birthdate": "2026-09-18" }
+```
+
+The mask governs how input is *parsed*, not what is submitted — and gina already
+described these fields as `{ "type": "string", "format": "date" }` in both its routing
+introspection and its [DTO](/guides/dtos) type emission, so the payload now matches the
+schema it was already publishing.
+
+**Unchanged:** the field itself still holds the parsed `Date`, so the documented chain
+`field.isDate(mask).format('isoDateTime')` renders exactly as before, and an invalid date
+still fails validation.
+
+**What to check** — two consumer-visible differences:
+
+- **`req.body.<field>` is a string, not a `Date`.** Code calling `.getTime()`,
+  `.getFullYear()` or any `Date` method on it directly must parse it first.
+- **`new Date('2026-09-18')` resolves to UTC midnight**, because JavaScript parses a
+  date-only string as UTC while `new Date(2026, 8, 18)` is local midnight. If you
+  reconstruct a `Date` from the payload and then read local components, split the string
+  instead — `new Date(y, m - 1, d)` — or keep working with the date string.
+
+If you were already compensating for the day shift server-side, remove that correction
+when you pick this up, or it will shift the date the other way.
+
+The change is in the browser bundle: restart the bundle **and** run `gina bundle:build`
+so pages pick up the new `gina.min.js`.
+
+
+### Fixed — an XHR redirect over HTTP/2 now delivers the session cookie it rotated (restart; no rebuild)
+
+Signing a user in and answering with an XHR redirect left them signed out, on HTTP/2 only.
+
+`self.redirect()` has two exits: a `303` for an ordinary form post, and a JSON
+`{ isXhrRedirect: true, location }` payload for a request the browser made with `fetch` or
+`XMLHttpRequest` — which is what the framework's own form validator sends once any form
+rule exists in the bundle. The `303` answered through Node's response object. The JSON exit
+wrote straight to the raw HTTP/2 stream.
+
+That difference mattered because a session middleware does not write its cookie at the
+moment you call `req.login()`. It writes it later, from a hook on `res.writeHead`, and it
+saves the session from a wrapper on `res.end`. The raw HTTP/2 stream path calls neither. So
+the rotated session was created and stored, the previous id was discarded, and the
+replacement cookie was never sent — the browser kept presenting an id that no longer
+existed, and the next request arrived unauthenticated. The same code on HTTP/1.1 answered
+through the response object and always worked, which is why this only ever appeared on
+HTTP/2, and why testing the form post with `curl` could not reproduce it.
+
+Both JSON exits — the plain one and the popin form — now answer through the response
+object, exactly as the `303` exit always has.
+
+The same release also makes the redirect's one-shot data carry clean up after itself. The
+`inheritedData` the router hands to the next action was deleted from the session in memory
+but never written back on HTTP/2, so it stayed in the stored record for the rest of the
+session. It is now saved explicitly.
+
+**What to check:** nothing, if your sign-in already worked. If you added a workaround — a
+manual `req.session.save()` after `req.login()`, a forced full-page navigation in place of
+the XHR redirect, or a throwaway second request to make the session stick — you can remove
+it.
+
+**The render path is fixed too, in this same release.** When this entry was written an
+ordinary HTTP/2 render still fired neither hook; the next entry closes that. `req.login()`,
+`req.logout()`, `req.session.destroy()` and `req.session.regenerate()` were never affected —
+they write to the store directly rather than through the response.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — a session survives an ordinary HTTP/2 render (restart; no rebuild)
+
+On HTTP/2, a `rolling` session cookie did not roll on a rendered response, and a change you
+made to `req.session` while rendering was not persisted.
+
+The cause is the one described in the previous entry, on the path that entry left open. Every
+render delegate answers on the raw HTTP/2 stream and calls neither `res.writeHead` nor
+`res.end`. A session middleware writes its cookie from a hook on the first and saves from a
+wrapper on the second, so on a render neither ran: no cookie was emitted, so a rolling expiry
+kept its original value however active the user was, and a mutation made during the render was
+dropped.
+
+This was never specific to sessions. Any middleware that installs itself by wrapping
+`res.writeHead` or `res.end` was inert on a rendered HTTP/2 response.
+
+The framework now installs its own `writeHead`/`write`/`end` on the response before your
+bundle's middleware runs, so that middleware wraps the framework's base rather than methods
+nothing calls. Each render delegate hands its HTTP/2 send to that base `end`, which a session
+middleware invokes only once its store write has finished — so a response can no longer reach
+the browser ahead of the session record it depends on.
+
+The shim is transparent: a response no delegate has claimed keeps its original methods, so
+redirects, cached responses and the built-in `/_gina/*` endpoints behave exactly as before.
+Error pages answer through the same base since a follow-up commit in this release — an error
+answered over HTTP/2 now carries the session cookie it rotated and persists a session mutation
+made while handling it — and static files are covered by the security entry below: they now
+answer with their own request's headers.
+
+**Not changed — `renderStream()`.** It writes chunk by chunk from an async iterable, and
+buffering that would change how SSE and Range responses behave, so it still answers on the raw
+stream. A `rolling` cookie will not roll on a streamed response.
+
+**What to check:** if you added a `req.session.save()` purely to work around this in an action
+that renders, you can drop it. Keeping it is harmless.
+
+HTTP/1.1 was never affected on either engine.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Security — an HTTP/2 static file no longer carries another request's response headers (restart; no rebuild)
+
+Over HTTP/2, the built-in engine served static files through a listener registered once per
+server, from inside the first static request after boot. That listener kept the first
+request's response object for the life of the process and served every later static file
+through it, so the headers it emitted were folded from that captured response: its
+`Set-Cookie`, its request id and its CORS headers reached every other client that asked for a
+static file. Any middleware that sets a header before the response is written — the
+framework's own CSRF plugin does — made this a cross-user cookie delivery: whoever's request
+armed the listener had their cookie handed to everyone else until the bundle restarted, and
+an attacker who arms it plants their own. The same listener served an HTML file it had not
+seen before as a raw binary (no loader injection in dev), and once a directory URL had been
+requested, its index URL — the one the directory's own `301` sends the browser to — answered
+with a destroyed stream for the rest of the process's life.
+
+The listener and its server-push branch are gone. Every HTTP/2 static file is now served by
+the static handler on the request's own stream, which is what already happened for the first
+request of every URL: it carries that request's headers, the dev `cache-control: no-store`
+set, and in production an `ETag` and `Last-Modified` with `304` support — none of which the
+listener path emitted.
+
+HTTP/2 server push is no longer implemented. Browsers dropped it years ago (Chrome 106,
+Firefox 132) and the framework's own HTTP/2 client never enabled it; only a push-capable
+client such as a default `node:http2` session could reach the branch, and what it received
+was a push of the very path it had just requested.
+
+**What to check:** nothing, for a browser-facing bundle. If you relied on HTTP/2 push from a
+non-browser client, it is gone. If a bundle of yours serves static files over HTTP/2 behind
+middleware that sets per-user cookies before the response is written, treat sessions minted
+on the affected versions as you would after any cookie exposure — this release closes the
+leak; it cannot recall a cookie already delivered. HTTP/1.1 was never affected, on either
+engine.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — an HTML file in `public/` no longer answers 500 on a bundle without templates (restart; no rebuild)
+
+In dev, the static handler injects the gina loader into an HTML file served from `public/`,
+and did so by reading the bundle's `content.templates._common` block. A bundle that never ran
+`view:add` — any API-only bundle — has no such block, so the read threw and the request
+answered 500 with a `TypeError`. The loader is now injected only when the bundle carries one;
+otherwise the file is served exactly as it is on disk, which is what production always did.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — an environment config overlay now overrides its base file (restart; behaviour change)
+
+A `<name>.<env>.json` overlay was merged **before** its base file and lost to it on every key
+both declared. Keys that existed only in the overlay were added, so overlays appeared to work —
+but an actual override was silently dropped, which is the one thing an overlay exists to do.
+Base-wins has held since the loader's first cut, while every reference page described the
+opposite.
+
+The overlay now wins on every key it declares.
+
+**What to check before upgrading.** Read your `*.<env>.json` files and ask, for each key they
+share with their base file, whether the overlay's value is the one you actually want — because
+from now on it is the one you get. Two cases deserve a second look:
+
+- **Values you never saw take effect.** A credential, host list, provider name or interval that
+  you put in an overlay and that never appeared to apply was being dropped. It will apply now.
+- **Compensations.** If you worked around the old behaviour by editing the base file instead,
+  the overlay may now override that edit back.
+
+Two further consequences, both observable:
+
+- An overlay **array replaces** the base array; it is not unioned into it.
+- A `null` in an overlay **overrides** the base value, rather than being ignored.
+
+Unaffected: bundles with no overlay file, and the `settings.*` template path, which is a
+separate mechanism with its own environment handling and is unchanged.
+
+### Added — per-bundle login session cookie lifetimes from `security.json` (restart; additive)
+
+A bundle can declare how long a login lasts, and the framework applies it at `req.login()`:
+
+```json title="src/dashboard/config/security.json"
+{
+  "session": {
+    "expires"  : "3h",
+    "remember" : "15d"
+  }
+}
+```
+
+`session.expires` is the cookie lifetime for an ordinary login, `session.remember` for one that
+asked to be remembered. Both are unit-suffixed duration strings — the unit is required. A login
+counts as remembered when the caller passes `{ remember: true }` to `req.login()`, or when the
+login request carries a truthy `remember` field (`on`, `1`, `true`, `yes`); an explicit option
+always wins over the field.
+
+Both keys are optional and **a bundle that declares neither behaves exactly as before**. Nothing
+else about the cookie is written: your own `req.session.cookie.maxAge` set inside the login
+callback still wins, `absoluteTimeout` still caps the total lifetime, and a store's `ttl` still
+governs the server-side record.
+
+**What to check before upgrading.** These two keys were documented but interpreted by nothing
+before 0.6.32, so a value already sitting in one may not be a duration string — an arithmetic
+expression or a number of milliseconds that your own code evaluated is common. Such a value is
+**reported at boot and then ignored**, naming the bundle, environment and key; the bundle keeps
+the cookie lifetime it already had and the boot is never refused. Nothing breaks, but the
+lifetime you meant will not be applied until the value is rewritten in duration form:
+
+```
+"expires": "60000*15"   →   "expires": "15m"
+"remember": "60000*60*24*15"   →   "remember": "15d"
+```
+
+**⚠️ If your application parses these keys itself, the rewrite above will break it — change
+the code first.** While the values keep their old shape your own handling keeps working and keeps
+winning, because the framework assigns first and your login callback runs after. But the moment a
+value becomes a duration string, code that evaluated the old shape is handed something it cannot
+read: an arithmetic evaluator throws, a `parseInt` yields `NaN`, and a hand-rolled parser usually
+returns `undefined`. The framework's own tolerance does not help you here — it ignores a value it
+cannot parse, whereas your code was written to succeed on it.
+
+So the order is not optional:
+
+1. Retire your own handling of these two keys, or make it duration-aware.
+2. Then rewrite the values.
+3. Then restart.
+
+The other order fails at bundle initialisation, before anything serves a request — and depending
+on how your bootstrap treats a throw there, the bundle may be left running but never bound to its
+port rather than exiting loudly, which is a considerably worse way to find out.
+
+**Audit every call site before you start, not just the obvious one.** Two shapes are routinely
+missed: a *shared* `security.json` is read by every bundle that does not override it, so a single
+value rewrite reaches bundles you were not thinking about; and a per-request session refresh that
+re-derives the expiry on each request lives away from the login path. Grep both key names across
+the whole source tree and count what comes back before you scope the change.
+
+**If your tiers run different gina versions, retire per tier, not globally.** Your source is
+shared but the capability arrives with each tier's gina: retiring your handling on a tier still
+running an older release means nothing sets the lifetime at all, and remember-me degrades
+silently instead of failing. Retire only where gina is 0.6.32 or newer.
+
+Full reference: [`security.json`](/reference/security).
+
+### Added — `lib.duration.parse()`, one parser for unit-suffixed durations (no action)
+
+`lib.duration.parse()` is the framework's one parser for unit-suffixed duration strings —
+`"500ms"`, `"30s"`, `"15m"`, `"3h"`, `"15d"`. The unit is required: a bare number is refused
+with `NaN`, and `"0s"` is legal. It is the parser `lib/storage` already used for its interval
+keys, promoted to a registry entry so that every configuration key naming a span of time —
+the storage intervals and the `security.json` session lifetimes above — shares one dialect.
+Storage delegates to it and its behaviour is unchanged.
+
+Additive. Nothing to do; reach it as `lib.duration.parse()` from framework-side code if you
+want the same parser for your own keys.
+
+### Added — the maintenance status payload carries `pid` and `hostname` (no action)
+
+`GET` and `POST /_gina/maintenance` now answer with `pid` and `hostname` — the process that
+answered and, under Kubernetes, the pod name. The runtime override was always per process: it
+lives in the memory of the process that received the `POST`, and unless the replica sync above
+(`server.maintenance.store`) is configured it is neither written nor broadcast, so a replica
+that restarts returns to its configured state. The two fields let an operator fanning a `POST`
+out over replicas read back which ones applied it; `enabled: true` in configuration remains the
+durable, deployment-wide form. Additive — nothing in the existing payload moved.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Added — a `commit-msg` hook for contributor clones (no action for applications)
+
+The framework repository gains a `commit-msg` git hook that keeps local-tool configuration
+paths and attribution mentions out of commit messages — the one surface no hook had scanned.
+It reaches a contributor clone through the `core.hooksPath` that `post_install` already
+installs, and it is not part of the published package: an application installing gina from
+npm sees nothing of it and has nothing to do.
+
+### Fixed — a JSON config with a docblock and an unterminated `/*` in a string no longer hangs the boot (restart; no rebuild)
+
+`requireJSON` strips block comments from a config that carries a `/**` docblock, and did so
+with a regular expression that backtracked about twice per line — four times per CRLF line —
+following a string value containing `/*` with no `*/` after it: a glob or a certificate path
+such as `"…/ssl/*.example.pem"`. A config with such a value a few dozen lines from its bottom
+hung the boot until the CLI's start-wait killed the process, with nothing logged. The strip is
+now a linear, string-aware scan: a `/*` inside a quoted value is data and survives intact —
+where the old strip also removed `/**/` from glob values such as `"./lib/**/*"`. Block
+comments are still stripped only when the file carries a docblock.
+
+**What to check:** a glob value the old strip had silently shortened is now read as written.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — `self.throwError()` answers the request when called with a falsy value (restart; no rebuild)
+
+The one-argument form passes the caller's own payload in the slot the two- and three-argument
+forms use for the response, and the guard that protects `throwError()` from running against an
+already-released response tested only that slot for truthiness. So `self.throwError(err)` with
+`err` an empty string, `null`, `undefined`, `0` or `false` was mistaken for a late call:
+nothing was written, the request was never answered, and the only trace was a warning that the
+response had been released — which it had not — followed by no error text, because that
+message reads the status and message arguments, never the payload. Such a call now renders a
+500 like any other; genuine late calls, and calls made with no arguments, still bail exactly as
+before. This is the guard the `?error=` fix above ran into.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — the storage metadata store runs your callback outside its own try/catch (restart; no rebuild)
+
+Seven methods of the storage metadata store — `set`, `remove`, `acquireRef`, `releaseRef`,
+`listZeroRefs`, `removeIfZero` and `listKeys` — invoked the application callback inside the
+`try` that guards their SQLite statement. An error thrown by the callback was swallowed by the
+store, and the `catch` then invoked the same callback a second time with the application's own
+error presented as a store error. A caller that latches on the first settle — the
+content-addressed driver's `verify()` does — treated the re-entry as a no-op and never
+completed, so the operation hung instead of reporting. Callbacks now run after the `try` on
+every path; a genuine store error still arrives as `fn(err)`, and `get()`, which already had
+the correct shape, is unchanged.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
@@ -5834,7 +6692,11 @@ safe — it is rebuilt as bundles start.
 
 ### Added — SQLite works under the Bun runtime
 
-The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly. The MongoDB connector remains unavailable under Bun (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
+The SQLite ORM connector, the SQLite session store, the SQLite async-job store and the framework state store now run under [Bun](https://bun.sh). Bun below 1.4 does not implement `node:sqlite`, so these previously failed at boot under Bun (and the state store silently fell back to its JSON path). Gina now resolves Bun's built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter whenever `node:sqlite` is absent — nothing to install, no configuration change, and transient/permanent connector-error classification behaves identically on both runtimes. On Node.js nothing changes: `node:sqlite` is still used directly.
+
+Bun 1.4 and later ship `node:sqlite` themselves. On those versions Gina resolves it directly and the `bun:sqlite` adapter is never used — again with nothing to change on your side. The adapter stays in place for Bun 1.2 and 1.3, which remain inside the supported range (`engines.bun` is `>= 1.2`).
+
+The MongoDB connector remains unavailable under Bun, on 1.4 as on earlier versions (its `bson` dependency uses a `node:v8` API Bun does not implement — an upstream Bun limitation).
 
 ### Added — DuckDB connector
 
@@ -8483,7 +9345,7 @@ A new `connector:test` CLI command probes a project's configured connectors for 
 
 Gina now runs on the [Bun](https://bun.sh) runtime as a supported, CI-tested target. Install it globally with `bun add -g gina` (Bun `>= 1.2`), alongside the usual `npm install -g gina`. Bun skips dependency install scripts by default, but Gina needs no extra setup — it self-bootstraps on first run, so there is no `trustedDependencies` entry to add. Node.js (`>= 22, < 27`) is unchanged and remains fully supported.
 
-One caveat applies only if you host a bundle on Bun **and** opt into WebSocket-over-HTTP/2 (off by default): Bun does not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against it. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged.
+One caveat applies only if you host a bundle on Bun **below 1.4** and opt into WebSocket-over-HTTP/2 (off by default): those Bun versions do not advertise the HTTP/2 extended-CONNECT capability, so standards-compliant clients won't open a WebSocket over HTTP/2 against them. This is an upstream Bun `node:http2` limitation, not a Gina one — every other path (HTTP/1.1, the standard HTTP/2 request/response cycle, and HTTP/1.1-Upgrade WebSockets) works unchanged. Bun 1.4 and later advertise the capability.
 
 **No action required** — additive. See [Installation](/getting-started/installation).
 

@@ -186,12 +186,44 @@ the matching region in it, and replaces **the contents of** the matching element
 in the open dialog — the element itself survives, which is what preserves chrome
 and its event bindings.
 
-Two behaviours to know:
+The selector is applied on **both** sides — it finds the region in the response
+*and* the slot in the open dialog — so there are two ways it can miss, and each
+has its own fallback:
 
-- **A selector that matches nothing falls back to a full replace, silently.** A
-  typo produces working-but-wrong output with no warning.
-- **It applies to the current API only.** A legacy `data-gina-popin-name` trigger
-  carrying `data-gina-dialog-target` does a full replace.
+- **Nothing matches in the open dialog** — including a selector the browser
+  refuses as malformed — and the whole dialog is replaced, as if no target had
+  been given.
+- **Nothing matches in the response** and the whole response body goes into the
+  slot.
+
+Both fallbacks are deliberate: a popin open is a read the user can retry, so
+working-but-wrong beats refusing. Neither is visible from the outside, so each
+one now **logs a console warning in dev mode**, naming the popin, the selector
+and which fallback ran. Production stays silent.
+
+**It applies to the current API only.** A *pure* legacy trigger — one carrying
+`data-gina-popin-name` / `data-gina-popin-url` and **neither**
+`data-gina-dialog` nor `data-gina-dialog-src` — keeps its own open path and does
+a full replace. A mixed trigger, one given `data-gina-dialog-src` alongside the
+legacy attributes, goes through the current path and **does** get the partial
+swap.
+
+:::note How this compares to the form attributes
+`data-gina-dialog-target` is the dialog-scoped sibling of
+[`data-gina-form-select`](/guides/forms-and-validation#swapping-the-answer-into-the-page),
+not of `data-gina-form-target`: it is **one plain selector applied on both
+sides**, and there is nothing here to resolve relative to an element, so the
+`this` / `closest x` / `find x` / `next x` grammar a form target accepts does not
+apply here. All four spellings happen to be valid CSS in their own right, so
+writing one here matches nothing and takes the fallback above rather than
+reporting a mistake.
+
+The form attributes also behave the opposite way on a miss: they **refuse the
+submit** when the target cannot be resolved, instead of falling back. The
+difference is deliberate — a popin open is a read the user can retry, while a
+submit has already changed something on the server, and there
+working-but-wrong is the worse outcome.
+:::
 
 ## What happens to the content
 
@@ -225,6 +257,22 @@ With one, each form in the content is bound through
 form in a modal popin lives inside a `showModal()` dialog — where everything
 outside is inert — its validation live region stays inside the form itself.
 
+A contained form's `text/html` answer replaces **this popin's** content — the
+popin is chosen by containment, not by whichever one happens to be open. A form
+that declares its own
+[`data-gina-form-target`](/guides/forms-and-validation#swapping-the-answer-into-the-page)
+overrides that: the answer goes to the declared element, inside the popin or
+outside it, and the popin's content is left alone. The same containment rule
+places a contained form's
+[staged uploads](/guides/file-uploads#the-client-upload-layer): the virtual
+upload form and its staging request belong to the popin the real form is inside,
+and a page form's upload stays with the page whatever popins are open.
+
+An element of the answer carrying
+[`data-gina-swap-oob`](/guides/forms-and-validation#out-of-band-swaps) updates the
+page **behind** the dialog, wherever the rest of the answer goes. If the answer
+held nothing else, the dialog keeps its own content rather than being blanked.
+
 ## Loading state
 
 While a popin loads, the trigger carries a loading attribute and the container
@@ -254,14 +302,26 @@ gated on `prefers-reduced-motion`) which you can replace entirely. For a popin
 that should appear instantly and fill afterwards, construct it with
 `preOpen: true` and optionally your own `loadingShell` markup.
 
+A pre-opened popin is in an explicit **loading state** — `isLoading` is `true` on the
+popin object — from the moment its shell shows until its content lands and the real
+open runs (`isOpen` stays `false` until then). While it loads, `close()` and `destroy()`
+cancel the load and take the shell down: the content still in flight is dropped, a
+transport still in flight is aborted without firing `error`, and a dismissed dialog never
+comes back when its answer arrives. A native Escape on the shell takes the same path. If
+the load fails, `error` fires first — a listener that calls `loadContent()` on the popin
+keeps the dialog open with its own content — and the shell closes if nothing handled it,
+so a failed load never leaves a spinner behind. A popin without `preOpen` shows nothing
+while it loads and never enters the state.
+
 ## The `gina.popin` API
 
 ```js
 gina.popin.open(name);              // opens MODAL — see the caution above
 gina.popin.close(name);
 gina.popin.load(name, url, options);
-gina.popin.loadContent(html);       // inject content you already have
-gina.popin.getActivePopin();        // the popin on top, or null
+gina.popin.loadContent(html);       // inject content you already have (into the active popin)
+gina.popin.getActivePopin();        // the most recently opened OPEN popin, or null
+gina.popin.getPopinContaining(el);  // the popin whose dialog contains el, or null
 gina.popin.getPopinByName(name);
 gina.popin.getPopinById(id);
 gina.popin.destroy(name);
@@ -269,13 +329,25 @@ gina.popin.destroy(name);
 
 The registry is shared across every popin instance, so a form in one popin can
 redirect into another. `gina.popin.activePopinId` and `gina.popin.$popins` expose
-the live state.
+the live state, and each popin object carries `isOpen` and — for a `preOpen: true`
+popin — `isLoading` (see [Loading state](#loading-state)).
 
 `open()` throws if the name is unknown, `loadContent()` throws if the popin is
-not open, and `load()` throws if the name cannot be resolved — so guard calls
-whose names come from data. With two non-modal popins open, `getActivePopin()`
-returns whichever it reaches first; prefer looking a popin up by name when you
-know which one you mean.
+neither open nor loading, and `load()` throws if the name cannot be resolved — so
+guard calls whose names come from data. Called on a popin instance —
+`gina.popin.getPopinByName('details').loadContent(html)` — `loadContent()` loads
+into **that** popin; called on `gina.popin` itself it loads into the active one.
+Called on a popin that is still **loading**, it injects into the shell and completes
+the open — `open` fires once, from that completion — and the content still in flight
+lands afterwards as any later `loadContent()` would. `gina.popin.loadContent(html)`
+reaches open popins only, since a loading popin is not the active one.
+
+`getActivePopin()` returns **open** popins only: with two open it returns the most
+recently opened one, and a popin that is registered but not yet open — during its
+own click-time load, for instance — is never returned. Prefer looking a popin up
+by name when you know which one you mean, and `getPopinContaining(el)` when what
+you know is an element inside it — that is how the validator decides where a
+form's HTML answer goes (see [Reacting to the result](/guides/forms-and-validation#html-answers-and-popins)).
 
 **Events**, observable with `gina.popin.on('<event>', handler)`:
 
@@ -307,7 +379,10 @@ matter when you convert:
 - **Modal mode.** A legacy trigger is always modal; the current API defaults to
   non-modal. If you rely on modal behaviour, add `data-gina-dialog-modal` when
   you convert.
-- **Partial swaps.** `data-gina-dialog-target` has no effect on a legacy trigger.
+- **Partial swaps.** `data-gina-dialog-target` has no effect on a *pure* legacy
+  trigger — one carrying neither `data-gina-dialog` nor `data-gina-dialog-src`.
+  Adding `data-gina-dialog-src` moves the trigger onto the current open path,
+  and the partial swap starts working.
 - **Setup.** Legacy triggers only work when your code constructs the matching
   popin (`new Popin({ name: '…' })`); the current API needs no setup at all.
 

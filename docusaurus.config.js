@@ -4,7 +4,7 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → npm registry → node_modules.
-const ginaVersion = '0.6.31';
+const ginaVersion = '0.6.32';
 const swigVersion = '2.8.0';
 const twigVersion = '2.8.0';
 const jinjaVersion = '2.8.0';
@@ -17,7 +17,16 @@ const config = {
   favicon: 'img/favicon.ico',
 
   future: {
-    v4: true,
+    // Pinned explicitly rather than the `v4: true` shortcut: that shortcut is
+    // forward-opting, so a minor upgrade silently adopts whatever sub-flags the
+    // new version adds to the v4 set. 3.10 added three (siteStorageNamespacing,
+    // fasterByDefault, mdx1CompatDisabledByDefault); each is a deliberate
+    // decision, not an upgrade side effect. These two are what `v4: true`
+    // already meant on 3.9.2, so behaviour is unchanged.
+    v4: {
+      removeLegacyPostBuildHeadAttribute: true,
+      useCssCascadeLayers: true,
+    },
   },
 
   markdown: {
@@ -164,17 +173,9 @@ const config = {
             });
           },
         },
-        blog: {
-          showReadingTime: true,
-          feedOptions: {
-            type: ['rss', 'atom'],
-            xslt: true,
-          },
-          editUrl: 'https://github.com/gina-io/docs/tree/main/',
-          onInlineTags: 'warn',
-          onInlineAuthors: 'warn',
-          onUntruncatedBlogPosts: 'warn',
-        },
+        // No blog on this site. It was left enabled from the Docusaurus
+        // scaffold and published four boilerplate posts at /docs/blog.
+        blog: false,
         theme: {
           customCss: './src/css/custom.css',
         },

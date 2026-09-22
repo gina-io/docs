@@ -47,6 +47,32 @@ Restart the bundle and every visitor gets the maintenance page. `enabled` must b
 a **strict boolean** — `"true"` (a string) leaves it off, on purpose, so a typo
 cannot silently close your site.
 
+For a process that must come up closed **without** a configuration edit — a
+replacement pod created during a window is the case — set the environment
+variable instead (available since 0.6.32):
+
+```bash
+GINA_MAINTENANCE=1 gina bundle:start frontend @myproject    # or GINA_MAINTENANCE=true
+```
+
+It is folded into the configuration layer at boot, so everything below applies
+unchanged: the runtime toggle still reopens the process, and the status payload
+reports `source: "env"`. Three rules: `1` and `true` (any case) are the only
+values that close; `0`, `false` or an unset variable leave the configured state
+in place — **the variable can only close a bundle, never open one**, because a
+rollout-time variable must not be able to open a site the release's
+configuration deliberately closed; any other value is ignored with a boot
+warning naming the accepted values.
+
+:::note Which environment the bundle sees
+Under the daemon (`gina bundle:start`) a bundle receives the environment of the
+process that **started the daemon** — a pod's init script, so under Kubernetes
+the Deployment's `env` just works. On a development host with a daemon already
+running, a variable set on a later `gina bundle:start` does not reach the bundle
+until the daemon is restarted. Under `gina-container` the container's own
+environment reaches the bundle directly.
+:::
+
 To flip it without editing configuration, use the
 [runtime toggle](#flipping-it-at-runtime) instead.
 
@@ -92,6 +118,8 @@ assets.
 | `message` | string | `Service Unavailable` | Text shown on the page and placed in the JSON body's `explicit` field. HTML-escaped on output. |
 | `bypassKey` | string | *(unset)* | Shared secret letting chosen visitors through. Supports `${secret:KEY}`. |
 | `allowFrom` | string[] | `[]` | Supplementary IP allowlist — **only honoured for non-proxied requests**, see below. |
+| `store` | string | *(unset)* | A declared [kv namespace](/guides/kv) that keeps the runtime toggle in step across replicas — see [Replicas](#replicas). Since 0.6.32. |
+| `pollInterval` | integer (250–60000) | `2000` | How often each process reads the shared namespace, in milliseconds. Only meaningful with `store`. |
 
 A malformed block never refuses a boot. Each bad key falls back to its default
 **individually**, with a warning naming it — so a mistyped `retryAfter` cannot
@@ -212,6 +240,8 @@ curl -s -X POST http://127.0.0.1:8080/_gina/maintenance \
 ```json
 {
   "bundle": "frontend",
+  "pid": 4242,
+  "hostname": "frontend-7c9d8f-x2k4q",
   "active": true,
   "source": "runtime",
   "retryAfter": 120,
@@ -241,7 +271,13 @@ Three deliberate behaviours:
   `settings.json` says the bundle is closed, a lapsed timer cannot re-open it.
 
 The status payload reports `hasBypassKey` so you can confirm you will be able to
-get back in — but never the key itself.
+get back in — but never the key itself. With a [`store`](#replicas) configured it
+also carries `sync` — `{ store, key, lastSyncAt, lastError }`, what this process
+last read from the shared namespace — and a `POST` reply adds
+`store: { written, error }`: whether the flip reached the namespace the other
+replicas poll. A write that fails still applies to the process you reached and
+still answers `200`, with `written: false` and the error — so read that field
+when you script against a store-backed deployment.
 
 :::caution The toggle refuses cross-origin writes
 `POST /_gina/maintenance` is gated by an IP allowlist, which is an *ambient*
@@ -317,6 +353,23 @@ configuration only, and the runtime toggle cannot add it. The header
 path grants no cookie and redirects nowhere, so it is the right form
 for a probe.
 
+### Replacement pods during a window
+
+A pod created or restarted while a window is open boots in its **configured**
+state — the runtime toggle is per process and not persisted. To make new pods
+come up closed without a configuration rollout, set the variable on the
+Deployment for the duration of the window and remove it when you reopen:
+
+```yaml
+env:
+  - name: GINA_MAINTENANCE
+    value: "1"           # close-only: removing it (or "0") reverts to configuration
+```
+
+Pods that were already running keep whatever the toggle told them; pods that
+start during the window read the variable at boot. The toggle still works on
+every pod either way.
+
 See [Kubernetes & Docker](/guides/k8s-docker) for the probe configuration.
 
 ---
@@ -327,5 +380,87 @@ Maintenance is **per bundle**. Each bundle serves from its own server instance,
 so closing one bundle of a multi-bundle project leaves its siblings serving —
 including when several bundles share a single process. To close a whole project,
 apply it to each bundle.
+
+### Replicas
+
+The runtime override is also **per process**. It lives in the memory of the
+process that received the `POST` — it is neither written anywhere nor
+broadcast. With more than one process serving the same logical bundle —
+replicas behind a load balancer, several pods of one deployment — a `POST`
+closes the one process it reached while every other replica keeps serving, and
+a replica that restarts mid-window comes back in its configured state. That is
+a consequence of the design above (boot-resolved, not persisted), and the
+contract you can build on is:
+
+- each replica answers `GET` / `POST /_gina/maintenance` for **itself only**;
+- the payload carries `pid` and `hostname` — under Kubernetes `hostname` is
+  the pod name — so you can see which process answered;
+- coherence across a deployment is yours to produce — either fan the `POST`
+  out to every replica (per-pod `kubectl exec`, a headless service, or your
+  ingress's own maintenance switch) and read `hostname` back from each reply
+  until the set matches your replica list, or configure a shared `store`
+  (below);
+- for a window that must be coherent **and** survive restarts, use the durable
+  form — `enabled: true` in configuration, rolled out to every replica — rather
+  than the runtime toggle.
+
+The bypass grant is the exception: the cookie is stateless and keyed on
+`bypassKey`, so a grant minted by one replica is accepted by every replica that
+shares the key.
+
+#### Keeping replicas in step with a shared store
+
+Since 0.6.32 the toggle can be made coherent without fan-out: name a declared
+[kv namespace](/guides/kv) in `server.maintenance.store` and every replica
+follows it.
+
+```json
+{
+  "kv": {
+    "namespaces": { "maint": { "store": "kvRedis" } }
+  },
+  "server": {
+    "maintenance": { "store": "maint", "pollInterval": 2000, "bypassKey": "${secret:MAINTENANCE_BYPASS_KEY}" }
+  }
+}
+```
+
+With that in place a `POST /_gina/maintenance` on **any** replica applies to the
+process it reached and writes the override to the namespace, under the bundle
+name as key; every other process polls the namespace on an unref'd timer
+(`pollInterval`, default two seconds, first read at boot) and applies what it
+finds. So one `POST` anywhere closes or reopens the whole deployment within one
+interval, and a replica that joins mid-window follows the shared state within
+one store round-trip. The request gate itself never touches the store — it keeps
+reading the process's own memory, synchronously, exactly as before.
+
+What the store changes, and what it does not:
+
+- **A dead-man window expires deployment-wide.** `ttlSeconds` becomes the
+  record's own TTL in the store, so when it lapses every replica reverts to its
+  configuration together.
+- **`enable: false` is written, not deleted**, so a runtime "off" wins over a
+  configured `enabled: true` on every replica — the same rule the toggle has
+  always followed locally.
+- **A store outage never opens a closed site.** A replica that cannot read the
+  namespace keeps its last-known state and logs the outage once (and once more
+  when the store answers again); `sync.lastError` on the status payload shows
+  it. A `POST` whose write fails still applies locally and answers `200` with
+  `store.written: false` — and that local flip is superseded by the next
+  successful poll, because the shared record wins; re-issue the `POST` once
+  the store answers again.
+- **Replacement pods still boot in their configured state** until their first
+  poll completes — for pods that must come up closed from the first request,
+  combine the store with [`GINA_MAINTENANCE`](#turning-it-on).
+- **The backend decides the reach.** A redis-backed namespace is shared across
+  hosts; a sqlite-backed one across the processes of one host; a memory-backed
+  namespace is per process — the bundle boots with a warning that replicas will
+  not follow each other. The namespace must run `failMode: "closed"` (the
+  default): under `"open"` an outage would read as "no record" and reopen every
+  replica, so the bundle refuses to boot rather than accept it; so does a
+  `store` naming a namespace that is not declared.
+- **The namespace is a control-plane surface.** Whoever can write to it can
+  close or reopen the deployment — keep it private to the deployment, as you
+  would a session store.
 
 See [Multi-bundle projects](/guides/multi-bundle).

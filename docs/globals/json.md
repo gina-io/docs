@@ -33,11 +33,21 @@ var config = requireJSON(getPath('myapp.root') + '/config/settings.json');
 
 Two comment styles are recognised and removed before parsing:
 
-- Block comments: `/** ... */`
+- Block comments: `/* ... */` — stripped only when the file carries at least one
+  `/** ... */` docblock; a file with single-star blocks and no docblock is not
+  block-stripped
 - Line comments: `// ...`
 
 URL strings are preserved — `://` sequences inside quoted values are not treated
 as line comment markers.
+
+Block stripping is a linear, string-aware scan: a `/*` inside a quoted value —
+a glob such as `"./lib/**/*"` or a certificate path such as
+`"…/ssl/*.example.pem"` — is data and survives intact. Previously the strip
+was a regular expression that backtracked exponentially on such a value when
+lines followed it (about 2× per line, 4× per CRLF line), so a config carrying a
+glob path a few dozen lines from its bottom hung the bundle boot until the CLI's
+start-wait killed it; it also removed `/**/` out of glob values. Both are fixed.
 
 ### Dev-mode cache busting
 

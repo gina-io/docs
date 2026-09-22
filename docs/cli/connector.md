@@ -170,7 +170,7 @@ The text output emits one row per resolved entry:
 
 ### Comment tolerance
 
-`connectors.json`, `manifest.json`, and the file headers they carry are parsed with tolerance for `//` line comments and `/* … */` block comments, the same as `routing.json`.
+`connectors.json`, `manifest.json`, and the file headers they carry are parsed with tolerance for `//` line comments and — when the file carries a `/** … */` docblock — `/* … */` block comments, the same as `routing.json` (see [requireJSON](/globals/json)).
 
 ### Error paths
 

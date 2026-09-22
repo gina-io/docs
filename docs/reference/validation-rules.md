@@ -192,11 +192,23 @@ follows the mask — so `"dd/mm/yyyy"` accepts `15/06/2023`. Impossible dates
 - **Default message:** *Must be a valid Date*
 - **Returns the field object**, so it chains like any other rule. The parsed
   `Date` becomes the field's value, which is what [`format`](#format) consumes.
+- **Submits `yyyy-mm-dd`.** Whatever mask you validate with, the submitted
+  payload carries a plain calendar date — `"2026-09-18"` — matching the
+  `{ "type": "string", "format": "date" }` this field already publishes. The
+  mask governs how the input is parsed, not what goes on the wire.
 
 :::note Changed in 0.5.4
 Earlier versions returned the parsed `Date` instead of the field, which ended any
 chain continuing past it. On 0.5.3 and below, follow `isDate` with
 [`.format()`](#format) or capture the field separately.
+:::
+
+:::caution Changed in 0.6.32
+Earlier versions submitted the `Date` object itself, which JSON serialises as a UTC
+instant — so a user east of UTC submitted the **previous day** (`2026-09-18` picked in
+Paris arrived as `2026-09-17T22:00:00.000Z`). The payload is now a `yyyy-mm-dd` string.
+The field's value is still a `Date`, so `format` chains are unaffected; see the
+[0.6.31 → 0.6.32 migration notes](/migration#0631--0632).
 :::
 
 ```json

@@ -64,8 +64,8 @@ A file-backed write reaches its final path only through `rename(2)`, which is at
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `adapter` | yes | Where bytes live. `local` = the local filesystem under `root`. |
-| `strategy` | yes | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted; [`stream`](#large-media-and-resumable-uploads-stream) = one directory per asset, with resumable uploads. |
-| `root` | yes | Absolute directory holding this driver's objects. |
+| `strategy` | `local` only | How keys are laid out. `sharded` = `YYYY/MM/DD/<ulid>` with a sanitised extension; [`cas`](#content-addressed-storage-cas) = content-addressed, deduplicating, refcounted; [`stream`](#large-media-and-resumable-uploads-stream) = one directory per asset, with resumable uploads. On [`s3`](#the-s3-adapter--provider-owned-object-storage) it is optional and defaults to the `sharded` grammar; `cas` and `stream` refuse the boot there. |
+| `root` | `local` only | Absolute directory holding this driver's objects. Not read by [`s3`](#the-s3-adapter--provider-owned-object-storage), which takes `bucket` instead. |
 | `maxObjectSize` | no | Per-object ceiling, as a **unit-suffixed string** (`"50MB"`). Defaults to `100MB`. |
 | `store` | no | A `connectors.json` entry name for the metadata store. Omit for the embedded default. |
 | `inlineThreshold` | no | [Size-tiering](#size-tiering) boundary, as a **unit-suffixed string**. Objects strictly under it live inline in the metadata store. Defaults to `"64KB"`; `"0B"` turns tiering off for this driver. Applies to `sharded` and `cas`; reported as an ignored key under `stream`, which never inlines. |
@@ -117,14 +117,25 @@ gina.storage().put(pdf, {
 });
 ```
 
-Reading it back:
+Reading it back — in almost every case reach for
+[`self.serveFromStorage()`](#serving-objects-over-http), which owns the
+conditional-GET and `Range` protocol for you:
 
 ```javascript
+self.serveFromStorage('assets', order.invoiceKey);
+```
+
+Stream the bytes yourself only when you want custom protocol handling. The
+response is the action's **own `res` argument** — the controller keeps `res`
+private and publishes no `self.res`:
+
+```javascript
+// inside an action: function (req, res, next) { … }
 gina.storage().get(order.invoiceKey, function (err, stream) {
     if (err) {
         return self.throwError(404);
     }
-    stream.pipe(self.res);
+    stream.pipe(res);
 });
 ```
 
