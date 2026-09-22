@@ -802,6 +802,81 @@ silently instead of failing. Retire only where gina is 0.6.32 or newer.
 
 Full reference: [`security.json`](/reference/security).
 
+### Added — `lib.duration.parse()`, one parser for unit-suffixed durations (no action)
+
+`lib.duration.parse()` is the framework's one parser for unit-suffixed duration strings —
+`"500ms"`, `"30s"`, `"15m"`, `"3h"`, `"15d"`. The unit is required: a bare number is refused
+with `NaN`, and `"0s"` is legal. It is the parser `lib/storage` already used for its interval
+keys, promoted to a registry entry so that every configuration key naming a span of time —
+the storage intervals and the `security.json` session lifetimes above — shares one dialect.
+Storage delegates to it and its behaviour is unchanged.
+
+Additive. Nothing to do; reach it as `lib.duration.parse()` from framework-side code if you
+want the same parser for your own keys.
+
+### Added — the maintenance status payload carries `pid` and `hostname` (no action)
+
+`GET` and `POST /_gina/maintenance` now answer with `pid` and `hostname` — the process that
+answered and, under Kubernetes, the pod name. The runtime override was always per process: it
+lives in the memory of the process that received the `POST`, and unless the replica sync above
+(`server.maintenance.store`) is configured it is neither written nor broadcast, so a replica
+that restarts returns to its configured state. The two fields let an operator fanning a `POST`
+out over replicas read back which ones applied it; `enabled: true` in configuration remains the
+durable, deployment-wide form. Additive — nothing in the existing payload moved.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Added — a `commit-msg` hook for contributor clones (no action for applications)
+
+The framework repository gains a `commit-msg` git hook that keeps local-tool configuration
+paths and attribution mentions out of commit messages — the one surface no hook had scanned.
+It reaches a contributor clone through the `core.hooksPath` that `post_install` already
+installs, and it is not part of the published package: an application installing gina from
+npm sees nothing of it and has nothing to do.
+
+### Fixed — a JSON config with a docblock and an unterminated `/*` in a string no longer hangs the boot (restart; no rebuild)
+
+`requireJSON` strips block comments from a config that carries a `/**` docblock, and did so
+with a regular expression that backtracked about twice per line — four times per CRLF line —
+following a string value containing `/*` with no `*/` after it: a glob or a certificate path
+such as `"…/ssl/*.example.pem"`. A config with such a value a few dozen lines from its bottom
+hung the boot until the CLI's start-wait killed the process, with nothing logged. The strip is
+now a linear, string-aware scan: a `/*` inside a quoted value is data and survives intact —
+where the old strip also removed `/**/` from glob values such as `"./lib/**/*"`. Block
+comments are still stripped only when the file carries a docblock.
+
+**What to check:** a glob value the old strip had silently shortened is now read as written.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — `self.throwError()` answers the request when called with a falsy value (restart; no rebuild)
+
+The one-argument form passes the caller's own payload in the slot the two- and three-argument
+forms use for the response, and the guard that protects `throwError()` from running against an
+already-released response tested only that slot for truthiness. So `self.throwError(err)` with
+`err` an empty string, `null`, `undefined`, `0` or `false` was mistaken for a late call:
+nothing was written, the request was never answered, and the only trace was a warning that the
+response had been released — which it had not — followed by no error text, because that
+message reads the status and message arguments, never the payload. Such a call now renders a
+500 like any other; genuine late calls, and calls made with no arguments, still bail exactly as
+before. This is the guard the `?error=` fix above ran into.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
+### Fixed — the storage metadata store runs your callback outside its own try/catch (restart; no rebuild)
+
+Seven methods of the storage metadata store — `set`, `remove`, `acquireRef`, `releaseRef`,
+`listZeroRefs`, `removeIfZero` and `listKeys` — invoked the application callback inside the
+`try` that guards their SQLite statement. An error thrown by the callback was swallowed by the
+store, and the `catch` then invoked the same callback a second time with the application's own
+error presented as a store error. A caller that latches on the first settle — the
+content-addressed driver's `verify()` does — treated the re-entry as a no-op and never
+completed, so the operation hung instead of reporting. Callbacks now run after the `try` on
+every path; a genuine store error still arrives as `fn(err)`, and `get()`, which already had
+the correct shape, is unchanged.
+
+Server-side: **restart the bundle**. No rebuild needed.
+
 ## 0.6.30 → 0.6.31
 
 ### Security — a request field named `count` crashed the request, and usually the whole process (restart **and** rebuild)
