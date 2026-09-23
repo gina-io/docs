@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'infra/cloudflare/**'
+  # The docs merge job in update-alias.yml pushes main with GITHUB_TOKEN, which
+  # fires no push trigger — it dispatches this workflow instead when the merge
+  # touched infra/cloudflare/**.
+  workflow_dispatch:
 
 jobs:
   deploy:

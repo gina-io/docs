@@ -5,8 +5,16 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    # Badge drift check — see the `drift` job. Minute offset avoids top-of-hour load.
+    # Badge drift check + the gina docs merge — see the `drift` and `merge`
+    # jobs. Minute offset avoids top-of-hour load.
     - cron: '17 */6 * * *'
+
+# One deploy at a time: a push deploy and a scheduled merge+deploy would
+# otherwise race on the gina-io-docs alias. A running deploy is never
+# cancelled; a newer queued one waits.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
 
 jobs:
   drift:
@@ -57,17 +65,143 @@ jobs:
 
           echo "drifted=$drifted" >> "$GITHUB_OUTPUT"
 
+  merge:
+    # Scheduled + manual runs: when a new STABLE gina is LIVE on the registry
+    # and develop was staged for exactly that version (the gina release
+    # checklist sets docusaurus.config.js's ginaVersion on develop before the
+    # publish), merge develop into main — what gina's release script used to
+    # do from the maintainer's machine — catch the gina devDependency up first
+    # (docs/api is rendered from the INSTALLED gina, i.e. the lock pin), and
+    # deploy in this same run: a push made with GITHUB_TOKEN starts no
+    # workflow.
+    #
+    # `drift` is NOT a safe trigger for this: develop routinely stages the docs
+    # of the NEXT, unreleased version, and drift also fires on a swig-family
+    # release, on a registry-lag badge downgrade, and when the site or the
+    # registry is unreachable. The gate below reads three things — npm latest,
+    # develop's ginaVersion, main's ginaVersion — and merges only when the
+    # first two agree and main lags. A conflict is never auto-resolved.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # the merge push to main + the devDependency catch-up on develop
+      actions: write    # dispatching deploy-worker.yml when the merge touches infra/cloudflare/**
+    outputs:
+      merged: ${{ steps.merge.outputs.merged }}
+      sha: ${{ steps.merge.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Gate — is a stable gina live that develop is staged for and main is not?
+        id: gate
+        run: |
+          set -euo pipefail
+          ginaVersion () { git show "$1:docusaurus.config.js" | sed -n "s/^const ginaVersion = '\(.*\)';\$/\1/p" | head -1; }
+          latest=$(npm view gina dist-tags.latest 2>/dev/null || echo unknown)
+          dev_v=$(ginaVersion origin/develop)
+          main_v=$(ginaVersion origin/main)
+          echo "gina: latest=$latest develop=$dev_v main=$main_v"
+          decision=skip
+          case "$latest" in
+            unknown|'') reason="the registry is unreadable" ;;
+            *-*)        reason="npm latest is a pre-release ($latest)" ;;
+            *)
+              if git merge-base --is-ancestor origin/develop origin/main; then
+                reason="develop is already merged into main"
+              elif [ "$main_v" = "$latest" ]; then
+                reason="main already names the live version"
+              elif [ "$dev_v" = "$latest" ]; then
+                decision=merge; reason="develop is staged for the live $latest and main is at $main_v"
+              elif [ "$(printf '%s\n%s\n%s\n' "$latest" "$dev_v" "$main_v" | sort -V | tail -1)" = "$latest" ]; then
+                echo "::error::gina $latest is live but neither develop ($dev_v) nor main ($main_v) is staged for it — set ginaVersion on develop (gina release checklist, step 10c), push, then dispatch this workflow"
+                exit 1
+              else
+                reason="develop is staged for $dev_v, live is $latest"
+              fi ;;
+          esac
+          echo "decision: $decision — $reason"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+
+      - name: Catch the gina devDependency up on develop, then merge develop into main
+        id: merge
+        if: steps.gate.outputs.decision == 'merge'
+        run: |
+          set -euo pipefail
+          latest="${{ steps.gate.outputs.latest }}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git branch -f develop origin/develop
+          # A GITHUB_TOKEN push that creates or updates .github/workflows/** is
+          # refused (the token has no `workflows` scope) — say so before merging.
+          wf=$(git diff --name-only origin/main...develop -- .github/workflows/ || true)
+          if [ -n "$wf" ]; then
+            echo "::error::develop changes workflow files — this push would be refused; merge develop into main by hand:"
+            echo "$wf"
+            exit 1
+          fi
+          # The catch-up. The registry serves $latest by the gate's own precondition;
+          # if the lockfile still cannot be regenerated, commit NOTHING (the pair
+          # stays consistent) and merge the content anyway.
+          git checkout -q develop
+          if npm pkg set devDependencies.gina="^$latest" && npm install --package-lock-only --ignore-scripts; then
+            if git diff --quiet -- package.json package-lock.json; then
+              echo "gina devDependency already at ^$latest"
+            else
+              git commit -q -m "Updating the gina devDependency to ^$latest after the stable publish" -- package.json package-lock.json
+              git push origin develop
+              echo "gina devDependency caught up to ^$latest on develop"
+            fi
+          else
+            git checkout -q -- package.json package-lock.json
+            echo "::warning::could not regenerate package-lock.json for gina@$latest — nothing committed, the content still merges; catch up later with: npm pkg set devDependencies.gina=\"^$latest\" && npm install --package-lock-only --ignore-scripts"
+          fi
+          git checkout -q main
+          before=$(git rev-parse HEAD)
+          if ! git merge --no-edit develop; then
+            echo "::error::develop → main CONFLICTS — nothing pushed; resolve by hand (the documented content-loss / pair-consistency checks are judgement calls):"
+            git diff --name-only --diff-filter=U || true
+            git merge --abort || true
+            exit 1
+          fi
+          git push origin main
+          sha=$(git rev-parse HEAD)
+          echo "merged develop ($(git rev-parse --short develop)) into main: $before → $sha"
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$(git diff --name-only "$before" "$sha" -- infra/cloudflare/)" ]; then
+            echo "worker=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy the Cloudflare Worker — the merge changed infra/cloudflare/** and a bot push fires no workflow
+        if: steps.merge.outputs.worker == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-worker.yml --ref main
+
   deploy:
-    needs: [drift]
-    # always() lets this run when drift is skipped (push / manual dispatch);
-    # on scheduled runs it deploys only when the drift check saw a stale badge.
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || needs.drift.outputs.drifted == 'true')
+    needs: [drift, merge]
+    # always() lets this run when drift/merge are skipped (push / manual dispatch);
+    # on scheduled runs it deploys when the drift check saw a stale badge or the
+    # merge job just moved main.
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || needs.drift.outputs.drifted == 'true' || needs.merge.outputs.merged == 'true')
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # After an in-run merge, deploy the MERGE commit — a bare checkout would
+          # pin the pre-merge github.sha. Otherwise exactly the triggering commit.
+          ref: ${{ needs.merge.outputs.sha || github.sha }}
 
       - uses: actions/setup-node@v5
         with:
