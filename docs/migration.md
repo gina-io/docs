@@ -75,6 +75,29 @@ beside `getRequiredKeys`) and exports `MALFORMED_RE` beside `SECRET_RE`.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — a throw from `onInitialize` now aborts the boot loudly (restart; behaviour change)
+
+A synchronous throw from the bundle's `onInitialize` callback — or the rejection
+of a promise an `async` callback returns — **before** it emitted `complete` used
+to be logged at error level and swallowed: the boot stopped with nothing
+listening and no failure reported. `gina bundle:start` waited out its startup
+timeout (about a minute) and printed only "Check your logs", and under
+`gina-container` the process could even exit with code `0`, a success status.
+
+It now aborts the boot the same way a model-load failure does:
+`[ FRAMEWORK ] onInitialize threw before emitting 'complete' — aborting boot: <stack>`
+on stderr and exit code `1`, so `gina bundle:start` reports the failure straight
+away and a container exits `1` with the reason in its log. A throw **after**
+`complete` is logged — now as `onInitialize threw after emitting 'complete' — the
+bundle keeps starting …` — and the bundle keeps starting, as before. See
+[Architecture — Bootstrap failures](/concepts/architecture#bootstrap-failures).
+
+**What to check:** a bundle whose bootstrap throws today — one that never
+listens — will now exit `1` naming the throw. That is the fix. Nothing changes
+for a bundle whose callback runs to `complete`.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

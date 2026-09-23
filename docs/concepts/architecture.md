@@ -85,6 +85,25 @@ stateDiagram-v2
     Crashed --> Stopped : process exit
 ```
 
+### Bootstrap failures
+
+When `src/<bundle>/index.js` registers an `onInitialize` callback, that callback
+wires the application and ends with `event.emit('complete', app)`, which starts
+the server. If it throws — or the promise an `async` callback returns rejects —
+**before** it has emitted `complete`, the bundle process exits with code `1` and
+the reason on stderr:
+
+```text
+[ FRAMEWORK ] onInitialize threw before emitting 'complete' — aborting boot: Error: …
+```
+
+`gina bundle:start` then reports the failure straight away instead of waiting
+out its startup timeout, and a `gina-container` container exits `1` with the
+reason in its log. A throw **after** `complete` is logged and the bundle keeps
+starting, because its server start was already triggered — but the rest of the
+callback did not run. Since `0.6.33`; before it, the throw was only logged and
+the boot stopped with nothing listening and no failure reported.
+
 ---
 
 ## HTTP request lifecycle
