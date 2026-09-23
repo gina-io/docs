@@ -514,9 +514,9 @@ overrides the built-in value rather than being merged under it.
 
 :::caution Values containing `+` — declare `Content-Type` explicitly
 The request body is JSON, but on **0.6.17 and earlier** it is labelled
-`application/x-www-form-urlencoded`. The server honours that label and
-url-decodes the body before parsing it, which turns every `+` in a value into a
-space — so a check on an email plus-address such as `alias+tag@example.com` is
+`application/x-www-form-urlencoded`. The server honours that label and reads
+every `+` in the body as a space, as the form encoding prescribes, before parsing
+it — so a check on an email plus-address such as `alias+tag@example.com` is
 answered for `alias tag@example.com` instead. The body stays well-formed, so
 nothing errors: the endpoint simply returns the wrong answer, and because a
 `query` rule also gates the submit button the visitor cannot submit at all.

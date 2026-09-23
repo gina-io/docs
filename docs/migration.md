@@ -98,6 +98,199 @@ for a bundle whose callback runs to `complete`.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Security — an encoded `&` or `=` in a form field can no longer add or override other fields (restart and re-bake; behaviour change)
+
+An `application/x-www-form-urlencoded` POST, PUT or PATCH body was percent-decoded
+as a whole **before** it was split into fields, so an encoded `&` or `=` inside a
+field's name or value became a separator. A value could add a field, or override
+one sent earlier in the same body — and the body stayed well-formed, so nothing
+reported it. Percent-encoding is what protects text relayed from someone else
+(stored text pre-filled into another user's form, a body composed server-side with
+`encodeURIComponent`), and the parser undid it.
+
+The body now follows the standard form algorithm: split on `&`, then at the
+**first** `=`, and each name and value is percent-decoded **exactly once**.
+
+| Body sent | 0.6.32 | 0.6.33 |
+|-----------|--------|--------|
+| `bio=hi%26role%3Dadmin` | `{ bio: 'hi', role: 'admin' }` | `{ bio: 'hi&role=admin' }` |
+| `role=user&a%26role%3Dadmin=x` | `{ role: 'admin' }` | `{ role: 'user', 'a&role=admin': 'x' }` |
+| `token=YWJj==` | `{ token: 'YWJj' }` | `{ token: 'YWJj==' }` |
+| `pct=100%2525` | `{ pct: '100%' }` | `{ pct: '100%25' }` |
+| `ok=%22true%22` | `{ ok: 'true' }` | `{ ok: '"true"' }` |
+| `f=%7B%22active%22%3A%22true%22%7D` | `{ f: { active: true } }` | `{ f: { active: 'true' } }` |
+| `items%5B0%5D=%7B%22a%22%3A1%7D` | `{ 'items[0]': { a: 1 } }` | `{ items: [ { a: 1 } ] }` |
+| `title=%5BDRAFT%5D+x` | `{}` — the field was dropped | `{ title: '[DRAFT] x' }` |
+| `constructor=v&a=1` | `{ constructor: 'v', a: '1' }` | `{ a: '1' }` — see the reserved-names note below |
+
+Beyond the fix itself:
+
+- **A quoted token keeps its quotes.** `%22true%22` — or a raw `"true"` in a
+  hand-built body — is the six-character string `"true"`; a text pass over the
+  whole body used to strip the quotes.
+- **A JSON value in a field keeps its own types.** A value that is itself a JSON
+  document is parsed as JSON, so a quoted `"true"` inside it stays a string, and
+  under a bracket name it nests: `items[0]={…}` now gives `items` an element
+  instead of a field literally named `items[0]`. A value that merely starts with
+  `{` or `[` and is not JSON is kept as text; it used to be dropped.
+- **A stray `{`-leading segment without `=` is dropped** like any value-less
+  segment. It used to replace every field of the body: `a=1&{"x":1}&c=3` gave
+  `{ x: 1 }` and now gives `{ a: '1', c: '3' }`.
+- **Bare `true`, `false`, `on` and `null` stay strings** on this path, as they
+  always did. The [data helper](/globals/data#url-encoded-input) example that said
+  otherwise was wrong and is corrected.
+
+**What to check:**
+
+- Plain HTML forms (`method="post"` without the client validator) and hand-built
+  urlencoded bodies take this path. The client validator sends its fields as a
+  JSON document — labelled `application/json` unless the form sets an explicit
+  `enctype` — so the split never applied to it; the change it does see is in the
+  next note.
+- A client that encodes a value **twice**, or a server-side sender composing a
+  body from text that is already percent-encoded, now receives that text decoded
+  once: `100%2525` arrives as `100%25`. Encode each name and value once.
+- Code that read a JSON field's quoted `"true"`/`"false"` as booleans now gets
+  strings — compare with the string, or send JSON booleans (`{"active":true}`).
+- Code that read a flat `items[0]`-style key for a JSON-valued field finds the
+  value nested under `items`.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a query value holding a percent-escape no longer empties the whole query (restart and re-bake; behaviour change)
+
+A GET or HEAD query value whose **text** holds a percent-escape — sent encoded,
+as `%250A` or `%2522`, so that it reads `%0A` or `%22` — was decoded a second time
+on its way to `req.get`. `%0A` and `%22` broke the JSON document the query is
+re-parsed from, so `req.get` came back **empty** for the whole request, and `%25`
+text silently collapsed:
+
+| Query sent | 0.6.32 | 0.6.33 |
+|------------|--------|--------|
+| `x=line%20%250A%20break&y=1` | `req.get` is `{}` | `{ x: 'line %0A break', y: '1' }` |
+| `x=100%2525%20sure` | `x` is `'100% sure'` | `x` is `'100%25 sure'` |
+
+A route with a `validator::` requirement copies the request data into an internal
+query, so a POST field merely containing such text made that route answer `404`.
+
+The data helper no longer percent-decodes a JSON document at all, whichever
+request it comes from, and the isaac query parser now decodes query **names**
+once, like values — so an HTML form GET's `user%5Bname%5D=Alice` still nests. The
+same document path serves two more callers:
+
+- **The client validator** hands its fields to it before sending: a form value
+  holding `%22` or `%0A` no longer empties the validated data set, and a pasted
+  `a%20b` is sent as typed.
+- **Routes declaring a DTO** re-parse their validated payload through it: an
+  `application/json` value holding `%20` reached the action as a space, and one
+  holding `%22` left the action with no payload at all (`req.post` undefined).
+  Both now arrive as sent.
+
+**What to check:**
+
+- Code that decoded a query value again to compensate, or a client that encoded
+  query values twice, now receives the text decoded once.
+- On the isaac engine a `+` in a query **name** is now a space (`a+b=1` gives
+  `{ 'a b': '1' }`), as the express engine's query parsers already did; `%2B`
+  keeps a plus.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — one GET request could stop the bundle: a bracket field name with a numeric segment (restart and re-bake)
+
+A bracket-notation field name whose non-last segment is numeric while its
+container is not an array — `0[a]`, or `a[0][b]` after `a[x]` — made the nesting
+helper throw a `TypeError`. Where it threw decided the damage:
+
+- **The `inheritedData` query parameter of a GET or HEAD request** is parsed with
+  no guard, so the throw reached the process as an `uncaughtException` and **the
+  bundle exited**. One unauthenticated `GET /any-url?inheritedData=0%5Ba%5D%3D1`
+  was enough, on any URL, because the parse runs before routing (measured on the
+  default engine: exit code 143, the next request refused).
+- **A form-encoded POST, PUT or PATCH field** with such a name answered `500`.
+- **The client validator's copy** of the helper threw in the browser, breaking the
+  submission.
+
+Such a segment now creates a plain object slot: `0[a]=1` gives
+`{ '0': { a: '1' } }`, and `a[x]=1&a[0][b]=2` gives
+`{ a: { '0': { b: '2' }, x: '1' } }`. Every shape that did not throw before is
+unchanged.
+
+**What to check:** nothing to change. Under a supervisor that restarts a bundle on
+exit, one such request per restart kept it down — a
+`[ FRAMEWORK ][ uncaughtException ] TypeError: Cannot read properties of null`
+line naming `parseLocalObj` in your logs was this.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — a parse failure no longer writes the request body or query to the log (restart and re-bake)
+
+When a request body or query failed to parse, the data helper wrote the unparsed
+input to the log at error level: the whole body of a `{`- or `[`-leading request
+not labelled `application/json` (a malformed body carrying a password logged the
+password), and every parameter of a GET whose query failed to re-parse — which the
+query bug above made reachable from an ordinary URL. The same lines ship in the
+browser bundle, so they reached the browser console too, and the isaac query
+parser warned with a parameter's value the same way.
+
+They now log metadata only — never the input, and never the parse error's message,
+which can quote the input:
+
+```text
+[365] could not parse body: 32 chars (SyntaxError), leading {
+[SERVER][INCOMING REQUEST] Could not convert to JSON or Array the value of `<name>` (<length> chars, <error name>). Leaving value as a string.
+```
+
+The first is the data helper's line: the input's length, the error's name and its
+first character, always `{` or `[`. The second is the isaac query parser's warning:
+the parameter's name, the value's length and the error's name. The two
+segment-level lines (`[parseBody#1]`, `[parseBody#2]`) are gone.
+
+**What to check:**
+
+- A log search or alert keyed on `[365] could not parse body` still matches.
+- Logs written by earlier releases may hold request bodies or query values,
+  credentials included. Review, rotate or purge them under your retention policy.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — a top-level field named `__proto__`, `constructor` or `prototype` is dropped (restart and re-bake; behaviour change)
+
+A top-level field named `__proto__` with a JSON value in a form-encoded body
+(`__proto__=%7B%22polluted%22%3A1%7D`) did not become a field: it replaced the
+**prototype** of `req.post`. `req.post.polluted` then read `1` while
+`Object.keys(req.post)` and `hasOwnProperty` saw nothing, so an allow-list checking
+own keys let it through. It stayed within that one request object — process-wide
+prototype pollution was already closed in 0.6.22.
+
+A top-level name `__proto__`, `constructor` or `prototype` is now dropped, from a
+form-encoded body and from any JSON document the [data helper](/globals/data)
+parses. Names nested inside a JSON value are kept, and bracket paths through them
+(`a[constructor]=x`) were already dropped in 0.6.22. An `application/json` request
+body is parsed as-is and is not affected.
+
+**What to check:** a form field or query parameter literally named `constructor`
+or `prototype` no longer reaches `req.post`, `req.get` or the other request
+objects — rename it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — two data-helper type declarations now match the runtime (type-check only)
+
+`nestBracketNotationKey` is declared with the bracket path as an **array**
+(`['item', '0', 'id']`), which is what it has always needed at runtime — a string
+path is nested character by character — so a TypeScript caller passing a string
+now fails to compile instead of building the wrong object. `formatDataFromString`
+is declared to return `object | undefined`: a `{`- or `[`-leading input that is not
+valid JSON yields `undefined`.
+
+**What to check:** with `strictNullChecks`, handle `undefined` before reading
+`formatDataFromString`'s result; replace a string path passed to
+`nestBracketNotationKey` with the array of its segments.
+
+Type declarations only: nothing to restart or re-bake — they take effect at your
+next type-check.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

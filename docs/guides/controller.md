@@ -558,6 +558,18 @@ object that matches the incoming method; the others are set to `undefined`.
 | `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
+:::note How request values are decoded
+A form-encoded body and a query string are split into names and values
+**first**, and each name and value is then percent-decoded **exactly once**. An
+encoded `&`, `=` or `%` is therefore data, never a separator:
+`bio=hi%26role%3Dadmin` arrives as the single field `bio: 'hi&role=admin'`, and a
+typed `100%25` arrives as `100%25`. The values of a form-encoded body stay
+strings (`active=true` gives `'true'`), while in a query string `true`, `false`
+and `on` become booleans and `null` becomes `null`. A JSON value inside a form
+field keeps its own types, and an `application/json` body is parsed verbatim.
+The full contract is on the [data helper](/globals/data) page.
+:::
+
 **`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
 need to distinguish between POST, PUT, and PATCH:
 
