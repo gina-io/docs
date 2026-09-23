@@ -294,6 +294,46 @@ valid JSON yields `undefined`.
 Type declarations only: nothing to restart or re-bake — they take effect at your
 next type-check.
 
+### Fixed — a referenced value is compared exactly as typed (restart and re-bake; behaviour change)
+
+An [`is`](/reference/validation-rules#is) condition such as
+`$password === $passwordConfirm` compares the values of the fields it references.
+Three defects sat in the way those values were put into the condition:
+
+- **A double quote, a backslash or a line break stopped the validation pass.** The
+  value was pasted into the rule set unescaped, so the rule set could no longer be
+  read: in the browser the form could not be submitted, and on the server the
+  validation threw. `$&`, `$'` and `$$` in a value were rewritten as well, so
+  `ab$$cd` matched `ab$cd`.
+- **Parentheses and the word `return` inside a value were ignored**, so `ab(cd`
+  matched `ab)cd` and `myreturnpass` matched `mypass` — in the browser, on the
+  server, and in route `validator::` requirements.
+- **A value with no ASCII letter or digit never matched**, so a confirmation made
+  only of symbols or non-ASCII letters (`!!!`, `é€`) always failed.
+
+| Values compared | 0.6.32 | 0.6.33 |
+|-----------------|--------|--------|
+| `ab"cd` and `ab"cd` | the validation pass throws | valid |
+| `ab(cd` and `ab)cd` | valid | mismatch |
+| `!!!` and `!!!` | mismatch | valid |
+
+A `$fieldName` token in a [`query`](/reference/validation-rules#query) rule's `data`
+now reaches the endpoint as typed too: a value holding a quote or a backslash no
+longer stops the check or arrives unreadable or altered.
+
+**What to check:**
+
+- A referenced field carrying a number rule (`isNumber`, `isInteger`, `isFloat`,
+  `toFloat`, `toInteger`) is compared as a number when its value is one, and as text
+  otherwise — two identical non-numeric values now compare equal, where the
+  comparison used to fail.
+- A string literal written in the condition itself now follows JSON escaping (`\"`
+  is a double quote, `\\` a backslash); one that is not valid JSON is read as
+  written, as before. A quoted segment you wrote into a `query` rule's `data`
+  follows the same escaping, and its quotes are still dropped.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

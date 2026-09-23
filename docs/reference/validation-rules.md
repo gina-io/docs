@@ -328,6 +328,21 @@ For safety, free-form expressions are restricted to one regex test or one binary
 comparison (`===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`); anything else is
 rejected.
 
+Referenced values are compared exactly as typed, whatever they contain — quotes,
+backslashes, line breaks, parentheses, the word `return`, `$&`, or only symbols and
+non-ASCII letters such as `!!!` or `é€` (since 0.6.33 — earlier, a double quote, a
+backslash or a line break stopped the whole validation pass, parentheses and
+`return` inside a value were ignored so `ab(cd` matched `ab)cd`, and a value with no
+ASCII letter or digit never matched; see the
+[migration note](/migration#fixed--a-referenced-value-is-compared-exactly-as-typed-restart-and-re-bake-behaviour-change)).
+A referenced field with a number rule (`isNumber`, `isInteger`, `isFloat`, `toFloat`
+or `toInteger`) is compared as a number when its value is one, and as text
+otherwise.
+
+A string literal written in the condition itself follows JSON escaping: `\"` is a
+double quote and `\\` a backslash (in a JSON rule file, write each backslash twice).
+A literal that is not valid JSON is read as written.
+
 - **Default message:** *Condition not satisfied* (override with the second
   argument or [`setFlash`](#setflash)).
 
@@ -501,7 +516,7 @@ internals never reach the form.
 | Key | Type | Meaning |
 |---|---|---|
 | `url` | string | Endpoint to call. A gina route name (`name@bundle`) is resolved through the router; anything starting with `http` is used as-is. |
-| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call. |
+| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). |
 | `validIf` | boolean | The response `isValid` the rule treats as a **pass**. Defaults to `true`; set `false` for a "must NOT exist" check such as a uniqueness probe. |
 | `method` | string | HTTP method. Defaults to `GET`. |
 | `headers` | object | Request headers, merged over the defaults. See the caution below. |
