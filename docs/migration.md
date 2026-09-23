@@ -263,15 +263,18 @@ A top-level field named `__proto__` with a JSON value in a form-encoded body
 own keys let it through. It stayed within that one request object — process-wide
 prototype pollution was already closed in 0.6.22.
 
-A top-level name `__proto__`, `constructor` or `prototype` is now dropped, from a
-form-encoded body and from any JSON document the [data helper](/globals/data)
-parses. Names nested inside a JSON value are kept, and bracket paths through them
-(`a[constructor]=x`) were already dropped in 0.6.22. An `application/json` request
-body is parsed as-is and is not affected.
+A top-level name `__proto__`, `constructor` or `prototype` is now dropped from a
+form-encoded body and from a query string. Names nested inside a JSON value are
+kept, and bracket paths through them (`a[constructor]=x`) were already dropped in
+0.6.22. A plain `application/json` request body is parsed as-is and keeps these
+names — but a route declaring a DTO re-parses its validated payload through the
+[data helper](/globals/data), so a top-level `prototype` key sent to such a route
+is now dropped as well.
 
 **What to check:** a form field or query parameter literally named `constructor`
 or `prototype` no longer reaches `req.post`, `req.get` or the other request
-objects — rename it.
+objects, and neither does a top-level `prototype` key in the JSON body of a route
+declaring a DTO — rename it.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
