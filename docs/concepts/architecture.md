@@ -104,6 +104,21 @@ starting, because its server start was already triggered — but the rest of the
 callback did not run. Since `0.6.33`; before it, the throw was only logged and
 the boot stopped with nothing listening and no failure reported.
 
+A model that fails to build at boot ends the boot the same way. An entity file
+the class-name check rejects (a name starting with a digit or an underscore), an
+entity constructor that throws, or a connector's entity manager that fails to
+load exits the bundle with code `1` and the reason on stderr, whichever
+connector the model uses:
+
+```text
+[ FRAMEWORK ] Model loading failed — aborting boot: Error: …
+```
+
+Before `0.6.33` this held only for a connector that reports readiness
+synchronously, such as SQLite. On an asynchronous one, such as DuckDB or
+Couchbase, the failure was only logged, the bundle never listened, and a
+`gina-container` process could exit `0`.
+
 ---
 
 ## HTTP request lifecycle

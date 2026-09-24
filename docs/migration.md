@@ -98,6 +98,26 @@ for a bundle whose callback runs to `complete`.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — a model that fails to load on an asynchronous connector now aborts the boot (restart; behaviour change)
+
+On a connector that reports readiness asynchronously, such as DuckDB or
+Couchbase, a failure while the models were being built used to be logged only
+as `[ FRAMEWORK ] Unhandled promise rejection: …`. The bundle never listened,
+and under `gina-container` the process could exit with code `0`, a success
+status. Typical causes: an entity file whose name starts with a digit or an
+underscore (the class-name check rejects it), or an entity constructor that
+throws.
+
+It now aborts the boot the way it already did on SQLite:
+`[ FRAMEWORK ] Model loading failed — aborting boot: <stack>` on stderr and exit
+code `1`. See [Architecture — Bootstrap failures](/concepts/architecture#bootstrap-failures).
+
+**What to check:** a bundle that exits `0` or never listens at boot, with that
+rejection line in its log, will now exit `1` naming the cause. That is the fix.
+A bundle whose models load is unaffected.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ### Security — an encoded `&` or `=` in a form field can no longer add or override other fields (restart and re-bake; behaviour change)
 
 An `application/x-www-form-urlencoded` POST, PUT or PATCH body was percent-decoded
