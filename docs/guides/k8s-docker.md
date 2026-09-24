@@ -469,6 +469,26 @@ in Kubernetes the answer is the platform's own: give each service its normal
 Cross-service request correlation rides along automatically — `self.query()`
 propagates `X-Request-Id` and echoes it as a response header.
 
+### Balancing bundle-to-bundle calls
+
+`self.query()` multiplexes every call to one upstream over **one cached HTTP/2
+session** — one TCP connection. A `Service` balances per *connection* (the kube-proxy
+default, like any TCP load balancer), so all of a caller's traffic to that upstream lands
+on the one pod its connection reached, until the session is replaced. Two ways out:
+
+- Balance per **request** with an HTTP-aware ingress or a service mesh, which sees each
+  stream.
+- Keep the L4 `Service` and raise the caller's session pool —
+  `server.query.http2SessionPool` (default `1`, up to `50`) opens that many sessions per
+  upstream and hands calls to them in turn, so a per-connection balancer can place each
+  session on a different pod. Measured through a per-connection round-robin proxy over two
+  replicas: a pool of 1 put 40 of 40 calls on one replica, a pool of 2 split them 20 / 20.
+  See [Session pool](/guides/http2-resilience#session-pool).
+
+Sessions are long-lived: an upstream closes one only after
+`http2Options.sessionIdleTimeout` (120 s) without a request, so a fresh replica picks up
+traffic as sessions are replaced, not at once.
+
 ### Overriding the resolver
 
 When cluster DNS is not the resolver you want for a given scope, set

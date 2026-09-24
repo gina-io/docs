@@ -518,6 +518,126 @@ concatenation instead of binding a query parameter or validating an identifier:
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
+
+Two defects in the `self.query()` HTTP/2 client, both found by the bundle-to-bundle
+audit (2026-09-24):
+
+- **Orphaned connections.** Every eviction of a cached client session deleted the cache
+  entry *by key*, so a dead session's late `close`, `error` or `goaway` — or an earlier
+  attempt's retry — evicted the live replacement a retry had just cached under the same
+  key. The replacement kept running outside the cache, keepalive ticking, and the next
+  call opened yet another connection: 148 + 160 upstream connections were still open
+  186 s after a load run. Every eviction is now identity-checked, and a session that
+  loses its place in the cache (replaced, evicted to make room, deleted) stops its
+  keepalive and closes gracefully. The 50-session cap drains the oldest session instead
+  of destroying it under an in-flight call.
+- **The pre-flight PING storm.** A session counted as stale 3 s after its last PONG while
+  the keepalive pinged every 5 s, so about 40% of the time every concurrent caller sent
+  its own PING; Node.js cancels every PING past 10 outstanding, and a cancel was read as
+  a dead session — 22 healthy sessions evicted per 10 s at 50 concurrent callers. Now one
+  PING per session serves every waiting caller, every response counts as proof of life,
+  and a cancelled PING is inconclusive.
+
+**What to check:** nothing in your configuration. If you had raised `requestTimeout` or
+lowered concurrency to work around `PREFLIGHT_FAILED` errors or connection growth on
+bundle-to-bundle traffic, those can go. See
+[HTTP/2 Resilience — Session lifecycle](/guides/http2-resilience#session-lifecycle).
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Added — `server.query.http2SessionPool` (restart)
+
+`self.query()` keeps one HTTP/2 session per upstream authority — one connection — so a
+balancer that balances per *connection* (a Kubernetes `Service` without an HTTP-aware
+ingress, most TCP load balancers) pins all of a caller's traffic to one replica. Set
+`server.query.http2SessionPool` (an integer from 1 to 50) to keep N sessions per
+upstream, filled round-robin; each is its own connection, so a per-connection balancer
+can spread them. The default `1` is the single session every earlier release used.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "query": {
+      "http2SessionPool": 2
+    }
+  }
+}
+```
+
+**What to check:** nothing unless you set it. Any value outside 1–50 refuses the boot;
+the pool counts toward the 50-session cap, so keep *pool × upstreams* under 50. See
+[Session pool](/guides/http2-resilience#session-pool).
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the boot warmup (`server.warmup`) now keeps its HTTP/2 sessions on Node.js (restart)
+
+The warmup sent its first PING while the session was still connecting; Node.js cancels
+such a PING at once, and the warmup read the cancel as a dead session and discarded it —
+so the first real `self.query()` still met a cold connection. The PING is now sent once
+the session is connected, and the warmed session is cached and kept alive exactly like
+one `self.query()` opens.
+
+**What to check:** nothing. A bundle that lists upstreams in `server.warmup` now starts
+with those sessions open; the `[warmup] Initial PING failed` log line is gone.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the Isaac server closes idle HTTP/2 sessions after 120 s; `http2Options.sessionIdleTimeout` (restart; behaviour change)
+
+The server's 120 s idle timer never closed a session: it waited for
+`session.activeStreams` to read 0, and that property does not exist, so idle sessions
+lived until the client or the network dropped them. An idle session — no request and no
+data for the timeout — is now closed gracefully with `GOAWAY(NO_ERROR)`: open streams
+finish on their own, no new stream is accepted on that connection, and the client's next
+request opens a fresh one. The timeout is configurable:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "sessionIdleTimeout": "120s"
+    }
+  }
+}
+```
+
+**What to check:**
+
+- Clients that hold an HTTP/2 connection open and idle for more than two minutes —
+  browsers, gina's own `self.query()`, `curl`, an HTTP/2 upstream of a reverse proxy — now
+  receive a graceful GOAWAY and reconnect on their next request. All of them handle it;
+  for a client that does not, `"sessionIdleTimeout": 0` restores the old never-close
+  behaviour.
+- A client PING is not activity: a sibling bundle's keepalive does not keep an idle
+  session open. A quiet open stream is not either — an SSE stream between events sees
+  its session enter shutdown, carries on untouched until it ends, and new requests from
+  that client use a new connection. A stream still sending data keeps the session.
+- Accepts `"120s"`, `"2m"`, `"500ms"` or milliseconds; a negative, non-timeout or
+  larger-than-2147483647 ms value logs one boot warning and uses 120 s.
+- **Node.js only.** On Bun the key is ignored with one boot warning and the server still
+  does not close idle sessions (Bun 1.2 / 1.3 time out busy sessions, and a client's
+  next request after such a close hangs).
+
+Server-side only: **restart the bundle** — no re-bake. See
+[Session idle timeout](/guides/http2-native#session-idle-timeout).
+
+### Fixed — a request refused before the upstream processed it is retried for any method (restart)
+
+A request queued onto an HTTP/2 session that had just started closing — the upstream's
+GOAWAY landed between the pre-flight PING and the send, which the idle close above makes
+a regular event — was refused before any processing (`REFUSED_STREAM`; on Node.js 24 / 26
+and Bun 1.4 an `ERR_HTTP2_GOAWAY_SESSION` stream error) and went through the stream-error
+path, where only a safe method is replayed: a POST failed with a 503 although nothing had
+been processed. Such a request is now retried for any method — on a fresh session, or on
+the same session when a healthy upstream merely refused a stream at its limit.
+
+**What to check:** nothing. `STREAM_ERROR` failures on non-safe methods that coincided
+with an upstream restart or idle close are gone.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

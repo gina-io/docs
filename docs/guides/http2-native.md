@@ -280,7 +280,8 @@ Security limits (`headerTableSize`, `maxHeaderListSize`) remain hardcoded:
       "maxSessionRejectedStreams": 100,
       "maxSessionInvalidFrames": 1000,
       "maxStreamResetsPerSecond": 200,
-      "enableConnectProtocol": false
+      "enableConnectProtocol": false,
+      "sessionIdleTimeout": "120s"
     }
   }
 }
@@ -336,6 +337,46 @@ Isaac tracks HTTP/2 session metrics internally (`server._h2Metrics`):
 
 The [Inspector](/guides/inspector) Flow tab visualizes HTTP/2 inter-bundle calls,
 showing multiplexed request timelines in the waterfall chart.
+
+---
+
+## Session idle timeout
+
+Isaac closes an HTTP/2 session that has carried no request for
+`http2Options.sessionIdleTimeout` — 120 s by default — with a graceful `GOAWAY(NO_ERROR)`:
+streams still open finish on their own, no new stream is accepted on that connection, and
+the client's next request opens a fresh one. Browsers and gina's own `self.query()` client
+handle this transparently.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "sessionIdleTimeout": "120s"
+    }
+  }
+}
+```
+
+- Accepts the timeout format (`"120s"`, `"2m"`, `"500ms"`) or milliseconds. `0` disables
+  the close — the behaviour of every release before `0.6.33`. A negative, non-timeout or
+  larger-than-2147483647 ms value logs one boot warning and uses the default.
+- **What counts as activity:** a request, or a DATA frame on an open stream. A client PING
+  does not — a sibling bundle's 5 s keepalive does not keep an idle session alive — and
+  neither does a quiet open stream: an SSE stream between events sees its session enter
+  shutdown at the timeout, carries on untouched until it ends, and new requests from that
+  client use a new connection. A stream still sending data keeps the session.
+- Each idle close logs `[ SERVER ] HTTP/2 session idle for <ms> ms — closing it gracefully`
+  at the info level, and `activeSessions` in `/_gina/info` drops once the session is gone.
+- **Node.js only.** On Bun the key is ignored (one boot warning when it is set) and idle
+  sessions are not closed by the server: Bun 1.2 / 1.3 time out *busy* sessions, and a
+  client's next request after such a close hangs, so the close is off there by design.
+
+:::info Since `0.6.33`
+Before, the 120 s timer existed but never closed anything — it waited for a session
+property that does not exist — so idle sessions lived until the client or the network
+dropped them.
+:::
 
 ---
 
