@@ -11099,8 +11099,9 @@ statements declared as `.sql` files at
 `@param` CQL-type coercion (`uuid`, `timeuuid`, `bigint`, `decimal`,
 `timestamp`, etc.) and `@return` shape. Lightweight transactions
 (`IF NOT EXISTS`, `IF version = ?`) supported with `[applied]` boolean
-extraction. Same `$scope` substitution and `_scope` filtering as the
-Couchbase connector.
+extraction. Entities carry the same `_scope` property as on the other
+connectors, but CQL files get no `$scope` substitution: pass the scope as a
+bound parameter where a query filters on it.
 
 The session store uses CQL `USING TTL` for per-row server-side reaping.
 The sessions table must be created up front (the store does not run DDL —

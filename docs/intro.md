@@ -24,7 +24,7 @@ Most Node.js frameworks give you request routing and leave the rest to you. Gina
 
 **Structure without boilerplate overhead.** Gina enforces MVC conventions (controllers, entities, `routing.json`, templates) so every project looks the same and every developer on the team knows where to look. There is no "how should we structure this?" discussion.
 
-**Scope-based data isolation.** `local`, `beta`, and `production` are first-class data scopes, not just environment variables. Your staging environment can share a database with production without contaminating data — the framework enforces the partition at query time.
+**Scope-based data isolation.** `local`, `beta`, and `production` are first-class data scopes, not just environment variables. Your staging environment can share a Couchbase bucket with production without contaminating data: every document is stamped with its scope, and a query that filters on it through the `$scope` placeholder only sees its own environment.
 
 **No Express dependency.** Gina is compatible with Express middleware but does not depend on it. You are not carrying the Express security surface, the callback-first API, or the middleware assembly overhead.
 

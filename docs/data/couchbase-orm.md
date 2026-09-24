@@ -32,8 +32,8 @@ Gina's Couchbase connector provides a structured ORM layer:
   CRUD methods and EventEmitter-based lifecycle hooks
 - **SQL files** -- N1QL queries stored as `.sql` files alongside entity code,
   version-controlled and reusable
-- **`$scope` isolation** -- automatic multi-tenant data partitioning at the query
-  level
+- **`$scope` isolation** -- filter a query on `_scope = $scope` and it only sees
+  the current environment's documents, even with every environment in one bucket
 - **Auto-stamping** -- `_createdAt`, `_updatedAt`, `_scope` fields injected on
   every insert
 - **Query instrumentation** -- every query captured in dev mode for the Inspector
@@ -172,8 +172,9 @@ ORDER BY i._createdAt DESC
 :::info
 `$scope` is a **string substitution**, not a query parameter. It is replaced with
 a quoted literal (`'local'`, `'production'`, etc.) before the query is sent to
-Couchbase. This ensures scope isolation is enforced at the data layer, not in
-application code. A longer placeholder that merely starts with `$scope` —
+Couchbase, so the value always comes from the connector, never from application
+code. The filter itself is yours: a query without `_scope = $scope` reads every
+scope. A longer placeholder that merely starts with `$scope` —
 `$scopeId`, say — is left alone.
 
 Because the scope is written into the statement text, the connector validates it
@@ -414,7 +415,7 @@ db.invoice.save({
 
 ## Multi-tenant isolation with `$scope`
 
-Every N1QL query that includes `$scope` is automatically partitioned by the
+Every N1QL query that filters on `_scope = $scope` is partitioned by the
 current environment's scope. This means:
 
 - A developer running in `local` scope sees only `local` documents
@@ -422,7 +423,8 @@ current environment's scope. This means:
 - Production sees only `production` documents
 
 **All from the same Couchbase bucket.** No separate databases, no separate clusters,
-no manual filtering in application code.
+and no per-environment branches in application code: the same `.sql` file serves
+every environment.
 
 ```mermaid
 flowchart LR
