@@ -377,6 +377,26 @@ inside a referenced value is never resolved.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — every request re-read the framework's env template from disk (restart)
+
+`Config` is constructed three times per request — route resolution, view
+detection and the bundle-configuration lookup — and each construction parsed the
+framework's `core/template/conf/env.json` twice through `requireJSON`, which has
+no cache. That was six synchronous file reads and parses per request in every
+bundle, twelve per bundle-to-bundle call, measured at 27% of a trivial JSON
+route's CPU.
+
+The template is now parsed once per process, on the first construction, and
+shared read-only by every `Config` instance. Nothing observable changes except
+the cost: the same values reach `defEnv`, `defScope` and the `${bundle}` /
+`${env}` substitutions.
+
+**What to check:** nothing in your configuration. If your own code calls
+`requireJSON` inside a request handler, move that read to module load or
+`onReady` — the helper never caches (see [JSON helper](/globals/json)).
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
