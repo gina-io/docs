@@ -257,7 +257,8 @@ Isaac includes built-in protection against known HTTP/2 attack vectors:
 |---|---|---|
 | HPACK bomb | Header table size limit | 4 KB (`headerTableSize`) |
 | Rapid Reset (CVE-2023-44487) | Rejected stream limit | 100 (`maxSessionRejectedStreams`) |
-| Rapid Reset (CVE-2023-44487) | Per-session new-stream rate limit | 200/s (`maxStreamsPerSecond`) |
+| Rapid Reset (CVE-2023-44487) | Runtime reset rate limit (nghttp2, every received `RST_STREAM`) | 1,000 burst then 33/s (`streamResetBurst` / `streamResetRate`, set together) |
+| Rapid Reset (CVE-2023-44487) | Per-session client-reset rate limit (streams cut short before the response) | 200/s (`maxStreamResetsPerSecond`) |
 | CONTINUATION flood | Invalid frame limit | 1000 (`maxSessionInvalidFrames`) |
 | Settings flood | Settings ACK timeout | 10 s |
 | Stream exhaustion | Concurrent stream limit | 256 (`maxConcurrentStreams`) |
@@ -278,19 +279,29 @@ Security limits (`headerTableSize`, `maxHeaderListSize`) remain hardcoded:
       "initialWindowSize": 655350,
       "maxSessionRejectedStreams": 100,
       "maxSessionInvalidFrames": 1000,
-      "maxStreamsPerSecond": 200,
+      "maxStreamResetsPerSecond": 200,
       "enableConnectProtocol": false
     }
   }
 }
 ```
 
-`maxStreamsPerSecond` (default 200) bounds how many new streams a single
-session may open within a rolling one-second window. When a session exceeds
-it, Isaac sends a `GOAWAY` and closes that session — a targeted,
-application-level defense against rapid-reset floods (CVE-2023-44487) on top
-of the OS-level mitigation in modern Node.js. The `/_gina/info` endpoint
-reports a `rapidResetBlocked` counter for breach events.
+`maxStreamResetsPerSecond` (default 200) bounds how many streams a single session's
+*client* may cut short — reset with `RST_STREAM`, of any code, before the response
+completed — within a rolling one-second window. That is the rapid-reset attack shape
+(CVE-2023-44487); a client that merely opens many streams, such as a sibling bundle
+multiplexing hundreds of `self.query()` calls per second on one session, never trips
+it (new streams stay bounded by `maxConcurrentStreams`). When a session exceeds it,
+Isaac sends `GOAWAY(ENHANCE_YOUR_CALM)` and closes that session, logs a warning, and
+the `/_gina/info` endpoint's `rapidResetBlocked` counter increments. It sits on top of
+the runtime's own frame-level reset limit (nghttp2: a 1,000-frame burst then 33/s,
+closing the session with `GOAWAY(INTERNAL_ERROR)` and no server-side event), which
+counts every received reset and can be tuned through `streamResetBurst` +
+`streamResetRate` — both keys together, or neither.
+
+Before `0.6.33` the key was `maxStreamsPerSecond` and it counted *new streams*; it is
+no longer read (one boot warning names it) — see the
+[migration notes](/migration#0632--0633).
 
 `enableConnectProtocol` (default `false`) advertises the RFC 8441 extended
 CONNECT capability, enabling WebSocket endpoints over the same HTTP/2
@@ -313,7 +324,9 @@ Isaac tracks HTTP/2 session metrics internally (`server._h2Metrics`):
 | `activeSessions` | Currently open HTTP/2 sessions |
 | `totalStreams` | Total streams opened since bundle start |
 | `goawayCount` | GOAWAY frames received from clients |
-| `rstCount` | RST_STREAM frames received |
+| `rstCount` | Streams the client cut short before the response completed (a `RST_STREAM` of any code, or the peer destroying the stream) — the signal the rapid-reset guard counts. Before `0.6.33` it always read 0. |
+| `rapidResetBlocked` | Sessions closed by the rapid-reset guard (one per breach) |
+| `extendedConnect` | RFC 8441 extended-CONNECT streams seen (WebSocket over HTTP/2) |
 
 The [Inspector](/guides/inspector) Flow tab visualizes HTTP/2 inter-bundle calls,
 showing multiplexed request timelines in the waterfall chart.

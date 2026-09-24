@@ -65,9 +65,25 @@ Retried error types:
 - Stream timeout (no response within `requestTimeout`)
 - Premature close (GOAWAY / network reset)
 - Stream error (HTTP/2 protocol error)
+- Session error — every in-flight stream of a session the server closed with a GOAWAY
+  (`ERR_HTTP2_SESSION_ERROR`, "Session closed with error code N"); retried since `0.6.33`
 - 502 Bad Gateway from upstream
 
+Every retry above re-sends a request the upstream may already have executed, so it is
+gated on the method: only a safe method (`GET`, `HEAD`, `OPTIONS`, `TRACE`) is replayed
+unless the call opts in with `retryUnsafe: true`. One case is exempt because nothing was
+sent: a cached session that died between the cache lookup and the send — `request()`
+throws synchronously — is retried on a fresh session for any method (since `0.6.33`).
+
 **`ECONNREFUSED` is never retried** — the target process is down, retrying won't help.
+
+:::info A completed stream is never reset
+Since `0.6.33` the client no longer sends an `RST_STREAM` after a completed response
+(the settled-stream release used to `close()` a stream that had not yet been marked
+closed). Those frames counted against the target's own reset rate limit, which closed
+long-lived bundle-to-bundle sessions with `GOAWAY(INTERNAL_ERROR)` after roughly a
+thousand calls — the `Session closed with error code 2` failures.
+:::
 
 ---
 
@@ -129,7 +145,7 @@ of these codes:
 |---|---|---|
 | `TIMEOUT` | Stream timeout — no response within `requestTimeout` | Yes |
 | `PREMATURE_CLOSE` | Stream closed before response complete (GOAWAY / reset) | Yes |
-| `STREAM_ERROR` | HTTP/2 stream or session error | Yes |
+| `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send exhausts into) | Yes (safe methods, or `retryUnsafe`; the gone-before-send case for any method) |
 | `ECONNRESET` | Connection reset by peer | Yes |
 | `ECONNREFUSED` | Connection refused — target process is down | **No** |
 | `PREFLIGHT_TIMEOUT` | Pre-flight PING got no PONG within deadline | Yes |

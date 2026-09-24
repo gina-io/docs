@@ -397,6 +397,69 @@ the cost: the same values reach `defEnv`, `defScope` and the `${bundle}` /
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Changed — the HTTP/2 rapid-reset guard counts client resets; `maxStreamsPerSecond` becomes `maxStreamResetsPerSecond` (restart; behaviour change)
+
+The Isaac rapid-reset guard (CVE-2023-44487) counted *new streams* per session per
+second, so a sibling bundle calling you over HTTP/2 — every `self.query()` to one
+authority multiplexes on one cached session — was `GOAWAY`'d by your bundle above 200
+calls per second: 17% of calls answered 500 at 50 concurrent callers with default
+settings. It now counts the streams a client *cuts short* — a `RST_STREAM` of any
+code, or the peer destroying the stream, before the response completed — which is the
+attack shape; a well-behaved multiplexing caller never resets a stream, so it never
+trips the guard. New streams stay bounded by `maxConcurrentStreams`.
+
+The setting is renamed to say what it counts:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "maxStreamResetsPerSecond": 200
+    }
+  }
+}
+```
+
+**What to check:** grep your bundles' `settings.json` / `settings.server.json` for
+`maxStreamsPerSecond`. The old key is **no longer read** — a bundle still carrying it gets
+one boot warning (`[ SERVER ] http2Options.maxStreamsPerSecond is no longer read …`)
+and the default. If you had raised it to stop your own bundle-to-bundle calls failing,
+delete the key: the workaround is obsolete and a raised value would otherwise have
+silently widened the reset limit. The runtime's own frame-level reset limit (nghttp2:
+a 1,000-reset burst, then 33/s, `GOAWAY(INTERNAL_ERROR)`) stays underneath as the
+primary guard; it can be tuned with `streamResetBurst` + `streamResetRate`, set together.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — bundle-to-bundle calls over HTTP/2 no longer die after ~1,000 calls, and a call cut by a GOAWAY is retried (restart)
+
+The HTTP/2 client sent an `RST_STREAM(NO_ERROR)` after **every** completed response,
+and the target's nghttp2 counted those frames against its reset rate limit — the
+cached session was closed with `GOAWAY(INTERNAL_ERROR)` after roughly a thousand calls
+and every in-flight call failed with `Session closed with error code 2`. The client no
+longer resets a settled stream.
+
+An in-flight **safe-method** call cut by a server GOAWAY (`ERR_HTTP2_SESSION_ERROR`) is
+now retried on a fresh session, as the resilience guide already promised; a non-safe
+method is still never replayed unless the call sets `retryUnsafe: true`. A session that
+died between the cache lookup and the send used to make `request()` throw synchronously
+— on a retry re-entry, as an uncaught exception; it is now retried on a fresh session
+for any method (nothing was sent) and exhausts into a typed `STREAM_ERROR` / 503.
+
+**What to check:** nothing in your configuration. If you had worked around the code-2
+failures with a lower `requestTimeout` or by raising the target's limiter, those can go.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the `/_gina/info` `rstCount` metric was always 0 (restart)
+
+The server listened for a `rstCode` *event* on every stream; `rstCode` is a stream
+property, so the listener never fired. `rstCount` now counts the streams the client cut
+short before the response completed — the signal the rapid-reset guard counts. A
+dashboard that read 0 there was not measuring anything.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
