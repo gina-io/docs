@@ -334,6 +334,49 @@ longer stops the check or arrives unreadable or altered.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — every `$field` token follows one grammar (restart and re-bake; behaviour change)
+
+A `$field` token — in an [`is`](/reference/validation-rules#is) condition, a route
+`validator::` requirement, a fluent `is()` call or a [`query`](/reference/validation-rules#query)
+rule's `data` — used to be recognised differently on each path. Now one rule applies
+everywhere: `$` + a field name, the longest name wins, a token ends at the first
+character outside `A-Z a-z 0-9 _ -`, a `$` naming no field stays literal, and a `$`
+inside a referenced value is never resolved.
+
+- **A value containing `$` + another field's name compares as typed.** A password
+  `abc$email` in a form that also has an `email` field could never be confirmed: the
+  rule set was resolved one field at a time and re-read after each splice, so the
+  value was substituted a second time (in the two-argument `is` form, a third time).
+- **`($password) === ($passwordConfirm)` and `$a===$b` resolve in route requirements
+  and fluent `is()` calls.** A token used to resolve only when whitespace or the end
+  of the condition followed it; the condition was refused and the field read invalid.
+  A field name holding a bracket or another special character (`$pw[0]`, `$a+b`)
+  resolves there too.
+- **In a `query` rule's `data`, the token names the right field.** `$passwordConfirm`
+  was resolved as `$password` followed by `Confirm` — another field's value reached
+  the endpoint; `$Email` was left as is; `$password` and `$password-confirm` in one
+  body resolved by their order; a space after a token swallowed the text after it;
+  and a `$` naming no field went out as the string `null` (and threw while
+  live-checking). Such a `$` is now sent as typed.
+
+| Condition or data | 0.6.32 | 0.6.33 |
+|-------------------|--------|--------|
+| `$password === $passwordConfirm`, both `abc$email` | mismatch | valid |
+| `($password) === ($passwordConfirm)` in a route requirement | invalid | compared |
+| `{ "c": "$passwordConfirm" }` in `query` data | the `password` value + `Confirm` | the `passwordConfirm` value |
+| `{ "price": "$100" }` in `query` data | `"null"` | `"$100"` |
+
+**What to check:**
+
+- A `$` in a `query` rule's `data` that names no field of the form is now sent as
+  typed instead of `null` — a template relying on `null` there must reference a real
+  field.
+- In a route requirement or fluent `is()` call, a `$` followed by an engine method
+  name (`$isValid`) is no longer resolved to `undefined`; the condition is refused
+  and the field reads invalid, with a warning naming the condition.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

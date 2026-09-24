@@ -324,6 +324,21 @@ arguments a `$` is plain literal text (since 0.6.3 — earlier versions threw a
 `TypeError` when an array-form rule's first value carried a `$` that matched no
 field name).
 
+A `$name` token is `$` immediately followed by the name of a field of the form.
+The longest field name wins (`$password-confirm` is never read as `$password`
+followed by `-confirm`), and a token ends where its name ends as long as the next
+character is not a name character (`A-Z`, `a-z`, `0-9`, `_`, `-`) — so
+`($password) === ($passwordConfirm)` and `$a===$b` resolve, while `$passwordX`
+leaves `password` alone. Names are matched exactly (case included), and any
+character a field name may carry (`$user[email]`, `$user.email`) is fine. A `$`
+that names no field stays literal, and a `$` inside a referenced **value** is
+never resolved: `abc$email` compares as those eight characters. (Since 0.6.33 —
+earlier, a token had to be followed by whitespace or the end of the condition in
+route requirements and fluent `is()` calls, a field name holding a bracket never
+resolved, and a value containing `$otherField` was substituted a second time, so
+such a value could never be confirmed; see the
+[migration note](/migration#fixed--every-field-token-follows-one-grammar-restart-and-re-bake-behaviour-change).)
+
 For safety, free-form expressions are restricted to one regex test or one binary
 comparison (`===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`); anything else is
 rejected.
@@ -516,7 +531,7 @@ internals never reach the form.
 | Key | Type | Meaning |
 |---|---|---|
 | `url` | string | Endpoint to call. A gina route name (`name@bundle`) is resolved through the router; anything starting with `http` is used as-is. |
-| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). |
+| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). The token follows the same rule as in [`is`](#is): the longest field name wins, whatever its spelling (`$passwordConfirm`, `$Email`), a token ends at the first character outside `A-Z a-z 0-9 _ -`, and a `$` naming no field is sent as typed (before 0.6.33 it was sent as the string `null`, and a camelCase name resolved only its lowercase prefix). |
 | `validIf` | boolean | The response `isValid` the rule treats as a **pass**. Defaults to `true`; set `false` for a "must NOT exist" check such as a uniqueness probe. |
 | `method` | string | HTTP method. Defaults to `GET`. |
 | `headers` | object | Request headers, merged over the defaults. See the caution below. |
