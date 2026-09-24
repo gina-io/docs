@@ -429,6 +429,12 @@ silently widened the reset limit. The runtime's own frame-level reset limit (ngh
 a 1,000-reset burst, then 33/s, `GOAWAY(INTERNAL_ERROR)`) stays underneath as the
 primary guard; it can be tuned with `streamResetBurst` + `streamResetRate`, set together.
 
+**On Bun** there is no such runtime layer — Bun's HTTP/2 server has no frame-level reset
+limit and ignores `streamResetBurst` / `streamResetRate` (setting them on Bun now logs one
+boot warning) — so `maxStreamResetsPerSecond` is the only rapid-reset limit on a
+Bun-hosted bundle. The guard tells a client reset from the engine's own abort using Bun's
+stream state, so every reset code counts there too.
+
 Server-side only: **restart the bundle** — no re-bake.
 
 ### Fixed — bundle-to-bundle calls over HTTP/2 no longer die after ~1,000 calls, and a call cut by a GOAWAY is retried (restart)

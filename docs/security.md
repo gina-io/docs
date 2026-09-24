@@ -23,7 +23,7 @@ Gina on a public HTTP/2 endpoint.
 
 | CVE | Name | Severity | Gina mitigation | Node.js required |
 |---|---|---|---|---|
-| [CVE-2023-44487](https://nvd.nist.gov/vuln/detail/CVE-2023-44487) | HTTP/2 Rapid Reset | **Critical** | `maxSessionRejectedStreams` + the runtime's reset rate limit (nghttp2) + `maxStreamResetsPerSecond` | ≥ 20.12.1 |
+| [CVE-2023-44487](https://nvd.nist.gov/vuln/detail/CVE-2023-44487) | HTTP/2 Rapid Reset | **Critical** | `maxSessionRejectedStreams` + the runtime's reset rate limit (nghttp2 — Node.js only) + `maxStreamResetsPerSecond` (the only layer on Bun) | ≥ 20.12.1 |
 | [CVE-2024-27316](https://nvd.nist.gov/vuln/detail/CVE-2024-27316) | CONTINUATION flood | **High** | `maxSessionInvalidFrames` + Node.js patch | ≥ 20.12.1 |
 | [CVE-2024-27983](https://nvd.nist.gov/vuln/detail/CVE-2024-27983) | CONTINUATION flood (Node.js) | **High** | Node.js patch | ≥ 20.12.1 |
 | [CVE-2019-9514](https://nvd.nist.gov/vuln/detail/CVE-2019-9514) | RST flood | **High** | `maxSessionRejectedStreams` | any |
@@ -70,6 +70,17 @@ GOAWAY itself causes — are told apart and never counted. A reset that lands af
 response was written is not counted either: the work was done, so it is not
 amplification — a fully synchronous route therefore never trips this layer, and a
 reset flood against it meets the runtime's limit at ~1,000 instead.
+
+**On Bun there is no runtime layer.** Bun's `node:http2` server carries no frame-level
+reset rate limit — measured on Bun 1.2.21, 1.3.14 and 1.4.2: 50,000 open-and-reset pairs
+on one session raise no `GOAWAY` and no event — and it ignores `streamResetBurst` /
+`streamResetRate` (a bundle setting them on Bun gets one boot warning). Gina's
+`maxStreamResetsPerSecond` guard is therefore the **only** rapid-reset mitigation on a
+Bun-hosted bundle. It reads Bun's own stream state to tell a client reset from the
+engine's own abort (Bun marks the stream closed before raising the abort for a reset it
+received; `stream.destroyed`, the Node.js signal, reads differently by Bun version), so
+every reset code counts there too — a flood of any code meets the guard at the 201st
+reset, as on Node.js.
 
 Before `0.6.33` this layer counted *new streams* (`maxStreamsPerSecond`), and a sibling
 bundle's own multiplexed `self.query()` calls tripped it above 200 calls per second on
@@ -192,7 +203,8 @@ override them only when you have a specific reason. The hardcoded security guard
 ```
 
 `streamResetBurst` and `streamResetRate` (the runtime's own reset limit, see above) may be
-added to the same block — always together.
+added to the same block — always together. Node.js only: Bun has no such limit and ignores
+both keys.
 
 See the [Configuration reference](/reference/settings) for the full `settings.server.json`
 field list.

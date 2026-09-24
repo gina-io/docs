@@ -257,7 +257,7 @@ Isaac includes built-in protection against known HTTP/2 attack vectors:
 |---|---|---|
 | HPACK bomb | Header table size limit | 4 KB (`headerTableSize`) |
 | Rapid Reset (CVE-2023-44487) | Rejected stream limit | 100 (`maxSessionRejectedStreams`) |
-| Rapid Reset (CVE-2023-44487) | Runtime reset rate limit (nghttp2, every received `RST_STREAM`) | 1,000 burst then 33/s (`streamResetBurst` / `streamResetRate`, set together) |
+| Rapid Reset (CVE-2023-44487) | Runtime reset rate limit (nghttp2, every received `RST_STREAM`) — Node.js only | 1,000 burst then 33/s (`streamResetBurst` / `streamResetRate`, set together; ignored on Bun) |
 | Rapid Reset (CVE-2023-44487) | Per-session client-reset rate limit (streams cut short before the response) | 200/s (`maxStreamResetsPerSecond`) |
 | CONTINUATION flood | Invalid frame limit | 1000 (`maxSessionInvalidFrames`) |
 | Settings flood | Settings ACK timeout | 10 s |
@@ -298,6 +298,12 @@ the runtime's own frame-level reset limit (nghttp2: a 1,000-frame burst then 33/
 closing the session with `GOAWAY(INTERNAL_ERROR)` and no server-side event), which
 counts every received reset and can be tuned through `streamResetBurst` +
 `streamResetRate` — both keys together, or neither.
+
+On Bun that runtime layer does not exist: Bun's HTTP/2 server has no frame-level reset
+limit (measured on Bun 1.2–1.4) and ignores the two keys — a bundle setting them on Bun
+logs one boot warning — so `maxStreamResetsPerSecond` is the only rapid-reset limit
+there. The guard reads Bun's stream state to recognise a client reset, every reset code
+included, and trips at the same count as on Node.js.
 
 Before `0.6.33` the key was `maxStreamsPerSecond` and it counted *new streams*; it is
 no longer read (one boot warning names it) — see the
