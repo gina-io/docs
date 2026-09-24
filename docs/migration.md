@@ -466,6 +466,58 @@ dashboard that read 0 there was not measuring anything.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Security — the Couchbase connector no longer writes caller or configuration values into statement text unvalidated (restart; behaviour change)
+
+Three places in the Couchbase connector built the N1QL statement by string
+concatenation instead of binding a query parameter or validating an identifier:
+
+- **`SEARCH()`** — every positional value inside the `SEARCH()` span was written
+  into the statement as a double-quoted string literal, with no escaping: a search
+  term containing `"` made the statement fail, and a term could alter the statement
+  itself. The values are now **bound** as query parameters. Couchbase binds a
+  parameter used as `SEARCH()`'s query argument when it resolves to a string or an
+  object, on every server version that has `SEARCH()`.
+- **Field-path placeholders** (`SET d.flags.$2 = $3`) cannot be bound, so the
+  argument is still written after the dot — but only when it is an identifier path
+  (`newsletter`, `meta.count`). Anything else is refused before the query is sent
+  with a `TypeError` whose code is `GINA_COUCHBASE_INVALID_FIELD_PATH`, delivered to
+  the query callback when there is one and thrown otherwise. See
+  [Placeholders in field-path position](/data/couchbase-orm#placeholders-in-field-path-position).
+- **`$scope`** — the scope, from the connector entry's `scope` or from
+  `NODE_SCOPE`, is now validated once when the connector loads. It must match
+  `^[A-Za-z0-9_./-]+$`; otherwise the bundle stops at boot with exit code `1` and
+  `GINA_COUCHBASE_INVALID_SCOPE` on stderr, naming the value and where it came from.
+  A longer placeholder that merely starts with `$scope` (`$scopeId`) is no longer
+  rewritten.
+
+**What to check:**
+
+- **`SEARCH()` terms are sent with their JavaScript type.** A number, `null` or
+  object used to be turned into a string (`"5"`, `"null"`, `"[object Object]"`).
+  Couchbase documents the query argument as a string or an object: pass strings, or
+  declare the parameter `@param {string} $N` so the connector casts it. An object
+  now arrives as an object — the documented search-request form.
+- **Value parameters that follow a `SEARCH()` call keep their real type.** The old
+  substitution ran to the statement's last `)`, so in
+  `SEARCH(t, $2) AND (t.rank > $3)` a `$3` of `5` was compared as the string
+  `"5"`. It is now compared as the number `5`; if a query relied on the string
+  comparison, declare that parameter `@param {string}`.
+- **One prepared plan per statement.** Each distinct search term used to compile its
+  own plan.
+- **Field-path keys** must be identifier paths. The key has always been documented as
+  a literal identifier; a key outside that grammar is now refused even in the few
+  shapes that could still form a valid path — a backtick-escaped name, an array index
+  (`items[0]`), a `$` inside a name. Pick such keys from a fixed list of identifier
+  names in your own code rather than passing request input through.
+- **Scope names** outside `^[A-Za-z0-9_./-]+$` now stop the boot. The scopes gina
+  ships (`local`, `beta`, `production`, `testing`) pass, and so does a name
+  registered with `scope:add` in either documented form (`<scope>` or
+  `<bundle>/<scope>`) when it uses only those characters — `scope:add` checks only
+  the first character. Check `gina scope:list @<project>` and your connector
+  entries' `scope` before restarting.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
