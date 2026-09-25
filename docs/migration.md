@@ -747,6 +747,19 @@ process; the least recently used one is retired without cutting a call in flight
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — an https bundle-to-bundle call no longer reads its CA file on every call (restart)
+
+Every https `self.query()` read the CA file named by `server.credentials.ca` (or the call's
+`ca` option) from disk — about 25 µs per call, and on HTTP/2 even when the call reused a
+cached session and never used it. The file is now read once and kept for the life of the
+bundle; each call checks it with a single `stat`.
+
+**What to check:** nothing. A CA file that changes on disk — a Kubernetes Secret volume
+update replaces it — is still read again and used by the very next call, as before, and a
+missing or unreadable CA file fails the call with the same error.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
