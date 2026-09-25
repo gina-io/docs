@@ -65,8 +65,8 @@ The primary server settings file.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `engine` | `"isaac"` | `"isaac"` | HTTP server engine. `"isaac"` is the built-in HTTP/2 engine |
-| `protocol` | `"http/2.0"` \| `"http/1.1"` | `"http/2.0"` | Wire protocol |
-| `scheme` | `"https"` \| `"http"` | `"https"` | URL scheme |
+| `protocol` | `"http/2.0"` \| `"http/1.1"` | the project default, `"http/1.1"` (`"http/2.0"` in `gina-init` containers) | Wire protocol. HTTP/2 needs `"http/2.0"`; set it together with `scheme` |
+| `scheme` | `"https"` \| `"http"` | the project default, `"http"` (`"https"` in `gina-init` containers) | URL scheme. Set it together with `protocol` |
 | `requireHttps` | boolean | `false` | Opt-in transport enforcement: outside the `local` scope, a bundle resolving a cleartext scheme (anything but `"https"`) refuses to boot — before anything binds, so the cleartext port is never reachable. Inert in the `local` scope. Setting it together with `allowInsecure` refuses to boot. *New in 0.5.26* |
 | `allowInsecure` | boolean | `false` | Asserts that TLS terminates upstream (service mesh, ingress/load balancer, reverse proxy — the [h2c topology](/guides/https#h2c--cleartext-http2)): the boot-time cleartext-transport warning outside the `local` scope becomes a single info line. Same vocabulary as `mcp.json > server > allowInsecure`. *New in 0.5.26* |
 | `address` | string | `"0.0.0.0"` | Bind address. Use `"127.0.0.1"` for IPv4-only or `"::"` for IPv6-only |

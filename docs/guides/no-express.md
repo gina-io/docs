@@ -231,7 +231,8 @@ all work without adapters (server push is not implemented — browsers dropped i
 ### Multi-bundle process isolation
 
 Each bundle runs as an independent Node.js process. One bundle crashing does not
-take down others. Bundles communicate over HTTP/2 via `self.query()`. See
+take down others. Bundles call each other with `self.query()`, over HTTP/1.1 or
+HTTP/2 depending on the called bundle's protocol. See
 [Multi-bundle architecture](/guides/multi-bundle).
 
 ### Scope-based data isolation

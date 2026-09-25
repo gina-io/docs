@@ -2,7 +2,7 @@
 title: Multi-Bundle Architecture for Node.js
 sidebar_label: Multi-Bundle
 sidebar_position: 22
-description: Gina's multi-bundle architecture runs each service as an independent Node.js process with its own port, routing, and lifecycle — fault-isolated, independently deployable, and connected via HTTP/2.
+description: Gina's multi-bundle architecture runs each service as an independent Node.js process with its own port, routing, and lifecycle — fault-isolated, independently deployable, and calling each other over HTTP/1.1 or HTTP/2.
 level: intermediate
 prereqs:
   - '[Projects and bundles](/concepts/projects-and-bundles)'
@@ -27,8 +27,9 @@ that process crashes, everything goes down.
 
 Gina structures applications as **bundles** -- independent Node.js processes, each
 with its own port, routing table, controllers, models, templates, and lifecycle.
-Bundles communicate over HTTP/2 via `self.query()`. This is not a microservices
-framework bolted onto Express -- it is the core architectural model.
+Bundles call each other with `self.query()`, over HTTP/1.1 or HTTP/2 depending on
+the called bundle's protocol. This is not a microservices framework bolted onto
+Express -- it is the core architectural model.
 
 ---
 
@@ -83,11 +84,11 @@ flowchart TD
         C["auth<br/>port 3300<br/>Authentication"]
     end
 
-    Browser -->|"HTTP/2"| A
-    Mobile -->|"HTTP/2"| B
-    A -->|"self.query()<br/>HTTP/2"| B
-    A -->|"self.query()<br/>HTTP/2"| C
-    B -->|"self.query()<br/>HTTP/2"| C
+    Browser -->|"HTTP(S)"| A
+    Mobile -->|"HTTP(S)"| B
+    A -->|"self.query()"| B
+    A -->|"self.query()"| C
+    B -->|"self.query()"| C
 
     style Project fill:#1a1a2e,stroke:#f2af0d
     style A fill:#2a2a3e,stroke:#4caf50
@@ -164,7 +165,9 @@ preserves.
 ## Inter-bundle communication
 
 Bundles call each other using `self.query()` inside controller actions. The call
-travels over HTTP/2 with automatic session caching, multiplexing, and retry:
+uses the called bundle's protocol: HTTP/2, with session caching, multiplexing and
+retry, when that bundle's `protocol` is `http/2.0`; HTTP/1.1 otherwise — which is
+what a new bundle serves (see [HTTPS and HTTP/2](/guides/https#http2)):
 
 ```javascript
 // In dashboard/controllers/controller.content.js
@@ -172,10 +175,10 @@ var self = this;
 
 this.home = function(req, res, next) {
 
-    self.query('api/users/current', function(err, userData) {
+    self.query({ hostname: 'api@myapp', path: '/api/users/current' }, function(err, userData) {
         if (err) return self.throwError(err);
 
-        self.query('api/notifications', function(err, notifications) {
+        self.query({ hostname: 'api@myapp', path: '/api/notifications' }, function(err, notifications) {
             if (err) return self.throwError(err);
 
             self.render({
@@ -187,10 +190,15 @@ this.home = function(req, res, next) {
 };
 ```
 
+`hostname: '<bundle>@<project>'` resolves the called bundle's host, port, protocol
+and scheme from the project's configuration. `path` is the full URL path on that
+bundle, starting with its webroot: `/api` for a new bundle named `api` (the `webroot`
+in its `config/settings.server.json`).
+
 :::info
-`self.query()` uses the same HTTP/2 session cache and resilience layers described
-in [HTTP/2 Resilience](/guides/http2-resilience) -- pre-flight PING validation,
-retry with backoff, and automatic dead-session eviction.
+When the called bundle serves HTTP/2, `self.query()` uses the session cache and
+resilience layers described in [HTTP/2 Resilience](/guides/http2-resilience) --
+pre-flight PING validation, retry with backoff, and automatic dead-session eviction.
 :::
 
 Over HTTP/1.1, `self.query()` keeps one keep-alive connection pool per upstream bundle
@@ -226,11 +234,11 @@ sequenceDiagram
     Note over A: Unhandled exception!
     A--xA: Process crashes
 
-    D->>Auth: self.query('auth/session')
+    D->>Auth: self.query() to auth@myapp
     Auth-->>D: 200 OK
     Note over D: Dashboard + Auth still running
 
-    D->>A: self.query('api/users')
+    D->>A: self.query() to api@myapp
     Note over D: ECONNREFUSED — not retried<br/>(target process is down)
     D->>D: self.throwError(503)
 ```

@@ -471,8 +471,8 @@ propagates `X-Request-Id` and echoes it as a response header.
 
 ### Balancing bundle-to-bundle calls
 
-`self.query()` multiplexes every call to one upstream over **one cached HTTP/2
-session** — one TCP connection. A `Service` balances per *connection* (the kube-proxy
+When the upstream serves HTTP/2 (the `gina-init` default), `self.query()` multiplexes
+every call to it over **one cached HTTP/2 session** — one TCP connection. A `Service` balances per *connection* (the kube-proxy
 default, like any TCP load balancer), so all of a caller's traffic to that upstream lands
 on the one pod its connection reached, until the session is replaced. Two ways out:
 

@@ -13,7 +13,7 @@ prereqs:
 
 ## Overview
 
-Gina uses HTTP/2 as its default protocol and supports HTTPS out of the box. Each bundle or service requires its own certificate (or a wildcard certificate with symlinks). Once HTTPS is configured, HTTP/2 is enabled automatically with no additional steps.
+Gina supports HTTPS and HTTP/2 out of the box. A new bundle serves HTTP/1.1 over `http`; for HTTP/2 over TLS, set its `protocol` to `http/2.0` and its `scheme` to `https` (both keys — see [HTTP/2](#http2)). Each bundle or service requires its own certificate (or a wildcard certificate with symlinks).
 
 ---
 
@@ -156,7 +156,16 @@ ln -s ~/.gina/certificates/scopes/local/myproject.app \
 
 ## HTTP/2
 
-HTTP/2 is enabled automatically once HTTPS is configured. There is nothing extra to turn on.
+HTTPS alone does not switch a bundle to HTTP/2: with `scheme` `https` and the default `protocol`, `http/1.1`, it serves HTTPS over HTTP/1.1. Choose `http/2.0` as the protocol when you run [`gina protocol:set`](/cli/protocol) (Step 3), or set both keys in the bundle's `settings.json`:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "protocol": "http/2.0",
+    "scheme"  : "https"
+  }
+}
+```
 
 When a client connects, Gina negotiates `h2` via ALPN. If the client does not support HTTP/2, it falls back to `http/1.1` — controlled by the `allowHTTP1` setting (default `true`). See the [server settings reference](../reference/settings#server) for the full field list.
 
