@@ -116,8 +116,10 @@ connector the model uses:
 
 Before `0.6.33` this held only for a connector that reports readiness
 synchronously, such as SQLite. On an asynchronous one, such as DuckDB or
-Couchbase, the failure was only logged, the bundle never listened, and a
-`gina-container` process could exit `0`.
+Couchbase, the failure did not stop the boot: depending on the connector it was
+logged as an unhandled promise rejection, reported as a failure to connect and
+retried, or swallowed. Either way the bundle never listened, and a DuckDB
+bundle under `gina-container` exited `0`.
 
 ---
 

@@ -101,20 +101,24 @@ Server-side only: **restart the bundle** — no re-bake.
 ### Fixed — a model that fails to load on an asynchronous connector now aborts the boot (restart; behaviour change)
 
 On a connector that reports readiness asynchronously, such as DuckDB or
-Couchbase, a failure while the models were being built used to be logged only
-as `[ FRAMEWORK ] Unhandled promise rejection: …`. The bundle never listened,
-and under `gina-container` the process could exit with code `0`, a success
-status. Typical causes: an entity file whose name starts with a digit or an
-underscore (the class-name check rejects it), or an entity constructor that
-throws.
+Couchbase, a failure while the models were being built did not stop the boot.
+Depending on the connector it was logged as
+`[ FRAMEWORK ] Unhandled promise rejection: …`, reported as a failure to connect
+and retried — Couchbase logged `Could not connect to couchbase` with the model
+error's stack inside the message, though the cluster was reachable — or
+swallowed with no log line. The bundle never listened, and under
+`gina-container` a DuckDB bundle exited with code `0`, a success status. Typical
+causes: an entity file whose name starts with a digit or an underscore (the
+class-name check rejects it), or an entity constructor that throws.
 
 It now aborts the boot the way it already did on SQLite:
 `[ FRAMEWORK ] Model loading failed — aborting boot: <stack>` on stderr and exit
 code `1`. See [Architecture — Bootstrap failures](/concepts/architecture#bootstrap-failures).
 
-**What to check:** a bundle that exits `0` or never listens at boot, with that
-rejection line in its log, will now exit `1` naming the cause. That is the fix.
-A bundle whose models load is unaffected.
+**What to check:** a bundle that exited `0` or never listened at boot — with an
+unhandled-rejection line, a Couchbase connection failure carrying a model
+error's stack, or nothing at all in its log — now exits `1` naming the cause.
+That is the fix. A bundle whose models load is unaffected.
 
 Server-side only: **restart the bundle** — no re-bake.
 
