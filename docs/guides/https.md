@@ -156,7 +156,7 @@ ln -s ~/.gina/certificates/scopes/local/myproject.app \
 
 ## HTTP/2
 
-HTTPS alone does not switch a bundle to HTTP/2: with `scheme` `https` and the default `protocol`, `http/1.1`, it serves HTTPS over HTTP/1.1. Choose `http/2.0` as the protocol when you run [`gina protocol:set`](/cli/protocol) (Step 3), or set both keys in the bundle's `settings.json`:
+HTTPS alone does not switch a bundle to HTTP/2: with `scheme` `https` and the default `protocol`, `http/1.1`, it serves HTTPS over HTTP/1.1. Choose `http/2.0` as the protocol when you run [`gina protocol:set`](/cli/cli-protocol) (Step 3), or set both keys in the bundle's `settings.json`:
 
 ```json title="src/<bundle>/config/settings.json"
 {
