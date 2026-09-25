@@ -12,8 +12,10 @@ prereqs:
 
 # HTTP/2 Client Resilience
 
-When one Gina bundle calls another via `self.query()`, the request travels over a
-cached HTTP/2 session. In containerised environments (Docker, OrbStack, Kubernetes),
+When one Gina bundle calls another via `self.query()` and the called bundle serves
+HTTP/2, the request travels over a cached HTTP/2 session — those calls are what this
+guide covers (a new bundle serves HTTP/1.1; see [HTTPS and HTTP/2](/guides/https#http2)).
+In containerised environments (Docker, OrbStack, Kubernetes),
 the network layer can silently drop TCP connections without sending RST or FIN — the
 cached session looks alive but is dead. Requests sent on dead sessions hang until
 stream timeout, then fail with a 503.
@@ -59,12 +61,15 @@ sequenceDiagram
 
 Every HTTP/2 client request is retried up to 2 times (3 total attempts) on transient
 failures. The first retry is immediate; subsequent retries are delayed by 500 ms to
-give the network time to stabilise.
+give the network time to stabilise. A 502 is the exception: each of its retries waits
+2 seconds.
 
 Retried error types:
 - Stream timeout (no response within `requestTimeout`)
 - Premature close (GOAWAY / network reset)
-- Stream error (HTTP/2 protocol error)
+- HTTP/2 stream error (`ERR_HTTP2_STREAM_ERROR`); a stream that fails with another
+  code is not retried, unless it was refused before processing (below)
+- Connection reset (`ECONNRESET`)
 - Session error — every in-flight stream of a session the server closed with a GOAWAY
   (`ERR_HTTP2_SESSION_ERROR`, "Session closed with error code N"); retried since `0.6.33`
 - 502 Bad Gateway from upstream
@@ -269,10 +274,11 @@ of these codes:
 
 | Code | Meaning | Retried? |
 |---|---|---|
-| `TIMEOUT` | Stream timeout — no response within `requestTimeout` | Yes |
-| `PREMATURE_CLOSE` | Stream closed before response complete (GOAWAY / reset) | Yes |
-| `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send, or a request refused before processing, exhausts into) | Yes (safe methods, or `retryUnsafe`; the gone-before-send and refused-before-processing cases for any method) |
-| `ECONNRESET` | Connection reset by peer | Yes |
+| `TIMEOUT` | Stream timeout — no response within `requestTimeout` | Yes (safe methods, or `retryUnsafe`) |
+| `PREMATURE_CLOSE` | Stream closed before response complete (GOAWAY / reset) | Yes (safe methods, or `retryUnsafe`) |
+| `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send, or a request refused before processing, exhausts into) | Yes for the HTTP/2 stream and session errors (safe methods, or `retryUnsafe`; the gone-before-send and refused-before-processing cases for any method); any other stream failure is not retried |
+| `ECONNRESET` | Connection reset by peer | Yes (safe methods, or `retryUnsafe`) |
+| `BAD_GATEWAY` | The upstream answered 502 on every attempt | Yes — each retry after 2 s (safe methods, or `retryUnsafe`) |
 | `ECONNREFUSED` | Connection refused — target process is down | **No** |
 | `PREFLIGHT_TIMEOUT` | Pre-flight PING got no PONG within deadline | Yes |
 | `PREFLIGHT_FAILED` | Pre-flight PING errored (a *cancelled* PING never produces this since `0.6.33` — the request is sent) | Yes |
@@ -313,8 +319,11 @@ Look for these patterns in your logs:
 A refused connection (`ECONNREFUSED` — the target process is down) reaches the caller
 as that error code and is never retried.
 
-The `/_gina/info` endpoint includes HTTP/2 session metrics (`activeSessions`,
-`goawayCount`, `rstCount`) for monitoring session pool health.
+The `/_gina/info` endpoint's HTTP/2 metrics (`activeSessions`, `goawayCount`,
+`rstCount`) describe the sessions a bundle **serves**, not the sessions its
+`self.query()` calls use — and they miss a GOAWAY the upstream's HTTP/2 library sends
+on its own (its reset limit). On the calling side, the
+`[http2] GOAWAY received — errorCode: N` log line is the signal.
 
 Every `self.query()` call also forwards the request's correlation id as
 `x-request-id` (see [Request correlation](/guides/observability#request-correlation)),

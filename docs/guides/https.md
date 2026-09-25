@@ -173,7 +173,7 @@ When a client connects, Gina negotiates `h2` via ALPN. If the client does not su
 
 - **Protocol negotiation** — `h2` via TLS ALPN, automatic `http/1.1` fallback
 - **Session multiplexing** — multiple concurrent requests share a single TCP connection; the framework manages session reuse, idle eviction (120s), and dead-session detection
-- **GOAWAY** — if the remote peer closes the connection mid-flight, the request is retried transparently once
+- **GOAWAY** — when the remote peer closes the session mid-flight, a `self.query()` call is retried on a fresh session, up to 2 times (safe methods, or `retryUnsafe`; a request refused before processing, for any method) — see [HTTP/2 client resilience](/guides/http2-resilience)
 - **Forbidden headers** — `Connection`, `Transfer-Encoding`, and other HTTP/1.1-only headers are stripped automatically; you do not need to sanitise them
 
 ### What is different for your code
