@@ -248,7 +248,11 @@ scans all routes and picks the first one whose URL **and** method both match:
 }
 ```
 
-If no route matches the URL with the requested method, the router returns 405.
+`PUT /notes` gets a **404**, the same answer as an unknown URL: each of the two rules
+declares a single method other than `PUT`, and the router skips such a rule before it
+compares URLs. A **405** (`Method Not Allowed`) comes only from a rule that declares
+several methods (`"method": "GET,POST"`), when its URL matches and the request's method
+is not in its list. A single-method `GET` rule also serves `HEAD`.
 
 :::warning namespace is required
 Without `"namespace"`, the router looks in `controller.js` instead of
