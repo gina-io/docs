@@ -252,7 +252,8 @@ scans all routes and picks the first one whose URL **and** method both match:
 declares a single method other than `PUT`, and the router skips such a rule before it
 compares URLs. A **405** (`Method Not Allowed`) comes only from a rule that declares
 several methods (`"method": "GET,POST"`), when its URL matches and the request's method
-is not in its list. A single-method `GET` rule also serves `HEAD`.
+is not in its list; it carries an `Allow` header naming the methods the URL does serve.
+Every rule that serves `GET` also serves `HEAD`, whatever its URL shape.
 
 :::warning namespace is required
 Without `"namespace"`, the router looks in `controller.js` instead of
@@ -260,6 +261,21 @@ Without `"namespace"`, the router looks in `controller.js` instead of
 omitting `namespace` silently routes to the wrong file and you will get a
 "control not found" error.
 :::
+
+### A `GET` on a `DELETE` route
+
+The [popin](/guides/popin) and link plugins send an anchor's request as a `GET`. So
+that a delete link needs no client code, a route declared `"method": "DELETE"` also
+serves such a `GET`, and the action sees `req.method` as `DELETE`. The router grants
+this only to an XHR (`X-Requested-With: XMLHttpRequest`, which both plugins send) that
+is not a browser cross-origin request: the browser's `Sec-Fetch-Site` must be
+`same-origin` or `none`, and an `Origin` that differs from the host is refused. Any other
+`GET` answers `404` on a URL whose only route is `DELETE`, and `405` on a route whose
+method list includes `DELETE`. From your own client code, send a real `DELETE`, for
+example `fetch(url, { method: 'DELETE' })`.
+
+The override reaches a static URL, or a parameterised URL whose key carries a
+[requirement](#requirements).
 
 ---
 

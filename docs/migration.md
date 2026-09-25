@@ -228,6 +228,35 @@ middleware on Express 5 — it now holds the parsed query there too, as on Expre
 
 Restart the bundle. Nothing to re-bake.
 
+### Security — a `GET` no longer runs a `DELETE` action for another site (restart; check your delete links)
+
+A route declared `"method": "DELETE"` answered a plain `GET` to its URL as if it
+were a `DELETE`, for any client. The rewrite exists for the
+[popin](/guides/popin) and link plugins, whose anchors send their request as a
+`GET`; granted to every `GET`, it let a cross-site navigation carrying the
+visitor's session cookie run the `DELETE` action. On the Express engine this held
+even with the [CSRF plugin](/guides/csrf) adopted as documented: the plugin runs
+before routing and treats a `GET` as safe. The default isaac engine refused the
+request when the plugin was in place, because there the plugin runs after the
+rewrite. Without the plugin both engines ran the action, and the Session plugin's
+default `SameSite=Lax` cookie is sent on a top-level cross-site navigation.
+
+The override is now granted only to an XHR (`X-Requested-With: XMLHttpRequest`)
+that is not a browser cross-origin request: a `Sec-Fetch-Site` of `same-origin`
+or `none` passes, `same-site` and `cross-site` are refused, and an `Origin` that
+differs from the host is refused. The popin and link plugins' anchors on your own
+pages keep working. Any other `GET` answers `404` on a URL whose only route is
+`DELETE`, and `405` on a route whose method list includes `DELETE`. The action now
+always sees `req.method` as `DELETE`; on a route declaring several methods
+(`"POST,DELETE"`) it used to see the whole list.
+
+**What to check:** client code that sends a `GET` to a `DELETE`-only route
+outside the popin and link plugins — a plain link, a redirect, a script on
+another origin, a request without `X-Requested-With` — must now send a real
+`DELETE`, for example `fetch(url, { method: 'DELETE' })`.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
 
 On the Express engine, on Express 4 and 5 alike, a URL with a query string never
@@ -244,6 +273,26 @@ routing loop. `request.originalUrl` keeps the full URL.
 the query variants of one path now share one entry, exactly as on isaac — the match
 verdict, requirements included, is re-evaluated on every hit, so a variant that
 requirements reject still gets its `404`.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a `405` lists the allowed methods, and `HEAD` works on every `GET` route (restart)
+
+A `405 Method Not Allowed` now carries the `Allow` header that HTTP requires,
+listing the methods of the routes whose URL matched, with `HEAD` wherever `GET`
+is listed. A wrong method on a URL whose routes each declare a single method
+still answers `404`, as the [routing guide](/guides/routing#http-methods)
+describes.
+
+A `HEAD` request is now served by every route that serves `GET`. It used to
+answer `404` on a parameterised URL (a `GET` route on `/items/:id`) and `405` on a
+route declaring several methods (`"GET,POST"`); only a single-method `GET` route
+on a static URL served it.
+
+**What to check:** nothing, unless a client relied on those `404` or `405`
+answers to `HEAD`. On the isaac engine the `access-control-allow-methods` header
+of a `HEAD` response now reads `HEAD` rather than `GET`, as it already did on the
+Express engine.
 
 Restart the bundle. Nothing to re-bake.
 
