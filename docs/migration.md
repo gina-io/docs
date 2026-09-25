@@ -556,6 +556,24 @@ reconnect.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — `bulkInsert` escapes the bucket name (restart)
+
+A Couchbase entity's `bulkInsert` wrote the bucket name into its statement bare,
+so a bucket whose name N1QL needs escaped — a dash, as in `beer-sample`, is legal in
+a bucket name — made the statement fail to parse. The name is now written as an
+escaped identifier:
+
+```sql
+INSERT INTO `beer-sample` (KEY, VALUE) VALUES ("doc-1", { … })
+RETURNING `beer-sample`.*;
+```
+
+**What to check:** the statement text changes for every bucket — a plain name
+gains backticks too — while the query means the same. A log or Inspector filter
+that matches `INSERT INTO <bucket>` literally needs the backticks.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
 
 Two defects in the `self.query()` HTTP/2 client, both found by the bundle-to-bundle
