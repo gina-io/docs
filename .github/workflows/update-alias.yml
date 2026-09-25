@@ -139,13 +139,23 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git branch -f develop origin/develop
-          # A GITHUB_TOKEN push that creates or updates .github/workflows/** is
-          # refused (the token has no `workflows` scope) — say so before merging.
-          wf=$(git diff --name-only origin/main...develop -- .github/workflows/ || true)
-          if [ -n "$wf" ]; then
-            echo "::error::develop changes workflow files — this push would be refused; merge develop into main by hand:"
-            echo "$wf"
-            exit 1
+          # GitHub refuses a GITHUB_TOKEN push only when a NEW commit in it itself
+          # changes a workflow file (the token has no `workflows` scope). Measured on
+          # a throwaway repo (gina #R10 G2b, 2026-09-24): a bot merge whose workflow
+          # files equal the incoming side's was ALLOWED; the bot's own
+          # workflow-editing commit was REFUSED. The catch-up commit below touches
+          # package.json and the lock only, so the merge must reproduce develop's
+          # .github/workflows/ exactly; any other result is an unmeasured shape,
+          # refused here before anything is pushed. A conflicting merge skips this
+          # check and fails at `git merge` below, as before.
+          if t=$(git merge-tree --write-tree origin/main develop); then
+            wf=$(git diff --name-only "$t" develop -- .github/workflows/) \
+              || { echo "::error::could not compare the merge result's workflow files with develop's"; exit 1; }
+            if [ -n "$wf" ]; then
+              echo "::error::merging develop into main would hold workflow content that develop does not have — a GITHUB_TOKEN push carrying it may be refused; merge develop into main by hand:"
+              echo "$wf"
+              exit 1
+            fi
           fi
           # The catch-up. The registry serves $latest by the gate's own precondition;
           # if the lockfile still cannot be regenerated, commit NOTHING (the pair
