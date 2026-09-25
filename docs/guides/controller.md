@@ -1014,6 +1014,7 @@ Key options:
 | `method` | `"GET"` | HTTP method |
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
+| `maxSockets` | `100` | HTTP/1.1 only, since 0.6.33: the most connections `self.query()` opens to one upstream at once. Calls to an upstream share one keep-alive pool; a call beyond the limit waits for a free connection, and its `requestTimeout` starts once it has one. Calls that set a different value get a pool of their own |
 | `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
 | `priority` | the inbound `req.priority`, when present | Since 0.6.31: the RFC 9218 `Priority` header of the outbound call — `{ urgency, incremental }`, a wire string such as `'u=5, i'`, or `false` to send none. Omitted, a present inbound header propagates as is (RFC 9218 is end to end); a `headers.priority` you set yourself always wins — [Request priorities](/guides/http2-native#request-priorities-rfc-9218) |
 

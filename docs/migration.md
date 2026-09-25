@@ -720,6 +720,33 @@ with an upstream restart or idle close are gone.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — bundle-to-bundle calls over HTTP/1.1 reuse their connections (restart; behaviour change)
+
+`self.query()` built a new connection pool for every HTTP/1.1 call and threw it away, so
+every call to another bundle opened a new TCP connection: 500 sequential calls to one
+bundle opened 500. Calls to the same upstream now share one keep-alive pool, kept for the
+life of the bundle: the same 500 calls use one connection, and 50 concurrent callers
+settle at 10 open connections. Each upstream gets its own pool (two bundles, or one host
+reached with two different CAs, never share one), and at most 50 pools are kept per
+process; the least recently used one is retired without cutting a call in flight.
+
+**What to check:**
+
+- `maxSockets` (default `100`) now limits how many connections `self.query()` opens to
+  one upstream at once. It limited nothing before, because every call had its own pool. A
+  call beyond the limit waits for a free connection, and its `requestTimeout` starts once
+  it has one. If one process sends more than 100 concurrent calls to one upstream and
+  needs them all in flight at once, raise `maxSockets` on those calls.
+- A pooled connection is reused. A gina bundle announces its idle timeout
+  (`server.keepAliveTimeout`, default 5 s) and Node.js closes an idle pooled connection a
+  second before it. An upstream that is not a gina bundle and closes idle connections
+  without announcing a timeout can reset a reused connection: a safe method (`GET`,
+  `HEAD`, …) is retried as before, and any other method reports the error.
+- `options.agent` is still ignored, as it always was on HTTP/1.1.
+- HTTP/2 calls are unchanged.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)

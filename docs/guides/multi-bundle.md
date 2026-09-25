@@ -193,6 +193,10 @@ in [HTTP/2 Resilience](/guides/http2-resilience) -- pre-flight PING validation,
 retry with backoff, and automatic dead-session eviction.
 :::
 
+Over HTTP/1.1, `self.query()` keeps one keep-alive connection pool per upstream bundle
+(since 0.6.33), so repeated calls to the same bundle reuse their connections instead of
+opening a new one each time.
+
 ### What travels between bundles
 
 When bundle A calls bundle B, the response includes:
