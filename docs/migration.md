@@ -542,6 +542,20 @@ concatenation instead of binding a query parameter or validating an identifier:
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — a Couchbase reconnect keeps each connector's declared `scope` (restart)
+
+When a Couchbase reconnect rebuilds the models, each connector's entity manager is
+built again. That rebuild now passes the `scope` declared on the connector's
+`connectors.json` entry, as the boot does. It used to omit it, so after a reconnect
+a connector whose entry declares a scope other than `NODE_SCOPE` stamped inserted
+documents and filled `$scope` in its queries with `NODE_SCOPE` instead.
+
+**What to check:** nothing, unless a connector entry's `scope` differs from the
+bundle's `NODE_SCOPE` — such a bundle now keeps the declared scope across a
+reconnect.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
 
 Two defects in the `self.query()` HTTP/2 client, both found by the bundle-to-bundle
