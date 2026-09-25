@@ -217,7 +217,7 @@ A few things to notice:
 - **`param.control`** — the action method to call on the controller.
 - **`"slug": ":slug"`** in the `param` block of `stats` and `redirect` — required so `fitsWithRequirements` binds the matched URL segment to `req.params.slug`. Without this entry, `fitsWithRequirements` returns `false` even when the regex matches and the routes return 404.
 - **`requirements`** — a regex guard on `:slug`, wrapped in `/` delimiters (e.g. `/^pattern$/`). Only 6-character alphanumeric strings match; anything else (e.g. `/favicon.ico`) falls through to 404 without hitting your controller.
-- **`stats` before `redirect`** — good practice: put the more specific two-segment path (`/:slug/stats`) before the one-segment wildcard (`/:slug`), even though Gina's radix trie handles ordering correctly.
+- **`stats` before `redirect`** — good practice: put the more specific two-segment path (`/:slug/stats`) before the one-segment wildcard (`/:slug`). These two cannot match the same URL — their segment counts differ — but the router tests routes in declaration order and the first match wins, so where two patterns can overlap, the order decides.
 - **`"code": 302`** in the redirect route's `param` block — Gina's `self.redirect()` reads `req.routing.param.code` as the HTTP status code, defaulting to 301. Setting it to `302` here means the browser won't cache the redirect permanently, which is correct for a link shortener (destinations can change).
 
 ---

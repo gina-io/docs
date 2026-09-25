@@ -48,6 +48,50 @@ fewer leftover values, since fewer routes are evaluated before the error.
 
 Restart the bundle. Nothing to re-bake.
 
+### Changed — the route cache is one map and keeps only the matched route (restart and re-bake)
+
+The warm route cache — the per-process record of which route matched each method and
+path, up to 5,000 of them — is now one map. A lookup and an eviction cost the same at
+any size: with the cache full, a lookup went from 18–74 µs to about 1.5 µs, and an insert
+that evicts the oldest entry from 26–80 µs to about 1 µs. The rules are unchanged: the
+first route cached for a key stays, the oldest key is evicted first, and a hit does not
+move an entry.
+
+An entry now keeps only the matched route. It used to also keep the route parameters
+and the data of the request that first matched it — for a `POST`, its body, a login
+form's included — for as long as the entry lived, which is the life of the process
+unless 5,000 other paths pushed it out.
+
+The unused radix trie is removed: `lib/routing/src/radix.js` and the routing library's
+internal `buildTrie()` and `lookupTrie()`. Nothing called them, so the trie never ran in
+any release; the route candidate index above replaces them.
+
+**What to check:** nothing, unless your code reached into the routing library's
+internals (`Routing._cached`, `buildTrie`, `lookupTrie`, `lib/routing/src/radix`).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Changed — `self.query()` over HTTP/2 no longer adds `status: 200` (restart)
+
+An upstream JSON body that carries no `status` used to reach an HTTP/2 caller with
+`status: 200` added, and the client logged
+`[<rule>] Response status code is undefined: switching to 200` on every such call. Over
+HTTP/1.1 the same body arrived as sent. Both transports now deliver the body as the
+upstream sent it, and the warning is gone. The end client of a `control: "forward"`
+route, which received the added key in its JSON, no longer does.
+
+Nothing else moves: a body without `status` is a success on both transports, and a body
+that carries a `status`, numeric or not, is delivered as it came. A JSON string body such
+as `"[]"` is now a success over HTTP/2 as well — adding the key threw on it, and the call
+answered `500`.
+
+**What to check:** code that reads `status` on the result of an HTTP/2 `self.query()` to
+an upstream that sends none now reads `undefined` — treat an absent `status` as success,
+as the framework does. A `delete result.status` that stripped the added key can go. A
+record saved from such a result may still hold the `status: 200` it was given.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — `project:rename` renames to a free name and refuses a taken one (CLI; behaviour change)
 
 `gina project:rename @<old> @<new>` checked the new name backwards: it refused
