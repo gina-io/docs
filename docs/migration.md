@@ -189,6 +189,47 @@ after changing it.
 
 Nothing to restart or re-bake for the change itself.
 
+### Security — Express engine on Express 5: one body-less request no longer stops the bundle (restart)
+
+A bundle running `engine: "express"` on Express 5 exited on a single request, sent
+by anyone, to any URL, before routing: a `DELETE` (with or without a query string),
+or a `POST`, `PUT` or `PATCH` sent without a body. The Express 5 support added in
+0.6.9 shadowed Express's `req.query` getter with an undefined value so the
+framework's own assignments would work, but that left `request.query` undefined
+until the `GET`/`HEAD` branches assigned it; the `DELETE` branch and the empty-body
+fallback of the body-carrying branches counted it as it was, and the resulting
+`TypeError` inside the request's `end` handler took the uncaught-exception path and
+exited the process. The property is now an accessor: the first read materialises
+Express's own parse — honouring the app's `query parser` setting — as a plain,
+writable object of the request, and assignments still store. Express 4 (its query
+middleware assigns the property on every request) and the default isaac engine were
+never affected; a bundle that mounts the [CSRF plugin](/guides/csrf) refused such
+unauthenticated requests before the pipeline ran.
+
+**What to check:** nothing, unless you read `req.query` in your own Express
+middleware on Express 5 — it now holds the parsed query there too, as on Express 4.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
+
+On the Express engine, on Express 4 and 5 alike, a URL with a query string never
+matched a route or a static file: `GET /items?page=2` answered `404` while
+`GET /items` answered `200`, and a static requested with a cache-buster
+(`/css/app.css?v=3`) was not found. The engine kept the query string in
+`request.url`, so the path handed to route matching, to the statics handler and to
+the requirement matcher still carried `?…` on its last segment; the isaac engine
+strips it before dispatch. The Express path now does the same, after the
+framework's own `/_gina` handlers and before the webroot filter, the statics and the
+routing loop. `request.originalUrl` keeps the full URL.
+
+**What to check:** the warm route cache is keyed by method and path, so on Express
+the query variants of one path now share one entry, exactly as on isaac — the match
+verdict, requirements included, is re-evaluated on every hit, so a variant that
+requirements reject still gets its `404`.
+
+Restart the bundle. Nothing to re-bake.
+
 ## 0.6.32 → 0.6.33
 
 ### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
