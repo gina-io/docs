@@ -318,6 +318,17 @@ valid JSON yields `undefined`.
 Type declarations only: nothing to restart or re-bake — they take effect at your
 next type-check.
 
+### Fixed — the published package no longer carries end-to-end test artifacts (nothing to do)
+
+`gina@0.6.32` and `gina@0.6.33-alpha.1` shipped two `error-context.md` snapshots
+under `test-results/`, left by a local end-to-end run: the directory is excluded
+from git, but it was never listed in `.npmignore`, which npm reads in its place.
+They were test fixtures only — no credentials and no local paths (measured before
+the release). `test-results/` and `playwright-report/` are now excluded from the
+tarball.
+
+Nothing to restart or re-bake: nothing ever loaded those files.
+
 ### Fixed — a referenced value is compared exactly as typed (restart and re-bake; behaviour change)
 
 An [`is`](/reference/validation-rules#is) condition such as
@@ -398,6 +409,23 @@ inside a referenced value is never resolved.
 - In a route requirement or fluent `is()` call, a `$` followed by an engine method
   name (`$isValid`) is no longer resolved to `undefined`; the condition is refused
   and the field reads invalid, with a warning naming the condition.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — the in-memory Collection compares strings with `==`, `>` and `<`, and a quote in a value no longer breaks a query (restart and re-bake)
+
+`find()` and the nested-path filters of the in-memory [Collection](/api/collection)
+had three defects on string values:
+
+- **A double quote or a backslash in a value threw.** One row whose string value
+  held a `"` failed the whole query, and a filter holding one did the same.
+- **`==`, `>` and `<` were not recognised on strings** — only `>=`, `<=`, `===`
+  and `!==` were.
+- **A space after the operator was kept inside the operand** (`'>= b'`), which
+  skewed the comparison.
+
+Both operands are now encoded before they are compared. Numeric and datetime
+comparisons are unchanged.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
@@ -657,6 +685,16 @@ Run outside a project directory without `@<project>`, or with an `@<project>` th
 is not registered, the three commands crashed with "Gina has some troubles with this
 command" and a stack trace. They now print "Project name is required:
 @<project_name>" or "[ <name> ] is not a valid project name." and exit `1`.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `scope:link-local`, `scope:link-production` and `env:link-dev` exit after a successful change
+
+The three commands updated `projects.json` and then did not exit. Typed through the
+installed `gina` launcher they returned normally; started by the CLI's own path
+(`node <gina>/bin/cli …`, as CI jobs and scripts run it), the CLI's open log
+listener kept the process alive, so the command hung. They now exit once the change
+is written.
 
 CLI only: nothing to restart or re-bake.
 
