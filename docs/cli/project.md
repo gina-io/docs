@@ -46,9 +46,9 @@ Since `0.6.9` it also writes a `.gitignore` — but **only when the project does
 | Option | Description |
 |---|---|
 | `--path=<dir>` | Target directory for the project. Defaults to the current working directory. |
-| `--homedir=<dir>` | Override the project home directory (defaults to `~/.<project>`). |
-| `--scope=<scope>` | Add a scope at creation time (e.g. `local`). |
-| `--env=<env>` | Set the default environment (e.g. `dev`). |
+| `--homedir=<dir>` | Not usable yet: the CLI takes `--homedir` for the directory of gina's own home, not the project's, so it does not set the project home — that stays `~/.<project>`. Do not pass it until a release fixes this. |
+| `--scope=<scope>` | Register the scope if it does not exist yet (e.g. `staging`). It does not become the project's default scope — set that with [`scope:use`](/cli/cli-scope#scopeuse). |
+| `--env=<env>` | Register the environment if it does not exist yet (e.g. `qa`). It does not become the project's default environment — set that with [`env:use`](/cli/cli-env#envuse). |
 | `--start-port-from=<port>` | Start the port scanner from this port number. |
 
 `--scope` and `--env` register the scope or environment when it does not exist yet, for
@@ -56,6 +56,10 @@ every project, as [`scope:add`](/cli/cli-scope#scopeadd) and [`env:add`](/cli/cl
 do. `project:add` checks both values against the scope and environment naming rules
 before it writes anything, and refuses an invalid one with exit `1`. `project:import`
 does not check them: it only accepts a scope or environment the project already lists.
+
+Each option's value is everything after its first `=`, so a `--path` may itself
+contain `=`. Since `0.6.34` a `--scope` or `--env` value holding `=` is refused as an
+invalid name; before, it was cut at the `=` and the first part was registered.
 
 ---
 
@@ -83,6 +87,11 @@ gina project:rename @<old-name> @<new-name>
 ```bash
 gina project:rename @myproject @myproject-v2
 ```
+
+The new name must be free: `project:rename` refuses a name another project is
+registered under, and a target directory that already exists, with exit `1` and
+before anything moves. In the port registries it renames only the entries of the
+renamed project — another project whose name begins with the old name keeps its own.
 
 ---
 

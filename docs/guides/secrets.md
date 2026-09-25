@@ -57,7 +57,7 @@ string field. The connectors registry is a typical adoption surface:
     "database": "api",
     "username": "appuser",
     "password": "${secret:COUCHBASE_PASSWORD}",
-    "ping":     "2m"
+    "pingInterval": "2m"
   }
 }
 ```

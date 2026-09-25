@@ -230,24 +230,34 @@ development environments usually work without setting it explicitly.
 
 ### Scope values
 
-| Value | Environment |
+A scope value is the name of a scope registered with the framework. Gina registers two
+by default:
+
+| Value | Used for |
 |---|---|
-| `local` | Local development |
-| `beta` | Staging / beta |
-| `production` | Production |
-| `testing` | Automated test runs — wiped before each suite |
+| `local` | Local development — maps to `local_scope` by default |
+| `production` | Production — maps to `production_scope` by default |
+
+Register another one — for example `staging` — with
+[`gina scope:add`](/cli/cli-scope#scopeadd), and use the same value in `connectors.json`.
 
 ### Backfilling existing documents
 
-Documents created before `_scope` was introduced will have the field missing. Run
-the backfill script once per environment to stamp them:
+Documents created before `_scope` was introduced have no `_scope` field. Stamp them
+with an N1QL update, run in the Couchbase query service against the bucket an
+environment uses, with that environment's scope:
 
-```bash
-node script/backfill-scope.js --scope=local --host=localhost:8093
+```sql
+UPDATE `<bucket>` AS d
+SET d._scope = '<scope>'
+WHERE d._scope IS MISSING
 ```
 
-The script updates all documents where `_scope IS MISSING` and is safe to run
-multiple times — subsequent runs are no-ops.
+Only documents that still lack the field are updated, so running it again changes
+nothing. The query service needs an index it can use on the bucket (a primary index
+works). In a bucket shared by several environments, documents written before `_scope`
+existed cannot be told apart by this query: add a condition that selects the ones
+each environment owns.
 
 ### Why not separate buckets?
 

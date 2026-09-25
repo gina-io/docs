@@ -19,6 +19,105 @@ upward to the target version.
 
 ---
 
+## 0.6.33 → 0.6.34
+
+### Fixed — `project:rename` renames to a free name and refuses a taken one (CLI; behaviour change)
+
+`gina project:rename @<old> @<new>` checked the new name backwards: it refused
+every free name as already taken, and went ahead only when the new name was
+already registered — a rename onto another project, after which one of the two
+registrations was lost. Such a run also damaged the port records: another project
+whose name began with the old one had its `ports.reverse.json` entries renamed
+too, and the renamed project kept its old name in `ports.json`, beside stray
+entries.
+
+It now renames to a free name, and refuses a registered name or a target
+directory that already exists with exit `1`, before anything moves. Port entries
+are renamed only where the project name matches exactly.
+
+**What to check:** a script that renamed onto a registered name now gets exit `1`
+— pass a free name. If you ran `project:rename` with an earlier release, check
+`gina port:list @<project>` for each project whose name begins with the old name:
+a bundle with no ports listed lost its entries, and `gina port:reset @<project>`
+gives that project's bundles new ports.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `env:add <env> @<project>` makes the environment ready to start (CLI)
+
+`gina env:add <env> @<project>` listed the environment on the project but gave
+its bundles no ports for it and wrote no `env.json` blocks, so the environment
+could not start. It also printed nothing, and never exited where the CLI runs by
+its own path, as CI and scripts run it. It now gives every bundle of the project
+its own ports for the environment, writes their `env.json` blocks, prints
+`environment [ <env> ] created` and exits; if the port scan fails, it exits `1`
+and restores what it had changed.
+
+**What to check:** an environment you added with the `@<project>` form on an
+earlier release is listed on the project without ports. Run the same command
+again: its bundles get their ports and `env.json` blocks, and the ports of the
+project's other environments do not change. The form without `@<project>` still
+registers only the name — see [`env:add`](/cli/cli-env#envadd).
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — six more commands end after their work (CLI)
+
+`gina port:reset` with no registered project, `env:unset`, `env:set` with no key,
+`port:list --format=json` (with or without `--filename`) and `--format=conf`
+without `--filename`, `connector:list` without `@<project>`, and a cancelled
+`protocol:set` prompt did their work and then never ended the process wherever
+the CLI runs by its own path, as CI and scripts run it. They now exit, and the
+listings exit only once their output has been written.
+
+**What to check:** a script that killed one of these commands after a timeout can
+drop that workaround.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `project:add` and `project:import` read `--path`, `--scope` and `--env` whole (CLI; behaviour change)
+
+A flag value holding `=` was cut at its second `=`. On a fresh registry a `--path`
+holding `=` failed with `ENOENT`, `project:import` refused such a path as one that
+"no longer exists", and `--scope=a=b` or `--env=a=b` registered `a` instead of
+refusing the name. A `--path` value containing `--scope=` or `--env=` was also
+read as that flag. The values are now read whole, and a flag counts only where its
+name starts the argument. A failed removal of the project's `node_modules/gina`
+link now reports its own error instead of a `ReferenceError`.
+
+**What to check:** a `--scope` or `--env` value holding `=` is now refused as an
+invalid name. And `--scope` / `--env` never changed a project's default scope or
+environment, although the reference said `--env` did: set the defaults with
+[`gina scope:use`](/cli/cli-scope#scopeuse) and [`gina env:use`](/cli/cli-env#envuse).
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — a failed copy no longer leaves a temporary file behind (CLI)
+
+A copy through the path helper — what `bundle:add`, `bundle:build`, `bundle:copy`,
+`project:build`, `project:rename` and `view:add` copy with — removed its
+temporary `*.tmp` file only if the file existed when the failure was reported,
+and its creation could finish just after. It is now removed once its stream has
+closed, before the callback runs. On Bun, the error such a failure reported had
+no `stack`, so a caller printing `err.stack` printed `undefined`; it now always
+carries one, and keeps its code and message.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — the Couchbase keep-alive interval is `pingInterval`, not `ping` (check your connectors)
+
+The connector reference and the `connectors.json` a new bundle is scaffolded with
+showed the Couchbase keep-alive interval as `ping`, a key the connector never read.
+It reads `pingInterval` (default `2m`, used while `keepAlive` is on, as it is by
+default).
+
+**What to check:** if a `connectors.json` of yours sets `"ping"`, rename it to
+`"pingInterval"` — until then the connector ignored it and used the 2-minute
+default. `connectors.json` is read when a bundle starts, so restart the bundle
+after changing it.
+
+Nothing to restart or re-bake for the change itself.
+
 ## 0.6.32 → 0.6.33
 
 ### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
