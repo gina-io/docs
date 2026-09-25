@@ -40,6 +40,12 @@ gina env:add <env>
 gina env:add staging
 ```
 
+An environment applies to every bundle of a project. An environment name is made of
+letters, digits, `_`, `.` and `-`, and starts with a lowercase letter, a digit, `_` or
+`.`; any other name is refused, and so are `.`, `..`, `global` — the name of the
+configuration overlay that applies to every environment (`<name>.global.json`) — and
+the name of a property every object inherits, such as `constructor`.
+
 ---
 
 ## `env:remove`

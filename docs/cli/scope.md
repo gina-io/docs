@@ -43,7 +43,8 @@ gina scope:add staging
 A scope applies to every bundle of a project; to deploy a bundle in some scopes
 only, see [Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
 A scope name is made of letters, digits, `_`, `.` and `-`, and starts with a
-lowercase letter, a digit, `_` or `.`; any other name is refused.
+lowercase letter, a digit, `_` or `.`; any other name is refused, as is the name of a
+property every object inherits, such as `constructor`.
 
 ---
 
@@ -73,18 +74,28 @@ gina scope:use production
 
 ## `scope:link-local`
 
-Create a symlink for a bundle targeting local development.
+Make a scope the project's local slot (`local_scope`). If the project's default scope
+(`def_scope`) was the previous local scope, it moves to the new one too. Nothing is
+symlinked: the command updates the project's entry in `~/.gina/projects.json`. See
+[Link scopes to local and production slots](/concepts/scopes#link-scopes-to-local-and-production-slots).
 
 ```bash
-gina scope:link-local <bundle> @<project>
+gina scope:link-local <scope> [@<project>]
 ```
+
+Without `@<project>`, the project is the one whose directory you run the command from.
 
 ---
 
 ## `scope:link-production`
 
-Create a symlink for a bundle targeting production.
+Make a scope the project's production slot (`production_scope`). If the project's
+default scope (`def_scope`) was the previous production scope, it moves to the new one
+too. Nothing is symlinked: the command updates the project's entry in
+`~/.gina/projects.json`.
 
 ```bash
-gina scope:link-production <bundle> @<project>
+gina scope:link-production <scope> [@<project>]
 ```
+
+Without `@<project>`, the project is the one whose directory you run the command from.

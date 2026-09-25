@@ -579,8 +579,9 @@ Server-side only: **restart the bundle** — no re-bake.
 
 `gina scope:add` checked only the first character of a scope name. It now checks
 the whole name: letters, digits, `_`, `.` and `-`, starting with a lowercase
-letter, a digit, `_` or `.`, and neither `.` nor `..` — a scope name becomes a
-directory name under `releases/<bundle>/`.
+letter, a digit, `_` or `.`, and none of `.`, `..` or the name of a property every
+object inherits, such as `constructor` — a scope name becomes a directory name
+under `releases/<bundle>/` and a key in the project files.
 
 The command help documented `gina scope:add <bundle>/<scope> @<project>` as
 adding a scope to one bundle. It never did: it registered a project scope
@@ -599,6 +600,81 @@ still accepts a `/` in a scope, so a scope registered under the old form keeps
 booting.
 
 CLI only: nothing to restart or re-bake.
+
+### Changed — `env:add` checks the whole name; the `<bundle>/<env>` form is retired (behaviour change)
+
+`gina env:add` checked only the first character of an environment name. It now
+applies the scope rule above to the whole name, and also refuses `global`, which
+names the configuration overlay that applies to every environment
+(`<name>.global.json`, `routing.global.json`).
+
+The command help documented `gina env:add <bundle>/<env> @<project>` as adding an
+environment to one bundle. It never did: it registered a project environment
+literally named `<bundle>/<env>`. That form is retired and refused.
+
+A name that failed the old first-character check, such as `Staging`, used to be
+dropped silently; it is now refused by name.
+
+**What to check:** a script that calls `env:add` with a name outside the rule now
+exits `1`. Environments already registered are unchanged.
+
+CLI only: nothing to restart or re-bake.
+
+### Security — `project:add` no longer runs `--scope` / `--env` through a shell (behaviour change)
+
+When `--scope` or `--env` named a scope or environment that was not registered yet,
+`gina project:add` registered it by running `scope:add` / `env:add` through a shell
+command line with the value spliced in unquoted, so shell syntax in the value ran as
+a command, as the user running `project:add`. Automation that builds these flags from
+data it does not control, such as a branch or ticket name, was exposed; typing the
+command yourself crossed no boundary, and `project:import` was never exposed.
+
+`project:add` now checks both values against the scope and environment naming rules
+before it writes anything, refuses an invalid one with exit `1` — the project is no
+longer left half-added — and starts the child commands without a shell.
+`project:import` skips that check: it only accepts a scope or environment the project
+already lists, so a name registered by an older release keeps importing.
+
+**What to check:** a script that passes `project:add` a `--scope` or `--env` outside
+the naming rules now exits `1` before anything is written.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `project:add` no longer loses a scope or environment it has just registered
+
+With `--scope` or `--env` naming one that did not exist yet, `gina project:add`
+started linking gina into the new project and, while that step was still running,
+registered the new names. Both steps rewrite the registry files in `~/.gina`, so on
+some runs the new name was missing afterwards from `main.json` or from the project's
+entry in `projects.json`. The link step now starts only once the rest of the command
+has finished.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `scope:link-local`, `scope:link-production` and `env:link-dev` no longer crash without a registered project
+
+Run outside a project directory without `@<project>`, or with an `@<project>` that
+is not registered, the three commands crashed with "Gina has some troubles with this
+command" and a stack trace. They now print "Project name is required:
+@<project_name>" or "[ <name> ] is not a valid project name." and exit `1`.
+
+CLI only: nothing to restart or re-bake.
+
+### Security — the Couchbase connector's REST query transport is retired (restart; behaviour change)
+
+`useRestApi: true` on a couchbase entry of `connectors.json` sent every N1QL query
+over plain HTTP to the query service, with the cluster credentials in an
+`Authorization: Basic` header — unencrypted even when the entry used `couchbases://`.
+It also rewrote every `'` in the statement into `"` and inserted parameter values
+without escaping. The option was off by default and undocumented.
+
+It is now ignored, with one warning when the connector connects, and those queries
+go through the Couchbase SDK like every other query.
+
+**What to check:** remove `useRestApi` from any couchbase connector entry.
+
+Restart the bundle to pick it up — the connector is loaded once, at boot; nothing to
+re-bake.
 
 ### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
 

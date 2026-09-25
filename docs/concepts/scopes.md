@@ -50,7 +50,8 @@ scopes only, give its manifest entry a `scopes` allow-list — see
 A scope name is made of letters, digits, `_`, `.` and `-`, and starts with a
 lowercase letter, a digit, `_` or `.`. `scope:add` refuses any other name,
 including `.` and `..` — a scope name becomes a directory name under
-`releases/<bundle>/`.
+`releases/<bundle>/`. It also refuses the name of a property every object inherits,
+such as `constructor` or `__proto__`: the project files are indexed by scope name.
 
 ---
 
