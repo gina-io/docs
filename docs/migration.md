@@ -21,6 +21,33 @@ upward to the target version.
 
 ## 0.6.33 → 0.6.34
 
+### Changed — routing tests only the routes whose URL could match (`validator::` side effects)
+
+A request the route cache has not seen before used to be tested against every route
+of the bundle, in declaration order. It is now tested only against the routes whose
+URL pattern could match its path — still in declaration order, with every check
+(scope, method, requirements) as before — so each request is answered by the same
+route as before.
+Matching is faster: measured on the routing step alone, over a 380-route table, a
+late route took about 440 µs and now about 14 µs, and a `404` went from about 510 µs
+to about 12 µs.
+
+A skipped route is not evaluated at all, so its `validator::` requirements do not
+run for that request: a validator that throws no longer answers a request aimed at
+another route with a `500`, and a `validator::{ query: ... }` rule no longer calls its
+backend for it. Every route is still tested for the root path, a path ending in `/`
+or holding `//`, and — on the Express engine — a path carrying a query string; a route
+with two or more requirements that are not bound to a whole `:key` segment of its
+`url` is tested for every request. See
+[Validator requirements](/guides/routing#validator-requirements).
+
+**What to check:** if a `validator::` requirement was relied on for a side effect on
+requests aimed at other routes — logging, counting, a backend call — move it into a
+middleware. A custom error page that reads `req.params` on a `404` or a `405` may see
+fewer leftover values, since fewer routes are evaluated before the error.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — `project:rename` renames to a free name and refuses a taken one (CLI; behaviour change)
 
 `gina project:rename @<old> @<new>` checked the new name backwards: it refused

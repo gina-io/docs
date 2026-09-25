@@ -19,10 +19,11 @@ The router evaluates rules in order, checking scope, URL pattern, parameter requ
 
 ## How it works
 
-When a request arrives, the router tests every route in order. The first rule whose URL
-pattern, HTTP method, and scope all match wins. The matched route's middleware list (global
-middlewares prepended, then route-specific) executes sequentially before the controller
-action is called.
+When a request arrives, the router tests the routes in declaration order, skipping those
+whose URL pattern cannot match the request's path. The first rule whose URL pattern,
+requirements, HTTP method, and scope all match wins. The matched route's middleware list
+(global middlewares prepended, then route-specific) executes sequentially before the
+controller action is called.
 
 ```mermaid
 flowchart LR
@@ -331,6 +332,17 @@ not strict-equal to any list member are rejected):
 
 If a requirement value starts with neither `/` nor `validator::`, the bundle fails
 to start with a configuration error.
+
+:::note Requirements run only on routes whose URL could match
+Since 0.6.34 a route whose URL pattern cannot match the request's path is skipped
+before its requirements are evaluated, so its `validator::` rules do not run for that
+request: a validator that throws no longer answers a request aimed at another route
+with a `500`, and a `query` rule no longer calls its backend for it. Every route is
+still tested for the root path, a path ending in `/` or holding `//`, and — on the
+Express engine — a path carrying a query string; and a route with two or more
+requirements that are not bound to a whole `:key` segment of its `url` is tested for
+every request.
+:::
 
 :::tip Same rules, client and server
 The `is*` names here are the same rules that power client-side form validation.
