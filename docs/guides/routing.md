@@ -338,7 +338,7 @@ If a requirement value starts with neither `/` nor `validator::`, the bundle fai
 to start with a configuration error.
 
 :::note Requirements run only on routes whose URL could match
-Since 0.6.34 a route whose URL pattern cannot match the request's path is skipped
+Since 0.7.0 a route whose URL pattern cannot match the request's path is skipped
 before its requirements are evaluated, so its `validator::` rules do not run for that
 request: a validator that throws no longer answers a request aimed at another route
 with a `500`, and a `query` rule no longer calls its backend for it. Every route is

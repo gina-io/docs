@@ -19,7 +19,24 @@ upward to the target version.
 
 ---
 
-## 0.6.33 → 0.6.34
+## 0.6.33 → 0.7.0
+
+### Action required — settings reset (shortVersion bump)
+
+`0.7.0` is a **shortVersion bump** (`0.6` → `0.7`). On install, the framework
+creates a fresh `~/.gina/0.7/settings.json` from defaults — your
+`~/.gina/0.6/settings.json` customizations (log level, port, culture, timezone,
+etc.) are **not** carried forward. This is intentional: the per-version settings
+schema can change between short versions.
+
+After upgrading, re-apply your customizations with `gina framework:set`, or copy
+the values across from `~/.gina/0.6/settings.json`. Root-level state
+(`~/.gina/main.json`, `projects.json`, `ports.json`, `gina.db`) is shared across
+short versions and is unaffected — only the per-version `settings.json` resets.
+
+A project that lists `gina` as a dependency with a `^0.6.x` range does not
+resolve `0.7.0`: npm's caret range keeps a `0.x` dependency on its minor line.
+Widen the range (for example to `^0.7.0`) to pick this release up.
 
 ### Changed — routing tests only the routes whose URL could match (`validator::` side effects)
 

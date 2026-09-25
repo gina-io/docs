@@ -58,7 +58,7 @@ before it writes anything, and refuses an invalid one with exit `1`. `project:im
 does not check them: it only accepts a scope or environment the project already lists.
 
 Each option's value is everything after its first `=`, so a `--path` may itself
-contain `=`. Since `0.6.34` a `--scope` or `--env` value holding `=` is refused as an
+contain `=`. Since `0.7.0` a `--scope` or `--env` value holding `=` is refused as an
 invalid name; before, it was cut at the `=` and the first part was registered.
 
 ---
