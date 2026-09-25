@@ -179,10 +179,9 @@ scope. A longer placeholder that merely starts with `$scope` —
 
 Because the scope is written into the statement text, the connector validates it
 once when it loads: it must be a non-empty string of letters, digits, `_`, `.`,
-`-` or `/` (`^[A-Za-z0-9_./-]+$`). The scopes gina ships pass, and so do names
-registered with `scope:add` in either documented form (`<scope>` or
-`<bundle>/<scope>`) as long as they use only those characters -- `scope:add`
-itself checks only the first character. Since 0.6.33 a scope
+`-` or `/` (`^[A-Za-z0-9_./-]+$`). The scopes gina ships pass, and so does every
+name `scope:add` accepts; `/` is still allowed so that a scope registered under
+the retired `<bundle>/<scope>` form keeps booting. Since 0.6.33 a scope
 outside that grammar — from the connector entry's `scope` or from `NODE_SCOPE` —
 stops the bundle at boot with exit code `1` and `GINA_COUCHBASE_INVALID_SCOPE`
 on stderr, instead of being written into every query and stamped on every

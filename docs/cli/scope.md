@@ -40,6 +40,11 @@ gina scope:add <scope>
 gina scope:add staging
 ```
 
+A scope applies to every bundle of a project; to deploy a bundle in some scopes
+only, see [Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+A scope name is made of letters, digits, `_`, `.` and `-`, and starts with a
+lowercase letter, a digit, `_` or `.`; any other name is refused.
+
 ---
 
 ## `scope:remove`

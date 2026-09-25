@@ -534,11 +534,12 @@ concatenation instead of binding a query parameter or validating an identifier:
   (`items[0]`), a `$` inside a name. Pick such keys from a fixed list of identifier
   names in your own code rather than passing request input through.
 - **Scope names** outside `^[A-Za-z0-9_./-]+$` now stop the boot. The scopes gina
-  ships (`local`, `beta`, `production`, `testing`) pass, and so does a name
-  registered with `scope:add` in either documented form (`<scope>` or
-  `<bundle>/<scope>`) when it uses only those characters — `scope:add` checks only
-  the first character. Check `gina scope:list @<project>` and your connector
-  entries' `scope` before restarting.
+  ships (`local`, `beta`, `production`, `testing`) pass, and so does every name
+  `scope:add` accepts. `/` is still allowed, so a scope registered under the
+  retired `<bundle>/<scope>` form keeps booting. A name registered before
+  `0.6.33` could hold other characters, since `scope:add` then checked only the
+  first one: check `gina scope:list @<project>` and your connector entries'
+  `scope` before restarting.
 
 Server-side only: **restart the bundle** — no re-bake.
 
@@ -573,6 +574,31 @@ gains backticks too — while the query means the same. A log or Inspector filte
 that matches `INSERT INTO <bucket>` literally needs the backticks.
 
 Server-side only: **restart the bundle** — no re-bake.
+
+### Changed — `scope:add` checks the whole name; the `<bundle>/<scope>` form is retired (behaviour change)
+
+`gina scope:add` checked only the first character of a scope name. It now checks
+the whole name: letters, digits, `_`, `.` and `-`, starting with a lowercase
+letter, a digit, `_` or `.`, and neither `.` nor `..` — a scope name becomes a
+directory name under `releases/<bundle>/`.
+
+The command help documented `gina scope:add <bundle>/<scope> @<project>` as
+adding a scope to one bundle. It never did: it registered a project scope
+literally named `<bundle>/<scope>`. That form is retired and refused, with a
+pointer to the per-bundle mechanism, the `scopes` allow-list on the bundle's
+entry in `manifest.json` — see
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+
+A name that failed the old first-character check, such as `Staging`, used to be
+dropped silently; it is now refused by name.
+
+**What to check:** a script that calls `scope:add` with a name outside the rule
+now exits `1`. Scopes already registered are unchanged — `gina scope:list` shows
+them and `gina scope:remove` still removes them — and the Couchbase connector
+still accepts a `/` in a scope, so a scope registered under the old form keeps
+booting.
+
+CLI only: nothing to restart or re-bake.
 
 ### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
 

@@ -37,17 +37,20 @@ The currently active (default) scope is marked with `[ * ]`.
 
 ## Add a scope
 
-Add a scope to all bundles in a project:
+Add a scope to a project:
 
 ```bash
 gina scope:add staging @myproject
 ```
 
-Add a scope to a specific bundle only:
+A scope applies to every bundle in the project. To deploy a bundle in some
+scopes only, give its manifest entry a `scopes` allow-list — see
+[Restrict a bundle to certain scopes](#restrict-a-bundle-to-certain-scopes).
 
-```bash
-gina scope:add frontend/staging @myproject
-```
+A scope name is made of letters, digits, `_`, `.` and `-`, and starts with a
+lowercase letter, a digit, `_` or `.`. `scope:add` refuses any other name,
+including `.` and `..` — a scope name becomes a directory name under
+`releases/<bundle>/`.
 
 ---
 
