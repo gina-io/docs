@@ -836,6 +836,30 @@ missing or unreadable CA file fails the call with the same error.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Security — on an `http/2.0` bundle, an HTTP/1.1 request is held to the route's method (restart; behaviour change)
+
+A bundle configured `"protocol": "http/2.0"` also answers HTTP/1.1, through the HTTP/2
+server's `allowHTTP1` fallback: a client that does not negotiate HTTP/2, or a reverse proxy
+that talks HTTP/1.1 to the bundle (nginx's `proxy_pass` does). For those requests the
+router read the method from the HTTP/2-only `:method` pseudo-header, found none, and let
+every method through: any method ran a single-method route without a `:param` segment, and
+any multi-method route. A `GET` reached a POST-only action (and a `GET` is never asked for a
+CSRF token); a `POST` on a URL declared for both `GET` and `POST` ran whichever route was
+declared first. The route cache is keyed by method and path, so one such request also made
+the wrong route the cached answer for every later client using that method on that path,
+HTTP/2 clients included.
+
+Every method check now uses the request's own method, whatever protocol the bundle is
+configured for. An HTTP/1.1 CORS preflight on such a bundle is answered `204`, as an HTTP/2
+one is; it used to be routed, and the route's action ran for the `OPTIONS` request.
+
+**What to check:** if your bundles run `http/2.0` behind a proxy that talks HTTP/1.1 to
+them, a client that reached a route with a method the route does not declare now gets `404`
+(`405` when the route declares several methods). Declare every method a route accepts in its
+`method` field. Bundles on the default `http/1.1` protocol are unaffected.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
