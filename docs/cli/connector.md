@@ -346,7 +346,8 @@ Any comment header above the first `{` is preserved byte-for-byte. Mid-body `//`
 | `connector:add mycache @<project> --connector=notathing` | "Unknown connector type `notathing`. Allowed values: ..." (exit 1) |
 | `connector:add redis @<project>` with no `shared/` dir | "Config directory does not exist: ..." (exit 1) |
 | Entry already exists, `--force` not passed | "Connector \`<name>\` already exists in ... Re-run with --force to overwrite." (exit 1) |
-| `--scope=` is not one of `local`, `beta`, `production`, `testing` | The framework's scope validation rejects first (before the handler); if it passes, the handler falls back to "Scope \`<value>\` is not valid. Allowed: ..." |
+| `--scope=` names a scope the project does not list | Refused before the handler runs: "Scope \[ <value> \] not registered. See \[ man gina-scope \]." (exit 1) — this includes `beta` and `testing` on a project that does not list them |
+| `--scope=` names a listed scope that is not one of `local`, `beta`, `production`, `testing` | "Scope \`<value>\` is not valid. Allowed: ..." (exit 1) |
 
 :::tip Inferred type
 If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type.

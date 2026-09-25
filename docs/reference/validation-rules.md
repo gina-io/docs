@@ -324,9 +324,39 @@ arguments a `$` is plain literal text (since 0.6.3 — earlier versions threw a
 `TypeError` when an array-form rule's first value carried a `$` that matched no
 field name).
 
+A `$name` token is `$` immediately followed by the name of a field of the form.
+The longest field name wins (`$password-confirm` is never read as `$password`
+followed by `-confirm`), and a token ends where its name ends as long as the next
+character is not a name character (`A-Z`, `a-z`, `0-9`, `_`, `-`) — so
+`($password) === ($passwordConfirm)` and `$a===$b` resolve, while `$passwordX`
+leaves `password` alone. Names are matched exactly (case included), and any
+character a field name may carry (`$user[email]`, `$user.email`) is fine. A `$`
+that names no field stays literal, and a `$` inside a referenced **value** is
+never resolved: `abc$email` compares as those eight characters. (Since 0.6.33 —
+earlier, a token had to be followed by whitespace or the end of the condition in
+route requirements and fluent `is()` calls, a field name holding a bracket never
+resolved, and a value containing `$otherField` was substituted a second time, so
+such a value could never be confirmed; see the
+[migration note](/migration#fixed--every-field-token-follows-one-grammar-restart-and-re-bake-behaviour-change).)
+
 For safety, free-form expressions are restricted to one regex test or one binary
 comparison (`===`, `!==`, `==`, `!=`, `<`, `>`, `<=`, `>=`); anything else is
 rejected.
+
+Referenced values are compared exactly as typed, whatever they contain — quotes,
+backslashes, line breaks, parentheses, the word `return`, `$&`, or only symbols and
+non-ASCII letters such as `!!!` or `é€` (since 0.6.33 — earlier, a double quote, a
+backslash or a line break stopped the whole validation pass, parentheses and
+`return` inside a value were ignored so `ab(cd` matched `ab)cd`, and a value with no
+ASCII letter or digit never matched; see the
+[migration note](/migration#fixed--a-referenced-value-is-compared-exactly-as-typed-restart-and-re-bake-behaviour-change)).
+A referenced field with a number rule (`isNumber`, `isInteger`, `isFloat`, `toFloat`
+or `toInteger`) is compared as a number when its value is one, and as text
+otherwise.
+
+A string literal written in the condition itself follows JSON escaping: `\"` is a
+double quote and `\\` a backslash (in a JSON rule file, write each backslash twice).
+A literal that is not valid JSON is read as written.
 
 - **Default message:** *Condition not satisfied* (override with the second
   argument or [`setFlash`](#setflash)).
@@ -501,7 +531,7 @@ internals never reach the form.
 | Key | Type | Meaning |
 |---|---|---|
 | `url` | string | Endpoint to call. A gina route name (`name@bundle`) is resolved through the router; anything starting with `http` is used as-is. |
-| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call. |
+| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). The token follows the same rule as in [`is`](#is): the longest field name wins, whatever its spelling (`$passwordConfirm`, `$Email`), a token ends at the first character outside `A-Z a-z 0-9 _ -`, and a `$` naming no field is sent as typed (before 0.6.33 it was sent as the string `null`, and a camelCase name resolved only its lowercase prefix). |
 | `validIf` | boolean | The response `isValid` the rule treats as a **pass**. Defaults to `true`; set `false` for a "must NOT exist" check such as a uniqueness probe. |
 | `method` | string | HTTP method. Defaults to `GET`. |
 | `headers` | object | Request headers, merged over the defaults. See the caution below. |
@@ -514,9 +544,9 @@ overrides the built-in value rather than being merged under it.
 
 :::caution Values containing `+` — declare `Content-Type` explicitly
 The request body is JSON, but on **0.6.17 and earlier** it is labelled
-`application/x-www-form-urlencoded`. The server honours that label and
-url-decodes the body before parsing it, which turns every `+` in a value into a
-space — so a check on an email plus-address such as `alias+tag@example.com` is
+`application/x-www-form-urlencoded`. The server honours that label and reads
+every `+` in the body as a space, as the form encoding prescribes, before parsing
+it — so a check on an email plus-address such as `alias+tag@example.com` is
 answered for `alias tag@example.com` instead. The body stays well-formed, so
 nothing errors: the endpoint simply returns the wrong answer, and because a
 `query` rule also gates the submit button the visitor cannot submit at all.

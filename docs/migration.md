@@ -19,6 +19,906 @@ upward to the target version.
 
 ---
 
+## 0.6.32 → 0.6.33
+
+### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
+
+Logging in rotates the session id: `req.login()` and Passport 0.6 or later call
+`req.session.regenerate()`, and express-session's `regenerate()` deletes the
+pre-login session from the store before it issues a new one. When that session
+was never saved — `saveUninitialized: false`, with nothing written before the
+login — it is not in the bucket, and the Couchbase store reported deleting it as
+an error (`DocumentNotFoundError`), so the login answered `500`.
+
+Deleting a session that is not in the bucket is now a successful delete, as it
+already was on every other session store gina ships. Every other error — a
+timeout, a lost connection — still reaches the callback, so a logout never
+reports a session gone that is still stored.
+
+**What to check:** if you wrapped the store's `destroy` to treat
+`DocumentNotFoundError` as success, you can remove that wrapper after upgrading;
+it is harmless in the meantime. Nothing else changes.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — a malformed `${secret:…}` reference now refuses the bundle at config load (restart; behaviour change)
+
+A config value that is **nothing but** a `${secret:…}` token whose key breaks
+the placeholder grammar `^[A-Z_][A-Z0-9_]*$` — a lowercase or dotted key
+(`${secret:db_password}`, `${secret:config.db.password}`), an empty one
+(`${secret:}`) — or a valid token padded with surrounding whitespace
+(`"${secret:DB_PASSWORD} "`) used to be **passed through unchanged**: the
+literal placeholder text reached its consumer as a credential, and the only
+symptom was that consumer's own failure much later (a database driver reporting
+an authentication error). Such a value is always a mistake.
+
+It is now a **malformed reference**: the resolver refuses it at bundle start,
+exactly like a missing key, with an error naming the config path and the
+grammar (``Secret reference malformed at `connectors.db.password`: …``) — never
+the offending text, which the internal logger names at debug level only.
+`gina secrets:check` reports each one (`! MALFORMED reference at …`) and exits
+non-zero; `gina secrets:scan` lists them under `Malformed references`. Genuine
+mixed content (`"https://${secret:HOST}/v1"`) still passes through unchanged.
+See [Secrets — Syntax](/guides/secrets#syntax).
+
+**What to check:** a bundle that boots today with such a literal in any
+`config/*.json` will refuse to start after upgrading. Run
+`gina secrets:check @<project>` before the restart — it names every offending
+entry with its file and path — and fix each reference by naming the environment
+variable that carries the secret. Do not try to "escape" it: the whole-value
+form is always read as a reference. `connector:test`, `connector:infer` and
+`connector:models` now name the path too, instead of reporting
+`secret resolution failed for \`<unknown>\``.
+
+For tooling: `lib.secrets` gains `getMalformedReferences(config)` (read-only,
+beside `getRequiredKeys`) and exports `MALFORMED_RE` beside `SECRET_RE`.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — a throw from `onInitialize` now aborts the boot loudly (restart; behaviour change)
+
+A synchronous throw from the bundle's `onInitialize` callback — or the rejection
+of a promise an `async` callback returns — **before** it emitted `complete` used
+to be logged at error level and swallowed: the boot stopped with nothing
+listening and no failure reported. `gina bundle:start` waited out its startup
+timeout (about a minute) and printed only "Check your logs", and under
+`gina-container` the process could even exit with code `0`, a success status.
+
+It now aborts the boot the same way a model-load failure does:
+`[ FRAMEWORK ] onInitialize threw before emitting 'complete' — aborting boot: <stack>`
+on stderr and exit code `1`, so `gina bundle:start` reports the failure straight
+away and a container exits `1` with the reason in its log. A throw **after**
+`complete` is logged — now as `onInitialize threw after emitting 'complete' — the
+bundle keeps starting …` — and the bundle keeps starting, as before. See
+[Architecture — Bootstrap failures](/concepts/architecture#bootstrap-failures).
+
+**What to check:** a bundle whose bootstrap throws today — one that never
+listens — will now exit `1` naming the throw. That is the fix. Nothing changes
+for a bundle whose callback runs to `complete`.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — a model that fails to load on an asynchronous connector now aborts the boot (restart; behaviour change)
+
+On a connector that reports readiness asynchronously, such as DuckDB or
+Couchbase, a failure while the models were being built did not stop the boot.
+Depending on the connector it was logged as
+`[ FRAMEWORK ] Unhandled promise rejection: …`, reported as a failure to connect
+and retried — Couchbase logged `Could not connect to couchbase` with the model
+error's stack inside the message, though the cluster was reachable — or
+swallowed with no log line. The bundle never listened, and under
+`gina-container` a DuckDB bundle exited with code `0`, a success status. Typical
+causes: an entity file whose name starts with a digit or an underscore (the
+class-name check rejects it), or an entity constructor that throws.
+
+It now aborts the boot the way it already did on SQLite:
+`[ FRAMEWORK ] Model loading failed — aborting boot: <stack>` on stderr and exit
+code `1`. See [Architecture — Bootstrap failures](/concepts/architecture#bootstrap-failures).
+
+**What to check:** a bundle that exited `0` or never listened at boot — with an
+unhandled-rejection line, a Couchbase connection failure carrying a model
+error's stack, or nothing at all in its log — now exits `1` naming the cause.
+That is the fix. A bundle whose models load is unaffected.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Security — an encoded `&` or `=` in a form field can no longer add or override other fields (restart and re-bake; behaviour change)
+
+An `application/x-www-form-urlencoded` POST, PUT or PATCH body was percent-decoded
+as a whole **before** it was split into fields, so an encoded `&` or `=` inside a
+field's name or value became a separator. A value could add a field, or override
+one sent earlier in the same body — and the body stayed well-formed, so nothing
+reported it. Percent-encoding is what protects text relayed from someone else
+(stored text pre-filled into another user's form, a body composed server-side with
+`encodeURIComponent`), and the parser undid it.
+
+The body now follows the standard form algorithm: split on `&`, then at the
+**first** `=`, and each name and value is percent-decoded **exactly once**.
+
+| Body sent | 0.6.32 | 0.6.33 |
+|-----------|--------|--------|
+| `bio=hi%26role%3Dadmin` | `{ bio: 'hi', role: 'admin' }` | `{ bio: 'hi&role=admin' }` |
+| `role=user&a%26role%3Dadmin=x` | `{ role: 'admin' }` | `{ role: 'user', 'a&role=admin': 'x' }` |
+| `token=YWJj==` | `{ token: 'YWJj' }` | `{ token: 'YWJj==' }` |
+| `pct=100%2525` | `{ pct: '100%' }` | `{ pct: '100%25' }` |
+| `ok=%22true%22` | `{ ok: 'true' }` | `{ ok: '"true"' }` |
+| `f=%7B%22active%22%3A%22true%22%7D` | `{ f: { active: true } }` | `{ f: { active: 'true' } }` |
+| `items%5B0%5D=%7B%22a%22%3A1%7D` | `{ 'items[0]': { a: 1 } }` | `{ items: [ { a: 1 } ] }` |
+| `title=%5BDRAFT%5D+x` | `{}` — the field was dropped | `{ title: '[DRAFT] x' }` |
+| `constructor=v&a=1` | `{ constructor: 'v', a: '1' }` | `{ a: '1' }` — see the reserved-names note below |
+
+Beyond the fix itself:
+
+- **A quoted token keeps its quotes.** `%22true%22` — or a raw `"true"` in a
+  hand-built body — is the six-character string `"true"`; a text pass over the
+  whole body used to strip the quotes.
+- **A JSON value in a field keeps its own types.** A value that is itself a JSON
+  document is parsed as JSON, so a quoted `"true"` inside it stays a string, and
+  under a bracket name it nests: `items[0]={…}` now gives `items` an element
+  instead of a field literally named `items[0]`. A value that merely starts with
+  `{` or `[` and is not JSON is kept as text; it used to be dropped.
+- **A stray `{`-leading segment without `=` is dropped** like any value-less
+  segment. It used to replace every field of the body: `a=1&{"x":1}&c=3` gave
+  `{ x: 1 }` and now gives `{ a: '1', c: '3' }`.
+- **Bare `true`, `false`, `on` and `null` stay strings** on this path, as they
+  always did. The [data helper](/globals/data#url-encoded-input) example that said
+  otherwise was wrong and is corrected.
+
+**What to check:**
+
+- Plain HTML forms (`method="post"` without the client validator) and hand-built
+  urlencoded bodies take this path. The client validator sends its fields as a
+  JSON document — labelled `application/json` unless the form sets an explicit
+  `enctype` — so the split never applied to it; the change it does see is in the
+  next note.
+- A client that encodes a value **twice**, or a server-side sender composing a
+  body from text that is already percent-encoded, now receives that text decoded
+  once: `100%2525` arrives as `100%25`. Encode each name and value once.
+- Code that read a JSON field's quoted `"true"`/`"false"` as booleans now gets
+  strings — compare with the string, or send JSON booleans (`{"active":true}`).
+- Code that read a flat `items[0]`-style key for a JSON-valued field finds the
+  value nested under `items`.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a query value holding a percent-escape no longer empties the whole query (restart and re-bake; behaviour change)
+
+A GET or HEAD query value whose **text** holds a percent-escape — sent encoded,
+as `%250A` or `%2522`, so that it reads `%0A` or `%22` — was decoded a second time
+on its way to `req.get`. `%0A` and `%22` broke the JSON document the query is
+re-parsed from, so `req.get` came back **empty** for the whole request, and `%25`
+text silently collapsed:
+
+| Query sent | 0.6.32 | 0.6.33 |
+|------------|--------|--------|
+| `x=line%20%250A%20break&y=1` | `req.get` is `{}` | `{ x: 'line %0A break', y: '1' }` |
+| `x=100%2525%20sure` | `x` is `'100% sure'` | `x` is `'100%25 sure'` |
+
+A route with a `validator::` requirement copies the request data into an internal
+query, so a POST field merely containing such text made that route answer `404`.
+
+The data helper no longer percent-decodes a JSON document at all, whichever
+request it comes from, and the isaac query parser now decodes query **names**
+once, like values — so an HTML form GET's `user%5Bname%5D=Alice` still nests. The
+same document path serves two more callers:
+
+- **The client validator** hands its fields to it before sending: a form value
+  holding `%22` or `%0A` no longer empties the validated data set, and a pasted
+  `a%20b` is sent as typed.
+- **Routes declaring a DTO** re-parse their validated payload through it: an
+  `application/json` value holding `%20` reached the action as a space, and one
+  holding `%22` left the action with no payload at all (`req.post` undefined).
+  Both now arrive as sent.
+
+**What to check:**
+
+- Code that decoded a query value again to compensate, or a client that encoded
+  query values twice, now receives the text decoded once.
+- On the isaac engine a `+` in a query **name** is now a space (`a+b=1` gives
+  `{ 'a b': '1' }`), as the express engine's query parsers already did; `%2B`
+  keeps a plus.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — one GET request could stop the bundle: a bracket field name with a numeric segment (restart and re-bake)
+
+A bracket-notation field name whose non-last segment is numeric while its
+container is not an array — `0[a]`, or `a[0][b]` after `a[x]` — made the nesting
+helper throw a `TypeError`. Where it threw decided the damage:
+
+- **The `inheritedData` query parameter of a GET or HEAD request** is parsed with
+  no guard, so the throw reached the process as an `uncaughtException` and **the
+  bundle exited**. One unauthenticated `GET /any-url?inheritedData=0%5Ba%5D%3D1`
+  was enough, on any URL, because the parse runs before routing (measured on the
+  default engine: exit code 143, the next request refused).
+- **A form-encoded POST, PUT or PATCH field** with such a name answered `500`.
+- **The client validator's copy** of the helper threw in the browser, breaking the
+  submission.
+
+Such a segment now creates a plain object slot: `0[a]=1` gives
+`{ '0': { a: '1' } }`, and `a[x]=1&a[0][b]=2` gives
+`{ a: { '0': { b: '2' }, x: '1' } }`. Every shape that did not throw before is
+unchanged.
+
+**What to check:** nothing to change. Under a supervisor that restarts a bundle on
+exit, one such request per restart kept it down — a
+`[ FRAMEWORK ][ uncaughtException ] TypeError: Cannot read properties of null`
+line naming `parseLocalObj` in your logs was this.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — a parse failure no longer writes the request body or query to the log (restart and re-bake)
+
+When a request body or query failed to parse, the data helper wrote the unparsed
+input to the log at error level: the whole body of a `{`- or `[`-leading request
+not labelled `application/json` (a malformed body carrying a password logged the
+password), and every parameter of a GET whose query failed to re-parse — which the
+query bug above made reachable from an ordinary URL. The same lines ship in the
+browser bundle, so they reached the browser console too, and the isaac query
+parser warned with a parameter's value the same way.
+
+They now log metadata only — never the input, and never the parse error's message,
+which can quote the input:
+
+```text
+[365] could not parse body: 32 chars (SyntaxError), leading {
+[SERVER][INCOMING REQUEST] Could not convert to JSON or Array the value of `<name>` (<length> chars, <error name>). Leaving value as a string.
+```
+
+The first is the data helper's line: the input's length, the error's name and its
+first character, always `{` or `[`. The second is the isaac query parser's warning:
+the parameter's name, the value's length and the error's name. The two
+segment-level lines (`[parseBody#1]`, `[parseBody#2]`) are gone.
+
+**What to check:**
+
+- A log search or alert keyed on `[365] could not parse body` still matches.
+- Logs written by earlier releases may hold request bodies or query values,
+  credentials included. Review, rotate or purge them under your retention policy.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — a top-level field named `__proto__`, `constructor` or `prototype` is dropped (restart and re-bake; behaviour change)
+
+A top-level field named `__proto__` with a JSON value in a form-encoded body
+(`__proto__=%7B%22polluted%22%3A1%7D`) did not become a field: it replaced the
+**prototype** of `req.post`. `req.post.polluted` then read `1` while
+`Object.keys(req.post)` and `hasOwnProperty` saw nothing, so an allow-list checking
+own keys let it through. It stayed within that one request object — process-wide
+prototype pollution was already closed in 0.6.22.
+
+A top-level name `__proto__`, `constructor` or `prototype` is now dropped from a
+form-encoded body and from a query string. Names nested inside a JSON value are
+kept, and bracket paths through them (`a[constructor]=x`) were already dropped in
+0.6.22. A plain `application/json` request body is parsed as-is and keeps these
+names — but a route declaring a DTO re-parses its validated payload through the
+[data helper](/globals/data), so a top-level `prototype` key sent to such a route
+is now dropped as well.
+
+**What to check:** a form field or query parameter literally named `constructor`
+or `prototype` no longer reaches `req.post`, `req.get` or the other request
+objects, and neither does a top-level `prototype` key in the JSON body of a route
+declaring a DTO — rename it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — two data-helper type declarations now match the runtime (type-check only)
+
+`nestBracketNotationKey` is declared with the bracket path as an **array**
+(`['item', '0', 'id']`), which is what it has always needed at runtime — a string
+path is nested character by character — so a TypeScript caller passing a string
+now fails to compile instead of building the wrong object. `formatDataFromString`
+is declared to return `object | undefined`: a `{`- or `[`-leading input that is not
+valid JSON yields `undefined`.
+
+**What to check:** with `strictNullChecks`, handle `undefined` before reading
+`formatDataFromString`'s result; replace a string path passed to
+`nestBracketNotationKey` with the array of its segments.
+
+Type declarations only: nothing to restart or re-bake — they take effect at your
+next type-check.
+
+### Fixed — the published package no longer carries end-to-end test artifacts (nothing to do)
+
+`gina@0.6.32` and `gina@0.6.33-alpha.1` shipped two `error-context.md` snapshots
+under `test-results/`, left by a local end-to-end run: the directory is excluded
+from git, but it was never listed in `.npmignore`, which npm reads in its place.
+They were test fixtures only — no credentials and no local paths (measured before
+the release). `test-results/` and `playwright-report/` are now excluded from the
+tarball.
+
+Nothing to restart or re-bake: nothing ever loaded those files.
+
+### Fixed — a referenced value is compared exactly as typed (restart and re-bake; behaviour change)
+
+An [`is`](/reference/validation-rules#is) condition such as
+`$password === $passwordConfirm` compares the values of the fields it references.
+Three defects sat in the way those values were put into the condition:
+
+- **A double quote, a backslash or a line break stopped the validation pass.** The
+  value was pasted into the rule set unescaped, so the rule set could no longer be
+  read: in the browser the form could not be submitted, and on the server the
+  validation threw. `$&`, `$'` and `$$` in a value were rewritten as well, so
+  `ab$$cd` matched `ab$cd`.
+- **Parentheses and the word `return` inside a value were ignored**, so `ab(cd`
+  matched `ab)cd` and `myreturnpass` matched `mypass` — in the browser, on the
+  server, and in route `validator::` requirements.
+- **A value with no ASCII letter or digit never matched**, so a confirmation made
+  only of symbols or non-ASCII letters (`!!!`, `é€`) always failed.
+
+| Values compared | 0.6.32 | 0.6.33 |
+|-----------------|--------|--------|
+| `ab"cd` and `ab"cd` | the validation pass throws | valid |
+| `ab(cd` and `ab)cd` | valid | mismatch |
+| `!!!` and `!!!` | mismatch | valid |
+
+A `$fieldName` token in a [`query`](/reference/validation-rules#query) rule's `data`
+now reaches the endpoint as typed too: a value holding a quote or a backslash no
+longer stops the check or arrives unreadable or altered.
+
+**What to check:**
+
+- A referenced field carrying a number rule (`isNumber`, `isInteger`, `isFloat`,
+  `toFloat`, `toInteger`) is compared as a number when its value is one, and as text
+  otherwise — two identical non-numeric values now compare equal, where the
+  comparison used to fail.
+- A string literal written in the condition itself now follows JSON escaping (`\"`
+  is a double quote, `\\` a backslash); one that is not valid JSON is read as
+  written, as before. A quoted segment you wrote into a `query` rule's `data`
+  follows the same escaping, and its quotes are still dropped.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — every `$field` token follows one grammar (restart and re-bake; behaviour change)
+
+A `$field` token — in an [`is`](/reference/validation-rules#is) condition, a route
+`validator::` requirement, a fluent `is()` call or a [`query`](/reference/validation-rules#query)
+rule's `data` — used to be recognised differently on each path. Now one rule applies
+everywhere: `$` + a field name, the longest name wins, a token ends at the first
+character outside `A-Z a-z 0-9 _ -`, a `$` naming no field stays literal, and a `$`
+inside a referenced value is never resolved.
+
+- **A value containing `$` + another field's name compares as typed.** A password
+  `abc$email` in a form that also has an `email` field could never be confirmed: the
+  rule set was resolved one field at a time and re-read after each splice, so the
+  value was substituted a second time (in the two-argument `is` form, a third time).
+- **`($password) === ($passwordConfirm)` and `$a===$b` resolve in route requirements
+  and fluent `is()` calls.** A token used to resolve only when whitespace or the end
+  of the condition followed it; the condition was refused and the field read invalid.
+  A field name holding a bracket or another special character (`$pw[0]`, `$a+b`)
+  resolves there too.
+- **In a `query` rule's `data`, the token names the right field.** `$passwordConfirm`
+  was resolved as `$password` followed by `Confirm` — another field's value reached
+  the endpoint; `$Email` was left as is; `$password` and `$password-confirm` in one
+  body resolved by their order; a space after a token swallowed the text after it;
+  and a `$` naming no field went out as the string `null` (and threw while
+  live-checking). Such a `$` is now sent as typed.
+
+| Condition or data | 0.6.32 | 0.6.33 |
+|-------------------|--------|--------|
+| `$password === $passwordConfirm`, both `abc$email` | mismatch | valid |
+| `($password) === ($passwordConfirm)` in a route requirement | invalid | compared |
+| `{ "c": "$passwordConfirm" }` in `query` data | the `password` value + `Confirm` | the `passwordConfirm` value |
+| `{ "price": "$100" }` in `query` data | `"null"` | `"$100"` |
+
+**What to check:**
+
+- A `$` in a `query` rule's `data` that names no field of the form is now sent as
+  typed instead of `null` — a template relying on `null` there must reference a real
+  field.
+- In a route requirement or fluent `is()` call, a `$` followed by an engine method
+  name (`$isValid`) is no longer resolved to `undefined`; the condition is refused
+  and the field reads invalid, with a warning naming the condition.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — the in-memory Collection compares strings with `==`, `>` and `<`, and a quote in a value no longer breaks a query (restart and re-bake)
+
+`find()` and the nested-path filters of the in-memory [Collection](/api/collection)
+had three defects on string values:
+
+- **A double quote or a backslash in a value threw.** One row whose string value
+  held a `"` failed the whole query, and a filter holding one did the same.
+- **`==`, `>` and `<` were not recognised on strings** — only `>=`, `<=`, `===`
+  and `!==` were.
+- **A space after the operator was kept inside the operand** (`'>= b'`), which
+  skewed the comparison.
+
+Both operands are now encoded before they are compared. Numeric and datetime
+comparisons are unchanged.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — every request re-read the framework's env template from disk (restart)
+
+`Config` is constructed three times per request — route resolution, view
+detection and the bundle-configuration lookup — and each construction parsed the
+framework's `core/template/conf/env.json` twice through `requireJSON`, which has
+no cache. That was six synchronous file reads and parses per request in every
+bundle, twelve per bundle-to-bundle call, measured at 27% of a trivial JSON
+route's CPU.
+
+The template is now parsed once per process, on the first construction, and
+shared read-only by every `Config` instance. Nothing observable changes except
+the cost: the same values reach `defEnv`, `defScope` and the `${bundle}` /
+`${env}` substitutions.
+
+**What to check:** nothing in your configuration. If your own code calls
+`requireJSON` inside a request handler, move that read to module load or
+`onReady` — the helper never caches (see [JSON helper](/globals/json)).
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Changed — the HTTP/2 rapid-reset guard counts client resets; `maxStreamsPerSecond` becomes `maxStreamResetsPerSecond` (restart; behaviour change)
+
+The Isaac rapid-reset guard (CVE-2023-44487) counted *new streams* per session per
+second, so a sibling bundle calling you over HTTP/2 — every `self.query()` to one
+authority multiplexes on one cached session — was `GOAWAY`'d by your bundle above 200
+calls per second: 17% of calls answered 500 at 50 concurrent callers with default
+settings. It now counts the streams a client *cuts short* — a `RST_STREAM` of any
+code, or the peer destroying the stream, before the response completed — which is the
+attack shape; a well-behaved multiplexing caller never resets a stream, so it never
+trips the guard. New streams stay bounded by `maxConcurrentStreams`.
+
+The setting is renamed to say what it counts:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "maxStreamResetsPerSecond": 200
+    }
+  }
+}
+```
+
+**What to check:** grep your bundles' `settings.json` / `settings.server.json` for
+`maxStreamsPerSecond`. The old key is **no longer read** — a bundle still carrying it gets
+one boot warning (`[ SERVER ] http2Options.maxStreamsPerSecond is no longer read …`)
+and the default. If you had raised it to stop your own bundle-to-bundle calls failing,
+delete the key: the workaround is obsolete and a raised value would otherwise have
+silently widened the reset limit. The runtime's own frame-level reset limit (nghttp2:
+a 1,000-reset burst, then 33/s, `GOAWAY(INTERNAL_ERROR)`) stays underneath as the
+primary guard; it can be tuned with `streamResetBurst` + `streamResetRate`, set together.
+
+**On Bun** there is no such runtime layer — Bun's HTTP/2 server has no frame-level reset
+limit and ignores `streamResetBurst` / `streamResetRate` (setting them on Bun now logs one
+boot warning) — so `maxStreamResetsPerSecond` is the only rapid-reset limit on a
+Bun-hosted bundle. The guard tells a client reset from the engine's own abort using Bun's
+stream state, so every reset code counts there too.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — bundle-to-bundle calls over HTTP/2 no longer die after ~1,000 calls, and a call cut by a GOAWAY is retried (restart)
+
+The HTTP/2 client sent an `RST_STREAM(NO_ERROR)` after **every** completed response,
+and the target's nghttp2 counted those frames against its reset rate limit — the
+cached session was closed with `GOAWAY(INTERNAL_ERROR)` after roughly a thousand calls
+and every in-flight call failed with `Session closed with error code 2`. The client no
+longer resets a settled stream.
+
+An in-flight **safe-method** call cut by a server GOAWAY (`ERR_HTTP2_SESSION_ERROR`) is
+now retried on a fresh session, as the resilience guide already promised; a non-safe
+method is still never replayed unless the call sets `retryUnsafe: true`. A session that
+died between the cache lookup and the send used to make `request()` throw synchronously
+— on a retry re-entry, as an uncaught exception; it is now retried on a fresh session
+for any method (nothing was sent) and exhausts into a typed `STREAM_ERROR` / 503.
+
+**What to check:** nothing in your configuration. If you had worked around the code-2
+failures with a lower `requestTimeout` or by raising the target's limiter, those can go.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the `/_gina/info` `rstCount` metric was always 0 (restart)
+
+The server listened for a `rstCode` *event* on every stream; `rstCode` is a stream
+property, so the listener never fired. `rstCount` now counts the streams the client cut
+short before the response completed — the signal the rapid-reset guard counts. A
+dashboard that read 0 there was not measuring anything.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Security — the Couchbase connector no longer writes caller or configuration values into statement text unvalidated (restart; behaviour change)
+
+Three places in the Couchbase connector built the N1QL statement by string
+concatenation instead of binding a query parameter or validating an identifier:
+
+- **`SEARCH()`** — every positional value inside the `SEARCH()` span was written
+  into the statement as a double-quoted string literal, with no escaping: a search
+  term containing `"` made the statement fail, and a term could alter the statement
+  itself. The values are now **bound** as query parameters. Couchbase binds a
+  parameter used as `SEARCH()`'s query argument when it resolves to a string or an
+  object, on every server version that has `SEARCH()`.
+- **Field-path placeholders** (`SET d.flags.$2 = $3`) cannot be bound, so the
+  argument is still written after the dot — but only when it is an identifier path
+  (`newsletter`, `meta.count`). Anything else is refused before the query is sent
+  with a `TypeError` whose code is `GINA_COUCHBASE_INVALID_FIELD_PATH`, delivered to
+  the query callback when there is one and thrown otherwise. See
+  [Placeholders in field-path position](/data/couchbase-orm#placeholders-in-field-path-position).
+- **`$scope`** — the scope, from the connector entry's `scope` or from
+  `NODE_SCOPE`, is now validated once when the connector loads. It must match
+  `^[A-Za-z0-9_./-]+$`; otherwise the bundle stops at boot with exit code `1` and
+  `GINA_COUCHBASE_INVALID_SCOPE` on stderr, naming the value and where it came from.
+  A longer placeholder that merely starts with `$scope` (`$scopeId`) is no longer
+  rewritten.
+
+**What to check:**
+
+- **`SEARCH()` terms are sent with their JavaScript type.** A number, `null` or
+  object used to be turned into a string (`"5"`, `"null"`, `"[object Object]"`).
+  Couchbase documents the query argument as a string or an object: pass strings, or
+  declare the parameter `@param {string} $N` so the connector casts it. An object
+  now arrives as an object — the documented search-request form.
+- **Value parameters that follow a `SEARCH()` call keep their real type.** The old
+  substitution ran to the statement's last `)`, so in
+  `SEARCH(t, $2) AND (t.rank > $3)` a `$3` of `5` was compared as the string
+  `"5"`. It is now compared as the number `5`; if a query relied on the string
+  comparison, declare that parameter `@param {string}`.
+- **One prepared plan per statement.** Each distinct search term used to compile its
+  own plan.
+- **Field-path keys** must be identifier paths. The key has always been documented as
+  a literal identifier; a key outside that grammar is now refused even in the few
+  shapes that could still form a valid path — a backtick-escaped name, an array index
+  (`items[0]`), a `$` inside a name. Pick such keys from a fixed list of identifier
+  names in your own code rather than passing request input through.
+- **Scope names** outside `^[A-Za-z0-9_./-]+$` now stop the boot. The scopes gina
+  ships (`local`, `beta`, `production`, `testing`) pass, and so does every name
+  `scope:add` accepts. `/` is still allowed, so a scope registered under the
+  retired `<bundle>/<scope>` form keeps booting. A name registered before
+  `0.6.33` could hold other characters, since `scope:add` then checked only the
+  first one: check `gina scope:list @<project>` and your connector entries'
+  `scope` before restarting.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — a Couchbase reconnect keeps each connector's declared `scope` (restart)
+
+When a Couchbase reconnect rebuilds the models, each connector's entity manager is
+built again. That rebuild now passes the `scope` declared on the connector's
+`connectors.json` entry, as the boot does. It used to omit it, so after a reconnect
+a connector whose entry declares a scope other than `NODE_SCOPE` stamped inserted
+documents and filled `$scope` in its queries with `NODE_SCOPE` instead.
+
+**What to check:** nothing, unless a connector entry's `scope` differs from the
+bundle's `NODE_SCOPE` — such a bundle now keeps the declared scope across a
+reconnect.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — `bulkInsert` escapes the bucket name (restart)
+
+A Couchbase entity's `bulkInsert` wrote the bucket name into its statement bare,
+so a bucket whose name N1QL needs escaped — a dash, as in `beer-sample`, is legal in
+a bucket name — made the statement fail to parse. The name is now written as an
+escaped identifier:
+
+```sql
+INSERT INTO `beer-sample` (KEY, VALUE) VALUES ("doc-1", { … })
+RETURNING `beer-sample`.*;
+```
+
+**What to check:** the statement text changes for every bucket — a plain name
+gains backticks too — while the query means the same. A log or Inspector filter
+that matches `INSERT INTO <bucket>` literally needs the backticks.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Changed — `scope:add` checks the whole name; the `<bundle>/<scope>` form is retired (behaviour change)
+
+`gina scope:add` checked only the first character of a scope name. It now checks
+the whole name: letters, digits, `_`, `.` and `-`, starting with a lowercase
+letter, a digit, `_` or `.`, and none of `.`, `..` or the name of a property every
+object inherits, such as `constructor` — a scope name becomes a directory name
+under `releases/<bundle>/` and a key in the project files.
+
+The command help documented `gina scope:add <bundle>/<scope> @<project>` as
+adding a scope to one bundle. It never did: it registered a project scope
+literally named `<bundle>/<scope>`. That form is retired and refused, with a
+pointer to the per-bundle mechanism, the `scopes` allow-list on the bundle's
+entry in `manifest.json` — see
+[Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
+
+A name that failed the old first-character check, such as `Staging`, used to be
+dropped silently; it is now refused by name.
+
+**What to check:** a script that calls `scope:add` with a name outside the rule
+now exits `1`. Scopes already registered are unchanged — `gina scope:list` shows
+them and `gina scope:remove` still removes them — and the Couchbase connector
+still accepts a `/` in a scope, so a scope registered under the old form keeps
+booting.
+
+CLI only: nothing to restart or re-bake.
+
+### Changed — `env:add` checks the whole name; the `<bundle>/<env>` form is retired (behaviour change)
+
+`gina env:add` checked only the first character of an environment name. It now
+applies the scope rule above to the whole name, and also refuses `global`, which
+names the configuration overlay that applies to every environment
+(`<name>.global.json`, `routing.global.json`).
+
+The command help documented `gina env:add <bundle>/<env> @<project>` as adding an
+environment to one bundle. It never did: it registered a project environment
+literally named `<bundle>/<env>`. That form is retired and refused.
+
+A name that failed the old first-character check, such as `Staging`, used to be
+dropped silently; it is now refused by name.
+
+**What to check:** a script that calls `env:add` with a name outside the rule now
+exits `1`. Environments already registered are unchanged.
+
+CLI only: nothing to restart or re-bake.
+
+### Security — `project:add` no longer runs `--scope` / `--env` through a shell (behaviour change)
+
+When `--scope` or `--env` named a scope or environment that was not registered yet,
+`gina project:add` registered it by running `scope:add` / `env:add` through a shell
+command line with the value spliced in unquoted, so shell syntax in the value ran as
+a command, as the user running `project:add`. Automation that builds these flags from
+data it does not control, such as a branch or ticket name, was exposed; typing the
+command yourself crossed no boundary, and `project:import` was never exposed.
+
+`project:add` now checks both values against the scope and environment naming rules
+before it writes anything, refuses an invalid one with exit `1` — the project is no
+longer left half-added — and starts the child commands without a shell.
+`project:import` skips that check: it only accepts a scope or environment the project
+already lists, so a name registered by an older release keeps importing.
+
+**What to check:** a script that passes `project:add` a `--scope` or `--env` outside
+the naming rules now exits `1` before anything is written.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `project:add` no longer loses a scope or environment it has just registered
+
+With `--scope` or `--env` naming one that did not exist yet, `gina project:add`
+started linking gina into the new project and, while that step was still running,
+registered the new names. Both steps rewrite the registry files in `~/.gina`, so on
+some runs the new name was missing afterwards from `main.json` or from the project's
+entry in `projects.json`. The link step now starts only once the rest of the command
+has finished.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `scope:link-local`, `scope:link-production` and `env:link-dev` no longer crash without a registered project
+
+Run outside a project directory without `@<project>`, or with an `@<project>` that
+is not registered, the three commands crashed with "Gina has some troubles with this
+command" and a stack trace. They now print "Project name is required:
+@<project_name>" or "[ <name> ] is not a valid project name." and exit `1`.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `scope:link-local`, `scope:link-production` and `env:link-dev` exit after a successful change
+
+The three commands updated `projects.json` and then did not exit. Typed through the
+installed `gina` launcher they returned normally; started by the CLI's own path
+(`node <gina>/bin/cli …`, as CI jobs and scripts run it), the CLI's open log
+listener kept the process alive, so the command hung. They now exit once the change
+is written.
+
+CLI only: nothing to restart or re-bake.
+
+### Security — the Couchbase connector's REST query transport is retired (restart; behaviour change)
+
+`useRestApi: true` on a couchbase entry of `connectors.json` sent every N1QL query
+over plain HTTP to the query service, with the cluster credentials in an
+`Authorization: Basic` header — unencrypted even when the entry used `couchbases://`.
+It also rewrote every `'` in the statement into `"` and inserted parameter values
+without escaping. The option was off by default and undocumented.
+
+It is now ignored, with one warning when the connector connects, and those queries
+go through the Couchbase SDK like every other query.
+
+**What to check:** remove `useRestApi` from any couchbase connector entry.
+
+Restart the bundle to pick it up — the connector is loaded once, at boot; nothing to
+re-bake.
+
+### Fixed — bundle-to-bundle HTTP/2 sessions no longer leak, and the pre-flight PING no longer storms (restart)
+
+Two defects in the `self.query()` HTTP/2 client, both found by the bundle-to-bundle
+audit (2026-09-24):
+
+- **Orphaned connections.** Every eviction of a cached client session deleted the cache
+  entry *by key*, so a dead session's late `close`, `error` or `goaway` — or an earlier
+  attempt's retry — evicted the live replacement a retry had just cached under the same
+  key. The replacement kept running outside the cache, keepalive ticking, and the next
+  call opened yet another connection: 148 + 160 upstream connections were still open
+  186 s after a load run. Every eviction is now identity-checked, and a session that
+  loses its place in the cache (replaced, evicted to make room, deleted) stops its
+  keepalive and closes gracefully. The 50-session cap drains the oldest session instead
+  of destroying it under an in-flight call.
+- **The pre-flight PING storm.** A session counted as stale 3 s after its last PONG while
+  the keepalive pinged every 5 s, so about 40% of the time every concurrent caller sent
+  its own PING; Node.js cancels every PING past 10 outstanding, and a cancel was read as
+  a dead session — 22 healthy sessions evicted per 10 s at 50 concurrent callers. Now one
+  PING per session serves every waiting caller, every response counts as proof of life,
+  and a cancelled PING is inconclusive.
+
+**What to check:** nothing in your configuration. If you had raised `requestTimeout` or
+lowered concurrency to work around `PREFLIGHT_FAILED` errors or connection growth on
+bundle-to-bundle traffic, those can go. See
+[HTTP/2 Resilience — Session lifecycle](/guides/http2-resilience#session-lifecycle).
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Added — `server.query.http2SessionPool` (restart)
+
+`self.query()` keeps one HTTP/2 session per upstream authority — one connection — so a
+balancer that balances per *connection* (a Kubernetes `Service` without an HTTP-aware
+ingress, most TCP load balancers) pins all of a caller's traffic to one replica. Set
+`server.query.http2SessionPool` (an integer from 1 to 50) to keep N sessions per
+upstream, filled round-robin; each is its own connection, so a per-connection balancer
+can spread them. The default `1` is the single session every earlier release used.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "query": {
+      "http2SessionPool": 2
+    }
+  }
+}
+```
+
+**What to check:** nothing unless you set it. Any value outside 1–50 refuses the boot;
+the pool counts toward the 50-session cap, so keep *pool × upstreams* under 50. See
+[Session pool](/guides/http2-resilience#session-pool).
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the boot warmup (`server.warmup`) now keeps its HTTP/2 sessions on Node.js (restart)
+
+The warmup sent its first PING while the session was still connecting; Node.js cancels
+such a PING at once, and the warmup read the cancel as a dead session and discarded it —
+so the first real `self.query()` still met a cold connection. The PING is now sent once
+the session is connected, and the warmed session is cached and kept alive exactly like
+one `self.query()` opens.
+
+**What to check:** nothing. A bundle that lists upstreams in `server.warmup` now starts
+with those sessions open; the `[warmup] Initial PING failed` log line is gone.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — the Isaac server closes idle HTTP/2 sessions after 120 s; `http2Options.sessionIdleTimeout` (restart; behaviour change)
+
+The server's 120 s idle timer never closed a session: it waited for
+`session.activeStreams` to read 0, and that property does not exist, so idle sessions
+lived until the client or the network dropped them. An idle session — no request and no
+data for the timeout — is now closed gracefully with `GOAWAY(NO_ERROR)`: open streams
+finish on their own, no new stream is accepted on that connection, and the client's next
+request opens a fresh one. The timeout is configurable:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "sessionIdleTimeout": "120s"
+    }
+  }
+}
+```
+
+**What to check:**
+
+- Clients that hold an HTTP/2 connection open and idle for more than two minutes —
+  browsers, gina's own `self.query()`, `curl`, an HTTP/2 upstream of a reverse proxy — now
+  receive a graceful GOAWAY and reconnect on their next request. All of them handle it;
+  for a client that does not, `"sessionIdleTimeout": 0` restores the old never-close
+  behaviour.
+- A client PING is not activity: a sibling bundle's keepalive does not keep an idle
+  session open. A quiet open stream is not either — an SSE stream between events sees
+  its session enter shutdown, carries on untouched until it ends, and new requests from
+  that client use a new connection. A stream still sending data keeps the session.
+- Accepts `"120s"`, `"2m"`, `"500ms"` or milliseconds; a negative, non-timeout or
+  larger-than-2147483647 ms value logs one boot warning and uses 120 s.
+- **Node.js only.** On Bun the key is ignored with one boot warning and the server still
+  does not close idle sessions (Bun 1.2 / 1.3 time out busy sessions, and a client's
+  next request after such a close hangs).
+
+Server-side only: **restart the bundle** — no re-bake. See
+[Session idle timeout](/guides/http2-native#session-idle-timeout).
+
+### Fixed — a request refused before the upstream processed it is retried for any method (restart)
+
+A request queued onto an HTTP/2 session that had just started closing — the upstream's
+GOAWAY landed between the pre-flight PING and the send, which the idle close above makes
+a regular event — was refused before any processing (`REFUSED_STREAM`; on Node.js 24 / 26
+and Bun 1.4 an `ERR_HTTP2_GOAWAY_SESSION` stream error) and went through the stream-error
+path, where only a safe method is replayed: a POST failed with a 503 although nothing had
+been processed. Such a request is now retried for any method — on a fresh session, or on
+the same session when a healthy upstream merely refused a stream at its limit.
+
+**What to check:** nothing. `STREAM_ERROR` failures on non-safe methods that coincided
+with an upstream restart or idle close are gone.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — bundle-to-bundle calls over HTTP/1.1 reuse their connections (restart; behaviour change)
+
+`self.query()` built a new connection pool for every HTTP/1.1 call and threw it away, so
+every call to another bundle opened a new TCP connection: 500 sequential calls to one
+bundle opened 500. Calls to the same upstream now share one keep-alive pool, kept for the
+life of the bundle: the same 500 calls use one connection, and 50 concurrent callers
+settle at 10 open connections. Each upstream gets its own pool (two bundles, or one host
+reached with two different CAs, never share one), and at most 50 pools are kept per
+process; the least recently used one is retired without cutting a call in flight.
+
+**What to check:**
+
+- `maxSockets` (default `100`) now limits how many connections `self.query()` opens to
+  one upstream at once. It limited nothing before, because every call had its own pool. A
+  call beyond the limit waits for a free connection, and its `requestTimeout` starts once
+  it has one. If one process sends more than 100 concurrent calls to one upstream and
+  needs them all in flight at once, raise `maxSockets` on those calls.
+- A pooled connection is reused. A gina bundle announces its idle timeout
+  (`server.keepAliveTimeout`, default 5 s) and Node.js closes an idle pooled connection a
+  second before it. An upstream that is not a gina bundle and closes idle connections
+  without announcing a timeout can reset a reused connection: a safe method (`GET`,
+  `HEAD`, …) is retried as before, and any other method reports the error.
+- `options.agent` is still ignored, as it always was on HTTP/1.1.
+- HTTP/2 calls are unchanged.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — an https bundle-to-bundle call no longer reads its CA file on every call (restart)
+
+Every https `self.query()` read the CA file named by `server.credentials.ca` (or the call's
+`ca` option) from disk — about 25 µs per call, and on HTTP/2 even when the call reused a
+cached session and never used it. The file is now read once and kept for the life of the
+bundle; each call checks it with a single `stat`.
+
+**What to check:** nothing. A CA file that changes on disk — a Kubernetes Secret volume
+update replaces it — is still read again and used by the very next call, as before, and a
+missing or unreadable CA file fails the call with the same error.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Security — on an `http/2.0` bundle, an HTTP/1.1 request is held to the route's method (restart; behaviour change)
+
+A bundle configured `"protocol": "http/2.0"` also answers HTTP/1.1, through the HTTP/2
+server's `allowHTTP1` fallback: a client that does not negotiate HTTP/2, or a reverse proxy
+that talks HTTP/1.1 to the bundle (nginx's `proxy_pass` does). For those requests the
+router read the method from the HTTP/2-only `:method` pseudo-header, found none, and let
+every method through: any method ran a single-method route without a `:param` segment, and
+any multi-method route. A `GET` reached a POST-only action (and a `GET` is never asked for a
+CSRF token); a `POST` on a URL declared for both `GET` and `POST` ran whichever route was
+declared first. The route cache is keyed by method and path, so one such request also made
+the wrong route the cached answer for every later client using that method on that path,
+HTTP/2 clients included.
+
+Every method check now uses the request's own method, whatever protocol the bundle is
+configured for. An HTTP/1.1 CORS preflight on such a bundle is answered `204`, as an HTTP/2
+one is; it used to be routed, and the route's action ran for the `OPTIONS` request.
+
+**What to check:** if your bundles run `http/2.0` behind a proxy that talks HTTP/1.1 to
+them, a client that reached a route with a method the route does not declare now gets `404`
+(`405` when the route declares several methods). Declare every method a route accepts in its
+`method` field. Bundles on the default `http/1.1` protocol are unaffected.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Security — a query key named like an inherited object member can no longer reach another route (restart and re-bake)
+
+For a `GET` or `DELETE` request on a route that declares `requirements`, the router treats each
+request key that names a requirement the URL does not bind as a whole `:key` segment as an extra URL
+variable. It looked that name up with a plain property read, so a query key named like a member
+every object inherits — `toString`, `valueOf`, `toLocaleString`, `isPrototypeOf` — counted as a
+declared requirement. Each such key, with a value shaped like that member's source text, replaced
+one leading segment of the URL being compared, so a request reached a route whose path differs from
+its own: three keys made `/app/public/users/42` reach a route declared as `/app/admin/users/:id`,
+and two let a path outside the bundle's webroot reach a route inside it. The action also received
+`req.params.toString` as a string.
+
+Only requirements a route declares itself now count.
+
+**What to check:** a control that restricts such a route by its path alone, applied outside gina —
+a reverse-proxy `location` rule, a firewall path rule — could be bypassed before this release; the
+route's own middleware and authorization always ran. Routes without `requirements` were never
+affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
@@ -10480,8 +11380,9 @@ statements declared as `.sql` files at
 `@param` CQL-type coercion (`uuid`, `timeuuid`, `bigint`, `decimal`,
 `timestamp`, etc.) and `@return` shape. Lightweight transactions
 (`IF NOT EXISTS`, `IF version = ?`) supported with `[applied]` boolean
-extraction. Same `$scope` substitution and `_scope` filtering as the
-Couchbase connector.
+extraction. Entities carry the same `_scope` property as on the other
+connectors, but CQL files get no `$scope` substitution: pass the scope as a
+bound parameter where a query filters on it.
 
 The session store uses CQL `USING TTL` for per-row server-side reaping.
 The sessions table must be created up front (the store does not run DDL —

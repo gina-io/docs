@@ -85,6 +85,42 @@ stateDiagram-v2
     Crashed --> Stopped : process exit
 ```
 
+### Bootstrap failures
+
+When `src/<bundle>/index.js` registers an `onInitialize` callback, that callback
+wires the application and ends with `event.emit('complete', app)`, which starts
+the server. If it throws — or the promise an `async` callback returns rejects —
+**before** it has emitted `complete`, the bundle process exits with code `1` and
+the reason on stderr:
+
+```text
+[ FRAMEWORK ] onInitialize threw before emitting 'complete' — aborting boot: Error: …
+```
+
+`gina bundle:start` then reports the failure straight away instead of waiting
+out its startup timeout, and a `gina-container` container exits `1` with the
+reason in its log. A throw **after** `complete` is logged and the bundle keeps
+starting, because its server start was already triggered — but the rest of the
+callback did not run. Since `0.6.33`; before it, the throw was only logged and
+the boot stopped with nothing listening and no failure reported.
+
+A model that fails to build at boot ends the boot the same way. An entity file
+the class-name check rejects (a name starting with a digit or an underscore), an
+entity constructor that throws, or a connector's entity manager that fails to
+load exits the bundle with code `1` and the reason on stderr, whichever
+connector the model uses:
+
+```text
+[ FRAMEWORK ] Model loading failed — aborting boot: Error: …
+```
+
+Before `0.6.33` this held only for a connector that reports readiness
+synchronously, such as SQLite. On an asynchronous one, such as DuckDB or
+Couchbase, the failure did not stop the boot: depending on the connector it was
+logged as an unhandled promise rejection, reported as a failure to connect and
+retried, or swallowed. Either way the bundle never listened, and a DuckDB
+bundle under `gina-container` exited `0`.
+
 ---
 
 ## HTTP request lifecycle

@@ -807,8 +807,8 @@ SELECT * FROM `mydb` t
 WHERE t.id = $1
   AND t._scope = $scope
 
--- runtime (NODE_SCOPE=production)
-SELECT * FROM `mydb` t WHERE t.id = 'abc123' AND t._scope = 'production'
+-- runtime (NODE_SCOPE=production): $scope became a literal, $1 is still a bound parameter
+SELECT * FROM `mydb` t WHERE t.id = $1 AND t._scope = 'production'
 ```
 
 When **writing** a document, stamp `_scope` and `_collection` explicitly so future N1QL

@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Check token expiry
         run: |
-          EXPIRY="2026-09-02"
+          EXPIRY="2027-03-03"
           TODAY=$(date +%Y-%m-%d)
           DAYS=$(( ($(date -d "$EXPIRY" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
           if [ "$DAYS" -le 14 ]; then

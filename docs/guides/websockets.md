@@ -226,6 +226,7 @@ app.onWebSocket('/live', function(session, request) {
 
 The `/_gina/info` endpoint's `http2` block reports an `extendedConnect`
 counter — the number of extended-CONNECT streams the server has seen.
-WebSocket streams also count toward the per-session rapid-reset limit
-(`maxStreamsPerSecond`), so a CONNECT flood trips the same `GOAWAY` defense
-as any other stream flood.
+The per-session rapid-reset guard (`maxStreamResetsPerSecond`) is armed on WebSocket
+streams too: a CONNECT stream the client resets before it is answered counts like any
+other, so a CONNECT rapid-reset flood trips the same `GOAWAY` defense. Merely opening
+many CONNECT streams does not — they are bounded by `maxConcurrentStreams`.

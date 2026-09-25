@@ -558,6 +558,18 @@ object that matches the incoming method; the others are set to `undefined`.
 | `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
+:::note How request values are decoded
+A form-encoded body and a query string are split into names and values
+**first**, and each name and value is then percent-decoded **exactly once**. An
+encoded `&`, `=` or `%` is therefore data, never a separator:
+`bio=hi%26role%3Dadmin` arrives as the single field `bio: 'hi&role=admin'`, and a
+typed `100%25` arrives as `100%25`. The values of a form-encoded body stay
+strings (`active=true` gives `'true'`), while in a query string `true`, `false`
+and `on` become booleans and `null` becomes `null`. A JSON value inside a form
+field keeps its own types, and an `application/json` body is parsed verbatim.
+The full contract is on the [data helper](/globals/data) page.
+:::
+
 **`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
 need to distinguish between POST, PUT, and PATCH:
 
@@ -1002,6 +1014,7 @@ Key options:
 | `method` | `"GET"` | HTTP method |
 | `port` | `80` | Target port |
 | `requestTimeout` | route `queryTimeout` or `"10s"` | Accepts `"30s"`, `"500ms"`, `"2m"`, or ms integer |
+| `maxSockets` | `100` | HTTP/1.1 only, since 0.6.33: the most connections `self.query()` opens to one upstream at once. Calls to an upstream share one keep-alive pool; a call beyond the limit waits for a free connection, and its `requestTimeout` starts once it has one. Calls that set a different value get a pool of their own |
 | `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
 | `priority` | the inbound `req.priority`, when present | Since 0.6.31: the RFC 9218 `Priority` header of the outbound call — `{ urgency, incremental }`, a wire string such as `'u=5, i'`, or `false` to send none. Omitted, a present inbound header propagates as is (RFC 9218 is end to end); a `headers.priority` you set yourself always wins — [Request priorities](/guides/http2-native#request-priorities-rfc-9218) |
 

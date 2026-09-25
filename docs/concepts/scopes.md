@@ -13,7 +13,7 @@ prereqs:
 
 A **scope** is a named deployment target within a project. Scopes let you maintain
 separate configurations, certificate paths, and build outputs for different
-deployment destinations — for example `local`, `production`, or `staging`. Unlike plain environment variables, scopes are enforced at the data layer: every document written through a Gina connector is stamped with the active scope, preventing cross-environment data leaks even when environments share the same database cluster.
+deployment destinations — for example `local`, `production`, or `staging`. Unlike plain environment variables, scopes reach the data layer: the Couchbase connector stamps every document it inserts with the active scope, and a query that filters on that stamp stays inside its own environment even when environments share one cluster (see [Scopes and data isolation](#scopes-and-data-isolation)).
 
 Every project starts with two default scopes: `local` and `production`.
 
@@ -37,17 +37,21 @@ The currently active (default) scope is marked with `[ * ]`.
 
 ## Add a scope
 
-Add a scope to all bundles in a project:
+Add a scope to a project:
 
 ```bash
 gina scope:add staging @myproject
 ```
 
-Add a scope to a specific bundle only:
+A scope applies to every bundle in the project. To deploy a bundle in some
+scopes only, give its manifest entry a `scopes` allow-list — see
+[Restrict a bundle to certain scopes](#restrict-a-bundle-to-certain-scopes).
 
-```bash
-gina scope:add frontend/staging @myproject
-```
+A scope name is made of letters, digits, `_`, `.` and `-`, and starts with a
+lowercase letter, a digit, `_` or `.`. `scope:add` refuses any other name,
+including `.` and `..` — a scope name becomes a directory name under
+`releases/<bundle>/`. It also refuses the name of a property every object inherits,
+such as `constructor` or `__proto__`: the project files are indexed by scope name.
 
 ---
 
@@ -191,8 +195,9 @@ bucket without data leaking between them.
 ### How it works
 
 The connector reads the `scope` field from `connectors.json` (or falls back to
-`process.env.NODE_SCOPE`) and stamps it on every document at insert time. N1QL
-queries filter on it automatically via the `$scope` placeholder:
+`process.env.NODE_SCOPE`) and stamps it on every document at insert time. An N1QL
+query filters on it by comparing `_scope` with the `$scope` placeholder, which the
+connector fills in:
 
 ```sql
 SELECT c.*
@@ -202,7 +207,8 @@ AND   c._scope      = $scope
 ```
 
 `$scope` is replaced with the connector's resolved scope value before the query is
-dispatched — the same SQL file works unchanged across all environments.
+dispatched — the same SQL file works unchanged across all environments. The filter
+is not added for you: leave out `_scope = $scope` and the query reads every scope.
 
 ### Adding `scope` to a connector
 

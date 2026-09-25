@@ -12,7 +12,7 @@ prereqs:
 # JSON Helper
 
 The JSON helper injects the global `requireJSON()` function for loading JSON
-files with comment support and helpful parse-error messages. It is available everywhere in bundle code without a `require()` call, and it handles dev-mode cache busting so JSON file changes are picked up on the next request.
+files with comment support and helpful parse-error messages. It is available everywhere in bundle code without a `require()` call. It never caches, so a JSON file change is picked up by the next call that reads the file — and for the same reason it belongs at module load, not inside a request handler.
 
 ---
 
@@ -49,11 +49,17 @@ lines followed it (about 2× per line, 4× per CRLF line), so a config carrying 
 glob path a few dozen lines from its bottom hung the bundle boot until the CLI's
 start-wait killed it; it also removed `/**/` out of glob values. Both are fixed.
 
-### Dev-mode cache busting
+### No cache — every call reads the file
 
-In development mode (`NODE_ENV_IS_DEV=true`), the module cache entry for
-`filename` is evicted before each read. Changes to a JSON file are picked up
-immediately on the next request without restarting the server.
+`requireJSON` never caches: every call reads the file from disk, strips the
+comments and parses it, in every mode. A change to a JSON file is therefore
+picked up by the next call that reads it — and the same property makes it the
+wrong tool inside a request handler, where each call is a synchronous disk read
+and a parse per request. Read a configuration file once, at module load or in
+`onReady`, and keep the result.
+
+The helper still evicts `filename` from `require.cache` in development mode; that
+eviction touches a cache it never fills and has no effect.
 
 ### Error handling
 

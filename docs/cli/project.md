@@ -37,7 +37,7 @@ gina project:add @myproject --path=~/Sites/myproject
 gina project:add @myproject --path=./myproject
 ```
 
-Gina creates the directory if it does not exist, writes `manifest.json`, `package.json`, and `env.json`, and records the project path in `~/.gina/<version>/projects.json`.
+Gina creates the directory if it does not exist, writes `manifest.json`, `package.json`, and `env.json`, and records the project path in `~/.gina/projects.json`.
 
 Since `0.6.9` it also writes a `.gitignore` — but **only when the project does not already have one**. Yours is never replaced or appended to, so re-running `project:add` over an existing project leaves it untouched. The scaffolded file covers the usual build output (`node_modules`, `releases`, `logs`, `tmp`) and the secret-file globs `.env`, `.env.*` and `*.env`, with `!.env.example` negations so a sample can still be committed.
 
@@ -50,6 +50,12 @@ Since `0.6.9` it also writes a `.gitignore` — but **only when the project does
 | `--scope=<scope>` | Add a scope at creation time (e.g. `local`). |
 | `--env=<env>` | Set the default environment (e.g. `dev`). |
 | `--start-port-from=<port>` | Start the port scanner from this port number. |
+
+`--scope` and `--env` register the scope or environment when it does not exist yet, for
+every project, as [`scope:add`](/cli/cli-scope#scopeadd) and [`env:add`](/cli/cli-env#envadd)
+do. `project:add` checks both values against the scope and environment naming rules
+before it writes anything, and refuses an invalid one with exit `1`. `project:import`
+does not check them: it only accepts a scope or environment the project already lists.
 
 ---
 

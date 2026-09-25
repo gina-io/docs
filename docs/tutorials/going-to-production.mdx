@@ -221,7 +221,7 @@ SELECT id, slug, url, hits, created FROM links WHERE slug = ? AND user_id = ?
 `findBySlug.sql` and `incrementHits.sql` stay exactly as they were — the public redirect must keep working for links whoever owns them.
 
 :::note `_scope` is deployment isolation, not user isolation
-Gina injects a `_scope` property on every entity, resolved from `NODE_SCOPE` — that is the `local` / `staging` / `production` **deployment** axis, and the `$scope` placeholder it feeds is substituted when the query files are *loaded*, once per process. It structurally cannot carry a per-request user id. Per-user isolation is always what you see above: a bound argument. See [Models & entities](/guides/models) for the full scope story per connector.
+Gina sets a `_scope` property on every entity from the connector entry's `scope`, or else `NODE_SCOPE` — that is the `local` / `staging` / `production` **deployment** axis: a per-process setting, never a per-request value. It structurally cannot carry a per-request user id. (The SQLite connector used here has no `$scope` placeholder at all; on Couchbase, where it exists, it is filled with that same per-process value on every query.) Per-user isolation is always what you see above: a bound argument. See [Models & entities](/guides/models) for the full scope story per connector.
 :::
 
 ### The migration grows an upgrade path

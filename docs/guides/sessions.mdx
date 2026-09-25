@@ -413,6 +413,14 @@ a `couchbase@^2` (or older) pin with an upgrade message — v2 reached upstream
 end-of-life in 2021. v4 is recommended for any greenfield bundle.
 :::
 
+:::note Deleting a session that is not stored succeeds (since 0.6.33)
+Logging in rotates the session, which deletes the pre-login record first. With
+`saveUninitialized: false` that record was never written, and before 0.6.33 the
+store reported the delete as `DocumentNotFoundError`, so the login answered
+`500`. From 0.6.33 an absent session counts as deleted, as on every other store
+gina ships; any other error still fails.
+:::
+
 :::caution `length()`, `clear()`, `all()` not implemented
 The CouchbaseStore exposes `get` / `set` / `destroy` / `touch` only.
 express-session does not call the others on the request path — they're used by

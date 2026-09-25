@@ -80,9 +80,10 @@ straightforward schema migrations. Move to a distributed setup later with Patron
 managed cloud service when you need it.
 
 **Multi-tenant SaaS or environment-scoped data**
-Use **Couchbase**. Gina's scope system was designed around Couchbase's N1QL — every entity
-query automatically filters by `_scope`, giving you hard data isolation between `local`,
-`beta`, and `production` environments in a shared cluster without schema duplication.
+Use **Couchbase**. Gina's scope system was designed around Couchbase's N1QL — the connector
+stamps `_scope` on every document it inserts and fills the `$scope` placeholder in every
+query, so queries that filter on `_scope = $scope` keep `local`, `beta`, and `production`
+data apart in a shared cluster without schema duplication.
 
 **High-traffic app with flexible data shapes**
 Use **MongoDB** for primary data. Document model, horizontal scaling via replica sets and
@@ -211,7 +212,7 @@ for Couchbase Cloud and Capella deployments.
 | `password` | string | RBAC password. Supports `${secret:KEY}` substitution |
 | `ping` | string | Interval to verify cluster connectivity (e.g. `"2m"`, `"30s"`) |
 | `readyTimeout` | number (ms) | How long to wait for the connector to become ready at boot before it reports the failure and the bundle exits. Defaults to `50000`. Must stay below the CLI start budget (~64s) to take effect — see [Migration 0.6.30 → 0.6.31](../migration) |
-| `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
+| `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. Must be letters, digits, `_`, `.`, `-` or `/` (`^[A-Za-z0-9_./-]+$`): the value is written into every N1QL statement as a quoted literal, so since 0.6.33 any other value — here or in `NODE_SCOPE` — stops the bundle at boot (`GINA_COUCHBASE_INVALID_SCOPE`, exit code 1). See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
 
 ---
 

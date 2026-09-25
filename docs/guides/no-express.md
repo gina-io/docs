@@ -236,9 +236,11 @@ take down others. Bundles communicate over HTTP/2 via `self.query()`. See
 
 ### Scope-based data isolation
 
-Data is isolated by scope (`local`, `beta`, `production`) at the framework level.
-N1QL queries automatically include `$scope` filters. This is enforced by the
-connector, not by middleware.
+Data can be isolated by scope (`local`, `beta`, `production`) without any
+middleware. The Couchbase connector stamps every inserted document with the active
+scope and fills the `$scope` placeholder in every N1QL query, so a query that
+filters on `_scope = $scope` only sees its own environment. The filter is yours to
+write: a query without it reads every scope.
 
 ### Dev-mode Inspector
 

@@ -32,8 +32,8 @@ Gina's Couchbase connector provides a structured ORM layer:
   CRUD methods and EventEmitter-based lifecycle hooks
 - **SQL files** -- N1QL queries stored as `.sql` files alongside entity code,
   version-controlled and reusable
-- **`$scope` isolation** -- automatic multi-tenant data partitioning at the query
-  level
+- **`$scope` isolation** -- filter a query on `_scope = $scope` and it only sees
+  the current environment's documents, even with every environment in one bucket
 - **Auto-stamping** -- `_createdAt`, `_updatedAt`, `_scope` fields injected on
   every insert
 - **Query instrumentation** -- every query captured in dev mode for the Inspector
@@ -165,15 +165,27 @@ ORDER BY i._createdAt DESC
 | Feature | Syntax | Purpose |
 |---|---|---|
 | Scope filter | `$scope` | Replaced with the current scope string at execution time |
-| Positional params | `$1`, `$2`, ... | Bound to method arguments -- parameterized, injection-safe |
+| Positional params | `$1`, `$2`, ... | Bound to method arguments as query parameters -- never written into the statement text (a placeholder in [field-path position](#placeholders-in-field-path-position) is the one exception) |
 | Type filter | `i.type = 'invoice'` | Convention: one document type per entity |
 | Annotations | `@options` | Control query execution settings (see below) |
 
 :::info
 `$scope` is a **string substitution**, not a query parameter. It is replaced with
 a quoted literal (`'local'`, `'production'`, etc.) before the query is sent to
-Couchbase. This ensures scope isolation is enforced at the data layer, not in
-application code.
+Couchbase, so the value always comes from the connector, never from application
+code. The filter itself is yours: a query without `_scope = $scope` reads every
+scope. A longer placeholder that merely starts with `$scope` —
+`$scopeId`, say — is left alone.
+
+Because the scope is written into the statement text, the connector validates it
+once when it loads: it must be a non-empty string of letters, digits, `_`, `.`,
+`-` or `/` (`^[A-Za-z0-9_./-]+$`). The scopes gina ships pass, and so does every
+name `scope:add` accepts; `/` is still allowed so that a scope registered under
+the retired `<bundle>/<scope>` form keeps booting. Since 0.6.33 a scope
+outside that grammar — from the connector entry's `scope` or from `NODE_SCOPE` —
+stops the bundle at boot with exit code `1` and `GINA_COUCHBASE_INVALID_SCOPE`
+on stderr, instead of being written into every query and stamped on every
+inserted document.
 :::
 
 :::caution Positional parameters must be JSON-serializable
@@ -203,6 +215,58 @@ Pass `null` for a parameter you intend to leave empty -- `null` serializes
 correctly and reaches the query. Values such as `0`, `''`, `false`, and objects
 that merely *contain* `undefined` properties are all serializable and are passed
 through unchanged.
+:::
+
+### Placeholders in field-path position
+
+A placeholder written as a **field-path segment** -- `SET d.flags.$2 = $3` --
+cannot be bound: Couchbase does not accept a query parameter as a field name. The
+connector writes that argument into the statement after the dot instead, so the
+argument must be an **identifier path**: identifiers separated by dots, each made
+of letters, digits and `_` and not starting with a digit (`newsletter`,
+`meta.count`).
+
+```sql
+-- models/myBucket/n1ql/user/setFlag.sql
+/*
+ * @param {string} $1
+ * @param {string} $2
+ * @param {boolean} $3
+ */
+UPDATE `myBucket` AS d SET d.flags.$2 = $3 WHERE d.id = $1
+```
+
+```javascript
+await db.user.setFlag(userId, 'newsletter', true);  // runs SET d.flags.newsletter = $3
+db.user.setFlag(userId, 'news letter', true);        // throws GINA_COUCHBASE_INVALID_FIELD_PATH
+```
+
+:::caution Refused before the query is sent
+Since 0.6.33 any other value -- whitespace, a quote, a backtick, brackets, a dash,
+a leading digit, `$`, or a non-string -- is refused before dispatch with a
+`TypeError` whose code is `GINA_COUCHBASE_INVALID_FIELD_PATH` and whose message
+names the method, the placeholder and the `.sql` file. It is delivered to your
+query callback when you passed one, and thrown otherwise -- the same delivery as
+an unserializable parameter. Before 0.6.33 the value was written into the
+statement as given.
+
+The refusal guarantees the key is an identifier path; it cannot know which fields
+a caller is allowed to set. Pick the key from a fixed list in your own code rather
+than passing request input through.
+:::
+
+### Placeholders inside `SEARCH()`
+
+A placeholder inside `SEARCH()` is sent as a query parameter like any other --
+as the whole query argument (`SEARCH(t, $1)`) or nested in a search request
+object (`SEARCH(t, { "query": { "match": $1, "field": "name" } })`). Couchbase
+binds it when it resolves to a **string or an object**, on every server version
+that has `SEARCH()`.
+
+:::note Before 0.6.33
+The connector wrote each value into the `SEARCH()` span as a double-quoted string
+literal, unescaped, so a search term containing `"` made the statement fail. The
+[Migration Guide](/migration) lists what changed when those values became bound.
 :::
 
 ---
@@ -350,7 +414,7 @@ db.invoice.save({
 
 ## Multi-tenant isolation with `$scope`
 
-Every N1QL query that includes `$scope` is automatically partitioned by the
+Every N1QL query that filters on `_scope = $scope` is partitioned by the
 current environment's scope. This means:
 
 - A developer running in `local` scope sees only `local` documents
@@ -358,7 +422,8 @@ current environment's scope. This means:
 - Production sees only `production` documents
 
 **All from the same Couchbase bucket.** No separate databases, no separate clusters,
-no manual filtering in application code.
+and no per-environment branches in application code: the same `.sql` file serves
+every environment.
 
 ```mermaid
 flowchart LR

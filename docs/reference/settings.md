@@ -78,6 +78,7 @@ The primary server settings file.
 | `query.circuitBreaker.enabled` | boolean | `false` | Arm the per-authority circuit breaker for `self.query()`. Must be strictly `true` — any other value leaves it dormant. After `failureThreshold` consecutive transport-class failures to one authority (each already representing a call whose own retries were exhausted), further calls fail fast with a `CIRCUIT_OPEN` error (status `503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead of hammering a dead upstream. Gates both HTTP/1.x and HTTP/2 above the protocol dispatch. Resolved once at engine start — changes need a bundle restart. *New in 0.6.13* |
 | `query.circuitBreaker.failureThreshold` | integer | `5` | Consecutive transport-class failures (per `hostname:port`) that open the circuit. Application responses — whatever their status — and caller bugs never count. An invalid value on an enabled block refuses the boot. *New in 0.6.13* |
 | `query.circuitBreaker.cooldown` | string \| number | `"30s"` | How long an open circuit rejects before admitting exactly one critical request as the half-open probe (success closes the circuit, a transport failure re-arms it). Accepts `"30s"`, `"500ms"`, `"1m"` or milliseconds. An unparseable value on an enabled block refuses the boot. *New in 0.6.13* |
+| `query.http2SessionPool` | integer | `1` | HTTP/2 client sessions `self.query()` keeps per upstream authority (`hostname:port`). `1` keeps the single multiplexed session every earlier release used. A pool of N (up to 50, the per-process session cap) opens N sessions and hands calls to them round-robin, so a per-connection (L4) balancer — a Kubernetes `Service` with no HTTP-aware ingress — spreads one caller over N upstream connections. Any other value refuses the boot. Resolved once at engine start — changes need a bundle restart. See [Session pool](/guides/http2-resilience#session-pool). *New in 0.6.33* |
 | `maxBodySize` | string \| number | `"64MB"` | Enforced ceiling for **non-multipart** request bodies (multipart uploads stay under the [`upload`](#upload) caps). A body past the limit is answered `413` and the stream is destroyed. Accepts B/KB/MB/GB (case-insensitive); a bare number means MB; `0` disables enforcement. The permissive default exists to stop unbounded growth, not to police payload shapes — gina's own inter-bundle `self.query()` hop posts through the same pipeline. *New in 0.6.23* |
 | `maxBodySizeWarn` | string \| number | `"2MB"` | Warn-only companion to `maxBodySize`: a body past it is logged (once per request) but never rejected, so you can measure your real body-size distribution before choosing a stricter enforced ceiling. Same unit rules; `0` disables the warning. *New in 0.6.23* |
 | `timeout` | number \| string | `0` | Whole-request socket timeout, in ms or with a unit suffix (`"5m"`). The `0` (unlimited) default is deliberate: Server-Sent Events and WebSocket connections are long-lived by design, and the slow-body case is already closed by `maxBodySize`. Set a finite value only if the bundle serves no streaming endpoints. *New in 0.6.23* |
@@ -87,6 +88,44 @@ The primary server settings file.
 | `securityHeaders.coop` | boolean | `false` | Opt-in: emit `cross-origin-opener-policy: same-origin`. Off by default because it severs `window.opener` and breaks OAuth/payment popup flows. Never applied to `/_gina/*`. *New in 0.6.23* |
 | `securityHeaders.corp` | boolean | `false` | Opt-in: emit `cross-origin-resource-policy: same-origin`. Off by default because it blocks cross-origin loading of your assets — including gina's own deliberately cross-origin `/_gina/*` endpoints, which stay exempt regardless. *New in 0.6.23* |
 | `securityHeaders.hsts` | boolean | `false` | Opt-in: emit `strict-transport-security: max-age=15552000` (the [Hsts plugin](/guides/security-headers#hsts-hdr4) default, 180 days). Off by default because it commits every HTTPS visitor's browser for the full period — and per the documented spec deviation it is emitted over plain HTTP too. Mount the plugin or use `env.json` for a custom composition; first-writer-wins defers to either. *New in 0.6.23* |
+
+### `http2Options`
+
+Tuning for the HTTP/2 server engine — under `server.http2Options`, in `settings.json` or
+`settings.server.json`. The whole block reaches `createSecureServer()` (https) and
+`createServer()` (cleartext h2c) alike, so the same limits apply on both schemes. Every key
+is optional; the defaults are the values below.
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "http2Options": {
+      "maxConcurrentStreams": 256,
+      "initialWindowSize": 655350,
+      "maxSessionRejectedStreams": 100,
+      "maxSessionInvalidFrames": 1000,
+      "maxStreamResetsPerSecond": 200,
+      "enableConnectProtocol": false,
+      "sessionIdleTimeout": "120s"
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `maxConcurrentStreams` | integer | `256` | Parallel streams per connection advertised in the server's `SETTINGS` frame. Raise it for API servers that handle many parallel requests per client |
+| `initialWindowSize` | integer | `655350` | Per-stream flow-control window in bytes. Lower it in memory-constrained environments |
+| `maxSessionRejectedStreams` | integer | `100` | Rejected streams a session may accumulate before it is closed with `GOAWAY` (CVE-2019-9514 RST flood, CVE-2023-44487 rapid reset) |
+| `maxSessionInvalidFrames` | integer | `1000` | Invalid frames a session may send before it is closed (CVE-2024-27316 CONTINUATION flood) |
+| `maxStreamResetsPerSecond` | integer | `200` | Streams a single session's client may cut short before the response completed, per rolling second, before Isaac sends `GOAWAY(ENHANCE_YOUR_CALM)` and closes it — the rapid-reset shape. Replaces `maxStreamsPerSecond`, which counted *new* streams and tripped on a sibling bundle's own multiplexed calls; the old key is no longer read (one boot warning). See [HTTP/2 security hardening](/guides/http2-native#http2-security-hardening). *New in 0.6.33* |
+| `streamResetBurst` / `streamResetRate` | integer | runtime defaults (1000 / 33) | The runtime's own frame-level reset limit (nghttp2), which counts every received `RST_STREAM`. Set both together or neither — Node.js applies neither alone. Node.js only; Bun has no such limit and ignores both (one boot warning). *New in 0.6.33* |
+| `enableConnectProtocol` | boolean | `false` | Advertise RFC 8441 extended CONNECT, enabling [WebSocket over HTTP/2](/guides/websockets) on the same connection |
+| `sessionIdleTimeout` | string \| number | `"120s"` | Close a session gracefully after this long without a request (`GOAWAY(NO_ERROR)`; open streams finish, the client's next request reconnects). A client PING does not count as activity, a DATA frame on an open stream does. `0` disables the close — the pre-0.6.33 behaviour; a negative, non-timeout or larger-than-2147483647 ms value logs one boot warning and uses the default. Node.js only: on Bun it is ignored (one boot warning) and idle sessions are not closed by the server. See [Session idle timeout](/guides/http2-native#session-idle-timeout). *New in 0.6.33* |
+
+Two limits are hardcoded and not user-overridable: `maxHeaderListSize: 65536` (HPACK
+bomb) and `enablePush: false`. The security rationale for each limit is in
+[Security & CVE compliance](/security).
 
 ### `region`
 

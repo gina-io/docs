@@ -89,6 +89,19 @@ gina bundle:start api @myproject
 The connector then sees `password === 's3cret-prod-pw'` without any
 additional code.
 
+A value that is **nothing but** a `${secret:…}` token whose `KEY` breaks
+that grammar — `${secret:db_password}`, `${secret:config.db.password}`,
+`${secret:}` — or a valid token padded with surrounding whitespace, is a
+**malformed reference**. Since `0.6.33` the resolver **refuses** it at
+bundle start, naming the config path and the grammar (see
+[Fail-closed semantics](#fail-closed-semantics)). Earlier releases passed
+such a value through unchanged, so the literal placeholder text reached its
+consumer as a credential and the failure surfaced two layers deep, as an
+authentication error. Such a value is always a mistake: name the environment
+variable that carries the secret. `secrets:scan` lists malformed references
+and `secrets:check` fails on them (see
+[Inspecting required secrets](#inspecting-required-secrets)).
+
 ### Mixed-content strings pass through
 
 The placeholder must be the **entire** string value. Anything else —
@@ -110,6 +123,11 @@ reading the resolved value:
 var conf = self.getConfig('db');
 var url  = 'https://' + conf.host + '/path';
 ```
+
+Surrounding **whitespace is not content**: `"${secret:DB_HOST} "` is a
+[malformed reference](#syntax) and is refused, not passed through. The
+passthrough rule exists for genuine composition, where the `{` may be
+literal — not for a token that is the whole value give or take a space.
 
 ---
 
@@ -600,6 +618,24 @@ much more confusingly) — a database connect failing with an
 empty-password error two layers deep, or worse, a route handler that
 "works" by treating an empty value as anonymous auth.
 
+The same strictness applies to a **malformed reference** (since `0.6.33`):
+a value that is nothing but a `${secret:…}` token whose key breaks the
+grammar, or a valid token padded with whitespace. The resolver throws:
+
+```text
+Error: Secret reference malformed at `connectors.db.password`: a whole-value ${secret:KEY} placeholder must be exactly the placeholder, with no surrounding whitespace, and KEY must match ^[A-Z_][A-Z0-9_]*$ (uppercase letters, digits and underscores, not starting with a digit) — name the environment variable that carries the secret
+```
+
+This message names the **config path** and the grammar, so the author can
+locate the entry — but never the offending text: a broken reference is
+still a reference to a secret, and the boot log is a user-facing surface.
+The text rides a non-enumerable `_ginaSecretRef` annotation on the thrown
+Error, which the framework's internal logger names at debug level only,
+exactly as `_ginaSecretKey` does for a missing key. Before `0.6.33` such a
+value was passed through unchanged: the literal placeholder text became
+the credential, and the only symptom was the consumer's own failure much
+later.
+
 ---
 
 ## Adoption
@@ -711,6 +747,22 @@ string like `"https://${secret:API_HOST}/v1"` is not a placeholder
 (see [Mixed-content strings pass through](#mixed-content-strings-pass-through))
 and is not listed, mirroring exactly what the resolver would substitute.
 
+A [malformed reference](#syntax) — a whole-value token the resolver would
+**refuse** — is not a required key either; since `0.6.33` `scan` lists it
+separately, with its path, originating file and text, so the entry can be
+fixed before the bundle is started:
+
+```bash
+$ gina secrets:scan @myproject
+
+@myproject:
+  demo:
+    Required secrets (1):
+      API_KEY          <-  src/demo/config/settings.json
+    Malformed references (1) — the runtime REFUSES to boot on these:
+      db.password   <-  src/demo/config/connectors.json   (${secret:db_password})
+```
+
 ### `secrets:check` — verify the environment before deploy
 
 `check` runs the same enumeration, then cross-references the **current**
@@ -738,6 +790,24 @@ counts as `SET` only when it is a **non-empty string** — the same
 condition under which the resolver succeeds — so an `UNSET` here is
 precisely a key that would throw `Secret resolution failed` at bundle
 start.
+
+It also exits non-zero on a [malformed reference](#syntax) (since
+`0.6.33`), naming each one with its file, path and text: the runtime
+refuses to boot on it, so a gate that passed it would green-light a bundle
+that cannot start — even when every required key is set.
+
+```bash
+$ gina secrets:check @myproject
+
+@myproject:
+  demo:
+      ! MALFORMED reference at `db.password` in src/demo/config/connectors.json — the runtime REFUSES to boot on this: `${secret:db_password}` is not a ${secret:KEY} placeholder (KEY must match ^[A-Z_][A-Z0-9_]*$, no surrounding whitespace)
+      API_KEY          SET     env
+    (1 required: 1 set, 0 unset; 1 malformed)
+
+$ echo $?
+1
+```
 
 `check` reads the **same two tiers the runtime reads, in the same order**:
 the environment first, then any file the bundle declares in

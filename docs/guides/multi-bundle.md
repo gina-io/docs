@@ -193,6 +193,10 @@ in [HTTP/2 Resilience](/guides/http2-resilience) -- pre-flight PING validation,
 retry with backoff, and automatic dead-session eviction.
 :::
 
+Over HTTP/1.1, `self.query()` keeps one keep-alive connection pool per upstream bundle
+(since 0.6.33), so repeated calls to the same bundle reuse their connections instead of
+opening a new one each time.
+
 ### What travels between bundles
 
 When bundle A calls bundle B, the response includes:
@@ -305,10 +309,12 @@ flowchart TD
     style DB fill:#2a2a3e,stroke:#666
 ```
 
-The scope is set per environment in `env.json` and injected into every database
-query via `$scope` substitution. A developer running bundles locally with
-`scope: "local"` cannot accidentally read or write production data -- the connector
-enforces it at the query level.
+The scope comes from the connector entry's `scope` field in `connectors.json`, or
+else from the bundle's own scope (`--scope` at start, defaulting to the project's).
+With Couchbase, every inserted document is stamped with it and every query receives
+it through the `$scope` placeholder. Filter your queries on `_scope = $scope` and a
+bundle running with scope `local` only touches `local` documents. The filter is not
+added for you: a query without it reaches every scope.
 
 See [Scopes](/concepts/scopes) and [Environments](/concepts/environments) for details.
 
@@ -324,7 +330,7 @@ See [Scopes](/concepts/scopes) and [Environments](/concepts/environments) for de
 | Scaling | Uniform (scale the whole app) | Per-bundle (scale what needs it) |
 | Port allocation | One port | One port per bundle (auto-managed) |
 | Routing | Global middleware stack | Per-bundle `routing.json` |
-| Database isolation | Manual (shared connection pool) | Per-bundle scope, enforced by connector |
+| Database isolation | Manual (shared connection pool) | Scope-stamped documents + a `_scope = $scope` filter per query |
 | Dev tools | Per-process logging | Per-bundle Inspector with cross-bundle query tracing |
 | Code organization | Developer decides | Convention: `src/{bundle}/config|controllers|models|views` |
 

@@ -14,7 +14,7 @@ prereqs:
 
 Introspect the `${secret:KEY}` placeholders your bundle configs require. These commands are **read-only**: they enumerate which secrets a bundle needs and whether they are present in the sources a bundle would resolve from, but they never resolve a placeholder, never print a secret's value, and never write anything. See [Secrets in bundle config](/guides/secrets) for the resolver itself.
 
-Both commands walk each bundle's `<src>/config/*.json` plus the project's `shared/config/*.json` — the same files the framework merges at bundle start — and report only **bare** placeholders (a mixed-content string like `"https://${secret:HOST}/v1"` is not a placeholder and is not reported, mirroring what the resolver substitutes).
+Both commands walk each bundle's `<src>/config/*.json` plus the project's `shared/config/*.json` — the same files the framework merges at bundle start — and report only **bare** placeholders (a mixed-content string like `"https://${secret:HOST}/v1"` is not a placeholder and is not reported, mirroring what the resolver substitutes). A whole-value token the resolver would **refuse** — a [malformed reference](/guides/secrets#syntax) such as `"${secret:db_password}"` (lowercase key) or `"${secret:DB_PASSWORD} "` (padded) — is reported separately since `0.6.33`: `scan` lists it, `check` fails on it.
 
 ---
 
@@ -44,11 +44,27 @@ $ gina secrets:scan @myproject
       STRIPE_API_KEY   <-  shared/config/app.json
 ```
 
+A malformed reference is listed under its own heading, with its path, file and text — it is not a required key, and the runtime refuses to boot on it:
+
+```bash
+    Malformed references (1) — the runtime REFUSES to boot on these:
+      db.password   <-  src/demo/config/connectors.json   (${secret:db_password})
+```
+
+`scan` stays informational and exits `0` either way; `check` is the gate.
+
 ---
 
 ## `secrets:check` {#secretscheck}
 
-Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then the declared lower tier: a file chain from [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile), or the fetched map from [`settings.secrets.exec`](/guides/secrets#exec-bridge-secrets-settingssecretsexec), whose declared command the check **actually runs** (same timeout as the boot, so the verdict matches what booting would do — expect the fetch to run when the gate does). Each required key is marked `SET` or `UNSET` with the tier that satisfied it. **Exits non-zero when any required key is unset, or when the declaration itself is one the runtime would refuse to boot on** — an unreadable declared file, a malformed entry, a failing exec fetch — so it can gate a CI / pre-deploy step without green-lighting a config that cannot start.
+Run the same enumeration, then cross-reference the same sources a bundle would resolve from — the environment first, then the declared lower tier: a file chain from [`settings.secrets.file`](/guides/secrets#file-backed-secrets-settingssecretsfile), or the fetched map from [`settings.secrets.exec`](/guides/secrets#exec-bridge-secrets-settingssecretsexec), whose declared command the check **actually runs** (same timeout as the boot, so the verdict matches what booting would do — expect the fetch to run when the gate does). Each required key is marked `SET` or `UNSET` with the tier that satisfied it. **Exits non-zero when any required key is unset, or when the declaration itself is one the runtime would refuse to boot on** — an unreadable declared file, a malformed entry, a failing exec fetch — **or when a config carries a malformed `${secret:…}` reference** (since `0.6.33`), so it can gate a CI / pre-deploy step without green-lighting a config that cannot start. A malformed reference is reported with its file, path and text, and counted in the summary:
+
+```bash
+  demo:
+      ! MALFORMED reference at `db.password` in src/demo/config/connectors.json — the runtime REFUSES to boot on this: `${secret:db_password}` is not a ${secret:KEY} placeholder (KEY must match ^[A-Z_][A-Z0-9_]*$, no surrounding whitespace)
+      API_KEY          SET     env
+    (1 required: 1 set, 0 unset; 1 malformed)
+```
 
 The declaration is read the same way the loader reads it: the project's `shared/config/settings.json` first, with the bundle's own `settings.json` on top, so a project-wide chain is picked up for every bundle and a bundle-level one replaces it.
 

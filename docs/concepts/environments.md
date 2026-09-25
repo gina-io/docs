@@ -17,12 +17,12 @@ Gina has two independent concepts of "environment": one for the **framework itse
 
 ## Framework environment
 
-The framework ships with two environments: `dev` and `prod`. The default is `prod`.
+The framework ships with two environments: `dev` and `prod`. The default is `dev`.
 
-Switch the framework to `dev` mode when contributing to Gina or prototyping:
+Switch it with `framework:set`:
 
 ```bash
-gina framework:set --env=dev
+gina framework:set --env=prod
 ```
 
 Set the framework log level:
@@ -50,6 +50,13 @@ gina env:list @myproject
 gina env:add staging @myproject
 gina env:rm staging @myproject
 ```
+
+An environment name is made of letters, digits, `_`, `.` and `-`, and starts with a
+lowercase letter, a digit, `_` or `.`. `env:add` refuses any other name, including `.`
+and `..` — an environment name becomes a directory name under
+`releases/<bundle>/<scope>/` — as well as `global`, which names the configuration
+overlay that applies to every environment (`<name>.global.json`), and the name of a
+property every object inherits, such as `constructor`.
 
 ### Set the default environment for a project
 
