@@ -860,6 +860,27 @@ them, a client that reached a route with a method the route does not declare now
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Security — a query key named like an inherited object member can no longer reach another route (restart and re-bake)
+
+For a `GET` or `DELETE` request on a route that declares `requirements`, the router treats each
+request key that names a requirement the URL does not bind as a whole `:key` segment as an extra URL
+variable. It looked that name up with a plain property read, so a query key named like a member
+every object inherits — `toString`, `valueOf`, `toLocaleString`, `isPrototypeOf` — counted as a
+declared requirement. Each such key, with a value shaped like that member's source text, replaced
+one leading segment of the URL being compared, so a request reached a route whose path differs from
+its own: three keys made `/app/public/users/42` reach a route declared as `/app/admin/users/:id`,
+and two let a path outside the bundle's webroot reach a route inside it. The action also received
+`req.params.toString` as a string.
+
+Only requirements a route declares itself now count.
+
+**What to check:** a control that restricts such a route by its path alone, applied outside gina —
+a reverse-proxy `location` rule, a firewall path rule — could be bypassed before this release; the
+route's own middleware and authorization always ran. Routes without `requirements` were never
+affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ## 0.6.31 → 0.6.32
 
 ### Fixed — a form's HTML answer is routed by the popin the form is in (restart and re-bake; behaviour change)
