@@ -110,6 +110,11 @@ The `error` / `message` split matches the JSON error surface: `error` holds
 the status text, and the text you passed to `throwError` lands in `message`
 (see [Controllers → Incident ref](/guides/controller#incident-ref)).
 
+Outside the local scope, an `error` or `message` that carries a stack trace —
+for example from `self.throwError(res, 500, err.stack)` — arrives cut to its
+first line (since 0.7.0); the full text is in the server log under the page's
+`ref`. `stack` itself is not cut: see the caution below.
+
 :::caution Render `stack` deliberately
 On the JSON error surface the framework strips `stack` outside the local
 scope. A custom error template is **consumer-owned**: whatever it renders is

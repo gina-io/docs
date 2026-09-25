@@ -462,7 +462,9 @@ in `message` — so a client that wants to display your sentence should read `me
 not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
-stack is stripped from the wire — see below.) The ref carries no server detail,
+stack is stripped from the wire — see below. A stack passed *as* the message, as in
+`self.throwError(res, 500, err.stack)`, gets the same treatment since 0.7.0: outside
+the local scope `message` keeps its first line.) The ref carries no server detail,
 so it is safe to show an end user and to have them relay to support.
 
 Server-side, one error-level log line pairs that ref with the **full** error

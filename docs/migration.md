@@ -257,6 +257,31 @@ another origin, a request without `X-Requested-With` — must now send a real
 
 Restart the bundle. Nothing to re-bake.
 
+### Security — a stack passed as an error message no longer reaches the client (restart)
+
+A controller's `self.throwError()` strips the `stack` field from the JSON body
+outside the local scope, but a stack passed *as* the message went out whole:
+`self.throwError(res, 500, err.stack)`, `self.throwError(500, err.stack)`, or an
+error object whose `message`, `error` or `title` holds a stack put the file paths
+and frames in `message` (or `error`) and on the built-in HTML error page, in every
+scope. Outside the local scope such a value now keeps its first line — in the JSON
+body, on the fallback page, and in the `page.data` a custom error page receives —
+and the full text goes to the server log line that carries the incident `ref`. On
+the HTML path that line now logs the error's own text instead of the `throwError`
+call site, and a `self.throwError(res, code, { … })` call now writes one (it wrote
+none before).
+
+Local scope is unchanged, so the dev toolbar still shows the full stack. The
+engine-level error responder has applied the same rule since 0.5.21.
+
+**What to check:** a client or a custom error template that read frames out of
+`message` in production no longer finds them — read them from the log line with
+the `ref`. A human message with a line that starts with `at ` is cut the same way.
+`page.data.stack` is not cut; keep it out of templates you deploy (see
+[Custom error pages](/guides/error-pages)).
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
 
 On the Express engine, on Express 4 and 5 alike, a URL with a query string never
