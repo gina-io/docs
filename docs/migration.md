@@ -312,6 +312,31 @@ the `ref`. A human message with a line that starts with `at ` is cut the same wa
 
 Restart the bundle. Nothing to re-bake.
 
+### Security — `gina tail --follow` no longer re-runs a start command from the shared tmp dir (restart `gina tail`)
+
+With `--follow`, when a bundle goes down on an abort or an out-of-memory error,
+`gina tail` re-runs the start command saved at the bundle's last `bundle:start`
+or `bundle:restart`. That file lived in the system tmp directory. Where that
+directory is shared between local users (`/tmp` on Linux by default), another
+user could create `<bundle>@<project>.argv` there first: your own
+`gina bundle:start` then failed to overwrite it, and the next crash restart ran
+that user's program under your account.
+
+The file now lives under the framework home — `~/.gina/run/<bundle>@<project>.argv`,
+or `$GINA_HOMEDIR/run/` when you set `GINA_HOMEDIR` — written with mode `0600`,
+and `gina tail` re-runs it only when it is a regular file you own that group and
+other cannot write. Any other file is refused with a
+`[getBundleStartingArgv] refusing …` warning, and the bundle stays down. See
+[Logging → `--follow`](/guides/logging#--follow--stay-connected-across-restarts).
+
+**What to do:** restart `gina tail --follow`, then start each bundle once
+(`gina bundle:start` or `gina bundle:restart`) so its file is written in the new
+place. Until a bundle has been started with this version, a crash of that bundle
+is not restarted automatically. The old files in the tmp directory are no longer
+read; you can delete them.
+
+Nothing to re-bake; running bundles do not need a restart.
+
 ### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
 
 On the Express engine, on Express 4 and 5 alike, a URL with a query string never

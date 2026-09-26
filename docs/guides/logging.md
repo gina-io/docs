@@ -539,6 +539,17 @@ gina tail --follow
 This is the recommended mode during development — it survives `gina bundle:restart`
 and framework restarts without any manual intervention.
 
+With `--follow`, `gina tail` also restarts a bundle that goes down on an abort or
+an out-of-memory error: it re-runs the start command saved at that bundle's last
+`gina bundle:start` or `gina bundle:restart`. The command is saved in
+`~/.gina/run/<bundle>@<project>.argv` (under `$GINA_HOMEDIR/run/` when you set
+`GINA_HOMEDIR`), a file written with mode `0600`, and it is re-run only when that
+file is a regular file you own that group and other cannot write — otherwise
+`gina tail` logs a `[getBundleStartingArgv] refusing …` warning and leaves the
+bundle down. Up to 0.6.33 the file lived in the system tmp directory: after
+upgrading, restart `gina tail --follow` and start each bundle once so its file is
+written in the new place.
+
 ### Filtering output
 
 Pipe `gina tail` through `grep` to focus on a specific bundle:
