@@ -357,13 +357,16 @@ form's HTML answer goes (see [Reacting to the result](/guides/forms-and-validati
 | `open` | the popin |
 | `close` | the popin |
 | `loaded` | the response body |
+| `success` | the parsed JSON body — a JSON answer that neither redirects nor reloads |
 | `error` | `{ status, error }` |
 | `destroy` | `{ name, id }` |
 
-:::note Three names that do not fire
-`success`, `progress` and `click` exist in the internal event registry but no
-current code path delivers them — do not subscribe to them expecting callbacks.
-Use `loaded` for content arrival and `error` for failures.
+:::note Two names that do not fire
+`progress` and `click` exist in the internal event registry but no current code
+path delivers them — do not subscribe to them expecting callbacks. Use `loaded`
+for content arrival, `success` for a JSON answer and `error` for failures.
+`success` fires from 0.6.10; before that, such an answer raised `error` with a
+`422` status.
 :::
 
 ## Migrating from the legacy attributes
