@@ -196,6 +196,32 @@ carries one, and keeps its code and message.
 
 CLI only: nothing to restart or re-bake.
 
+### Fixed — a path with a space no longer breaks the install, `port:reset` or `bundle:restart` (CLI)
+
+A first `npm install -g gina` failed when your home directory held a space: the
+install scripts ran `chown` on the `~/.gina` they had just created, and created and
+sourced `~/.profile`, through command lines that split the path. The `chown` is
+removed — the directory already belongs to you — and `~/.profile` is created
+without a shell. It is no longer sourced either: that ran in a child shell that
+exited at once, so it never reached yours. With the npm prefix under a path with a
+space, the install's npm probes and its two `framework:set` calls failed without a
+word; they now reach such paths whole.
+
+`gina port:reset` reads the project's bundles itself instead of running
+`gina bundle:list` through a shell, so it no longer crashes when `gina` is not on
+your `PATH` or sits under a path with a space, and it no longer runs whichever
+`gina` comes first on `PATH`. `gina bundle:restart` runs `bundle:stop`, then
+`bundle:start` once the stop has succeeded, without a shell: it works from an
+install under a path with a space, and each flag reaches `bundle:start` as you
+passed it — shell syntax in a flag value used to run.
+
+**What to check:** nothing, unless a script relied on `bundle:restart` passing its
+flags through a shell a second time: a value holding a space, a quote or a `$` now
+arrives unchanged. As before, open a new shell to pick up the `PATH` line the
+install adds to `~/.profile`.
+
+CLI only: nothing to restart or re-bake.
+
 ### Fixed — the Couchbase keep-alive interval is `pingInterval`, not `ping` (check your connectors)
 
 The connector reference and the `connectors.json` a new bundle is scaffolded with
