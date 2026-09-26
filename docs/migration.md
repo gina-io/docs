@@ -337,6 +337,30 @@ read; you can delete them.
 
 Nothing to re-bake; running bundles do not need a restart.
 
+### Security — a long `X-Forwarded-Prefix` header no longer ties up a bundle (restart)
+
+On the default (isaac) engine, a bundle mounted on a sub-path by a reverse proxy
+reads the `X-Forwarded-Prefix` header on every request. The handler trimmed
+trailing slashes from the value with a pattern that backtracks quadratically on a
+long run of slashes, and it did so on the raw header *before* checking the
+value's length — so a single request carrying a 15 KB header of slashes cost
+roughly 100–170 ms of CPU (about 8 seconds at the 64 KB an HTTP/2 header list
+admits), and a few such requests a second could saturate a single-threaded
+bundle.
+
+The length and character-set check now runs *before* the trim, so an
+over-length value (anything past the 255-character mount-path limit) is discarded
+before any regular expression sees it. A legitimate mount path is validated and
+applied exactly as before — no configuration changes.
+
+**What to check:** nothing, if your proxy sends a normal mount path. If you rely
+on `X-Forwarded-Prefix`, a reverse proxy that caps request header size (nginx's
+`large_client_header_buffers`, 8 KB by default) already bounds the exposure; the
+fix removes it regardless.
+
+Restart the bundle. Nothing to re-bake. The Express engine and the router were
+never affected.
+
 ### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
 
 On the Express engine, on Express 4 and 5 alike, a URL with a query string never
