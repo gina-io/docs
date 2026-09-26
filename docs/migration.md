@@ -21,22 +21,59 @@ upward to the target version.
 
 ## 0.6.33 → 0.7.0
 
-### Action required — settings reset (shortVersion bump)
+### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
 
-`0.7.0` is a **shortVersion bump** (`0.6` → `0.7`). On install, the framework
-creates a fresh `~/.gina/0.7/settings.json` from defaults — your
-`~/.gina/0.6/settings.json` customizations (log level, port, culture, timezone,
-etc.) are **not** carried forward. This is intentional: the per-version settings
-schema can change between short versions.
+`0.7.0` is a **shortVersion bump** (`0.6` → `0.7`): the framework keeps its
+per-version settings in a new `~/.gina/0.7/settings.json`. What carries over from
+`0.6` depends on how you installed:
 
-After upgrading, re-apply your customizations with `gina framework:set`, or copy
-the values across from `~/.gina/0.6/settings.json`. Root-level state
-(`~/.gina/main.json`, `projects.json`, `ports.json`, `gina.db`) is shared across
-short versions and is unaffected — only the per-version `settings.json` resets.
+| Setting | npm install | Bun, a `gina-container` image or a git checkout |
+|---|---|---|
+| Culture, timezone, default environment and scope | carried over | carried over |
+| `port`, `debug_port`, `mq_port`, `host_v4`, `bind_host`, `hostname`, `rundir`, `logdir`, `tmpdir` | reset to defaults | carried over |
+| Log level | reset to `info` | reset to `info` |
+
+- **npm install:** the install writes `~/.gina/0.7/settings.json` from its
+  template before the first gina command runs, so the nine settings above and the
+  log level start from their defaults. Re-apply your values with
+  `gina framework:set` (for example
+  `gina framework:set --port=8324 --log-level=debug`), or copy them across from
+  `~/.gina/0.6/settings.json`.
+- **Bun, a `gina-container` image or a git checkout:** no install script runs, so
+  the first gina command creates `~/.gina/0.7/settings.json` and fills those nine
+  settings from `~/.gina/0.6/settings.json`. Only the log level resets; set it
+  again with `gina framework:set --log-level=<level>`.
+
+Culture, timezone, default environment and scope live in `~/.gina/main.json`,
+which gina copies from their `0.6` entries on the first run of `0.7`, whatever
+the install path. Root-level state (`~/.gina/main.json`, `projects.json`,
+`ports.json`, `gina.db`) is shared across short versions.
 
 A project that lists `gina` as a dependency with a `^0.6.x` range does not
 resolve `0.7.0`: npm's caret range keeps a `0.x` dependency on its minor line.
 Widen the range (for example to `^0.7.0`) to pick this release up.
+
+### Fixed — the first gina commands after a minor-version upgrade no longer fail (CLI)
+
+On the first run of a new minor version, gina copies the per-version defaults it
+keeps in `~/.gina/main.json` (culture, timezone, environments, scopes and the
+rest) from the previous minor version. That copy ran only while the new
+version was not yet listed in `main.json`, and `gina bundle:start`,
+`bundle:restart`, `project:start`, `project:restart` and every `gina-container`
+boot list it without running the copy. When one of those came first, every later
+gina command exited `1` with `Cannot read properties of undefined (reading 'split')`
+until `main.json` was repaired by hand. Separately, the first gina command after
+any minor upgrade exited `1` once with `(reading 'indexOf')`, because it read
+`main.json` as it was before the copy. Both are fixed in `0.7.0`: the copy fills
+whatever the new version is missing, whether or not the version is listed, and
+the rest of that first command reads the updated file.
+
+**What to check:** nothing. Installs that skip npm's install scripts (Bun, a
+`gina-container` image, a git checkout) were the ones exposed; the upgrade to
+`0.7.0` runs the fixed code. A container or CI step that stops on the first gina
+command's exit code after an upgrade no longer fails that one time.
+
+CLI only: nothing to restart or re-bake.
 
 ### Changed — custom validators compile without `eval` (restart and re-bake; no action required)
 
