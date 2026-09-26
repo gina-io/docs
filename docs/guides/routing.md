@@ -253,7 +253,10 @@ declares a single method other than `PUT`, and the router skips such a rule befo
 compares URLs. A **405** (`Method Not Allowed`) comes only from a rule that declares
 several methods (`"method": "GET,POST"`), when its URL matches and the request's method
 is not in its list; it carries an `Allow` header naming the methods the URL does serve.
-Every rule that serves `GET` also serves `HEAD`, whatever its URL shape.
+Every rule that serves `GET` also serves `HEAD`, whatever its URL shape. The `GET`
+action runs, with `req.get` set to the same object as `req.head`, so it reads the URL
+and query parameters as it does for a `GET`; `req.method` stays `HEAD`, and the
+response carries the headers without the body.
 
 :::warning namespace is required
 Without `"namespace"`, the router looks in `controller.js` instead of

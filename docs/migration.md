@@ -321,6 +321,24 @@ Express engine.
 
 Restart the bundle. Nothing to re-bake.
 
+### Fixed — a `HEAD` gives the action `req.get` (restart)
+
+gina answers a `HEAD` by running the action of the route that serves `GET`, so
+that the response carries the headers a `GET` would. The action saw `req.get` as
+`undefined`, though: a `HEAD`'s URL and query parameters were only in
+`req.head`, so an action reading `req.get.<param>` answered `500` to a `HEAD`.
+That was the case on routes with a static URL since 0.3.0, and with the change
+above it would have reached parameterised and multi-method routes too.
+
+On a `HEAD`, `req.get` is now the same object as `req.head`. `req.head`,
+`req.getParam()` and `req.getParams()` are unchanged, and `req.method` stays
+`HEAD`, so the body is still not sent.
+
+**What to check:** nothing, unless an action told a `HEAD` apart by `req.get`
+being `undefined`; test `req.method` for that instead.
+
+Restart the bundle. Nothing to re-bake.
+
 ## 0.6.32 → 0.6.33
 
 ### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
