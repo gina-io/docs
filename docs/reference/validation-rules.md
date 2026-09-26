@@ -704,6 +704,11 @@ It becomes a chainable rule named `<name>` that you can use like any other
 `this.getValidationContext()` to read sibling fields and set errors. Custom
 validators get a default message of *Condition not satisfied*.
 
+The browser compiles the file as an inline script — no `eval`, so a page needs
+no `'unsafe-eval'` in its Content-Security-Policy, and the script carries the
+page's own nonce when one is set (see the [CSP guide](/guides/csp)). Each
+validator is compiled once per page and shows up in DevTools under `<name>.js`.
+
 :::caution Browser-side only — not a server-side guarantee
 A custom validator is applied in the browser, but it is **not** enforced on the
 server: the server-side registration path is not wired, and the engine silently

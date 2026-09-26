@@ -38,6 +38,10 @@ A project that lists `gina` as a dependency with a `^0.6.x` range does not
 resolve `0.7.0`: npm's caret range keeps a `0.x` dependency on its minor line.
 Widen the range (for example to `^0.7.0`) to pick this release up.
 
+### Changed — custom validators compile without `eval` (restart and re-bake; no action required)
+
+A custom form validator (`src/<bundle>/forms/validators/<name>/main.js`) is now compiled by the browser as an inline script instead of through `eval`: the same scope contract (`this.getValidationContext()`), the same name in DevTools (`<name>.js`), one compile per validator per page, and the script carries the page's CSP nonce when one is set — so a page needs no `'unsafe-eval'`. The bundled RequireJS and engine.io-client each carried one unreachable dynamic-code call as well; both are rewritten at build time, so the published browser bundle contains none. Rebuild your bundles to pick up the new `gina.min.js`. Nothing changes for validator files that follow the [reference](/reference/validation-rules#custom-validators); a file that relied on a name from the engine's own scope (undocumented) now fails at call time with a `ReferenceError` in the console.
+
 ### Changed — routing tests only the routes whose URL could match (`validator::` side effects)
 
 A request the route cache has not seen before used to be tested against every route
