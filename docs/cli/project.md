@@ -41,6 +41,23 @@ Gina creates the directory if it does not exist, writes `manifest.json`, `packag
 
 Since `0.6.9` it also writes a `.gitignore` — but **only when the project does not already have one**. Yours is never replaced or appended to, so re-running `project:add` over an existing project leaves it untouched. The scaffolded file covers the usual build output (`node_modules`, `releases`, `logs`, `tmp`) and the secret-file globs `.env`, `.env.*` and `*.env`, with `!.env.example` negations so a sample can still be committed.
 
+### Project names
+
+Since `0.7.1`, a new project name is made of letters, digits, `_`, `.` and `-`, and
+starts with a lowercase letter, a digit, `_` or `.`. `.`, `..` and the names every
+object inherits, such as `constructor`, are refused. `project:add` checks the name
+before it writes anything, and refuses one outside the rule with exit `1`:
+
+```bash
+gina project:add @my-app        # accepted
+gina project:add @My.App        # refused: starts with an uppercase letter
+gina project:add @constructor   # refused: every object inherits it
+```
+
+A project registered before this rule existed keeps working: re-running `project:add`
+on a registered name does not check it, and neither does
+[`project:import`](#projectimport).
+
 ### Options
 
 | Option | Description |
@@ -73,6 +90,9 @@ config or running `project:remove` without deleting the source).
 gina project:import @<project>
 ```
 
+`project:import` does not apply the [project naming rule](#project-names), so a
+project named before `0.7.1` can still be imported.
+
 ---
 
 ## `project:rename`
@@ -92,6 +112,9 @@ The new name must be free: `project:rename` refuses a name another project is
 registered under, and a target directory that already exists, with exit `1` and
 before anything moves. In the port registries it renames only the entries of the
 renamed project — another project whose name begins with the old name keeps its own.
+
+Since `0.7.1` the new name must also follow the [project naming rule](#project-names):
+`project:rename` refuses one outside it with exit `1`, before anything moves.
 
 ---
 
@@ -330,6 +353,11 @@ gina project:restore @myproject ./myproject-20260619-120000.zip --to=~/Sites/myp
 ```
 
 The archive is extracted to `--to`, then the project is registered under `@<name>` (allocating ports for each bundle in its `manifest.json`). The name may differ from the original, so the same command also handles rename-on-restore. Pass `--force` to overwrite an already-registered name or a non-empty destination. After restoring you can [`gina project:start`](#projectstart) `@<name>` directly.
+
+Since `0.7.1` a name that is not registered yet must follow the
+[project naming rule](#project-names): `project:restore` checks it before it extracts
+anything, and refuses one outside the rule with exit `1`. A name already registered,
+which you overwrite with `--force`, is not checked.
 
 ---
 

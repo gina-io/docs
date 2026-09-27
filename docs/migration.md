@@ -173,6 +173,70 @@ frame examined. When no file outside `node_modules` makes the call, they no long
 
 **What to check:** nothing. Restart your bundles to pick this up. Nothing to re-bake.
 
+### Changed — new project and bundle names follow a naming rule (CLI)
+
+`gina project:add` and `bundle:add`, the new name you give `project:rename`,
+`bundle:rename` or `bundle:copy`, and the name `project:restore` registers must now be
+made of letters, digits, `_`, `.` and `-`, and start with a lowercase letter, a digit,
+`_` or `.`. `.`, `..` and the names every object inherits, such as `constructor`, are
+refused (see [Project names](/cli/cli-project#project-names) and
+[Bundle names](/cli/cli-bundle#bundle-names)). Each command checks the name before it
+writes anything, and `bundle:add` checks every name of its list before it adds the
+first bundle. Until now only the first character was checked, so names holding spaces,
+quotes, `$` or `/` were registered, and `project:add @constructor` took the name for a
+registered project with no path, and failed.
+
+A project or bundle already registered under a name outside the rule keeps working,
+including with `project:import`, `bundle:add --import` and `bundle:add --replace`.
+
+**What to check:** a script that creates projects or bundles with names outside the
+rule now gets exit `1`, with a message naming the value.
+
+The commands pick this up on their next run. Nothing to restart or re-bake.
+
+### Security — the CLI matches names literally in its registry lookups (CLI; framework restart)
+
+The CLI looked up project, bundle and environment names in the port and project
+registries with regular expressions built from the names. A `.` in a name matched any
+character, and a name holding `+`, `(` or `[` broke the lookup or made the command
+throw: `project:remove @my.app` also removed the ports of `my-app`, `env:remove` could
+remove, and `port:list` list, another project's entries, and `bundle:start` did not
+recognise the mounted line of a bundle whose name holds `+`, so it waited out its start
+timeout and stopped the bundle. These lookups now match the names literally. The
+install scripts match the install prefix literally too: a prefix holding `c++` made
+`npm install -g gina` fail.
+
+These names come from your own registry and command line, or from anything that can
+reach the framework's command socket, which listens on loopback by default.
+
+**What to check:** nothing.
+
+Restart the framework with `gina framework:restart` to pick it up for `bundle:start`,
+which runs inside the framework process; the other commands pick it up on their next
+run, and installing 0.7.1 runs the new install scripts. Nothing to re-bake.
+
+### Fixed — a lookup no longer takes a bundle, project or environment for another whose name extends it (CLI; framework restart)
+
+- `bundle:remove api @shop` also removed the ports of `myapi@shop` and the port
+  registry entry of `api@shopping`.
+- `port:reset` removed the ports of the same bundle in a project whose name begins with
+  its project's.
+- While allocating ports, `bundle:add`, `bundle:copy` and `env:add` could give
+  environment `dev` the port assigned to `devel`, taking it from `devel`.
+- `project:add` and `port:reset` could skip an assignment as already made because
+  another value contained it (`api@shop/dev` inside `api@shop/devel` or
+  `myapi@shop/dev`).
+
+These lookups now match whole names. The first-character refusal of `bundle:add` also
+names the rejected bundle instead of printing `[ undefined ]`.
+
+**What to check:** if you ran one of these commands on names that extend one another,
+run `gina port:list @<project>` to check that each bundle still has its own ports.
+
+Restart the framework with `gina framework:restart` to pick it up for `bundle:start`,
+which runs inside the framework process; the other commands pick it up on their next
+run. Nothing to re-bake.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)

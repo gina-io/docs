@@ -312,6 +312,18 @@ add a `scopes` allow-list to its manifest entry to hold it back from the others:
 Remove the key (or add the other scopes) when it is ready to ship. See
 [Restrict a bundle to certain scopes](/concepts/scopes#restrict-a-bundle-to-certain-scopes).
 
+### Bundle names
+
+Since `0.7.1`, a new bundle name is made of letters, digits, `_`, `.` and `-`, and
+starts with a lowercase letter, a digit, `_` or `.`. `.`, `..` and the names every
+object inherits, such as `constructor`, are refused. `bundle:add` checks the name
+before it writes anything, and refuses one outside the rule with exit `1`. When you
+add several bundles at once (`gina bundle:add <bundle_1> <bundle_2> @<project>`), every
+name is checked before the first bundle is added.
+
+A bundle already in the project's `manifest.json` keeps its name, including when you
+re-register or overwrite it with `--import` or `--replace`.
+
 ### Controlling the port scan
 
 `bundle:add` scans for an available port starting at `3100`, automatically
@@ -377,6 +389,11 @@ Overwrite an existing target with `--force`:
 gina bundle:copy <source> <new_name> @<project> --force
 ```
 
+Since `0.7.1` the new name must follow the [bundle naming rule](#bundle-names):
+`bundle:copy` refuses one outside it with exit `1`, before anything is written. A
+destination already in `manifest.json`, which you overwrite with `--force`, is not
+checked.
+
 **Flags**
 
 | Flag | Description |
@@ -411,6 +428,11 @@ Overwrite an already-existing bundle of the new name with `--force` (this only o
 ```bash
 gina bundle:rename <old> <new_name> @<project> --force
 ```
+
+Since `0.7.1` the new name must follow the [bundle naming rule](#bundle-names):
+`bundle:rename` refuses one outside it with exit `1`, before anything moves. A
+destination already in `manifest.json`, which you overwrite with `--force`, is not
+checked.
 
 **Flags**
 
