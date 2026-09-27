@@ -86,6 +86,55 @@ Restart the framework with `gina framework:restart`, or restart the container th
 runs it, to pick this up: `bundle:start` runs inside the framework process, so a
 `bundle:restart` alone keeps the old behaviour. Nothing to re-bake.
 
+### Security — more CLI commands, and an isaac bundle's boot, no longer run values through a shell (CLI; bundle restart)
+
+`gina framework:status`, `framework:restart`, `framework:build`, the download and
+extract steps of `framework:add`, `gina .`, `framework:open`, the default-browser
+probes, browser launch and fallbacks of `inspector:open`, and the npm prefix look-ups
+that the CLI and `framework:init` fall back on all built a command line and ran it
+through `sh`: the arguments you passed, file paths, the Inspector URL or the content
+of a pid file went into it. At every boot, an isaac bundle did the same with its
+cache path when it compressed its routing files with brotli and gzip. Shell syntax in
+any of these values ran as a command, as the user running gina. They now start their
+children from argument vectors. On Windows, the calls that need cmd.exe (`start`,
+`where` and the `npm.cmd` download) keep their command lines.
+
+Each of these values comes from your own command line, settings or files, so the
+shell never let anyone else run a command.
+
+Separately, `framework:status` listed every user's processes and wrote a pid file
+named after the title of any process whose title began with `gina-`, so another local
+user's process titled `gina-v/../../x` made it write `x.pid` outside the run
+directory. It now lists your own processes only, and accepts only a framework
+daemon's `gina-v<version>` title.
+
+**What to check:** nothing, unless a script relied on one of these commands passing
+a value through a shell a second time: a value holding a space, a quote or a `$` now
+arrives unchanged.
+
+Restart your bundles to pick up the isaac change; the CLI commands pick theirs up on
+their next run. Nothing to re-bake.
+
+### Fixed — `bundle:stop` reads its pid file strictly, `framework:status` works without `ps`, and paths with a space work (CLI; bundle restart)
+
+- `bundle:stop` reads a bundle's pid file as a positive integer only. A pid file
+  holding `-1` made it send `SIGKILL` to every process you could signal, and one
+  holding `12abc` sent it to pid 12; any other content now reads as "is not running".
+- On a host without `ps`, such as a slim container image, `framework:status` removed
+  the pid file of every running framework, because it checked each one with `ps`. It
+  now checks each pid with a signal-0 probe.
+- `gina .` and `framework:open` open a directory whose path holds a space instead of
+  splitting it in two, and `framework:build` passes each of its arguments to the build
+  script whole.
+- An isaac bundle whose cache path holds a space now gets the brotli and gzip copies
+  of its routing files: the compressions split the path and failed.
+- The npm prefix look-ups that the CLI and `framework:init` fall back on when no
+  prefix is configured no longer fail when npm is installed under a path holding a
+  space.
+
+Restart your bundles to pick up the isaac fix; the CLI commands pick theirs up on
+their next run. Nothing to re-bake.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
