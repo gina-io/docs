@@ -462,6 +462,25 @@ fix removes it regardless.
 Restart the bundle. Nothing to re-bake. The Express engine and the router were
 never affected.
 
+### Security — a malformed frame on the log listener no longer stops the framework (framework restart)
+
+The framework's log listener (the MQ listener on port 8125, loopback by default)
+dispatched each incoming log frame by its `request` field. A frame whose
+`request` named an inherited object member, such as `__proto__` or `constructor`,
+or the listener's own `name` field, reached an array method on a non-array or a
+call on a non-function. The throw left the socket handler and ended the framework
+process, which also serves the command socket on 8124.
+
+The listener now accepts only a short identifier as a request name and
+dispatches only to its own methods. Any other frame is refused with a warning,
+and the connection and the process stay up.
+
+**What to check:** nothing. The listener binds loopback by default, so only a
+process on the same host could send such a frame.
+
+Restart the framework with `gina framework:restart` to pick it up. Nothing to
+re-bake.
+
 ### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
 
 On the Express engine, on Express 4 and 5 alike, a URL with a query string never
