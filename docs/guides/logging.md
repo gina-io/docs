@@ -574,7 +574,7 @@ Pipe `gina tail` through `grep` to focus on a specific bundle:
 gina tail --follow | grep "api@myproject"
 
 # Only show warnings and above from any bundle
-gina tail --follow | grep -E "\[(emerg|alert|crit|err|warn)\]"
+gina tail --follow | grep -E "\[(emerg|alert|crit|error|err|warn|warning) *\]"
 
 # Exclude debug lines, keep everything else
 gina tail --follow | grep -v "\[debug"
@@ -582,6 +582,10 @@ gina tail --follow | grep -v "\[debug"
 # Watch a specific controller action across all bundles
 gina tail --follow | grep "\[HOME\]"
 ```
+
+The level name is padded to a fixed width (`[warn   ]`, `[emerg  ]`), and a line
+shows the name its logging call used: `warn` or `warning`, `error` or `err`. The
+warnings-and-above pattern therefore allows both spellings and the padding.
 
 ### Typical development workflow
 
@@ -607,13 +611,29 @@ printed to `process.stdout`. You can capture them at the OS level:
 
 Best for development. One terminal window shows all bundles and the framework.
 
-### Production — redirect stdout
+### Production — capture `gina tail`, or the container's stdout
 
-```bash
-gina bundle:start api @myapp > /var/log/myapp/api.log 2>&1 &
-```
+`gina bundle:start` returns once the bundle is up. Its output holds the start
+banner and, from 0.7.1, the lines the bundle logged at `warn` and above while it
+started, not the bundle's logs, so redirecting it does not capture them. Two ways
+to keep them:
 
-Pair with [logrotate](https://linux.die.net/man/8/logrotate) for rotation.
+- Under a framework daemon, redirect `gina tail --follow`, started **before** the
+  bundles, since it receives only what they log after it connects. Let it connect
+  before you start them: it logs `[MQTail] Connected …` once it has.
+
+  ```bash
+  gina tail --follow >> /var/log/myapp/gina.log 2>&1 &
+  gina bundle:start api @myapp
+  ```
+
+- In a container, start the bundle with `gina-container`: it runs the bundle in
+  the foreground and writes the bundle's own lines to its stdout. See
+  [Kubernetes &amp; Docker → Stdout logging](/guides/k8s-docker#stdout-logging).
+
+Pair a redirected file with [logrotate](https://linux.die.net/man/8/logrotate),
+using `copytruncate` since `gina tail` keeps the file open, or use the file
+transport below, which rotates on its own.
 
 ### File transport (experimental)
 
