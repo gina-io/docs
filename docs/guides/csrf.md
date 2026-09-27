@@ -264,9 +264,10 @@ string. Render it inside any `<form>` and you are done:
 </form>
 ```
 
-The `| safe` filter is required — Swig escapes by default, and the value is
-trusted HTML produced by the framework (the field name is HTML-escaped
-defensively).
+The `| safe` filter is required wherever output is auto-escaped — Nunjucks
+bundles by default, Swig bundles with `settings.swig.autoescape: true` (the
+default from 0.8.0) — and harmless where it is not. The value is trusted HTML
+produced by the framework (the field name is HTML-escaped defensively).
 
 When the bundle has not adopted the Csrf plugin, neither `gina.csrfToken` nor
 `gina.csrfInput` is exposed. Guard with `{% if gina.csrfToken %}` for

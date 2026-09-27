@@ -53,6 +53,70 @@ A project that lists `gina` as a dependency with a `^0.6.x` range does not
 resolve `0.7.0`: npm's caret range keeps a `0.x` dependency on its minor line.
 Widen the range (for example to `^0.7.0`) to pick this release up.
 
+### Added — a boot warning when Swig `autoescape` is not set; `true` becomes the default in 0.8.0 (restart)
+
+**Rendered output does not change in 0.7.0 — but plan for 0.8.0.** Swig renders `{{ x }}` unescaped
+unless `settings.swig.autoescape` is `true`, and **in 0.8.0 the default becomes `true`**. A bundle
+that renders Swig and leaves the key unset now logs one warning at boot:
+
+```text
+[ SWIG ] settings.swig.autoescape is not set for [ <bundle> ]: Swig output ({{ x }}) is not HTML-escaped. The default becomes true in 0.8.0. …
+```
+
+Set the key explicitly in the bundle's `settings.json` to silence it — `false` keeps today's
+behaviour, `true` opts in now:
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+**Before you set it to `true`, or before you upgrade to 0.8.0:**
+
+1. **Print `gina.csrfInput` with `| safe`** — `{{ gina.csrfInput | safe }}`. Unmarked, it renders as
+   visible text once escaping is on, and every form POST then fails CSRF verification. Find the
+   templates that print it: `grep -rn "gina.csrfInput" src/*/templates`.
+2. **Mark every other variable that carries HTML on purpose** with `| safe`: markup your controller
+   builds and trusts. Never mark user input.
+3. If a layout places `{{ page.view.stylesheets }}` or `{{ page.view.scripts }}` itself, write them
+   with `| safe`. The copies gina injects already carry it (see the fix below).
+4. Translation strings that contain HTML are escaped like any other output: keep markup out of the
+   catalogs, or mark the rendered value `| safe` where you trust it.
+
+A bundle whose own pages render only through Nunjucks is not warned — Nunjucks already escapes by
+default. New bundles created with `gina bundle:add` get `"swig": { "autoescape": true }`. See
+[`settings.swig`](/reference/settings#swig).
+
+### Fixed — with Swig `autoescape: true`, pages keep their CSS and JavaScript, and `nl2br` its line breaks (restart)
+
+**No action required.** With `settings.swig.autoescape: true`, gina rendered every `<link>` and
+`<script>` tag it injects into a Swig layout — the stylesheets and scripts listed in
+`templates.json`, and gina's own client bundle — as visible text, so the page lost its CSS and
+JavaScript. It injects them as `{{ page.view.stylesheets | safe }}` and
+`{{ page.view.scripts | safe }}` now, and a layout that already places either one, bare or with
+`| safe`, is not given a second copy. With escaping on, the `nl2br` filter also escapes the text it
+receives and keeps its `<br/>` as markup; before, the line breaks showed as text. With escaping off,
+output is unchanged.
+
+### Added — a boot warning for routing `requirements` regexes that are not anchored (restart)
+
+**Routing does not change — read the warning.** A `requirements` regex is tested as a partial match
+when a request is matched, so `"/[0-9]+/"` accepts `123abc`. A bundle now logs one line at boot
+listing its regex requirements that are not anchored at both ends:
+
+```text
+[CONFIG][loadBundleConfig] [ <bundle> ] 2 routing requirements are not anchored at both ends (^…$), so each is tested as a partial match … : item@<bundle> { id: /[0-9]+/ }, …
+```
+
+Anchor each listed pattern — `"/^[0-9]+$/"`, and every alternative of a `|`: `"/^(draft|[0-9]+)$/"` —
+write an intended partial match in full (`"/^pk_.*$/"`), and drop any `m` flag. Nothing is rewritten
+for you. Requirements are not applied when a URL is built either: `lib.routing.getRoute()`, its
+`toUrl()` and the `getUrl` filter put path values into the URL as given. See
+[Regex requirements](/guides/routing#regex-requirements).
+
 ### Fixed — the first gina commands after a minor-version upgrade no longer fail (CLI)
 
 On the first run of a new minor version, gina copies the per-version defaults it
@@ -9036,8 +9100,8 @@ Nunjucks, whose `settings.nunjucks.autoescape` already defaults to `true`. Absen
 or `false`, behaviour is exactly as before (raw). A non-boolean value now fails
 the bundle at startup, so the toggle can't be silently mis-typed. See
 [`settings.swig`](/reference/settings#swig) for details. Swig's default stays
-`false` in this release; enabling escaping globally by default is planned for a
-future major.
+`false` in this release; it becomes `true` in 0.8.0, and 0.7.0 warns at boot when
+a Swig bundle leaves the key unset (see the 0.6.33 → 0.7.0 notes).
 
 ### Added — transient-vs-permanent classification on datastore query errors
 

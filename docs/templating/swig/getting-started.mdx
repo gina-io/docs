@@ -40,7 +40,7 @@ console.log(swig.render('{% if foo %}Hooray!{% endif %}', { locals: { foo: true 
 
 ## Variables
 
-Variables are output with `{{ … }}`. All output is autoescaped as HTML by default — see [Filters](./filters) for escape-bypass options and [Security](./security) for the model.
+Variables are output with `{{ … }}`. All output is autoescaped as HTML by default — in a gina bundle, only when [`settings.swig.autoescape`](/reference/settings#swig) is `true`, the default from 0.8.0 — see [Filters](./filters) for escape-bypass options and [Security](./security) for the model.
 
 ```swig
 {{ foo }}

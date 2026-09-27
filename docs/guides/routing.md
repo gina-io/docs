@@ -321,6 +321,24 @@ slashes, flags after the last slash):
 
 `/docs/intro` matches. `/docs/pricing` does not — the router tries the next route.
 
+:::warning A regex requirement is a partial match — anchor it
+The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the
+value only *contains* a match: `"/[0-9]+/"` accepts `123abc`. Anchor the pattern at both ends —
+`"/^[0-9]+$/"` — so it constrains the whole value. With alternatives, anchor each one:
+`"/^(draft|[0-9]+)$/"` or `"/(^draft$|^[0-9]+$)/"`, never `"/^draft|[0-9]+$/"`. Write an intended
+partial match in full (`"/^pk_.*$/"`), and do not use the `m` flag: it lets `^` and `$` match at a
+line break inside the value.
+
+Since 0.7.0 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line, listing its
+regex requirements that are not anchored at both ends. Nothing is rewritten for you.
+:::
+
+:::note Requirements check incoming requests only
+Requirements are applied when a request is matched, not when you build a URL. `lib.routing.getRoute()`,
+its `toUrl()` and the `getUrl` template filter put path parameter values into the URL as given — no
+encoding and no requirement check. Build URLs from trusted values, or encode them yourself.
+:::
+
 ### Validator requirements
 
 Use `validator::{ ... }` for semantic validation. Keys are validator rule names;

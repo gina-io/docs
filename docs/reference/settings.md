@@ -498,7 +498,7 @@ HTML output escaping.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `autoescape` | boolean | `false` | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. |
+| `autoescape` | boolean | `false` (`true` from 0.8.0) | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina until 0.8.0, which makes `true` the default — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. Since 0.7.0 a bundle that renders Swig and leaves it unset logs one warning at boot; setting it explicitly, `true` or `false`, silences it. New bundles created with `gina bundle:add` set it to `true`. |
 
 :::warning Swig output is not auto-escaped by default in gina
 Unlike standalone `@rhinostone/swig` (which auto-escapes by default) and unlike
@@ -507,6 +507,12 @@ renders Swig variable output **raw** by default. Set
 `settings.swig.autoescape: true` to enable escaping, or escape explicitly with
 the `e` / `escape` filter. Never render untrusted input through Swig without one
 of these.
+
+With escaping on, mark a variable that carries HTML on purpose with `| safe` —
+`{{ gina.csrfInput | safe }}` first, or every form POST fails CSRF verification.
+A layout that places `{{ page.view.stylesheets }}` or `{{ page.view.scripts }}`
+itself writes them with `| safe` too; the copies gina injects already are. The
+`nl2br` filter escapes its text and keeps its line breaks as markup.
 :::
 
 ### `template`
