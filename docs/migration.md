@@ -19,6 +19,52 @@ upward to the target version.
 
 ---
 
+## 0.7.0 → 0.7.1
+
+### Security — CLI commands no longer run names and flags through a shell (CLI; framework restart)
+
+`gina project:start`, `project:stop` and `project:restart`; the `link-node-modules`
+and `link` steps that run on every `project:` and `bundle:` start, stop and restart;
+the `framework:link` step of a `bundle:start` that reinstalls a project's
+`node_modules`; the `node_modules` repair step of `framework:link`; and the process
+lookups of `bundle:stop` and `minion:kill` all built a command line from the
+project or bundle name and the `--` flags you passed, and ran it through `sh`.
+Shell syntax in a registered name or in a flag value ran as a command, as the user
+running gina. These commands now start their children from argument vectors, and
+`bundle:stop` and `minion:kill` read the `ps -ef` listing themselves.
+
+Typing a command yourself crossed no boundary. The cases at risk were automation
+that builds these names or flags from data it does not control, and anything that
+can send a `bundle:start` to the framework's command socket, which listens on
+loopback by default.
+
+**What to check:** nothing, unless a script relied on these commands passing a name
+or a flag through a shell a second time: a value holding a space, a quote or a `$`
+now arrives unchanged.
+
+Restart the framework with `gina framework:restart` to pick it up for
+`bundle:start`, which runs inside the framework process; the other commands pick it
+up on their next run. Nothing to re-bake.
+
+### Fixed — project commands work from a path with a space, and `bundle:stop` stops only its own bundle (CLI; framework restart)
+
+- `gina project:start`, `project:stop` and `project:restart` now work from an
+  install whose path holds a space: they ran `bundle:start`, `bundle:stop` or
+  `bundle:restart` through a command line that split the path, and failed.
+- A `bundle:start` that reinstalls a project's `node_modules` after an architecture
+  or platform change re-links gina with the running install's own `bin/gina`: it no
+  longer fails when `gina` is not on your `PATH`, nor uses whichever `gina` comes
+  first there.
+- A flag value holding a space now reaches the `link` steps of `project:` and
+  `bundle:` start, stop and restart as one value instead of two.
+- When a bundle's pid file is missing, `bundle:stop` finds its process by the exact
+  `gina: <bundle>@<project>` title: stopping `api@shop` no longer matches the
+  process of `api@shopping`, which it could stop instead.
+
+Restart the framework with `gina framework:restart` to pick it up for
+`bundle:start`; the other commands pick it up on their next run. Nothing to
+re-bake.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)

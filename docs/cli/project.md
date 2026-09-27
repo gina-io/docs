@@ -3,7 +3,7 @@ id: cli-project
 title: project
 sidebar_label: project
 sidebar_position: 3
-description: CLI reference for gina project commands — register, remove, list, start, stop, and build Gina projects and all their bundles.
+description: CLI reference for gina project commands — register, remove, list, start, stop, restart, and build Gina projects and all their bundles.
 level: beginner
 prereqs:
   - '[Gina installed globally](/getting-started/installation)'
@@ -11,7 +11,7 @@ prereqs:
 
 # `gina project`
 
-Register and manage Gina projects. A project is a collection of bundles sharing a common `manifest.json` and `env.json`. These commands let you register a project directory with the framework, start or stop all its bundles at once, check their status, and trigger a full project build.
+Register and manage Gina projects. A project is a collection of bundles sharing a common `manifest.json` and `env.json`. These commands let you register a project directory with the framework, start, stop or restart all its bundles at once, check their status, and trigger a full project build.
 
 ---
 
@@ -144,6 +144,19 @@ Start all bundles defined in a project's `manifest.json`.
 
 ```bash
 gina project:start @<project>
+```
+
+---
+
+## `project:restart`
+
+Restart all bundles in a project. Runs
+[`bundle:restart`](/cli/cli-bundle#bundlerestart) for the project: each bundle is
+stopped, then started again, one after another. The `--` flags you pass, such as
+`--env` or `--scope`, go to each `bundle:start`.
+
+```bash
+gina project:restart @<project>
 ```
 
 ---
