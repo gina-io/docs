@@ -214,8 +214,10 @@ A.8.8): what you can cite today is private vulnerability reporting with
 published, CVSS-scored advisories (see [Reporting a vulnerability](/security#reporting-a-vulnerability)),
 Dependabot, OSV and Socket scans of the framework's own dependencies, and npm
 releases published through a staged flow that a maintainer approves with 2FA.
-A software bill of materials per release and a published OpenSSF Scorecard are
-not available yet.
+Gina's OpenSSF Scorecard has been published on
+[scorecard.dev](https://scorecard.dev/viewer/?uri=github.com/gina-io/gina) since
+2026-09-27 and is re-scored on every push to `master` and weekly; a software
+bill of materials per release is not available yet.
 
 ---
 
