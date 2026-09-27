@@ -25,8 +25,8 @@ like `http2-express-bridge` or manual wrapping with `http2.createSecureServer()`
 Fastify added HTTP/2 support later but still routes through its own abstraction layer.
 
 Gina takes a different approach. Its built-in server engine, **Isaac**, uses Node.js
-`node:http2` directly as the primary transport. HTTP/2 is not bolted on — it is the
-default protocol when TLS is configured.
+`node:http2` directly as the primary transport. HTTP/2 is not bolted on — a bundle
+serves it as soon as its `protocol` is `http/2.0`.
 
 ---
 
@@ -65,7 +65,9 @@ flowchart LR
 
 ## Enabling HTTP/2
 
-HTTP/2 activates automatically when TLS is configured in the bundle's `settings.json`:
+Set `protocol` to `http/2.0` together with `scheme` in the bundle's `settings.json`. A
+new bundle serves HTTP/1.1, and a bundle whose `scheme` is `https` but whose `protocol`
+is `http/1.1` serves HTTPS over HTTP/1.1, not HTTP/2:
 
 ```json title="src/<bundle>/config/settings.json"
 {
@@ -382,8 +384,8 @@ dropped them.
 
 ## Inter-bundle communication over HTTP/2
 
-When one bundle calls another via `self.query()`, the request travels over a cached
-HTTP/2 session. Gina manages a per-hostname session cache with automatic eviction,
+When one bundle calls another via `self.query()` and the called bundle serves HTTP/2,
+the request travels over a cached HTTP/2 session. Gina manages a per-hostname session cache with automatic eviction,
 pre-flight PING validation, and retry with backoff. This is covered in detail in
 the [HTTP/2 Resilience](/guides/http2-resilience) guide.
 
@@ -398,8 +400,10 @@ flowchart LR
     style C fill:#1a1a2e,stroke:#f2af0d
 ```
 
-All inter-bundle calls use HTTP/2 multiplexing by default. Multiple concurrent
-`self.query()` calls to the same upstream bundle share a single TCP connection.
+Calls to a bundle that serves HTTP/2 are multiplexed: concurrent `self.query()` calls
+to it share a single TCP connection by default (see the
+[session pool](/guides/http2-resilience#session-pool)). Calls to an HTTP/1.1 bundle use
+a keep-alive connection pool instead.
 
 ---
 
@@ -426,4 +430,4 @@ See [Architecture without Express](/guides/no-express) for more on this decision
 - [HTTP/2 client resilience](/guides/http2-resilience) -- retry, PING, session management
 - [Settings reference](/reference/settings) -- full `http2Options` documentation
 - [Security reference](/reference/security) -- HTTP/2 attack mitigation details
-- [Multi-bundle architecture](/guides/multi-bundle) -- how bundles communicate over HTTP/2
+- [Multi-bundle architecture](/guides/multi-bundle) -- how bundles call each other

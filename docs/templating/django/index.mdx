@@ -136,7 +136,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | Syntax dialect | Native swig (Jinja2/Django-ish) | Django Template Language (lenient superset) |
 | Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
 | CVE-2023-25345 guards | Yes | Yes |
-| Autoescape defaults | `true` (HTML) | `true` (HTML) |
+| Autoescape defaults[^gina-autoescape] | `true` (HTML) | `true` (HTML) |
 | `new Function(...)` sandbox | Yes | Yes |
 | Loader contract | Shared | Shared |
 | Cache contract | Shared | Shared |
@@ -147,6 +147,8 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | `is` operator | — | Identity comparison (not Jinja2-style tests) |
 | Tag set | 15 built-ins | 12 built-ins (see [Parity](./parity)) |
 | Filter set | 26 built-ins | 42 built-ins (see [Parity](./parity)) |
+
+[^gina-autoescape]: In a gina bundle both run with [`settings.swig.autoescape`](/reference/settings#swig), which is `false` until 0.8.0.
 
 Use **native swig** if you have existing swig templates. Use **swig-django** if you have templates written against Django Template Language and want to keep them close to portable. Both share the same engine, so switching frontends is a parser-level choice — not a runtime or security-model choice.
 

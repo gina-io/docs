@@ -359,7 +359,7 @@ Missing from Twig that Swig also omits: `~` (string concat), `??` (null coalesce
 
 ## Autoescape parity
 
-All three engines autoescape `{{ … }}` by default. Opt-out mechanisms differ:
+All three engines autoescape `{{ … }}` by default. In a gina bundle, Swig does so when [`settings.swig.autoescape`](/reference/settings#swig) is `true`, the default from 0.8.0. Opt-out mechanisms differ:
 
 | Engine | Per-value opt-out | Region opt-out |
 | --- | --- | --- |

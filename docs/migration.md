@@ -19,6 +19,525 @@ upward to the target version.
 
 ---
 
+## 0.6.33 → 0.7.0
+
+### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
+
+`0.7.0` is a **shortVersion bump** (`0.6` → `0.7`): the framework keeps its
+per-version settings in a new `~/.gina/0.7/settings.json`. What carries over from
+`0.6` depends on how you installed:
+
+| Setting | npm install | Bun, a `gina-container` image or a git checkout |
+|---|---|---|
+| Culture, timezone, default environment and scope | carried over | carried over |
+| `port`, `debug_port`, `mq_port`, `host_v4`, `bind_host`, `hostname`, `rundir`, `logdir`, `tmpdir` | reset to defaults | carried over |
+| Log level | reset to `info` | reset to `info` |
+
+- **npm install:** the install writes `~/.gina/0.7/settings.json` from its
+  template before the first gina command runs, so the nine settings above and the
+  log level start from their defaults. Re-apply your values with
+  `gina framework:set` (for example
+  `gina framework:set --port=8324 --log-level=debug`), or copy them across from
+  `~/.gina/0.6/settings.json`.
+- **Bun, a `gina-container` image or a git checkout:** no install script runs, so
+  the first gina command creates `~/.gina/0.7/settings.json` and fills those nine
+  settings from `~/.gina/0.6/settings.json`. Only the log level resets; set it
+  again with `gina framework:set --log-level=<level>`.
+
+Culture, timezone, default environment and scope live in `~/.gina/main.json`,
+which gina copies from their `0.6` entries on the first run of `0.7`, whatever
+the install path. Root-level state (`~/.gina/main.json`, `projects.json`,
+`ports.json`, `gina.db`) is shared across short versions.
+
+A project that lists `gina` as a dependency with a `^0.6.x` range does not
+resolve `0.7.0`: npm's caret range keeps a `0.x` dependency on its minor line.
+Widen the range (for example to `^0.7.0`) to pick this release up.
+
+### Added — a boot warning when Swig `autoescape` is not set; `true` becomes the default in 0.8.0 (restart)
+
+**Rendered output does not change in 0.7.0 — but plan for 0.8.0.** Swig renders `{{ x }}` unescaped
+unless `settings.swig.autoescape` is `true`, and **in 0.8.0 the default becomes `true`**. A bundle
+that renders Swig and leaves the key unset now logs one warning at boot:
+
+```text
+[ SWIG ] settings.swig.autoescape is not set for [ <bundle> ]: Swig output ({{ x }}) is not HTML-escaped. The default becomes true in 0.8.0. …
+```
+
+Set the key explicitly in the bundle's `settings.json` to silence it — `false` keeps today's
+behaviour, `true` opts in now:
+
+```json
+{
+  "swig": {
+    "autoescape": true
+  }
+}
+```
+
+**Before you set it to `true`, or before you upgrade to 0.8.0:**
+
+1. **Print `gina.csrfInput` with `| safe`** — `{{ gina.csrfInput | safe }}`. Unmarked, it renders as
+   visible text once escaping is on, and every form POST then fails CSRF verification. Find the
+   templates that print it: `grep -rn "gina.csrfInput" src/*/templates`.
+2. **Mark every other variable that carries HTML on purpose** with `| safe`: markup your controller
+   builds and trusts. Never mark user input.
+3. If a layout places `{{ page.view.stylesheets }}` or `{{ page.view.scripts }}` itself, write them
+   with `| safe`. The copies gina injects already carry it (see the fix below).
+4. Translation strings that contain HTML are escaped like any other output: keep markup out of the
+   catalogs, or mark the rendered value `| safe` where you trust it.
+
+A bundle whose own pages render only through Nunjucks is not warned — Nunjucks already escapes by
+default. New bundles created with `gina bundle:add` get `"swig": { "autoescape": true }`. See
+[`settings.swig`](/reference/settings#swig).
+
+### Fixed — with Swig `autoescape: true`, pages keep their CSS and JavaScript, and `nl2br` its line breaks (restart)
+
+**No action required.** With `settings.swig.autoescape: true`, gina rendered every `<link>` and
+`<script>` tag it injects into a Swig layout — the stylesheets and scripts listed in
+`templates.json`, and gina's own client bundle — as visible text, so the page lost its CSS and
+JavaScript. It injects them as `{{ page.view.stylesheets | safe }}` and
+`{{ page.view.scripts | safe }}` now, and a layout that already places either one, bare or with
+`| safe`, is not given a second copy. With escaping on, the `nl2br` filter also escapes the text it
+receives and keeps its `<br/>` as markup; before, the line breaks showed as text. With escaping off,
+output is unchanged.
+
+### Added — a boot warning for routing `requirements` regexes that are not anchored (restart)
+
+**Routing does not change — read the warning.** A `requirements` regex is tested as a partial match
+when a request is matched, so `"/[0-9]+/"` accepts `123abc`. A bundle now logs one line at boot
+listing its regex requirements that are not anchored at both ends:
+
+```text
+[CONFIG][loadBundleConfig] [ <bundle> ] 2 routing requirements are not anchored at both ends (^…$), so each is tested as a partial match … : item@<bundle> { id: /[0-9]+/ }, …
+```
+
+Anchor each listed pattern — `"/^[0-9]+$/"`, and every alternative of a `|`: `"/^(draft|[0-9]+)$/"` —
+write an intended partial match in full (`"/^pk_.*$/"`), and drop any `m` flag. Nothing is rewritten
+for you. Requirements are not applied when a URL is built either: `lib.routing.getRoute()`, its
+`toUrl()` and the `getUrl` filter put path values into the URL as given. See
+[Regex requirements](/guides/routing#regex-requirements).
+
+### Fixed — the first gina commands after a minor-version upgrade no longer fail (CLI)
+
+On the first run of a new minor version, gina copies the per-version defaults it
+keeps in `~/.gina/main.json` (culture, timezone, environments, scopes and the
+rest) from the previous minor version. That copy ran only while the new
+version was not yet listed in `main.json`, and `gina bundle:start`,
+`bundle:restart`, `project:start`, `project:restart` and every `gina-container`
+boot list it without running the copy. When one of those came first, every later
+gina command exited `1` with `Cannot read properties of undefined (reading 'split')`
+until `main.json` was repaired by hand. Separately, the first gina command after
+any minor upgrade exited `1` once with `(reading 'indexOf')`, because it read
+`main.json` as it was before the copy. Both are fixed in `0.7.0`: the copy fills
+whatever the new version is missing, whether or not the version is listed, and
+the rest of that first command reads the updated file.
+
+**What to check:** nothing. Installs that skip npm's install scripts (Bun, a
+`gina-container` image, a git checkout) were the ones exposed; the upgrade to
+`0.7.0` runs the fixed code. A container or CI step that stops on the first gina
+command's exit code after an upgrade no longer fails that one time.
+
+CLI only: nothing to restart or re-bake.
+
+### Changed — custom validators compile without `eval` (restart and re-bake; no action required)
+
+A custom form validator (`src/<bundle>/forms/validators/<name>/main.js`) is now compiled by the browser as an inline script instead of through `eval`: the same scope contract (`this.getValidationContext()`), the same name in DevTools (`<name>.js`), one compile per validator per page, and the script carries the page's CSP nonce when one is set — so a page needs no `'unsafe-eval'`. The bundled RequireJS and engine.io-client each carried one unreachable dynamic-code call as well; both are rewritten at build time, so the published browser bundle contains none. Rebuild your bundles to pick up the new `gina.min.js`. Nothing changes for validator files that follow the [reference](/reference/validation-rules#custom-validators); a file that relied on a name from the engine's own scope (undocumented) now fails at call time with a `ReferenceError` in the console.
+
+### Changed — routing tests only the routes whose URL could match (`validator::` side effects)
+
+A request the route cache has not seen before used to be tested against every route
+of the bundle, in declaration order. It is now tested only against the routes whose
+URL pattern could match its path — still in declaration order, with every check
+(scope, method, requirements) as before — so each request is answered by the same
+route as before.
+Matching is faster: measured on the routing step alone, over a 380-route table, a
+late route took about 440 µs and now about 14 µs, and a `404` went from about 510 µs
+to about 12 µs.
+
+A skipped route is not evaluated at all, so its `validator::` requirements do not
+run for that request: a validator that throws no longer answers a request aimed at
+another route with a `500`, and a `validator::{ query: ... }` rule no longer calls its
+backend for it. Every route is still tested for the root path, a path ending in `/`
+or holding `//`, and — on the Express engine — a path carrying a query string; a route
+with two or more requirements that are not bound to a whole `:key` segment of its
+`url` is tested for every request. See
+[Validator requirements](/guides/routing#validator-requirements).
+
+**What to check:** if a `validator::` requirement was relied on for a side effect on
+requests aimed at other routes — logging, counting, a backend call — move it into a
+middleware. A custom error page that reads `req.params` on a `404` or a `405` may see
+fewer leftover values, since fewer routes are evaluated before the error.
+
+Restart the bundle. Nothing to re-bake.
+
+### Changed — the route cache is one map and keeps only the matched route (restart and re-bake)
+
+The warm route cache — the per-process record of which route matched each method and
+path, up to 5,000 of them — is now one map. A lookup and an eviction cost the same at
+any size: with the cache full, a lookup went from 18–74 µs to about 1.5 µs, and an insert
+that evicts the oldest entry from 26–80 µs to about 1 µs. The rules are unchanged: the
+first route cached for a key stays, the oldest key is evicted first, and a hit does not
+move an entry.
+
+An entry now keeps only the matched route. It used to also keep the route parameters
+and the data of the request that first matched it — for a `POST`, its body, a login
+form's included — for as long as the entry lived, which is the life of the process
+unless 5,000 other paths pushed it out.
+
+The unused radix trie is removed: `lib/routing/src/radix.js` and the routing library's
+internal `buildTrie()` and `lookupTrie()`. Nothing called them, so the trie never ran in
+any release; the route candidate index above replaces them.
+
+**What to check:** nothing, unless your code reached into the routing library's
+internals (`Routing._cached`, `buildTrie`, `lookupTrie`, `lib/routing/src/radix`).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Changed — `self.query()` over HTTP/2 no longer adds `status: 200` (restart)
+
+An upstream JSON body that carries no `status` used to reach an HTTP/2 caller with
+`status: 200` added, and the client logged
+`[<rule>] Response status code is undefined: switching to 200` on every such call. Over
+HTTP/1.1 the same body arrived as sent. Both transports now deliver the body as the
+upstream sent it, and the warning is gone. The end client of a `control: "forward"`
+route, which received the added key in its JSON, no longer does.
+
+Nothing else moves: a body without `status` is a success on both transports, and a body
+that carries a `status`, numeric or not, is delivered as it came. A JSON string body such
+as `"[]"` is now a success over HTTP/2 as well — adding the key threw on it, and the call
+answered `500`.
+
+**What to check:** code that reads `status` on the result of an HTTP/2 `self.query()` to
+an upstream that sends none now reads `undefined` — treat an absent `status` as success,
+as the framework does. A `delete result.status` that stripped the added key can go. A
+record saved from such a result may still hold the `status: 200` it was given.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — `project:rename` renames to a free name and refuses a taken one (CLI; behaviour change)
+
+`gina project:rename @<old> @<new>` checked the new name backwards: it refused
+every free name as already taken, and went ahead only when the new name was
+already registered — a rename onto another project, after which one of the two
+registrations was lost. Such a run also damaged the port records: another project
+whose name began with the old one had its `ports.reverse.json` entries renamed
+too, and the renamed project kept its old name in `ports.json`, beside stray
+entries.
+
+It now renames to a free name, and refuses a registered name or a target
+directory that already exists with exit `1`, before anything moves. Port entries
+are renamed only where the project name matches exactly.
+
+**What to check:** a script that renamed onto a registered name now gets exit `1`
+— pass a free name. If you ran `project:rename` with an earlier release, check
+`gina port:list @<project>` for each project whose name begins with the old name:
+a bundle with no ports listed lost its entries, and `gina port:reset @<project>`
+gives that project's bundles new ports.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `env:add <env> @<project>` makes the environment ready to start (CLI)
+
+`gina env:add <env> @<project>` listed the environment on the project but gave
+its bundles no ports for it and wrote no `env.json` blocks, so the environment
+could not start. It also printed nothing, and never exited where the CLI runs by
+its own path, as CI and scripts run it. It now gives every bundle of the project
+its own ports for the environment, writes their `env.json` blocks, prints
+`environment [ <env> ] created` and exits; if the port scan fails, it exits `1`
+and restores what it had changed.
+
+**What to check:** an environment you added with the `@<project>` form on an
+earlier release is listed on the project without ports. Run the same command
+again: its bundles get their ports and `env.json` blocks, and the ports of the
+project's other environments do not change. The form without `@<project>` still
+registers only the name — see [`env:add`](/cli/cli-env#envadd).
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — six more commands end after their work (CLI)
+
+`gina port:reset` with no registered project, `env:unset`, `env:set` with no key,
+`port:list --format=json` (with or without `--filename`) and `--format=conf`
+without `--filename`, `connector:list` without `@<project>`, and a cancelled
+`protocol:set` prompt did their work and then never ended the process wherever
+the CLI runs by its own path, as CI and scripts run it. They now exit, and the
+listings exit only once their output has been written.
+
+**What to check:** a script that killed one of these commands after a timeout can
+drop that workaround.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — `project:add` and `project:import` read `--path`, `--scope` and `--env` whole (CLI; behaviour change)
+
+A flag value holding `=` was cut at its second `=`. On a fresh registry a `--path`
+holding `=` failed with `ENOENT`, `project:import` refused such a path as one that
+"no longer exists", and `--scope=a=b` or `--env=a=b` registered `a` instead of
+refusing the name. A `--path` value containing `--scope=` or `--env=` was also
+read as that flag. The values are now read whole, and a flag counts only where its
+name starts the argument. A failed removal of the project's `node_modules/gina`
+link now reports its own error instead of a `ReferenceError`.
+
+**What to check:** a `--scope` or `--env` value holding `=` is now refused as an
+invalid name. And `--scope` / `--env` never changed a project's default scope or
+environment, although the reference said `--env` did: set the defaults with
+[`gina scope:use`](/cli/cli-scope#scopeuse) and [`gina env:use`](/cli/cli-env#envuse).
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — a failed copy no longer leaves a temporary file behind (CLI)
+
+A copy through the path helper — what `bundle:add`, `bundle:build`, `bundle:copy`,
+`project:build`, `project:rename` and `view:add` copy with — removed its
+temporary `*.tmp` file only if the file existed when the failure was reported,
+and its creation could finish just after. It is now removed once its stream has
+closed, before the callback runs. On Bun, the error such a failure reported had
+no `stack`, so a caller printing `err.stack` printed `undefined`; it now always
+carries one, and keeps its code and message.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — a path with a space no longer breaks the install, `port:reset` or `bundle:restart` (CLI)
+
+A first `npm install -g gina` failed when your home directory held a space: the
+install scripts ran `chown` on the `~/.gina` they had just created, and created and
+sourced `~/.profile`, through command lines that split the path. The `chown` is
+removed — the directory already belongs to you — and `~/.profile` is created
+without a shell. It is no longer sourced either: that ran in a child shell that
+exited at once, so it never reached yours. With the npm prefix under a path with a
+space, the install's npm probes and its two `framework:set` calls failed without a
+word; they now reach such paths whole.
+
+`gina port:reset` reads the project's bundles itself instead of running
+`gina bundle:list` through a shell, so it no longer crashes when `gina` is not on
+your `PATH` or sits under a path with a space, and it no longer runs whichever
+`gina` comes first on `PATH`. `gina bundle:restart` runs `bundle:stop`, then
+`bundle:start` once the stop has succeeded, without a shell: it works from an
+install under a path with a space, and each flag reaches `bundle:start` as you
+passed it — shell syntax in a flag value used to run.
+
+**What to check:** nothing, unless a script relied on `bundle:restart` passing its
+flags through a shell a second time: a value holding a space, a quote or a `$` now
+arrives unchanged. As before, open a new shell to pick up the `PATH` line the
+install adds to `~/.profile`.
+
+CLI only: nothing to restart or re-bake.
+
+### Fixed — the Couchbase keep-alive interval is `pingInterval`, not `ping` (check your connectors)
+
+The connector reference and the `connectors.json` a new bundle is scaffolded with
+showed the Couchbase keep-alive interval as `ping`, a key the connector never read.
+It reads `pingInterval` (default `2m`, used while `keepAlive` is on, as it is by
+default).
+
+**What to check:** if a `connectors.json` of yours sets `"ping"`, rename it to
+`"pingInterval"` — until then the connector ignored it and used the 2-minute
+default. `connectors.json` is read when a bundle starts, so restart the bundle
+after changing it.
+
+Nothing to restart or re-bake for the change itself.
+
+### Security — Express engine on Express 5: one body-less request no longer stops the bundle (restart)
+
+A bundle running `engine: "express"` on Express 5 exited on a single request, sent
+by anyone, to any URL, before routing: a `DELETE` (with or without a query string),
+or a `POST`, `PUT` or `PATCH` sent without a body. The Express 5 support added in
+0.6.9 shadowed Express's `req.query` getter with an undefined value so the
+framework's own assignments would work, but that left `request.query` undefined
+until the `GET`/`HEAD` branches assigned it; the `DELETE` branch and the empty-body
+fallback of the body-carrying branches counted it as it was, and the resulting
+`TypeError` inside the request's `end` handler took the uncaught-exception path and
+exited the process. The property is now an accessor: the first read materialises
+Express's own parse — honouring the app's `query parser` setting — as a plain,
+writable object of the request, and assignments still store. Express 4 (its query
+middleware assigns the property on every request) and the default isaac engine were
+never affected; a bundle that mounts the [CSRF plugin](/guides/csrf) refused such
+unauthenticated requests before the pipeline ran.
+
+**What to check:** nothing, unless you read `req.query` in your own Express
+middleware on Express 5 — it now holds the parsed query there too, as on Express 4.
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — a `GET` no longer runs a `DELETE` action for another site (restart; check your delete links)
+
+A route declared `"method": "DELETE"` answered a plain `GET` to its URL as if it
+were a `DELETE`, for any client. The rewrite exists for the
+[popin](/guides/popin) and link plugins, whose anchors send their request as a
+`GET`; granted to every `GET`, it let a cross-site navigation carrying the
+visitor's session cookie run the `DELETE` action. On the Express engine this held
+even with the [CSRF plugin](/guides/csrf) adopted as documented: the plugin runs
+before routing and treats a `GET` as safe. The default isaac engine refused the
+request when the plugin was in place, because there the plugin runs after the
+rewrite. Without the plugin both engines ran the action, and the Session plugin's
+default `SameSite=Lax` cookie is sent on a top-level cross-site navigation.
+
+The override is now granted only to an XHR (`X-Requested-With: XMLHttpRequest`)
+that is not a browser cross-origin request: a `Sec-Fetch-Site` of `same-origin`
+or `none` passes, `same-site` and `cross-site` are refused, and an `Origin` that
+differs from the host is refused. The popin and link plugins' anchors on your own
+pages keep working. Any other `GET` answers `404` on a URL whose only route is
+`DELETE`, and `405` on a route whose method list includes `DELETE`. The action now
+always sees `req.method` as `DELETE`; on a route declaring several methods
+(`"POST,DELETE"`) it used to see the whole list.
+
+**What to check:** client code that sends a `GET` to a `DELETE`-only route
+outside the popin and link plugins — a plain link, a redirect, a script on
+another origin, a request without `X-Requested-With` — must now send a real
+`DELETE`, for example `fetch(url, { method: 'DELETE' })`.
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — a stack passed as an error message no longer reaches the client (restart)
+
+A controller's `self.throwError()` strips the `stack` field from the JSON body
+outside the local scope, but a stack passed *as* the message went out whole:
+`self.throwError(res, 500, err.stack)`, `self.throwError(500, err.stack)`, or an
+error object whose `message`, `error` or `title` holds a stack put the file paths
+and frames in `message` (or `error`) and on the built-in HTML error page, in every
+scope. Outside the local scope such a value now keeps its first line — in the JSON
+body, on the fallback page, and in the `page.data` a custom error page receives —
+and the full text goes to the server log line that carries the incident `ref`. On
+the HTML path that line now logs the error's own text instead of the `throwError`
+call site, and a `self.throwError(res, code, { … })` call now writes one (it wrote
+none before).
+
+Local scope is unchanged, so the dev toolbar still shows the full stack. The
+engine-level error responder has applied the same rule since 0.5.21.
+
+**What to check:** a client or a custom error template that read frames out of
+`message` in production no longer finds them — read them from the log line with
+the `ref`. A human message with a line that starts with `at ` is cut the same way.
+`page.data.stack` is not cut; keep it out of templates you deploy (see
+[Custom error pages](/guides/error-pages)).
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — `gina tail --follow` no longer re-runs a start command from the shared tmp dir (restart `gina tail`)
+
+With `--follow`, when a bundle goes down on an abort or an out-of-memory error,
+`gina tail` re-runs the start command saved at the bundle's last `bundle:start`
+or `bundle:restart`. That file lived in the system tmp directory. Where that
+directory is shared between local users (`/tmp` on Linux by default), another
+user could create `<bundle>@<project>.argv` there first: your own
+`gina bundle:start` then failed to overwrite it, and the next crash restart ran
+that user's program under your account.
+
+The file now lives under the framework home — `~/.gina/run/<bundle>@<project>.argv`,
+or `$GINA_HOMEDIR/run/` when you set `GINA_HOMEDIR` — written with mode `0600`,
+and `gina tail` re-runs it only when it is a regular file you own that group and
+other cannot write. Any other file is refused with a
+`[getBundleStartingArgv] refusing …` warning, and the bundle stays down. See
+[Logging → `--follow`](/guides/logging#--follow--stay-connected-across-restarts).
+
+**What to do:** restart `gina tail --follow`, then start each bundle once
+(`gina bundle:start` or `gina bundle:restart`) so its file is written in the new
+place. Until a bundle has been started with this version, a crash of that bundle
+is not restarted automatically. The old files in the tmp directory are no longer
+read; you can delete them.
+
+Nothing to re-bake; running bundles do not need a restart.
+
+### Security — a long `X-Forwarded-Prefix` header no longer ties up a bundle (restart)
+
+On the default (isaac) engine, a bundle mounted on a sub-path by a reverse proxy
+reads the `X-Forwarded-Prefix` header on every request. The handler trimmed
+trailing slashes from the value with a pattern that backtracks quadratically on a
+long run of slashes, and it did so on the raw header *before* checking the
+value's length — so a single request carrying a 15 KB header of slashes cost
+roughly 100–170 ms of CPU (about 8 seconds at the 64 KB an HTTP/2 header list
+admits), and a few such requests a second could saturate a single-threaded
+bundle.
+
+The length and character-set check now runs *before* the trim, so an
+over-length value (anything past the 255-character mount-path limit) is discarded
+before any regular expression sees it. A legitimate mount path is validated and
+applied exactly as before — no configuration changes.
+
+**What to check:** nothing, if your proxy sends a normal mount path. If you rely
+on `X-Forwarded-Prefix`, a reverse proxy that caps request header size (nginx's
+`large_client_header_buffers`, 8 KB by default) already bounds the exposure; the
+fix removes it regardless.
+
+Restart the bundle. Nothing to re-bake. The Express engine and the router were
+never affected.
+
+### Security — a malformed frame on the log listener no longer stops the framework (framework restart)
+
+The framework's log listener (the MQ listener on port 8125, loopback by default)
+dispatched each incoming log frame by its `request` field. A frame whose
+`request` named an inherited object member, such as `__proto__` or `constructor`,
+or the listener's own `name` field, reached an array method on a non-array or a
+call on a non-function. The throw left the socket handler and ended the framework
+process, which also serves the command socket on 8124.
+
+The listener now accepts only a short identifier as a request name and
+dispatches only to its own methods. Any other frame is refused with a warning,
+and the connection and the process stay up.
+
+**What to check:** nothing. The listener binds loopback by default, so only a
+process on the same host could send such a frame.
+
+Restart the framework with `gina framework:restart` to pick it up. Nothing to
+re-bake.
+
+### Fixed — Express engine: a URL carrying a query string resolves (restart; note the route cache)
+
+On the Express engine, on Express 4 and 5 alike, a URL with a query string never
+matched a route or a static file: `GET /items?page=2` answered `404` while
+`GET /items` answered `200`, and a static requested with a cache-buster
+(`/css/app.css?v=3`) was not found. The engine kept the query string in
+`request.url`, so the path handed to route matching, to the statics handler and to
+the requirement matcher still carried `?…` on its last segment; the isaac engine
+strips it before dispatch. The Express path now does the same, after the
+framework's own `/_gina` handlers and before the webroot filter, the statics and the
+routing loop. `request.originalUrl` keeps the full URL.
+
+**What to check:** the warm route cache is keyed by method and path, so on Express
+the query variants of one path now share one entry, exactly as on isaac — the match
+verdict, requirements included, is re-evaluated on every hit, so a variant that
+requirements reject still gets its `404`.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a `405` lists the allowed methods, and `HEAD` works on every `GET` route (restart)
+
+A `405 Method Not Allowed` now carries the `Allow` header that HTTP requires,
+listing the methods of the routes whose URL matched, with `HEAD` wherever `GET`
+is listed. A wrong method on a URL whose routes each declare a single method
+still answers `404`, as the [routing guide](/guides/routing#http-methods)
+describes.
+
+A `HEAD` request is now served by every route that serves `GET`. It used to
+answer `404` on a parameterised URL (a `GET` route on `/items/:id`) and `405` on a
+route declaring several methods (`"GET,POST"`); only a single-method `GET` route
+on a static URL served it.
+
+**What to check:** nothing, unless a client relied on those `404` or `405`
+answers to `HEAD`. On the isaac engine the `access-control-allow-methods` header
+of a `HEAD` response now reads `HEAD` rather than `GET`, as it already did on the
+Express engine.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a `HEAD` gives the action `req.get` (restart)
+
+gina answers a `HEAD` by running the action of the route that serves `GET`, so
+that the response carries the headers a `GET` would. The action saw `req.get` as
+`undefined`, though: a `HEAD`'s URL and query parameters were only in
+`req.head`, so an action reading `req.get.<param>` answered `500` to a `HEAD`.
+That was the case on routes with a static URL since 0.3.0, and with the change
+above it would have reached parameterised and multi-method routes too.
+
+On a `HEAD`, `req.get` is now the same object as `req.head`. `req.head`,
+`req.getParam()` and `req.getParams()` are unchanged, and `req.method` stays
+`HEAD`, so the body is still not sent.
+
+**What to check:** nothing, unless an action told a `HEAD` apart by `req.get`
+being `undefined`; test `req.method` for that instead.
+
+Restart the bundle. Nothing to re-bake.
+
 ## 0.6.32 → 0.6.33
 
 ### Fixed — logging in with the Couchbase session store no longer fails when the pre-login session was never saved (restart)
@@ -8600,8 +9119,8 @@ Nunjucks, whose `settings.nunjucks.autoescape` already defaults to `true`. Absen
 or `false`, behaviour is exactly as before (raw). A non-boolean value now fails
 the bundle at startup, so the toggle can't be silently mis-typed. See
 [`settings.swig`](/reference/settings#swig) for details. Swig's default stays
-`false` in this release; enabling escaping globally by default is planned for a
-future major.
+`false` in this release; it becomes `true` in 0.8.0, and 0.7.0 warns at boot when
+a Swig bundle leaves the key unset (see the 0.6.33 → 0.7.0 notes).
 
 ### Added — transient-vs-permanent classification on datastore query errors
 

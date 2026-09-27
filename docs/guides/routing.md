@@ -19,10 +19,11 @@ The router evaluates rules in order, checking scope, URL pattern, parameter requ
 
 ## How it works
 
-When a request arrives, the router tests every route in order. The first rule whose URL
-pattern, HTTP method, and scope all match wins. The matched route's middleware list (global
-middlewares prepended, then route-specific) executes sequentially before the controller
-action is called.
+When a request arrives, the router tests the routes in declaration order, skipping those
+whose URL pattern cannot match the request's path. The first rule whose URL pattern,
+requirements, HTTP method, and scope all match wins. The matched route's middleware list
+(global middlewares prepended, then route-specific) executes sequentially before the
+controller action is called.
 
 ```mermaid
 flowchart LR
@@ -247,7 +248,15 @@ scans all routes and picks the first one whose URL **and** method both match:
 }
 ```
 
-If no route matches the URL with the requested method, the router returns 405.
+`PUT /notes` gets a **404**, the same answer as an unknown URL: each of the two rules
+declares a single method other than `PUT`, and the router skips such a rule before it
+compares URLs. A **405** (`Method Not Allowed`) comes only from a rule that declares
+several methods (`"method": "GET,POST"`), when its URL matches and the request's method
+is not in its list; it carries an `Allow` header naming the methods the URL does serve.
+Every rule that serves `GET` also serves `HEAD`, whatever its URL shape. The `GET`
+action runs, with `req.get` set to the same object as `req.head`, so it reads the URL
+and query parameters as it does for a `GET`; `req.method` stays `HEAD`, and the
+response carries the headers without the body.
 
 :::warning namespace is required
 Without `"namespace"`, the router looks in `controller.js` instead of
@@ -255,6 +264,21 @@ Without `"namespace"`, the router looks in `controller.js` instead of
 omitting `namespace` silently routes to the wrong file and you will get a
 "control not found" error.
 :::
+
+### A `GET` on a `DELETE` route
+
+The [popin](/guides/popin) and link plugins send an anchor's request as a `GET`. So
+that a delete link needs no client code, a route declared `"method": "DELETE"` also
+serves such a `GET`, and the action sees `req.method` as `DELETE`. The router grants
+this only to an XHR (`X-Requested-With: XMLHttpRequest`, which both plugins send) that
+is not a browser cross-origin request: the browser's `Sec-Fetch-Site` must be
+`same-origin` or `none`, and an `Origin` that differs from the host is refused. Any other
+`GET` answers `404` on a URL whose only route is `DELETE`, and `405` on a route whose
+method list includes `DELETE`. From your own client code, send a real `DELETE`, for
+example `fetch(url, { method: 'DELETE' })`.
+
+The override reaches a static URL, or a parameterised URL whose key carries a
+[requirement](#requirements).
 
 ---
 
@@ -297,6 +321,24 @@ slashes, flags after the last slash):
 
 `/docs/intro` matches. `/docs/pricing` does not — the router tries the next route.
 
+:::warning A regex requirement is a partial match — anchor it
+The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the
+value only *contains* a match: `"/[0-9]+/"` accepts `123abc`. Anchor the pattern at both ends —
+`"/^[0-9]+$/"` — so it constrains the whole value. With alternatives, anchor each one:
+`"/^(draft|[0-9]+)$/"` or `"/(^draft$|^[0-9]+$)/"`, never `"/^draft|[0-9]+$/"`. Write an intended
+partial match in full (`"/^pk_.*$/"`), and do not use the `m` flag: it lets `^` and `$` match at a
+line break inside the value.
+
+Since 0.7.0 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line, listing its
+regex requirements that are not anchored at both ends. Nothing is rewritten for you.
+:::
+
+:::note Requirements check incoming requests only
+Requirements are applied when a request is matched, not when you build a URL. `lib.routing.getRoute()`,
+its `toUrl()` and the `getUrl` template filter put path parameter values into the URL as given — no
+encoding and no requirement check. Build URLs from trusted values, or encode them yourself.
+:::
+
 ### Validator requirements
 
 Use `validator::{ ... }` for semantic validation. Keys are validator rule names;
@@ -331,6 +373,16 @@ not strict-equal to any list member are rejected):
 
 If a requirement value starts with neither `/` nor `validator::`, the bundle fails
 to start with a configuration error.
+
+:::note Requirements run only on routes whose URL could match
+Since 0.7.0 a route whose URL pattern cannot match the request's path is skipped
+before its requirements are evaluated, so its `validator::` rules do not run for that
+request: a validator that throws no longer answers a request aimed at another route
+with a `500`, and a `query` rule no longer calls its backend for it. Every route is
+still tested for the root path and for a path ending in `/` or holding `//`; and a
+route with two or more requirements that are not bound to a whole `:key` segment of
+its `url` is tested for every request.
+:::
 
 :::tip Same rules, client and server
 The `is*` names here are the same rules that power client-side form validation.

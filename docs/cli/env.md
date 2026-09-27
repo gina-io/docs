@@ -33,12 +33,25 @@ This is an **offline** command — it does not require the framework server.
 Add a new environment.
 
 ```bash
+gina env:add <env> @<project>
 gina env:add <env>
 ```
 
 ```bash
+gina env:add staging @myproject
 gina env:add staging
 ```
+
+With `@<project>`, the environment is added to that project and made ready to start:
+every bundle of the project gets its own ports for it, `env.json` gets a block for it
+under each bundle, and the command prints `environment [ <env> ] created`. If the port
+scan fails, it exits `1` and restores `env.json`, the port registries and the project
+list as they were.
+
+Without `@<project>`, the environment is registered for every project, but no bundle
+gets ports for it yet. Run `gina env:add <env> @<project>` for each project whose
+bundles should run in it: its bundles get their ports, and the ports of the other
+environments do not change.
 
 An environment applies to every bundle of a project. An environment name is made of
 letters, digits, `_`, `.` and `-`, and starts with a lowercase letter, a digit, `_` or

@@ -65,8 +65,8 @@ The primary server settings file.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `engine` | `"isaac"` | `"isaac"` | HTTP server engine. `"isaac"` is the built-in HTTP/2 engine |
-| `protocol` | `"http/2.0"` \| `"http/1.1"` | `"http/2.0"` | Wire protocol |
-| `scheme` | `"https"` \| `"http"` | `"https"` | URL scheme |
+| `protocol` | `"http/2.0"` \| `"http/1.1"` | the project default, `"http/1.1"` (`"http/2.0"` in `gina-init` containers) | Wire protocol. HTTP/2 needs `"http/2.0"`; set it together with `scheme` |
+| `scheme` | `"https"` \| `"http"` | the project default, `"http"` (`"https"` in `gina-init` containers) | URL scheme. Set it together with `protocol` |
 | `requireHttps` | boolean | `false` | Opt-in transport enforcement: outside the `local` scope, a bundle resolving a cleartext scheme (anything but `"https"`) refuses to boot — before anything binds, so the cleartext port is never reachable. Inert in the `local` scope. Setting it together with `allowInsecure` refuses to boot. *New in 0.5.26* |
 | `allowInsecure` | boolean | `false` | Asserts that TLS terminates upstream (service mesh, ingress/load balancer, reverse proxy — the [h2c topology](/guides/https#h2c--cleartext-http2)): the boot-time cleartext-transport warning outside the `local` scope becomes a single info line. Same vocabulary as `mcp.json > server > allowInsecure`. *New in 0.5.26* |
 | `address` | string | `"0.0.0.0"` | Bind address. Use `"127.0.0.1"` for IPv4-only or `"::"` for IPv6-only |
@@ -498,7 +498,7 @@ HTML output escaping.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `autoescape` | boolean | `false` | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. |
+| `autoescape` | boolean | `false` (`true` from 0.8.0) | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina until 0.8.0, which makes `true` the default — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. Since 0.7.0 a bundle that renders Swig and leaves it unset logs one warning at boot; setting it explicitly, `true` or `false`, silences it. New bundles created with `gina bundle:add` set it to `true`. |
 
 :::warning Swig output is not auto-escaped by default in gina
 Unlike standalone `@rhinostone/swig` (which auto-escapes by default) and unlike
@@ -507,6 +507,12 @@ renders Swig variable output **raw** by default. Set
 `settings.swig.autoescape: true` to enable escaping, or escape explicitly with
 the `e` / `escape` filter. Never render untrusted input through Swig without one
 of these.
+
+With escaping on, mark a variable that carries HTML on purpose with `| safe` —
+`{{ gina.csrfInput | safe }}` first, or every form POST fails CSRF verification.
+A layout that places `{{ page.view.stylesheets }}` or `{{ page.view.scripts }}`
+itself writes them with `| safe` too; the copies gina injects already are. The
+`nl2br` filter escapes its text and keeps its line breaks as markup.
 :::
 
 ### `template`

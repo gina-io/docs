@@ -95,7 +95,7 @@ Filters transform a value. Apply with `|`, chain left to right.
 {{ names|striptags|join(', ')|title }}
 ```
 
-A filter declared with `.safe = true` bypasses autoescape. The built-ins marked safe are: `safe`, `raw`, `e`, `escape`, `json`, `json_encode`, `url_encode`, `url_decode`. Full list in the [Filters reference](./filters).
+A filter declared with `.safe = true` bypasses autoescape. The built-ins marked safe are: `safe`, `raw`, `json` / `json_encode`, and `url_encode`. `escape` / `e` are not flagged — their output is not escaped twice because the HTML escape is idempotent — and `url_decode` is deliberately not safe. Full list in the [Filters reference](./filters).
 
 ## Tags
 
@@ -148,7 +148,7 @@ For larger regions, use the [`spaceless`](./tags#spaceless) tag to collapse whit
 
 ## Autoescape
 
-By default, every `{{ … }}` variable is piped through the `e` (escape) filter — `<`, `>`, `&`, `"`, `'` are converted to HTML entities. This is applied **after** any user filters.
+By default, every `{{ … }}` variable is piped through the `e` (escape) filter — `<`, `>`, `&`, `"`, `'` are converted to HTML entities. This is applied **after** any user filters. In a gina bundle this happens only when [`settings.swig.autoescape`](/reference/settings#swig) is `true`, the default from 0.8.0.
 
 ```swig
 {{ "<p>hi</p>" }}

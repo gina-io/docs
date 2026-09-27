@@ -13,7 +13,7 @@ prereqs:
 
 Gina organises server-side code around three nested concepts: **projects**, **bundles**,
 and **the framework itself**. Each bundle runs as an independent Node.js process with its
-own HTTP/2 server, port, config, and lifecycle. The framework coordinates them through a
+own HTTP server (HTTP/1.1, or HTTP/2 once configured), port, config, and lifecycle. The framework coordinates them through a
 background socket server and injects a shared global context into every module at startup.
 
 ---
@@ -126,12 +126,13 @@ bundle under `gina-container` exited `0`.
 ## HTTP request lifecycle
 
 Routes are declared in `src/<bundle>/config/routing.json` — they are not
-registered in code. Each bundle serves HTTP/2 by default; HTTP/1.1 clients are
-accepted on the same port via protocol negotiation.
+registered in code. A new bundle serves HTTP/1.1; once its `protocol` is `http/2.0`
+it serves HTTP/2 and still accepts HTTP/1.1 clients on the same port through
+protocol negotiation (`allowHTTP1`, default `true`).
 
 ```mermaid
 flowchart TD
-    REQ["HTTP/2 request"] --> ROUTER["core/router.js<br/>match URL against routing.json"]
+    REQ["HTTP request"] --> ROUTER["core/router.js<br/>match URL against routing.json"]
     ROUTER --> CTRL["core/controller.js<br/>session · auth · request data"]
     CTRL --> ACTION["Controller action<br/>this.home = function(req, res, next)"]
     ACTION --> HTML["self.render(data)<br/>HTML via Swig template"]

@@ -33,7 +33,11 @@ in order:
    can set cookies on the parent domain cannot forge a usable value.
 
 Safe methods (GET / HEAD / OPTIONS) issue a fresh token cookie and pass
-through without either check.
+through without either check. A `GET` still cannot run a `DELETE` action for
+another site: the router serves a `GET` on a `DELETE` route only to a same-origin
+XHR (see [A `GET` on a `DELETE` route](/guides/routing#a-get-on-a-delete-route)).
+Before 0.7.0 it served any `GET` that way, and on the Express engine such a
+request reached the action past this plugin, which runs before routing.
 
 The plugin builds on top of [`gina.plugins.Session`](/guides/sessions#hardened-cookie-defaults)
 (the `#CSRF1` cookie hardening baseline) — Session must be registered first.
@@ -260,9 +264,10 @@ string. Render it inside any `<form>` and you are done:
 </form>
 ```
 
-The `| safe` filter is required — Swig escapes by default, and the value is
-trusted HTML produced by the framework (the field name is HTML-escaped
-defensively).
+The `| safe` filter is required wherever output is auto-escaped — Nunjucks
+bundles by default, Swig bundles with `settings.swig.autoescape: true` (the
+default from 0.8.0) — and harmless where it is not. The value is trusted HTML
+produced by the framework (the field name is HTML-escaped defensively).
 
 When the bundle has not adopted the Csrf plugin, neither `gina.csrfToken` nor
 `gina.csrfInput` is exposed. Guard with `{% if gina.csrfToken %}` for

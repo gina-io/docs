@@ -2,7 +2,7 @@
 title: Compliance control mapping
 sidebar_label: Compliance
 sidebar_position: 5.9
-description: How Gina's technical controls map to the PCI-DSS, SOC 2, and HIPAA technical requirements — and, just as importantly, what a framework can never provide. A living reference, updated as controls ship.
+description: How Gina's technical controls map to the PCI-DSS, SOC 2, HIPAA and ISO/IEC 27001 technical requirements — and, just as importantly, what a framework can never provide. A living reference, updated as controls ship.
 level: intermediate
 prereqs:
   - '[Route authorization](/guides/route-authorization)'
@@ -14,18 +14,20 @@ prereqs:
 # Compliance control mapping
 
 This page maps the **technical controls** Gina provides to the PCI-DSS, SOC 2,
-and HIPAA technical requirements they support — and states plainly where a
-framework's responsibility ends. It is distinct from the
+HIPAA and ISO/IEC 27001 technical requirements they support — and states plainly
+where a framework's responsibility ends. It is distinct from the
 [Security & CVE compliance](/security) page, which lists the HTTP/2 CVEs Gina
 mitigates.
 
 :::caution A framework cannot be "compliant" — and Gina does not claim to be
-**Gina is not, and cannot be, "PCI-DSS compliant," "SOC 2 compliant," or "HIPAA
-compliant" — and no framework can be.** Compliance is achieved by an
-**organization**, through a QSA assessment (PCI-DSS), an independent auditor's
-attestation (SOC 2), or a documented risk analysis plus Business Associate
-Agreements (HIPAA). Those exercises span people, process, physical and network
-infrastructure, and policy — the overwhelming majority of any standard. There
+**Gina is not, and cannot be, "PCI-DSS compliant," "SOC 2 compliant," "HIPAA
+compliant" or "ISO 27001 certified" — and no framework can be.** Compliance is
+achieved by an **organization**, through a QSA assessment (PCI-DSS), an
+independent auditor's attestation (SOC 2), a documented risk analysis plus
+Business Associate Agreements (HIPAA), or an accredited certification body's
+audit of its information security management system (ISO/IEC 27001). Those
+exercises span people, process, physical and network infrastructure, and policy
+— the overwhelming majority of any standard. There
 is no such thing as a "certified" open-source framework: assessors audit your
 **application architecture and data handling**, not the library it is built on.
 
@@ -56,7 +58,7 @@ flowchart LR
     end
     subgraph ORG["Your organization & infrastructure"]
         direction TB
-        O1["The certification itself<br/>QSA · SOC 2 auditor · risk analysis"]
+        O1["The certification itself<br/>QSA · SOC 2 auditor · risk analysis · ISMS audit"]
         O2["Network, physical, personnel,<br/>vendor, IR & DR, key management"]
     end
     FW --> APP --> ORG
@@ -76,8 +78,10 @@ right of the framework remains yours.
   row names the interim pattern to use instead.
 - References are **version-pinned**: PCI-DSS cites use the **v4.0.1**
   numbering (the current edition), SOC 2 cites use the **2017 Trust Services
-  Criteria (Revised Points of Focus, 2022)**, and HIPAA cites are regulatory —
-  45 CFR §164.312, the Security Rule's technical safeguards. Each row names the requirement family plus the directly
+  Criteria (Revised Points of Focus, 2022)**, HIPAA cites are regulatory —
+  45 CFR §164.312, the Security Rule's technical safeguards — and ISO/IEC 27001
+  cites use the **2022 edition's Annex A** (the 93-control set, numbered and
+  titled as in ISO/IEC 27002:2022; the 2024 amendment changed no control). Each row names the requirement family plus the directly
   supporting sub-clause where the mapping is unambiguous. A single control
   rarely satisfies a requirement on its own — every requirement also needs
   configuration, process, and evidence outside the framework, and your
@@ -89,20 +93,21 @@ right of the framework remains yours.
 
 | Control | What it gives you | Supports | Status | Guide |
 |---|---|---|---|---|
-| **Authentication hardening** | scrypt password hashing with the cost encoded in the hash (plus argon2/bcrypt *verification* for migrating stores), `needsRehash` upgrade-on-login, length-first policy checks, a constant-time verify whose account-not-found branch is enumeration-safe, account lockout defaulting to 10 attempts / 30 minutes, and RFC 6238 TOTP. Gina supplies the primitives, not the identity store | PCI-DSS Req 8 (8.3.2 — authentication-factor storage · 8.3.4 — lockout thresholds · 8.4 — MFA building block) · SOC 2 CC6.1 · HIPAA §164.312(d) | ✅ 0.6.0 | [Authentication](/guides/authentication) |
-| **Authorization / RBAC** | Per-route `requireAuth` / `roles` / `policy` gate before the action runs; generic 403; boot-refusal on a silently-ungated route | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · HIPAA §164.312(a)(1) | ✅ 0.5.19 | [Route authorization](/guides/route-authorization) |
-| **Deny-by-default authorization** | Opt-in `auth.requireAuthByDefault` inverts the posture per bundle — an un-annotated route is gated, not open — with `param.public` as the audited exemption and boot-refusal on the shapes the mode makes unsafe | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · NIST SP 800-207 | ✅ 0.5.26 | [Route authorization](/guides/route-authorization#deny-by-default) |
-| **Audit trail** (record) | Append-only, user-attributed JSONL of who did what to which record when; auto-records authorization denials; own store, never the log sinks | PCI-DSS Req 10 (10.2) · SOC 2 CC7.2 · HIPAA §164.312(b) | ✅ 0.5.19 | [Audit trail](/guides/audit-trail) |
-| **Audit tamper-evidence** (change-detection) | Opt-in HMAC hash chain (`audit.chain`) — every record chains to its predecessor, so any edit, deletion, insertion, or reordering by anyone without the signing key is detectable; verified offline with `gina audit:verify`. Change-detection on the live file, complementary to streaming the trail to WORM storage (which covers a compromised writer) | PCI-DSS Req 10 (10.3.4 — change-detection) · SOC 2 CC7 · HIPAA §164.312(b) | ✅ 0.6.0 | [Audit trail](/guides/audit-trail#tamper-evidence--the-hash-chain) |
-| **Security headers** | CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP/COEP/CORP, and the rest of the header-plugin family; batteries-included or per-header. CSP in particular is a primary mechanism for PCI-DSS v4's payment-page script control | PCI-DSS Req 6 (6.4.3 via CSP) · SOC 2 CC6.6 | ✅ | [Security headers](/guides/security-headers) |
-| **CSRF protection** | Signed double-submit token + Origin/Referer pre-filter; per-route exemptions | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [CSRF](/guides/csrf) |
-| **Session cookie hardening** | `HttpOnly` (default on), `SameSite` (default `lax`), and a boot-time invariant rejecting `SameSite=None` without `Secure`; per-bundle expiry policy | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 | ✅ | [Sessions](/guides/sessions) |
-| **Session lifecycle hardening** | `req.login()` rotates the session id before binding the user, destroying the pre-login record — the session-fixation defense. Opt-in `absoluteTimeout` caps an authenticated session's total life measured from login, regardless of activity. Idle expiry composes from the cookie `maxAge` and the store record's TTL, both rolling with activity — **you set the window** (PCI-DSS asks for 15 minutes) and add `rolling: true` | PCI-DSS Req 6 (6.2.4 — session fixation, an attack on an access-control mechanism) · Req 8 (8.2.8 — idle re-authentication, once you set the window) · SOC 2 CC6.1 | ✅ 0.6.0 | [Sessions](/guides/sessions#session-lifetime) |
-| **Secrets resolver** | `${secret:KEY}` placeholders keep credentials out of config and source; fail-closed on an unset key. Values are read from the environment — the standard delivery channel for cloud secret managers and KMS-backed stores | PCI-DSS Req 8 (8.6.2 — no hard-coded credentials) · SOC 2 CC6.1 | ✅ | [Secrets](/guides/secrets) |
-| **Output escaping** | **Nunjucks bundles auto-escape variable output by default.** Swig bundles render variable output raw by default; enable auto-escaping per bundle with `settings.swig.autoescape: true` (`0.5.25`+), or escape explicitly with the `e` / `escape` filter | PCI-DSS Req 6 (6.2.4 — XSS) | ✅ Nunjucks · opt-in for Swig (`settings.swig.autoescape`) | [Templating](/templating) |
-| **Parameterized queries** | Connector query APIs bind parameters — the primary injection defense | PCI-DSS Req 6 (6.2.4 — injection) | ✅ | [Connectors](/reference/connectors) |
-| **Dependency / CVE scanning** | Socket, Dependabot, and an OSV workflow gate the framework's own supply chain; HTTP/2 CVEs mitigated by default | PCI-DSS Req 6 (6.3.1–6.3.2) · SOC 2 CC7.1 | ✅ | [Security & CVE compliance](/security) |
-| **Transport security** | HTTP/2 + TLS, with HSTS emitted by the header plugin. A cleartext bundle outside the local scope warns at boot; `server.requireHttps` refuses to boot it at all, and `server.allowInsecure` records that TLS terminates upstream (`0.5.26`+) | PCI-DSS Req 4 (4.2.1) · SOC 2 CC6.7 | ✅ | [HTTPS](/guides/https) |
+| **Authentication hardening** | scrypt password hashing with the cost encoded in the hash (plus argon2/bcrypt *verification* for migrating stores), `needsRehash` upgrade-on-login, length-first policy checks, a constant-time verify whose account-not-found branch is enumeration-safe, account lockout defaulting to 10 attempts / 30 minutes, and RFC 6238 TOTP. Gina supplies the primitives, not the identity store | PCI-DSS Req 8 (8.3.2 — authentication-factor storage · 8.3.4 — lockout thresholds · 8.4 — MFA building block) · SOC 2 CC6.1 · HIPAA §164.312(d) · ISO 27001 A.8.5 · A.5.17 | ✅ 0.6.0 | [Authentication](/guides/authentication) |
+| **Authorization / RBAC** | Per-route `requireAuth` / `roles` / `policy` gate before the action runs; generic 403; boot-refusal on a silently-ungated route | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · HIPAA §164.312(a)(1) · ISO 27001 A.5.15 · A.8.3 | ✅ 0.5.19 | [Route authorization](/guides/route-authorization) |
+| **Deny-by-default authorization** | Opt-in `auth.requireAuthByDefault` inverts the posture per bundle — an un-annotated route is gated, not open — with `param.public` as the audited exemption and boot-refusal on the shapes the mode makes unsafe | PCI-DSS Req 7 (7.2) · SOC 2 CC6.3 · NIST SP 800-207 · ISO 27001 A.5.15 · A.8.3 | ✅ 0.5.26 | [Route authorization](/guides/route-authorization#deny-by-default) |
+| **Audit trail** (record) | Append-only, user-attributed JSONL of who did what to which record when; auto-records authorization denials; own store, never the log sinks | PCI-DSS Req 10 (10.2) · SOC 2 CC7.2 · HIPAA §164.312(b) · ISO 27001 A.8.15 | ✅ 0.5.19 | [Audit trail](/guides/audit-trail) |
+| **Audit tamper-evidence** (change-detection) | Opt-in HMAC hash chain (`audit.chain`) — every record chains to its predecessor, so any edit, deletion, insertion, or reordering by anyone without the signing key is detectable; verified offline with `gina audit:verify`. Change-detection on the live file, complementary to streaming the trail to WORM storage (which covers a compromised writer) | PCI-DSS Req 10 (10.3.4 — change-detection) · SOC 2 CC7 · HIPAA §164.312(b) · ISO 27001 A.8.15 · A.5.33 | ✅ 0.6.0 | [Audit trail](/guides/audit-trail#tamper-evidence--the-hash-chain) |
+| **Security headers** | CSP, HSTS, X-Frame-Options, Referrer-Policy, COOP/COEP/CORP, and the rest of the header-plugin family; batteries-included or per-header. CSP in particular is a primary mechanism for PCI-DSS v4's payment-page script control | PCI-DSS Req 6 (6.4.3 via CSP) · SOC 2 CC6.6 · ISO 27001 A.8.26 | ✅ | [Security headers](/guides/security-headers) |
+| **CSRF protection** | Signed double-submit token + Origin/Referer pre-filter; per-route exemptions | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 · ISO 27001 A.8.26 · A.8.28 | ✅ | [CSRF](/guides/csrf) |
+| **Session cookie hardening** | `HttpOnly` (default on), `SameSite` (default `lax`), and a boot-time invariant rejecting `SameSite=None` without `Secure`; per-bundle expiry policy | PCI-DSS Req 6 (6.2.4) · SOC 2 CC6.1 · ISO 27001 A.8.26 | ✅ | [Sessions](/guides/sessions) |
+| **Session lifecycle hardening** | `req.login()` rotates the session id before binding the user, destroying the pre-login record — the session-fixation defense. Opt-in `absoluteTimeout` caps an authenticated session's total life measured from login, regardless of activity. Idle expiry composes from the cookie `maxAge` and the store record's TTL, both rolling with activity — **you set the window** (PCI-DSS asks for 15 minutes) and add `rolling: true` | PCI-DSS Req 6 (6.2.4 — session fixation, an attack on an access-control mechanism) · Req 8 (8.2.8 — idle re-authentication, once you set the window) · SOC 2 CC6.1 · ISO 27001 A.8.5 · A.8.26 | ✅ 0.6.0 | [Sessions](/guides/sessions#session-lifetime) |
+| **Secrets resolver** | `${secret:KEY}` placeholders keep credentials out of config and source; fail-closed on an unset key. Values are read from the environment — the standard delivery channel for cloud secret managers and KMS-backed stores | PCI-DSS Req 8 (8.6.2 — no hard-coded credentials) · SOC 2 CC6.1 · ISO 27001 A.5.17 · A.8.9 | ✅ | [Secrets](/guides/secrets) |
+| **Output escaping** | **Nunjucks bundles auto-escape variable output by default.** Swig bundles render variable output raw by default; enable auto-escaping per bundle with `settings.swig.autoescape: true` (`0.5.25`+), or escape explicitly with the `e` / `escape` filter | PCI-DSS Req 6 (6.2.4 — XSS) · ISO 27001 A.8.28 | ✅ Nunjucks · opt-in for Swig (`settings.swig.autoescape`) | [Templating](/templating) |
+| **Parameterized queries** | Connector query APIs bind parameters — the primary injection defense | PCI-DSS Req 6 (6.2.4 — injection) · ISO 27001 A.8.28 | ✅ | [Connectors](/reference/connectors) |
+| **Dependency / CVE scanning** | Socket, Dependabot, and an OSV workflow gate the framework's own supply chain; HTTP/2 CVEs mitigated by default | PCI-DSS Req 6 (6.3.1–6.3.2) · SOC 2 CC7.1 · ISO 27001 A.8.8 (and A.5.21, for Gina as a component of your supply chain) | ✅ | [Security & CVE compliance](/security) |
+| **Transport security** | HTTP/2 + TLS, with HSTS emitted by the header plugin. A cleartext bundle outside the local scope warns at boot; `server.requireHttps` refuses to boot it at all, and `server.allowInsecure` records that TLS terminates upstream (`0.5.26`+) | PCI-DSS Req 4 (4.2.1) · SOC 2 CC6.7 · ISO 27001 A.8.24 · A.5.14 | ✅ | [HTTPS](/guides/https) |
+| **Application-level rate limiting** | Opt-in per-principal quotas at the router — fixed-window counters in a key-value namespace you declare (per process in memory; across processes on one host via SQLite; across every replica via redis), per-route overrides or exemptions, `429` with `Retry-After` and the draft `RateLimit` header fields; the namespace's `failMode` is the outage policy. It counts identified callers only — anonymous flood control stays at your edge — and is distinct from [account lockout](/guides/authentication#lockout-is-not-rate-limiting), which brakes credential failures per **account** | PCI-DSS (anti-automation) · SOC 2 A1.1 (Availability) · ISO 27001 A.8.6 | ✅ 0.6.13 | [Rate limiting](/guides/rate-limiting) |
 
 :::note Recording vs. making the trail tamper-resistant
 Today's audit trail gives you the **record** an assessor asks for (PCI-DSS
@@ -132,7 +137,7 @@ complementary halves:
 
 ## Deferred controls (built on request)
 
-Three controls are scoped and measured on the [roadmap](/roadmap) but
+Two controls are scoped and measured on the [roadmap](/roadmap) but
 **deliberately deferred**: they get built when a consumer asks for them, not
 against a release date. Treat them as absent — and use the interim pattern,
 which in each case is an established control in its own right, not a stopgap.
@@ -141,9 +146,8 @@ If you need the real thing, say so on
 
 | Deferred control | Would support | Interim pattern — use this today |
 |---|---|---|
-| ⏸ **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA | Keep credentials and personal identifiers **out of query strings** — the always-on access log records full request URLs. Headers, bodies, and cookies are not logged on any always-on path |
-| ⏸ **Application-level rate limiting** — per-endpoint / per-client throttling at the route layer | PCI-DSS (anti-automation) · SOC 2 (Availability) | Throttle at your reverse proxy, ingress, or WAF. Distinct from [account lockout](/guides/authentication#lockout-is-not-rate-limiting), which ships today and brakes credential failures per **account**, not requests per client |
-| ⏸ **Data-at-rest / field-level encryption helpers** — field encryption + key-management utilities | PCI-DSS Req 3 (3.5) · HIPAA §164.312(a)(2)(iv) | Encrypt at the application layer with your platform's KMS SDK, delivering key material through the environment — the [`${secret:KEY}` resolver](/guides/secrets) reads it there. HSM/KMS *infrastructure* remains yours in every scenario |
+| ⏸ **PII/PHI protection** — production log-field redaction, data classification, retention helpers | SOC 2 (Privacy) · HIPAA · ISO 27001 A.5.34 · A.8.11 · A.8.10 | Keep credentials and personal identifiers **out of query strings** — the always-on access log records full request URLs. Headers, bodies, and cookies are not logged on any always-on path |
+| ⏸ **Data-at-rest / field-level encryption helpers** — field encryption + key-management utilities | PCI-DSS Req 3 (3.5) · HIPAA §164.312(a)(2)(iv) · ISO 27001 A.8.24 | Encrypt at the application layer with your platform's KMS SDK, delivering key material through the environment — the [`${secret:KEY}` resolver](/guides/secrets) reads it there. HSM/KMS *infrastructure* remains yours in every scenario |
 
 ---
 
@@ -153,7 +157,10 @@ No framework provides these. They are the organizational, infrastructure, and
 process controls an assessor evaluates alongside your application:
 
 - **The certification itself** — the PCI-DSS QSA assessment (ROC/AOC), the SOC 2
-  Type I/II auditor's report, the HIPAA risk analysis and remediation.
+  Type I/II auditor's report, the HIPAA risk analysis and remediation, the
+  ISO/IEC 27001 management system (clauses 4–10: scope, risk assessment and
+  treatment, the Statement of Applicability, internal audit, management review)
+  and its certification audit.
 - **Legal instruments** — HIPAA Business Associate Agreements, data-processing
   agreements with your subprocessors.
 - **Network & physical security** — segmentation, firewalls/WAF, DDoS protection,
@@ -193,6 +200,22 @@ over a period, are organizational.
 authentication (d). Encryption (a)(2)(iv) stays with your platform's KMS SDK —
 the field-level helpers are deferred, built on request. Administrative and
 physical safeguards, the risk analysis, and BAAs are outside any framework.
+
+**ISO/IEC 27001** — certification attaches to an organization's information
+security management system, never to a product. Gina supplies building blocks
+for some of the **Annex A technological controls** an application's Statement
+of Applicability includes — secure authentication (A.8.5), access restriction
+(A.5.15 / A.8.3), logging (A.8.15), application security and secure coding
+(A.8.26 / A.8.28), configuration and authentication-information handling
+(A.8.9 / A.5.17), cryptography in transit (A.8.24) — and nothing under the
+organizational, people or physical themes. Two control families point the other
+way, at Gina as a component of **your** ICT supply chain (A.5.19–A.5.22 and
+A.8.8): what you can cite today is private vulnerability reporting with
+published, CVSS-scored advisories (see [Reporting a vulnerability](/security#reporting-a-vulnerability)),
+Dependabot, OSV and Socket scans of the framework's own dependencies, and npm
+releases published through a staged flow that a maintainer approves with 2FA.
+A software bill of materials per release and a published OpenSSF Scorecard are
+not available yet.
 
 ---
 

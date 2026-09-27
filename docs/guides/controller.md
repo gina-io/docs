@@ -462,7 +462,9 @@ in `message` — so a client that wants to display your sentence should read `me
 not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
-stack is stripped from the wire — see below.) The ref carries no server detail,
+stack is stripped from the wire — see below. A stack passed *as* the message, as in
+`self.throwError(res, 500, err.stack)`, gets the same treatment since 0.7.0: outside
+the local scope `message` keeps its first line.) The ref carries no server detail,
 so it is safe to show an end user and to have them relay to support.
 
 Server-side, one error-level log line pairs that ref with the **full** error
@@ -545,16 +547,19 @@ this.get = function(req, res, next) {
 ### Request objects by HTTP method
 
 Each HTTP method gets its own object on `req`. The framework populates only the
-object that matches the incoming method; the others are set to `undefined`.
+object that matches the incoming method; the others are set to `undefined`. A
+`HEAD` is the one exception: `req.get` is the same object as `req.head`, so an
+action written for `GET` reads its parameters the same way when it answers a
+`HEAD`.
 
 | Property | Set for | Contains |
 |---|---|---|
-| `req.get` | `GET` | Query-string parameters (`?key=value`) |
+| `req.get` | `GET`, `HEAD` | Query-string parameters (`?key=value`); on a `HEAD`, the same object as `req.head` |
 | `req.post` | `POST` | Parsed request body (JSON or form-encoded) |
 | `req.put` | `PUT` | Parsed request body, merged with URI params |
 | `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update |
 | `req.delete` | `DELETE` | Query-string parameters |
-| `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response |
+| `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response; `req.get` is this same object |
 | `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 

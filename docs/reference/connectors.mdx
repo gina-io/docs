@@ -154,7 +154,7 @@ isolation across environments, or multi-node cluster failover.
     "database" : "myapp",
     "username" : "appuser",
     "password"  : "secret",
-    "ping"     : "2m",
+    "pingInterval" : "2m",
     "scope"    : "production"
   }
 }
@@ -174,7 +174,7 @@ balancing and automatic failover.
     "database" : "myapp",
     "username" : "appuser",
     "password"  : "secret",
-    "ping"     : "2m"
+    "pingInterval" : "2m"
   }
 }
 ```
@@ -193,7 +193,7 @@ for Couchbase Cloud and Capella deployments.
     "database" : "myapp",
     "username" : "appuser",
     "password"  : "${COUCHBASE_PASSWORD}",
-    "ping"     : "2m"
+    "pingInterval" : "2m"
   }
 }
 ```
@@ -210,7 +210,8 @@ for Couchbase Cloud and Capella deployments.
 | `database` | string | Couchbase bucket name |
 | `username` | string | Couchbase RBAC username |
 | `password` | string | RBAC password. Supports `${secret:KEY}` substitution |
-| `ping` | string | Interval to verify cluster connectivity (e.g. `"2m"`, `"30s"`) |
+| `keepAlive` | boolean | Verify cluster connectivity every `pingInterval`. Defaults to `true`; `false` turns the check off |
+| `pingInterval` | string | Interval between those checks while `keepAlive` is on (e.g. `"2m"`, `"30s"`). Defaults to `"2m"` |
 | `readyTimeout` | number (ms) | How long to wait for the connector to become ready at boot before it reports the failure and the bundle exits. Defaults to `50000`. Must stay below the CLI start budget (~64s) to take effect — see [Migration 0.6.30 → 0.6.31](../migration) |
 | `scope` | string | Data isolation scope stamped on every document at insert time and used to filter N1QL queries. Falls back to `process.env.NODE_SCOPE` when omitted. Must be letters, digits, `_`, `.`, `-` or `/` (`^[A-Za-z0-9_./-]+$`): the value is written into every N1QL statement as a quoted literal, so since 0.6.33 any other value — here or in `NODE_SCOPE` — stops the bundle at boot (`GINA_COUCHBASE_INVALID_SCOPE`, exit code 1). See [Scopes — data isolation](../concepts/scopes#scopes-and-data-isolation) |
 
@@ -992,7 +993,7 @@ duplicating the full config. The `${env}` segment must match `NODE_ENV`.
   "couchbase": {
     "host"    : "127.0.0.1",
     "database": "myapp_dev",
-    "ping"    : "5m"
+    "pingInterval": "5m"
   }
 }
 ```
