@@ -498,7 +498,7 @@ HTML output escaping.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `autoescape` | boolean | `false` (`true` from 0.8.0) | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina until 0.8.0, which makes `true` the default — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. Since 0.7.0 a bundle that renders Swig and leaves it unset logs one warning at boot; setting it explicitly, `true` or `false`, silences it. New bundles created with `gina bundle:add` set it to `true`. |
+| `autoescape` | boolean | `false` (`true` from 0.8.0) | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina until 0.8.0, which makes `true` the default — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. Since 0.7.0 a bundle that renders Swig and leaves it unset logs one warning at boot; setting it explicitly, `true` or `false`, silences it. New bundles created with `gina bundle:add` set it to `true`. Applied on npm installs since 0.7.1: from 0.5.25 to 0.7.0, gina installed with npm silently rendered with it off (see the [migration guide](/migration#070--071)). |
 
 :::warning Swig output is not auto-escaped by default in gina
 Unlike standalone `@rhinostone/swig` (which auto-escapes by default) and unlike

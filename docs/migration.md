@@ -135,6 +135,44 @@ their next run. Nothing to re-bake.
 Restart your bundles to pick up the isaac fix; the CLI commands pick theirs up on
 their next run. Nothing to re-bake.
 
+### Security — Swig `autoescape: true` is applied on npm installs (restart; check your templates first)
+
+From 0.5.25 through 0.7.0, a bundle's `settings.swig.autoescape: true` was silently **not
+applied** when gina was installed with npm: a global install, a project dependency, or the image
+`gina image:build` produces. Each request read the setting through a helper that locates the
+calling bundle by walking the call stack and skipping every frame under `node_modules`. Under an
+npm install every framework file sits there, so the walk found nothing and threw; the render setup
+caught the error and rendered with auto-escaping **off**, while the bundle's configuration said it
+was on. Nothing was logged: the 0.7.0 boot warning fires only when the key is absent. gina run
+from a repository checkout was not affected.
+
+A template that relies on `autoescape: true` to neutralise untrusted data therefore rendered that
+data raw on such an install: a cross-site scripting exposure.
+
+**After the upgrade, escaping turns on** for every bundle that sets `autoescape: true` on an npm
+install, including every bundle created with `gina bundle:add` since 0.7.0. **Before you upgrade
+such a bundle,** apply the checklist in [0.6.33 → 0.7.0](#0633--070): print `gina.csrfInput` with
+`| safe` (unmarked, it renders as visible text and every form POST then fails CSRF verification),
+and mark every other variable that carries trusted markup with `| safe`.
+
+To see the change, render a value that carries markup: with `autoescape: true` it now comes out
+escaped. Restart your bundles to pick this up. Nothing to re-bake.
+
+### Fixed — a bundle with templates no longer walks the call stack on every request (restart)
+
+On an npm install, every request to a bundle with templates paid up to nine stack captures and a
+caught exception when the render setup read the Swig settings: about a quarter of a request's CPU
+in a profile of a trivial JSON route. The render setup now reads the settings from the request's
+own configuration.
+
+`getConfig()` and `getConfig(confName)` no longer read the call stack: they return the running
+bundle's configuration, as they always did wherever the walk succeeded. `getConfig(null, confName)`
+and `getLib(lib)`, which do look for the calling bundle, capture the stack once instead of once per
+frame examined. When no file outside `node_modules` makes the call, they no longer throw a
+`TypeError`: no bundle is found, as for any other caller outside a bundle.
+
+**What to check:** nothing. Restart your bundles to pick this up. Nothing to re-bake.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
