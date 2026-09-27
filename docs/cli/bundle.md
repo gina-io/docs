@@ -31,6 +31,12 @@ gina bundle:start frontend @myproject
 The bundle's entry point (`src/<bundle>/index.js`) is executed in a detached
 child process. The assigned port is printed to stdout on success.
 
+From 0.7.1 the output also carries every line the bundle logs at `warn` and above
+while it starts (`warn`, `warning`, `error`, `err`, `crit`, `alert`), before the
+`started` line. The log listener keeps no backlog, so a `gina tail` that connects
+after the start never receives them. See
+[Following logs in real time](/guides/logging#following-logs-in-real-time).
+
 :::note Bundles restricted to certain scopes
 If the bundle's `manifest.json` entry carries a `scopes` allow-list that does not
 include the scope you are starting in, the start is **refused** by name — a boot

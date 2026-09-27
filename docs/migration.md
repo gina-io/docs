@@ -65,6 +65,27 @@ Restart the framework with `gina framework:restart` to pick it up for
 `bundle:start`; the other commands pick it up on their next run. Nothing to
 re-bake.
 
+### Fixed — a daemon-started bundle's boot warnings appear in the `bundle:start` output (CLI; framework restart)
+
+A bundle started through the framework daemon now prints the lines it logs at
+`warn` and above while it starts (`warn`, `warning`, `error`, `err`, `crit` and
+`alert`) in the output of `gina bundle:start`, before the `started` line.
+`gina bundle:restart` prints them too. Until now these lines reached only a
+`gina tail` connected before the bundle started, because the log listener keeps no
+backlog. So when you ran `gina bundle:start` and then `gina tail`, or in a container
+whose init script starts the bundle before its tail, the two boot warnings added in
+0.7.0 (Swig `autoescape` not set, and unanchored routing `requirements`; see
+0.6.33 → 0.7.0 below) never showed.
+
+**What to check:** nothing is required. If you start `gina tail` before your
+bundles, each of these lines now appears twice, once in the start output and once
+in the tail. A script that reads the start output sees these lines before the
+`started` line, which then starts a line of its own.
+
+Restart the framework with `gina framework:restart`, or restart the container that
+runs it, to pick this up: `bundle:start` runs inside the framework process, so a
+`bundle:restart` alone keeps the old behaviour. Nothing to re-bake.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)

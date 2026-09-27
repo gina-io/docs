@@ -392,7 +392,7 @@ When a container starts a daemon and keeps itself alive with the relay —
 `gina start`, then `gina bundle:start`, then `gina tail` in the foreground — the
 lines that reach `kubectl logs` are `gina tail`'s: the daemon discards a bundle's
 own stdout once the bundle has started, so the MQ relay is the only path a runtime
-line has to the collector, and it must stay on. Two consequences:
+line has to the collector, and it must stay on. Three consequences:
 
 - Do **not** set `GINA_LOG_STDOUT=true` there — it disables the transport `gina tail`
   reads.
@@ -401,6 +401,14 @@ line has to the collector, and it must stay on. Two consequences:
   with the same `ts`/`level`/`bundle`/`message` keys (plus the `group`/`msg`
   aliases). The relay carries no request context, so `requestId` and `durationMs`
   are not present on relayed lines.
+- Expect a bundle's **boot-time lines at `warn` and above in the `bundle:start`
+  output**, not in the tail's. The relay keeps no backlog, and in this order
+  `gina tail` connects after the bundle has started, so it never receives what the
+  bundle logged while it booted. From 0.7.1 `gina bundle:start` prints those lines
+  (`warn`, `warning`, `error`, `err`, `crit`, `alert`) before its `started` line,
+  and its output reaches `kubectl logs` like the tail's. They are text as the bundle
+  rendered them, even when the tail renders JSON. A tail already connected when the
+  bundle starts receives them too, so each appears twice.
 
 ### Per-request `requestId` and `durationMs`
 
@@ -525,6 +533,13 @@ gina tail
 
 `gina tail` is an alias for `gina framework:tail`. It connects to the MQ listener
 on port `8125` and streams formatted output from all running bundles to your terminal.
+
+The listener keeps no backlog: `gina tail` receives what bundles log after it has
+connected, and nothing from before. To see everything a bundle logs while it starts,
+start the tail first, as in the [development workflow](#typical-development-workflow)
+below. From 0.7.1 `gina bundle:start` also prints the lines a bundle logs at `warn`
+and above while it starts, so a boot warning reaches you even when your tail
+connects later.
 
 ### `--follow` — stay connected across restarts
 
