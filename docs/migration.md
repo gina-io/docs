@@ -21,6 +21,35 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Security — command output logs and the log-listener port file leave the shared temp directory (CLI and `run()`; framework restart)
+
+`run()` (also `gna.run`) and `Shell::run()` in `lib/shell` wrote every command's
+output to the fixed files `out.log` and `err.log` in the temp directory (`opt.tmp`,
+`GINA_TMPDIR`, the system temp directory by default), and every `gina` command wrote
+the framework log listener's port to `mq-listener-v<version>.port` in the same
+directory. Two runs sharing that directory read each other's output as their own,
+and a run whose files a sibling had already removed never called back. Where the
+directory is shared between local users (`/tmp` on Linux by default), another user
+could create those names first: `gina project:add` / `project:import` and any `run()`
+call then failed, every `gina` command failed at start-up, and on hosts without the
+kernel's `fs.protected_regular` / `fs.protected_symlinks` protections that user could
+read the command output or have it — or the port number — written into a file of
+their choosing.
+
+Each run now gets a private directory of its own under the base (`gina-run-*`, mode
+0700, removed with its two files when the command exits), a failure while reading the
+output back is delivered as the run's error, and the port file lives under the
+framework home (`<GINA_HOMEDIR>/run/`, `~/.gina/run/` by default, mode 0600).
+
+**What to check:** nothing, unless something of yours read `<tmpdir>/out.log`,
+`<tmpdir>/err.log` or `<tmpdir>/mq-listener-v<version>.port` directly — those paths
+are no longer written. A `run()` caller that passed `tmp` still gets its files under
+that directory, one level down.
+
+Restart the framework (`gina framework:restart`) and any running `gina tail` so both
+use the new port-file location; the CLI picks the rest up on its next command, a
+bundle calling `run()` on its restart. Nothing to re-bake.
+
 ### Security — CLI commands no longer run names and flags through a shell (CLI; framework restart)
 
 `gina project:start`, `project:stop` and `project:restart`; the `link-node-modules`
