@@ -237,6 +237,44 @@ Restart the framework with `gina framework:restart` to pick it up for `bundle:st
 which runs inside the framework process; the other commands pick it up on their next
 run. Nothing to re-bake.
 
+### Fixed — the path helper no longer keeps every path it has seen (restart)
+
+The path helper (`_()`) added each distinct path it normalized to a list kept for the
+life of the process, and each `_()` call and each path object's `toString()` searched
+that list, so a bundle's memory and per-call CPU grew with the number of distinct paths
+it had ever seen: through the output cache's lookup, two per distinct request URL, query
+string included. Nothing read the list, and it is gone.
+
+`toString()` and `toUnixStyle()` return what they did. `toWin32Style()` now also
+converts a path whose trailing separator `mkdir()`, `mkdirSync()`, `rm()`, `rmSync()` or
+`isValidPath()` had stripped: it returned that path with forward slashes, although the
+[path helper reference](/globals/path) documents it as returning backslashes.
+
+**What to check:** nothing. Restart your bundles to pick this up. Nothing to re-bake.
+
+### Changed — less work per routed request (restart and re-bake)
+
+Several per-request steps are trimmed: values that do not change between requests (the
+encoded form rules exported to the page, the heap-limit label, the date stamp) are
+computed once, three configuration lookups read the loaded configuration instead of
+building a new one, and a bundle's resolved configuration stays in V8's fast property
+mode, which makes the router's per-request copy of it cheap. Measured with the
+framework's profiling harness on a JSON route, these changes together cut the CPU a
+routed request costs by about a third, from about 300 µs to about 205 µs.
+
+One of them is visible to code that inspects an instance. Constructing a class built
+with `inherits()` — every controller, on every routed request — no longer copies
+anything onto the instance: no own `prototype` property (it was enumerable, so
+`Object.keys()` and `JSON.stringify()` of an instance listed it), no stamp of the
+instance's name onto a shared prototype, and no own copies of the parent prototype's
+falsy members. Inherited members resolve through the prototype chain as before. The
+browser bundle carries the same constructor: rebuild your bundles to pick up the new
+`gina.min.js`.
+
+**What to check:** nothing, unless code reads `this.prototype` on an instance, or relies
+on `Object.keys()` or `JSON.stringify()` of an instance listing `prototype`. Restart and
+rebuild your bundles to pick this up.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
