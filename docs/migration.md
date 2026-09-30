@@ -21,6 +21,31 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Security — a GET of the routing table in another letter case no longer stops an isaac bundle (bundle restart)
+
+On the isaac engine (the default), a bundle answers `GET /_gina/assets/routing.json` — the
+routing table the browser client fetches at boot — from a fast path that tested the URL
+without regard to letter case, then looked the file up by the requested spelling with an
+exact comparison. Any other spelling, such as `/_gina/assets/Routing.json`, found no file,
+and reading the empty result threw an uncaught error that ended the bundle process: one
+request, with no authentication, before routing and every route guard, under any path
+prefix. A request the bundle classified as coming through a reverse proxy — a `Host`
+header without a port, or an `X-Forwarded-Host` header (see
+[`server.proxy.requireForwardedHeaders`](/reference/settings#server)) — was served the
+host-stripped table instead and escaped the crash, but a client that reaches the bundle's
+port directly sets those headers itself. The express engine (`server.engine: "express"`)
+serves the table from memory and was not affected. The fast path now looks the file up by
+its lower-cased name, so every spelling it accepts serves the table. Affected: 0.1.6
+through 0.7.0.
+
+**What to check:** nothing in your code — the browser client requests the lower-case name,
+so pages were not affected. If an isaac bundle restarted with no obvious cause, look in
+your access logs for a request to `/_gina/assets/routing.json` in another letter case;
+before it ended, the process logged an uncaught `TypeError: Cannot read properties of null
+(reading 'mime')`.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — a page whose query string ends in a `/_gina/` endpoint path is answered by the page (bundle restart)
 
 A page URL whose query string ended in the path of a built-in endpoint — for instance
