@@ -404,6 +404,18 @@ Restart the framework with `gina framework:restart`, or restart the container th
 runs it, to pick this up: `bundle:start` runs inside the framework process, so a
 `bundle:restart` alone keeps the old behaviour. Nothing to re-bake.
 
+### Fixed — a `--restart-pid` flag no longer shifts a command's arguments (CLI)
+
+`bin/gina` filtered out a `--restart-pid=<pid>` flag, left from an internal restart
+handshake that nothing used any more, by removing the wrong argument: `gina start
+--restart-pid=<pid>` lost its `start` task, and any other command given the flag reached
+the CLI shifted by one argument. The filter is removed; a `--restart-pid` you type is
+passed on like any other flag.
+
+**What to check:** nothing, unless a script of yours passes `--restart-pid`.
+
+Nothing to restart: the next `gina` command picks it up.
+
 ### Security — more CLI commands, and an isaac bundle's boot, no longer run values through a shell (CLI; bundle restart)
 
 `gina framework:status`, `framework:restart`, `framework:build`, the download and
@@ -555,6 +567,19 @@ Restart the framework with `gina framework:restart` to pick it up for `bundle:st
 which runs inside the framework process; the other commands pick it up on their next
 run. Nothing to re-bake.
 
+### Fixed — with the output cache off, isaac no longer serves a page an earlier run cached (bundle restart)
+
+The built-in engine looked every `GET` up in the output cache even while
+[`server.cache.enable`](/guides/caching#server-level-cache-config) was off: two
+file-existence checks per request, and a page left on disk by an earlier run that had
+caching enabled could be served from there. It now looks the cache up only while
+`server.cache.enable` is on.
+
+**What to check:** nothing, unless you turned the output cache off and still saw cached
+pages — they now come from your routes.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — the path helper no longer keeps every path it has seen (restart)
 
 The path helper (`_()`) added each distinct path it normalized to a list kept for the
@@ -576,7 +601,12 @@ Several per-request steps are trimmed: values that do not change between request
 encoded form rules exported to the page, the heap-limit label, the date stamp) are
 computed once, three configuration lookups read the loaded configuration instead of
 building a new one, and a bundle's resolved configuration stays in V8's fast property
-mode, which makes the router's per-request copy of it cheap. Measured with the
+mode, which makes the router's per-request copy of it cheap. The global `setContext()` and
+`getConfig()` helpers bind the merge library once instead of resolving it on every call,
+and the controller's `set()` splits dotted names with string operations. In production the
+router probes a bundle's `controllers/setup.js` once, on the bundle's first request, instead
+of on every request, so adding or removing that file on a running production bundle takes a
+restart; development keeps the per-request probe. Measured with the
 framework's profiling harness on a JSON route, these changes together cut the CPU a
 routed request costs by about a third, from about 300 µs to about 205 µs.
 
@@ -590,8 +620,9 @@ browser bundle carries the same constructor: rebuild your bundles to pick up the
 `gina.min.js`.
 
 **What to check:** nothing, unless code reads `this.prototype` on an instance, or relies
-on `Object.keys()` or `JSON.stringify()` of an instance listing `prototype`. Restart and
-rebuild your bundles to pick this up.
+on `Object.keys()` or `JSON.stringify()` of an instance listing `prototype`, or you add or
+remove `controllers/setup.js` on a running production bundle without restarting it. Restart
+and rebuild your bundles to pick this up.
 
 ## 0.6.33 → 0.7.0
 
