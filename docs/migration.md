@@ -21,6 +21,56 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Fixed — the storage endpoints, and a health check with a query string, answer during a maintenance window on isaac (bundle restart)
+
+Since maintenance mode shipped in 0.6.10, during a
+[maintenance window](/guides/maintenance-mode) on the isaac engine (the default),
+`/_gina/storage/stats`, `/_gina/storage/gc` and `/_gina/storage/verify` answered the
+maintenance 503 instead of their result. Those three endpoints exist only in the
+engine-agnostic server layer, and isaac's maintenance check, which comes after the
+`/_gina/*` endpoints isaac answers itself, stood in front of them. So against a running
+bundle, `gina storage:stats`, `storage:gc` and `storage:verify` failed for the whole window
+with `invalid response from /_gina/storage/…`; they did not open the store themselves
+instead, which they do only when the bundle is stopped. A health check whose URL carries a
+query string (`/_gina/health/check?probe=1`) got the same 503 on isaac. isaac now lets
+those exact paths through to the server layer, where the storage endpoints stay restricted
+to [`app.json` `admin.allowFrom`](/reference/app#admin). The express engine was not
+affected.
+
+**What to check:** nothing, unless a liveness or readiness probe calls
+`/_gina/health/check` with a query string on an isaac bundle: that probe failed for the
+whole of every maintenance window, which makes the kubelet restart the container
+(liveness) or pull the pod from the Service (readiness) once the probe's failure threshold
+is reached — see
+[Kubernetes and health probes](/guides/maintenance-mode#kubernetes-and-health-probes). It
+now passes. A probe without a query string was not affected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a JSON body sent to the maintenance or instrumentation toggle no longer stops an express bundle (bundle restart)
+
+On the express engine (`server.engine: "express"`), a `POST /_gina/maintenance` carrying a
+JSON body, the documented way to
+[flip maintenance at runtime](/guides/maintenance-mode#flipping-it-at-runtime), stopped the
+bundle instead of flipping it. The server layer sets a text encoding on every request that
+is not multipart, so the body arrived as text, and the reader of these small control bodies
+threw while joining it: an uncaught exception, which ended the process.
+`POST /_gina/instrument`, which opens the
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation),
+shares that reader and stopped the bundle the same way. The reader now accepts text, counts
+its 4 KB limit in bytes, and turns a read failure into a `400` answer. Only a caller the
+endpoint already admits could send such a body: an address in
+[`app.json` `admin.allowFrom`](/reference/app#admin) for the maintenance toggle, the
+inspector key for the instrumentation window. The isaac engine was not affected. Affected:
+0.6.10 through 0.7.0 for `/_gina/maintenance`, 0.4.0 through 0.7.0 for `/_gina/instrument`.
+
+**What to check:** nothing, unless an express bundle went down when you flipped maintenance
+or opened an instrumentation window: the window never opened, and a bundle your supervisor
+restarted came back in its configured state. After the restart, both toggles work as
+documented.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — the maintenance IP allowlist lets a listed direct client through on an isaac bundle serving HTTP/1.1 (bundle restart)
 
 Since maintenance mode shipped in 0.6.10, on the isaac engine serving HTTP/1.1 — the
