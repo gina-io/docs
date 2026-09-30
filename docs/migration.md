@@ -918,10 +918,23 @@ answer `404` on a parameterised URL (a `GET` route on `/items/:id`) and `405` on
 route declaring several methods (`"GET,POST"`); only a single-method `GET` route
 on a static URL served it.
 
-**What to check:** nothing, unless a client relied on those `404` or `405`
-answers to `HEAD`. On the isaac engine the `access-control-allow-methods` header
-of a `HEAD` response now reads `HEAD` rather than `GET`, as it already did on the
-Express engine.
+**What to check:**
+
+- **A `GET` action that writes** — a record, a token it consumes, a state change —
+  now also runs for a `HEAD` on a parameterised or multi-method route, and on a
+  static route whose action reads `req.get.<param>` before writing (those answered
+  `404`, `405` or `500` before; see the next entry). A static route's action that
+  wrote before reading `req.get` already ran for a `HEAD`. The action runs even when
+  the route's `GET` is served from the output cache, which a `HEAD` never reads, so
+  a client that sends `HEAD` before `GET` — a link scanner, a preview fetcher —
+  triggers the write. Skip the write when `req.method === 'HEAD'` and let the action
+  end as usual with its `return self.render…(…)` (no body is sent for a `HEAD`), or
+  move the write behind a `POST`.
+- **A client that relied on those `404` or `405` answers** to `HEAD` now gets the
+  answer a `GET` would, without the body.
+- **On the isaac engine** the `access-control-allow-methods` header of a `HEAD`
+  response now reads `HEAD` rather than `GET`, as it already did on the Express
+  engine.
 
 Restart the bundle. Nothing to re-bake.
 
