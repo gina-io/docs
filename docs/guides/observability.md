@@ -113,7 +113,7 @@ All keys live under `app.json` `metrics`:
 | --- | --- | --- | --- |
 | `enabled` | boolean | `false` | Master opt-in. `false` = endpoint returns 503 with a hint; no metrics are collected and no listener is registered. |
 | `path` | string | `/_gina/metrics` | Endpoint path. Custom paths are not yet supported (the router only registers the default). |
-| `allowFrom` | string[] | `["127.0.0.1", "::1"]` | IP allowlist. Empty array `[]` denies everyone (explicit lockdown). |
+| `allowFrom` | string[] | `["127.0.0.1", "::1"]` | IP allowlist. Empty array `[]` denies everyone (explicit lockdown). A loopback entry admits direct scrapes only — see [Security](#security--ip-allowlist). |
 | `prefix` | string | `gina_` | Prefix applied to every metric name. |
 | `defaultMetrics` | boolean | `true` | When `true`, `prom-client.collectDefaultMetrics()` seeds Node.js process metrics. |
 
@@ -198,6 +198,16 @@ admin tooling), never proxied public traffic.
 `::ffff:127.0.0.1` (IPv6-mapped IPv4) is normalised to `127.0.0.1`, so a
 listed IPv4 entry matches both forms.
 
+A reverse proxy running on the bundle's own host connects from loopback too, so
+since 0.7.1 a loopback entry admits a scrape only when it connects **directly**: a
+request from `127.0.0.1` or `::1` that carries a forwarding header
+(`X-Forwarded-*`, `Forwarded`) or a `Host` header without a port is refused with
+`403`, and the first refusal is logged once per process. Point the scraper at the
+bundle's own port, never at a public route. The admin endpoints follow the same
+rule — see [`admin.allowFrom`](/reference/app#admin), which also covers the two
+limits (a proxy forwarding a port-bearing `Host` with no forwarding header, and a
+bundle bound directly to port 80 or 443).
+
 If you need to expose metrics to a remote Prometheus server, list its
 hostname's resolved IP explicitly:
 
@@ -267,7 +277,9 @@ built-ins.
   restart.
 - **No `X-Forwarded-For` trust.** Document the proxy chain in your
   Prometheus deployment if scrapers are remote — list the proxy's egress IP
-  in `allowFrom`, NOT the original client IP from XFF.
+  in `allowFrom`, NOT the original client IP from XFF. That works for a proxy
+  on **another** host; one on the bundle's own host connects from loopback and
+  is refused (since 0.7.1), so scrape the bundle's port directly there.
 
 ---
 

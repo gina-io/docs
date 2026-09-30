@@ -214,8 +214,10 @@ client can set must not decide who bypasses a closed site.
 
 `/_gina/maintenance` turns maintenance on and off without a restart or a config
 edit. It is restricted to the administrator allowlist in `app.json`
-(`admin.allowFrom`, loopback by default), so run it from the host or inside the
-pod:
+([`admin.allowFrom`](/reference/app#admin), loopback by default), so run it from
+the host or inside the pod, against the bundle's own port. Since 0.7.1 a loopback
+entry admits only a caller that connects directly: a request relayed by a reverse
+proxy on the same host is refused with `403`.
 
 ```bash
 # status
@@ -296,8 +298,8 @@ from a non-browser client, or serve that page from the bundle's own origin.
 
 ## Behind a reverse proxy
 
-Everything above works proxied, with three things worth checking in your own
-stack:
+Everything above works proxied — except the runtime toggle, which you call on the
+bundle's own port — with four things worth checking in your own stack:
 
 1. **Use `bypassKey`, not `allowFrom`** — see [above](#the-ip-allowlist--only-for-direct-connections).
 2. **Check how your proxy treats a `503` from an upstream.** Some configurations
@@ -308,6 +310,15 @@ stack:
 3. **Confirm your CDN honours `no-store`.** gina emits it on every maintenance
    response; an edge with an overriding cache policy could still retain the
    `503`.
+4. **Keep `/_gina/` off your public routes.** Since 0.7.1 the admin endpoints —
+   the maintenance toggle included — refuse a request relayed by a proxy on the
+   bundle's own host, but a proxy that forwards `Host` with its port and adds no
+   forwarding header still looks like a direct client (see
+   [`admin.allowFrom`](/reference/app#admin)). Block `/_gina/` at the edge, in any
+   letter case and anywhere in the path — `/<webroot>/_gina/…` reaches the same
+   endpoints. If a proxy on the same host forwards health probes, give it an exact
+   match (`location = /_gina/health/check` in nginx) rather than a prefix
+   location, which forwards every path that starts with it.
 
 If you would rather close the site *at the edge*, a proxy-level maintenance page
 is a perfectly good alternative — it also protects you while the bundle is being

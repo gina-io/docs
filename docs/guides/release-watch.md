@@ -262,7 +262,11 @@ gina.registerBusyProbe('export', function (done) {
 All three are dispatched before the router, behave identically on both server
 engines, and are **admin-gated** — restricted to the IP allowlist in
 [`app.json`](/reference/app) `admin.allowFrom` (loopback `127.0.0.1` / `::1` by
-default). A caller outside the allowlist gets `403 Forbidden`. The endpoints
+default). A caller outside the allowlist gets `403 Forbidden`. Loopback admits
+only a caller that connects directly: since 0.7.1 a request relayed by a proxy on
+the bundle's own host is refused (see [`admin.allowFrom`](/reference/app#admin)),
+so open the rehearsal page on the bundle's own port for the banner to reach them.
+The endpoints
 only exist while the feature is active (all three hard gates pass); otherwise
 the paths 404 through normal routing.
 

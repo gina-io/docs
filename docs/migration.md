@@ -69,6 +69,51 @@ well. Same-origin pages, `curl`, the `gina` CLI and deploy scripts are unaffecte
 
 Restart the bundle. Nothing to re-bake.
 
+### Security — the admin `/_gina/*` endpoints refuse a request relayed by a proxy on the bundle's host (bundle restart)
+
+The built-in admin endpoints — `/_gina/info`, `/_gina/cache/stats`, `/_gina/cache/clear`,
+`/_gina/storage/*`, `/_gina/release/*`, `/_gina/maintenance` — and `/_gina/metrics`
+authorise a caller by network address alone: [`app.json` `admin.allowFrom`](/reference/app#admin)
+and `metrics.allowFrom`, loopback by default. A reverse proxy running on the bundle's own
+host connects from loopback, so every client it forwarded was admitted: anyone who could
+reach a site behind such a proxy could turn maintenance mode on (a 503 for every visitor),
+flush the render cache, run a storage garbage collection or read the process and cache
+state, with no browser and no credential. Blocking `/_gina/` at the proxy did not close it
+either, because several of these endpoints also answered a nested path
+(`/_gina/health/check/_gina/maintenance`, which a proxy location for the health check
+forwards), the endpoint path at the end of the query string, another letter case or an
+empty leading segment.
+
+A loopback entry now admits a caller only when it connects directly: a request from
+`127.0.0.1` or `::1` that carries a forwarding header (`X-Forwarded-*`, `Forwarded`) or a
+`Host` header without a port is refused with 403, and the first refusal is logged once. An
+address listed explicitly — a proxy on another host — still admits what it relays. The
+endpoints also answer their exact path only: `/_gina/info`, `/_gina/cache/*`,
+`/_gina/maintenance` and `/_gina/metrics` at the root or under the bundle's own webroot,
+`/_gina/storage/*` and `/_gina/release/*` at the root, all in lower case.
+
+**What to check:**
+
+- **Call the admin endpoints on the bundle's own port**, from the host or the pod —
+  `curl http://127.0.0.1:<port>/_gina/maintenance`, the `gina` CLI. That is unchanged; a
+  script that went through a proxy on the same host now gets 403, so point it at the port.
+- **Release-watch banner:** open the rehearsal page on the bundle's own port. Through a
+  proxy on the same host, the banner's calls are refused.
+- **A bundle bound directly to port 80 or 443** receives a `Host` header without a port from
+  every direct client, so its loopback callers now read as relayed. Set
+  `server.proxy.requireForwardedHeaders: true` in its `settings.json`: only forwarding
+  headers then mark a request as proxied.
+- **A query string** on `/_gina/info`, `/_gina/cache/stats`, `/_gina/maintenance` or
+  `/_gina/metrics` no longer changes which endpoint answers (on the express engine some of
+  these URLs answered 404), and `/_GINA/…` or a prefix other than the bundle's webroot now
+  falls through to routing.
+- **Keep `/_gina/` off your public routes.** A proxy that forwards `Host` with its port and
+  adds no forwarding header still looks like a direct client and is still admitted. Block
+  `/_gina/` at the edge, in any letter case and anywhere in the path; if a proxy on the same
+  host forwards health probes, match `/_gina/health/check` exactly (`location =` in nginx).
+
+Restart the bundle. Nothing to re-bake.
+
 ### Security — command output logs and the log-listener port file leave the shared temp directory (CLI and `run()`; framework restart)
 
 `run()` (also `gna.run`) and `Shell::run()` in `lib/shell` wrote every command's

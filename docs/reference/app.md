@@ -102,6 +102,79 @@ The `bundle@project` notation tells the framework to look up the actual address 
 `~/.gina/${version}/ports.json` at startup. This means proxy targets always reflect
 the current port allocation without hardcoding addresses.
 
+### `admin`
+
+**Type:** `object` · **Optional**
+
+Decides who may call the bundle's built-in admin endpoints: `/_gina/info`,
+`/_gina/cache/stats`, `/_gina/cache/clear`, `/_gina/storage/*`, `/_gina/release/*` and
+`/_gina/maintenance`. They expose the process's state and can change it — close the
+site for maintenance, flush the cache, run a storage garbage collection — so they
+answer only the network addresses listed here.
+
+```json title="src/frontend/config/app.json"
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "admin": {
+    "allowFrom": ["127.0.0.1", "::1"]
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `allowFrom` | string[] | `["127.0.0.1", "::1"]` | Addresses allowed to call the admin endpoints. Any other caller gets `403`. An empty array `[]` denies everyone |
+
+The address checked is the one the connection comes from: gina never trusts
+`X-Forwarded-For`, which any client can set. An IPv4 entry also matches its
+IPv6-mapped form (`::ffff:127.0.0.1`).
+
+#### Loopback admits direct callers only
+
+A reverse proxy running on the bundle's own host connects from loopback too. Since
+0.7.1 a loopback entry admits a caller only when it connects **directly**: a request
+from `127.0.0.1` or `::1` that carries a forwarding header (`X-Forwarded-*`,
+`Forwarded`) or a `Host` header without a port is treated as relayed by such a proxy
+and refused with `403`. The first refusal is logged once per process.
+
+```mermaid
+flowchart TD
+    A["Request to an admin endpoint"] --> B{"Source address listed<br/>in admin.allowFrom?"}
+    B -- no --> R["403"]
+    B -- yes --> C{"Loopback address?"}
+    C -- no --> OK["Admitted"]
+    C -- yes --> D{"Forwarding header, or a<br/>Host header without a port?"}
+    D -- yes --> R
+    D -- no --> OK
+```
+
+From the machine or the pod running the bundle, call the bundle's own port —
+`curl http://127.0.0.1:<port>/_gina/maintenance`, or the `gina` CLI — and nothing
+changes. To let a proxy on **another** host through, list that proxy's address: an
+explicitly listed non-loopback address still admits what it relays.
+
+Two limits to know:
+
+- A proxy that forwards the `Host` header **with its port** and adds no forwarding
+  header cannot be told apart from a direct client, so it is still admitted. Do not
+  route `/_gina/` to the public: block it at your edge, in any letter case and
+  anywhere in the path.
+- A bundle bound directly to port 80 or 443 receives a `Host` header without a port
+  from every direct client, because clients omit a default port. Set
+  `server.proxy.requireForwardedHeaders: true` in its
+  [`settings.json`](/reference/settings): only forwarding headers then mark a request
+  as proxied.
+
+The admin endpoints also answer their **exact** path only: `/_gina/info`,
+`/_gina/cache/*` and `/_gina/maintenance` at the root or under the bundle's own
+webroot, `/_gina/storage/*` and `/_gina/release/*` at the root — all in lower case.
+A nested path, the endpoint path inside a query string, another letter case or an
+empty leading segment reaches none of them.
+
+`/_gina/metrics` has its own list, `metrics.allowFrom`, with the same loopback rule —
+see [Observability](/guides/observability#security--ip-allowlist).
+
 ### `*` — application constants
 
 **Type:** any · **Optional**

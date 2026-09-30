@@ -243,7 +243,8 @@ turning on in every non-local scope:
   (see [Observability → Request correlation](/guides/observability#request-correlation)).
 - **[Metrics](/guides/observability)** — `metrics.enabled: true` exposes
   Prometheus counters at `/_gina/metrics` behind an IP allowlist that reads
-  the socket address, never `X-Forwarded-For`. Alert on 401/403 rates: a
+  the socket address, never `X-Forwarded-For`, and that refuses a loopback
+  scrape relayed by a proxy on the bundle's own host (since 0.7.1). Alert on 401/403 rates: a
   spike in denials is the deny-by-default posture doing its job.
 - **[Structured logs](/guides/logging)** — `GINA_LOG_FORMAT=json` makes every
   log line machine-parseable, with the request id on request-scoped lines.
