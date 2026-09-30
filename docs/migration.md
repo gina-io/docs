@@ -21,6 +21,30 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Security — the `/_gina/*` control endpoints refuse a cross-site write whatever the shape of its URL (bundle restart)
+
+Since 0.6.10 a write from a page on another origin to a built-in control endpoint —
+`POST /_gina/maintenance`, `/_gina/cache/clear`, `/_gina/storage/gc`,
+`/_gina/release/rebuild` — is refused with 403, because those endpoints authorise a
+caller by network address alone (`app.json` `admin.allowFrom`, loopback by default), a
+credential a browser attaches automatically. That check only looked at URLs beginning
+with `/_gina/` in lower case, while several of the endpoints also answer other shapes: a
+leading segment (`/web/_gina/maintenance`, `//_gina/maintenance`), the endpoint path at
+the end of the query string (`/?next=/_gina/maintenance`), or another letter case
+(`/_GINA/cache/clear`, `/_GINA/storage/gc`). A page on another origin, visited by an
+operator browsing from an allowed address, could send one of those and turn maintenance
+mode on — a 503 for every visitor — flush the render cache, run a storage garbage
+collection or trigger a release rebuild.
+
+The check now looks for `/_gina/` anywhere in the URL, in any letter case.
+
+**What to check:** nothing, unless a browser page served from another origin sends a
+`POST` (or another unsafe method) to an application URL of yours that contains
+`/_gina/` — in its query string, for example. That request is now refused with 403 as
+well. Same-origin pages, `curl`, the `gina` CLI and deploy scripts are unaffected.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Security — command output logs and the log-listener port file leave the shared temp directory (CLI and `run()`; framework restart)
 
 `run()` (also `gna.run`) and `Shell::run()` in `lib/shell` wrote every command's
