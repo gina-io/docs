@@ -21,6 +21,44 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Fixed — the health check, the routing map and the release-watch endpoints answer a URL with a query string (bundle restart)
+
+`/_gina/health/check`, `/_gina/assets/routing.json`, and — while
+[release watch](/guides/release-watch) is on — `/_gina/release/status` and
+`/_gina/release/events` matched their path only when the URL ended there, so the same path
+followed by a query string (`/_gina/health/check?probe=1`) missed the endpoint. On the
+express engine (`server.engine: "express"`) such a request fell through to routing and
+answered 404, or the maintenance 503 during a
+[maintenance window](/guides/maintenance-mode). On the isaac engine (the default) the
+server layer answered it outside a window, but during one `/_gina/assets/routing.json?…`
+and the release-watch endpoints with a query string answered the maintenance 503. The four
+endpoints now ignore a query string on both engines.
+
+**What to check:** nothing, unless a probe or an uptime monitor calls
+`/_gina/health/check` with a query string on an express bundle — to defeat a cache, for
+example: it read the bundle as down (404) and now gets 200. The browser fetches the routing
+map without a query string, so pages were not affected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the health check answers `HEAD` (bundle restart)
+
+`/_gina/health/check` answered `GET` only, on both engines, so a `HEAD` probe — some load
+balancers and monitors probe with `HEAD` — fell through to routing: a 404, or the
+maintenance 503 during a [maintenance window](/guides/maintenance-mode). It now answers
+`HEAD` with the `200` and the headers a `GET` gets, plus `Content-Length`, and no body.
+(0.7.0 made `HEAD` work on every route that serves `GET`; the health check is a built-in
+endpoint, not a route.)
+
+**What to check:** nothing, unless a load balancer, a monitor or a probe calls
+`/_gina/health/check` with `HEAD`: it read the bundle as down, and a liveness or readiness
+probe failing that way makes the kubelet restart the container or pull the pod from the
+Service — see
+[Kubernetes and health probes](/guides/maintenance-mode#kubernetes-and-health-probes). It
+now passes.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — the storage endpoints, and a health check with a query string, answer during a maintenance window on isaac (bundle restart)
 
 Since maintenance mode shipped in 0.6.10, during a
@@ -34,8 +72,9 @@ with `invalid response from /_gina/storage/…`; they did not open the store the
 instead, which they do only when the bundle is stopped. A health check whose URL carries a
 query string (`/_gina/health/check?probe=1`) got the same 503 on isaac. isaac now lets
 those exact paths through to the server layer, where the storage endpoints stay restricted
-to [`app.json` `admin.allowFrom`](/reference/app#admin). The express engine was not
-affected.
+to [`app.json` `admin.allowFrom`](/reference/app#admin). The storage endpoints were not
+affected on the express engine; a health check with a query string was, in and out of a
+window — see the query-string fix above.
 
 **What to check:** nothing, unless a liveness or readiness probe calls
 `/_gina/health/check` with a query string on an isaac bundle: that probe failed for the

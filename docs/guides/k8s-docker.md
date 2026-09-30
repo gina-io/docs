@@ -174,15 +174,18 @@ stays skipped.
 ## Liveness and readiness probes
 
 Every Gina bundle serves a built-in, ungated liveness endpoint on **both**
-engines — the Isaac engine and the default Express engine:
+engines — the Isaac engine (the default) and the Express engine:
 
 ```
-GET /_gina/health/check  →  200  {"status":"healthy","timestamp":"<ISO>"}
+GET  /_gina/health/check  →  200  {"status":"healthy","timestamp":"<ISO>"}
+HEAD /_gina/health/check  →  200  (the same headers, no body)
 ```
 
 It exposes no process state, carries no admin allowlist, and answers
-off-loopback, so a kubelet or Docker probe reaches it directly. Wire it as a
-Kubernetes liveness probe:
+off-loopback, so a kubelet or Docker probe reaches it directly. Since 0.7.1 it
+also answers `HEAD`, for a load balancer that probes without reading a body,
+and ignores a query string, so a monitor that adds one to defeat a cache gets
+the same `200`. Wire it as a Kubernetes liveness probe:
 
 ```yaml
 livenessProbe:
