@@ -540,7 +540,10 @@ curl -X POST 'http://127.0.0.1:<port>/_gina/cache/clear?bundle=<name>'
   prefetch or crawler could fire).
 - **Admin-gated** — the same IP allowlist as `/_gina/cache/stats`, read from
   `app.json` `admin.allowFrom` (default: loopback only). A request from a
-  disallowed address gets `403`.
+  disallowed address gets `403`. Loopback admits only a caller that connects
+  directly: since 0.7.1 a request relayed by a proxy on the bundle's own host is
+  refused too (see [`admin.allowFrom`](/reference/app#admin)), so call the
+  bundle's port.
 - The optional `?bundle=<name>` query restricts the flush to one bundle; omit it
   to flush every bundle's output entries in the shared cache.
 - It drops the live cache entries and, for `fs` entries, removes the

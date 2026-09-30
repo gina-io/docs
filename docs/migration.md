@@ -19,6 +19,611 @@ upward to the target version.
 
 ---
 
+## 0.7.0 → 0.7.1
+
+### Security — a GET of the routing table in another letter case no longer stops an isaac bundle (bundle restart)
+
+On the isaac engine (the default), a bundle answers `GET /_gina/assets/routing.json` — the
+routing table the browser client fetches at boot — from a fast path that tested the URL
+without regard to letter case, then looked the file up by the requested spelling with an
+exact comparison. Any other spelling, such as `/_gina/assets/Routing.json`, found no file,
+and reading the empty result threw an uncaught error that ended the bundle process: one
+request, with no authentication, before routing and every route guard, under any path
+prefix. A request the bundle classified as coming through a reverse proxy — a `Host`
+header without a port, or an `X-Forwarded-Host` header (see
+[`server.proxy.requireForwardedHeaders`](/reference/settings#server)) — was served the
+host-stripped table instead and escaped the crash, but a client that reaches the bundle's
+port directly sets those headers itself. The express engine (`server.engine: "express"`)
+serves the table from memory and was not affected. The fast path now looks the file up by
+its lower-cased name, so every spelling it accepts serves the table. Affected: 0.1.6
+through 0.7.0.
+
+**What to check:** nothing in your code — the browser client requests the lower-case name,
+so pages were not affected. If an isaac bundle restarted with no obvious cause, look in
+your access logs for a request to `/_gina/assets/routing.json` in another letter case;
+before it ended, the process logged an uncaught `TypeError: Cannot read properties of null
+(reading 'mime')`.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a page whose query string ends in a `/_gina/` endpoint path is answered by the page (bundle restart)
+
+A page URL whose query string ended in the path of a built-in endpoint — for instance
+`/web/?next=/_gina/health/check` — was answered by that endpoint instead of the page, on
+both engines: the health check, `/_gina/jobs/<id>`, `/_gina/instrument`, and in dev the
+[Inspector](/guides/inspector)'s `/_gina/inspector`, `/_gina/logs`, `/_gina/agent`,
+`/_gina/indexes` and `/_gina/reveal` tested the whole URL. During a
+[maintenance window](/guides/maintenance-mode) such a page got the endpoint's answer where
+its 503 was due, and a WebSocket upgrade to such a URL was taken by the Inspector agent.
+These endpoints now match the URL's path only; a prefix before `/_gina/` still works (the
+Inspector and health probes under a webroot rely on it). The dev endpoints
+`/_gina/inspector`, `/_gina/logs`, `/_gina/indexes` and `/_gina/reveal` also answer a URL
+that carries a query string (`/_gina/logs?x=1`), which got a 404 on the express engine — the
+maintenance 503 during a window — and the maintenance 503 on the isaac engine during a window.
+
+**What to check:** nothing, unless a page of yours passes a `/_gina/` path in its query
+string — a return-to parameter, for instance: it now gets the page.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the standalone Inspector and `gina inspector:open` accept a target URL with a query string (reload the Inspector)
+
+The standalone [Inspector](/guides/inspector) appends `/_gina/…` to its `?target=` value,
+and `gina inspector:open <url>` passes its URL argument through as that value. A pasted
+page URL with a query string or a fragment — `http://localhost:3100/page?x=1` — built
+`http://localhost:3100/page?x=1/_gina/agent`: the endpoint path landed in the query string,
+where the endpoints no longer look for it (see the fix above), and outside dev mode the agent
+key became part of another parameter, so the Inspector could not connect. The target's query
+string and fragment are now dropped, then its trailing slashes.
+
+**What to check:** nothing.
+
+Reload the Inspector window: the bundle reads the Inspector from the framework on every
+request, so there is nothing to restart or re-bake. `gina inspector:open` picks the change up
+on its next run.
+
+### Fixed — the Inspector's streams and the release-watch banner work over HTTP/2 (bundle restart)
+
+On the isaac engine (the default), `/_gina/logs` and `/_gina/agent` — the
+[Inspector](/guides/inspector)'s server-log and agent streams — and
+`/_gina/release/events`, which feeds the live [release-watch](/guides/release-watch)
+banner, never answered an HTTP/2 client. Each sent a `connection: keep-alive` header, which
+HTTP/2 forbids: node refused the response headers, logged
+`ERR_HTTP2_INVALID_CONNECTION_HEADERS` as a warning, and the stream never opened. A bundle
+with `"protocol": "http/2.0"` reached directly — a browser on the bundle's own port —
+therefore showed no server logs in the Inspector, had no agent stream, and its release-watch
+banner got no live events. HTTP/1.1 clients, and a proxy that talks HTTP/1.1 to the bundle,
+were not affected. The header now goes to HTTP/1.1 clients only. Affected: 0.3.0 through
+0.7.0 (`/_gina/release/events`: 0.5.18 through 0.7.0).
+
+**What to check:** nothing. A `[ SERVER ][ HTTP2 UNCAUGHT EXCEPTION ]` warning naming
+`ERR_HTTP2_INVALID_CONNECTION_HEADERS` in a bundle's log came from this, and stops.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the health check, the routing map and the release-watch endpoints answer a URL with a query string (bundle restart)
+
+`/_gina/health/check`, `/_gina/assets/routing.json`, and — while
+[release watch](/guides/release-watch) is on — `/_gina/release/status` and
+`/_gina/release/events` matched their path only when the URL ended there, so the same path
+followed by a query string (`/_gina/health/check?probe=1`) missed the endpoint. On the
+express engine (`server.engine: "express"`) such a request fell through to routing and
+answered 404, or the maintenance 503 during a
+[maintenance window](/guides/maintenance-mode). On the isaac engine (the default) the
+server layer answered it outside a window, but during one `/_gina/assets/routing.json?…`
+and the release-watch endpoints with a query string answered the maintenance 503. The four
+endpoints now ignore a query string on both engines.
+
+**What to check:** nothing, unless a probe or an uptime monitor calls
+`/_gina/health/check` with a query string on an express bundle — to defeat a cache, for
+example: it read the bundle as down (404) and now gets 200. The browser fetches the routing
+map without a query string, so pages were not affected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the health check answers `HEAD` (bundle restart)
+
+`/_gina/health/check` answered `GET` only, on both engines, so a `HEAD` probe — some load
+balancers and monitors probe with `HEAD` — fell through to routing: a 404, or the
+maintenance 503 during a [maintenance window](/guides/maintenance-mode). It now answers
+`HEAD` with the `200` and the headers a `GET` gets, plus `Content-Length`, and no body.
+(0.7.0 made `HEAD` work on every route that serves `GET`; the health check is a built-in
+endpoint, not a route.)
+
+**What to check:** nothing, unless a load balancer, a monitor or a probe calls
+`/_gina/health/check` with `HEAD`: it read the bundle as down, and a liveness or readiness
+probe failing that way makes the kubelet restart the container or pull the pod from the
+Service — see
+[Kubernetes and health probes](/guides/maintenance-mode#kubernetes-and-health-probes). It
+now passes.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the storage endpoints, and a health check with a query string, answer during a maintenance window on isaac (bundle restart)
+
+Since maintenance mode shipped in 0.6.10, during a
+[maintenance window](/guides/maintenance-mode) on the isaac engine (the default),
+`/_gina/storage/stats`, `/_gina/storage/gc` and `/_gina/storage/verify` answered the
+maintenance 503 instead of their result. Those three endpoints exist only in the
+engine-agnostic server layer, and isaac's maintenance check, which comes after the
+`/_gina/*` endpoints isaac answers itself, stood in front of them. So against a running
+bundle, `gina storage:stats`, `storage:gc` and `storage:verify` failed for the whole window
+with `invalid response from /_gina/storage/…`; they did not open the store themselves
+instead, which they do only when the bundle is stopped. A health check whose URL carries a
+query string (`/_gina/health/check?probe=1`) got the same 503 on isaac. isaac now lets
+those exact paths through to the server layer, where the storage endpoints stay restricted
+to [`app.json` `admin.allowFrom`](/reference/app#admin). The storage endpoints were not
+affected on the express engine; a health check with a query string was, in and out of a
+window — see the query-string fix above.
+
+**What to check:** nothing, unless a liveness or readiness probe calls
+`/_gina/health/check` with a query string on an isaac bundle: that probe failed for the
+whole of every maintenance window, which makes the kubelet restart the container
+(liveness) or pull the pod from the Service (readiness) once the probe's failure threshold
+is reached — see
+[Kubernetes and health probes](/guides/maintenance-mode#kubernetes-and-health-probes). It
+now passes. A probe without a query string was not affected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a JSON body sent to the maintenance or instrumentation toggle no longer stops an express bundle (bundle restart)
+
+On the express engine (`server.engine: "express"`), a `POST /_gina/maintenance` carrying a
+JSON body, the documented way to
+[flip maintenance at runtime](/guides/maintenance-mode#flipping-it-at-runtime), stopped the
+bundle instead of flipping it. The server layer sets a text encoding on every request that
+is not multipart, so the body arrived as text, and the reader of these small control bodies
+threw while joining it: an uncaught exception, which ended the process.
+`POST /_gina/instrument`, which opens the
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation),
+shares that reader and stopped the bundle the same way. The reader now accepts text, counts
+its 4 KB limit in bytes, and turns a read failure into a `400` answer. Only a caller the
+endpoint already admits could send such a body: an address in
+[`app.json` `admin.allowFrom`](/reference/app#admin) for the maintenance toggle, the
+inspector key for the instrumentation window. The isaac engine was not affected. Affected:
+0.6.10 through 0.7.0 for `/_gina/maintenance`, 0.4.0 through 0.7.0 for `/_gina/instrument`.
+
+**What to check:** nothing, unless an express bundle went down when you flipped maintenance
+or opened an instrumentation window: the window never opened, and a bundle your supervisor
+restarted came back in its configured state. After the restart, both toggles work as
+documented.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the maintenance IP allowlist lets a listed direct client through on an isaac bundle serving HTTP/1.1 (bundle restart)
+
+Since maintenance mode shipped in 0.6.10, on the isaac engine serving HTTP/1.1 — the
+default engine and protocol — a client listed in
+[`server.maintenance.allowFrom`](/guides/maintenance-mode#the-ip-allowlist--only-for-direct-connections)
+was answered 503 like everyone else, on every page and static file, for the whole
+maintenance window: the allowlist never let a listed operator through. isaac's
+maintenance check admitted the client; isaac then rewrote the request's `Host` header
+without its port before handing the request on, and a second maintenance check read that
+port-less `Host` as the sign of a reverse proxy, closed the address arm and answered 503.
+The second check now keeps the first one's verdict. isaac rewrites `Host` only for a
+bundle serving HTTP/1.1, so a bundle serving HTTP/2 was not affected, whatever protocol its
+clients speak; nor were the express engine, the bypass key (the `?gina-maintenance-key=`
+link, its cookie and the `x-gina-maintenance-key` header) and a bundle with
+`server.proxy.requireForwardedHeaders: true`.
+
+**What to check:** if `allowFrom` lists a loopback address (`127.0.0.1`, `::1`) while a
+reverse proxy on the bundle's own host relays public traffic to it, make sure that proxy
+sends a forwarding header (`X-Forwarded-For`, for example) or a `Host` without its port. A
+proxy that does neither cannot be told from a direct client, so every visitor it relays
+now passes the window on an isaac bundle serving HTTP/1.1 too — as it already did on a bundle
+serving HTTP/2 and on the express engine. Or drop the loopback entry and use the
+[bypass key](/guides/maintenance-mode#the-bypass-key--works-under-any-deployment), which
+does not depend on the network path.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — `storage:gc --dry-run` and `--driver=` work against a running bundle on isaac (bundle restart)
+
+On the isaac engine (the default), the storage maintenance endpoints of a running
+bundle — `/_gina/storage/stats`, `/_gina/storage/gc` and `/_gina/storage/verify`, which
+the `storage:*` commands call while the bundle runs — never saw their query string:
+isaac removes it from the request URL before these handlers run. Against a running
+bundle, `gina storage:gc --dry-run` therefore ran a real garbage collection, and
+`--driver=<name>` was ignored by `storage:stats`, `storage:gc` and `storage:verify`,
+which reported on or collected every driver. The handlers now read the query from the
+original request URL, so a dry run touches nothing and `--driver` scopes one driver, as
+[Maintenance: stats, gc and verify](/guides/storage#maintenance-stats-gc-and-verify)
+describes.
+
+**What to check:** if you ran `gina storage:gc --dry-run` against a running bundle on
+0.6.7 through 0.7.0, that run was a real collection — its output kept the `[ dry-run ]`
+header but reported `collected N blob(s)` rather than `would collect N` — and it removed
+every unreferenced blob past `sweepGrace`, on every `cas` driver. The periodic sweep
+collects the same blobs on its next pass, so nothing else changes — unless a driver
+sets `sweepInterval` to `"0s"`, which turns that sweep off to keep unreferenced blobs
+until you collect them yourself; those were removed. A stopped bundle (the CLI then
+opens the store itself) and the express engine were not affected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — the `/_gina/*` control endpoints refuse a cross-site write whatever the shape of its URL (bundle restart)
+
+Since 0.6.10 a write from a page on another origin to a built-in control endpoint —
+`POST /_gina/maintenance`, `/_gina/cache/clear`, `/_gina/storage/gc`,
+`/_gina/release/rebuild` — is refused with 403, because those endpoints authorise a
+caller by network address alone (`app.json` `admin.allowFrom`, loopback by default), a
+credential a browser attaches automatically. That check only looked at URLs beginning
+with `/_gina/` in lower case, while several of the endpoints also answer other shapes: a
+leading segment (`/web/_gina/maintenance`, `//_gina/maintenance`), the endpoint path at
+the end of the query string (`/?next=/_gina/maintenance`), or another letter case
+(`/_GINA/cache/clear`, `/_GINA/storage/gc`). A page on another origin, visited by an
+operator browsing from an allowed address, could send one of those and turn maintenance
+mode on — a 503 for every visitor — flush the render cache, run a storage garbage
+collection or trigger a release rebuild.
+
+The check now looks for `/_gina/` anywhere in the URL, in any letter case.
+
+**What to check:** nothing, unless a browser page served from another origin sends a
+`POST` (or another unsafe method) to an application URL of yours that contains
+`/_gina/` — in its query string, for example. That request is now refused with 403 as
+well. Same-origin pages, `curl`, the `gina` CLI and deploy scripts are unaffected.
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — the admin `/_gina/*` endpoints refuse a request relayed by a proxy on the bundle's host (bundle restart)
+
+The built-in admin endpoints — `/_gina/info`, `/_gina/cache/stats`, `/_gina/cache/clear`,
+`/_gina/storage/*`, `/_gina/release/*`, `/_gina/maintenance` — and `/_gina/metrics`
+authorise a caller by network address alone: [`app.json` `admin.allowFrom`](/reference/app#admin)
+and `metrics.allowFrom`, loopback by default. A reverse proxy running on the bundle's own
+host connects from loopback, so every client it forwarded was admitted: anyone who could
+reach a site behind such a proxy could turn maintenance mode on (a 503 for every visitor),
+flush the render cache, run a storage garbage collection or read the process and cache
+state, with no browser and no credential. Blocking `/_gina/` at the proxy did not close it
+either, because several of these endpoints also answered a nested path
+(`/_gina/health/check/_gina/maintenance`, which a proxy location for the health check
+forwards), the endpoint path at the end of the query string, another letter case or an
+empty leading segment.
+
+A loopback entry now admits a caller only when it connects directly: a request from
+`127.0.0.1` or `::1` that carries a forwarding header (`X-Forwarded-*`, `Forwarded`) or a
+`Host` header without a port is refused with 403, and the first refusal is logged once. An
+address listed explicitly — a proxy on another host — still admits what it relays. The
+endpoints also answer their exact path only: `/_gina/info`, `/_gina/cache/*`,
+`/_gina/maintenance` and `/_gina/metrics` at the root or under the bundle's own webroot,
+`/_gina/storage/*` and `/_gina/release/*` at the root, all in lower case.
+
+**What to check:**
+
+- **Call the admin endpoints on the bundle's own port**, from the host or the pod —
+  `curl http://127.0.0.1:<port>/_gina/maintenance`, the `gina` CLI. That is unchanged; a
+  script that went through a proxy on the same host now gets 403, so point it at the port.
+- **Release-watch banner:** open the rehearsal page on the bundle's own port. Through a
+  proxy on the same host, the banner's calls are refused.
+- **A bundle bound directly to port 80 or 443** receives a `Host` header without a port from
+  every direct client, so its loopback callers now read as relayed. Set
+  `server.proxy.requireForwardedHeaders: true` in its `settings.json`: only forwarding
+  headers then mark a request as proxied.
+- **A query string** on `/_gina/info`, `/_gina/cache/stats`, `/_gina/maintenance` or
+  `/_gina/metrics` no longer changes which endpoint answers (on the express engine some of
+  these URLs answered 404), and `/_GINA/…` or a prefix other than the bundle's webroot now
+  falls through to routing.
+- **Keep `/_gina/` off your public routes.** A proxy that forwards `Host` with its port and
+  adds no forwarding header still looks like a direct client and is still admitted. Block
+  `/_gina/` at the edge, in any letter case and anywhere in the path; if a proxy on the same
+  host forwards health probes, match `/_gina/health/check` exactly (`location =` in nginx).
+
+Restart the bundle. Nothing to re-bake.
+
+### Security — command output logs and the log-listener port file leave the shared temp directory (CLI and `run()`; framework restart)
+
+`run()` (also `gna.run`) and `Shell::run()` in `lib/shell` wrote every command's
+output to the fixed files `out.log` and `err.log` in the temp directory (`opt.tmp`,
+`GINA_TMPDIR`, the system temp directory by default), and every `gina` command wrote
+the framework log listener's port to `mq-listener-v<version>.port` in the same
+directory. Two runs sharing that directory read each other's output as their own,
+and a run whose files a sibling had already removed never called back. Where the
+directory is shared between local users (`/tmp` on Linux by default), another user
+could create those names first: `gina project:add` / `project:import` and any `run()`
+call then failed, every `gina` command failed at start-up, and on hosts without the
+kernel's `fs.protected_regular` / `fs.protected_symlinks` protections that user could
+read the command output or have it — or the port number — written into a file of
+their choosing.
+
+Each run now gets a private directory of its own under the base (`gina-run-*`, mode
+0700, removed with its two files when the command exits), a failure while reading the
+output back is delivered as the run's error, and the port file lives under the
+framework home (`<GINA_HOMEDIR>/run/`, `~/.gina/run/` by default, mode 0600).
+
+**What to check:** nothing, unless something of yours read `<tmpdir>/out.log`,
+`<tmpdir>/err.log` or `<tmpdir>/mq-listener-v<version>.port` directly — those paths
+are no longer written. A `run()` caller that passed `tmp` still gets its files under
+that directory, one level down.
+
+Restart the framework (`gina framework:restart`) and any running `gina tail` so both
+use the new port-file location; the CLI picks the rest up on its next command, a
+bundle calling `run()` on its restart. Nothing to re-bake.
+
+### Security — CLI commands no longer run names and flags through a shell (CLI; framework restart)
+
+`gina project:start`, `project:stop` and `project:restart`; the `link-node-modules`
+and `link` steps that run on every `project:` and `bundle:` start, stop and restart;
+the `framework:link` step of a `bundle:start` that reinstalls a project's
+`node_modules`; the `node_modules` repair step of `framework:link`; and the process
+lookups of `bundle:stop` and `minion:kill` all built a command line from the
+project or bundle name and the `--` flags you passed, and ran it through `sh`.
+Shell syntax in a registered name or in a flag value ran as a command, as the user
+running gina. These commands now start their children from argument vectors, and
+`bundle:stop` and `minion:kill` read the `ps -ef` listing themselves.
+
+Typing a command yourself crossed no boundary. The cases at risk were automation
+that builds these names or flags from data it does not control, and anything that
+can send a `bundle:start` to the framework's command socket, which listens on
+loopback by default.
+
+**What to check:** nothing, unless a script relied on these commands passing a name
+or a flag through a shell a second time: a value holding a space, a quote or a `$`
+now arrives unchanged.
+
+Restart the framework with `gina framework:restart` to pick it up for
+`bundle:start`, which runs inside the framework process; the other commands pick it
+up on their next run. Nothing to re-bake.
+
+### Fixed — project commands work from a path with a space, and `bundle:stop` stops only its own bundle (CLI; framework restart)
+
+- `gina project:start`, `project:stop` and `project:restart` now work from an
+  install whose path holds a space: they ran `bundle:start`, `bundle:stop` or
+  `bundle:restart` through a command line that split the path, and failed.
+- A `bundle:start` that reinstalls a project's `node_modules` after an architecture
+  or platform change re-links gina with the running install's own `bin/gina`: it no
+  longer fails when `gina` is not on your `PATH`, nor uses whichever `gina` comes
+  first there.
+- A flag value holding a space now reaches the `link` steps of `project:` and
+  `bundle:` start, stop and restart as one value instead of two.
+- When a bundle's pid file is missing, `bundle:stop` finds its process by the exact
+  `gina: <bundle>@<project>` title: stopping `api@shop` no longer matches the
+  process of `api@shopping`, which it could stop instead.
+
+Restart the framework with `gina framework:restart` to pick it up for
+`bundle:start`; the other commands pick it up on their next run. Nothing to
+re-bake.
+
+### Fixed — a daemon-started bundle's boot warnings appear in the `bundle:start` output (CLI; framework restart)
+
+A bundle started through the framework daemon now prints the lines it logs at
+`warn` and above while it starts (`warn`, `warning`, `error`, `err`, `crit` and
+`alert`) in the output of `gina bundle:start`, before the `started` line.
+`gina bundle:restart` prints them too. Until now these lines reached only a
+`gina tail` connected before the bundle started, because the log listener keeps no
+backlog. So when you ran `gina bundle:start` and then `gina tail`, or in a container
+whose init script starts the bundle before its tail, the two boot warnings added in
+0.7.0 (Swig `autoescape` not set, and unanchored routing `requirements`; see
+0.6.33 → 0.7.0 below) never showed.
+
+**What to check:** nothing is required. If you start `gina tail` before your
+bundles, each of these lines now appears twice, once in the start output and once
+in the tail. A script that reads the start output sees these lines before the
+`started` line, which then starts a line of its own.
+
+Restart the framework with `gina framework:restart`, or restart the container that
+runs it, to pick this up: `bundle:start` runs inside the framework process, so a
+`bundle:restart` alone keeps the old behaviour. Nothing to re-bake.
+
+### Fixed — a `--restart-pid` flag no longer shifts a command's arguments (CLI)
+
+`bin/gina` filtered out a `--restart-pid=<pid>` flag, left from an internal restart
+handshake that nothing used any more, by removing the wrong argument: `gina start
+--restart-pid=<pid>` lost its `start` task, and any other command given the flag reached
+the CLI shifted by one argument. The filter is removed; a `--restart-pid` you type is
+passed on like any other flag.
+
+**What to check:** nothing, unless a script of yours passes `--restart-pid`.
+
+Nothing to restart: the next `gina` command picks it up.
+
+### Security — more CLI commands, and an isaac bundle's boot, no longer run values through a shell (CLI; bundle restart)
+
+`gina framework:status`, `framework:restart`, `framework:build`, the download and
+extract steps of `framework:add`, `gina .`, `framework:open`, the default-browser
+probes, browser launch and fallbacks of `inspector:open`, and the npm prefix look-ups
+that the CLI and `framework:init` fall back on all built a command line and ran it
+through `sh`: the arguments you passed, file paths, the Inspector URL or the content
+of a pid file went into it. At every boot, an isaac bundle did the same with its
+cache path when it compressed its routing files with brotli and gzip. Shell syntax in
+any of these values ran as a command, as the user running gina. They now start their
+children from argument vectors. On Windows, the calls that need cmd.exe (`start`,
+`where` and the `npm.cmd` download) keep their command lines.
+
+Each of these values comes from your own command line, settings or files, so the
+shell never let anyone else run a command.
+
+Separately, `framework:status` listed every user's processes and wrote a pid file
+named after the title of any process whose title began with `gina-`, so another local
+user's process titled `gina-v/../../x` made it write `x.pid` outside the run
+directory. It now lists your own processes only, and accepts only a framework
+daemon's `gina-v<version>` title.
+
+**What to check:** nothing, unless a script relied on one of these commands passing
+a value through a shell a second time: a value holding a space, a quote or a `$` now
+arrives unchanged.
+
+Restart your bundles to pick up the isaac change; the CLI commands pick theirs up on
+their next run. Nothing to re-bake.
+
+### Fixed — `bundle:stop` reads its pid file strictly, `framework:status` works without `ps`, and paths with a space work (CLI; bundle restart)
+
+- `bundle:stop` reads a bundle's pid file as a positive integer only. A pid file
+  holding `-1` made it send `SIGKILL` to every process you could signal, and one
+  holding `12abc` sent it to pid 12; any other content now reads as "is not running".
+- On a host without `ps`, such as a slim container image, `framework:status` removed
+  the pid file of every running framework, because it checked each one with `ps`. It
+  now checks each pid with a signal-0 probe.
+- `gina .` and `framework:open` open a directory whose path holds a space instead of
+  splitting it in two, and `framework:build` passes each of its arguments to the build
+  script whole.
+- An isaac bundle whose cache path holds a space now gets the brotli and gzip copies
+  of its routing files: the compressions split the path and failed.
+- The npm prefix look-ups that the CLI and `framework:init` fall back on when no
+  prefix is configured no longer fail when npm is installed under a path holding a
+  space.
+
+Restart your bundles to pick up the isaac fix; the CLI commands pick theirs up on
+their next run. Nothing to re-bake.
+
+### Security — Swig `autoescape: true` is applied on npm installs (restart; check your templates first)
+
+From 0.5.25 through 0.7.0, a bundle's `settings.swig.autoescape: true` was silently **not
+applied** when gina was installed with npm: a global install, a project dependency, or the image
+`gina image:build` produces. Each request read the setting through a helper that locates the
+calling bundle by walking the call stack and skipping every frame under `node_modules`. Under an
+npm install every framework file sits there, so the walk found nothing and threw; the render setup
+caught the error and rendered with auto-escaping **off**, while the bundle's configuration said it
+was on. Nothing was logged: the 0.7.0 boot warning fires only when the key is absent. gina run
+from a repository checkout was not affected.
+
+A template that relies on `autoescape: true` to neutralise untrusted data therefore rendered that
+data raw on such an install: a cross-site scripting exposure.
+
+**After the upgrade, escaping turns on** for every bundle that sets `autoescape: true` on an npm
+install, including every bundle created with `gina bundle:add` since 0.7.0. **Before you upgrade
+such a bundle,** apply the checklist in [0.6.33 → 0.7.0](#0633--070): print `gina.csrfInput` with
+`| safe` (unmarked, it renders as visible text and every form POST then fails CSRF verification),
+and mark every other variable that carries trusted markup with `| safe`.
+
+To see the change, render a value that carries markup: with `autoescape: true` it now comes out
+escaped. Restart your bundles to pick this up. Nothing to re-bake.
+
+### Fixed — a bundle with templates no longer walks the call stack on every request (restart)
+
+On an npm install, every request to a bundle with templates paid up to nine stack captures and a
+caught exception when the render setup read the Swig settings: about a quarter of a request's CPU
+in a profile of a trivial JSON route. The render setup now reads the settings from the request's
+own configuration.
+
+`getConfig()` and `getConfig(confName)` no longer read the call stack: they return the running
+bundle's configuration, as they always did wherever the walk succeeded. `getConfig(null, confName)`
+and `getLib(lib)`, which do look for the calling bundle, capture the stack once instead of once per
+frame examined. When no file outside `node_modules` makes the call, they no longer throw a
+`TypeError`: no bundle is found, as for any other caller outside a bundle.
+
+**What to check:** nothing. Restart your bundles to pick this up. Nothing to re-bake.
+
+### Changed — new project and bundle names follow a naming rule (CLI)
+
+`gina project:add` and `bundle:add`, the new name you give `project:rename`,
+`bundle:rename` or `bundle:copy`, and the name `project:restore` registers must now be
+made of letters, digits, `_`, `.` and `-`, and start with a lowercase letter, a digit,
+`_` or `.`. `.`, `..` and the names every object inherits, such as `constructor`, are
+refused (see [Project names](/cli/cli-project#project-names) and
+[Bundle names](/cli/cli-bundle#bundle-names)). Each command checks the name before it
+writes anything, and `bundle:add` checks every name of its list before it adds the
+first bundle. Until now only the first character was checked, so names holding spaces,
+quotes, `$` or `/` were registered, and `project:add @constructor` took the name for a
+registered project with no path, and failed.
+
+A project or bundle already registered under a name outside the rule keeps working,
+including with `project:import`, `bundle:add --import` and `bundle:add --replace`.
+
+**What to check:** a script that creates projects or bundles with names outside the
+rule now gets exit `1`, with a message naming the value.
+
+The commands pick this up on their next run. Nothing to restart or re-bake.
+
+### Security — the CLI matches names literally in its registry lookups (CLI; framework restart)
+
+The CLI looked up project, bundle and environment names in the port and project
+registries with regular expressions built from the names. A `.` in a name matched any
+character, and a name holding `+`, `(` or `[` broke the lookup or made the command
+throw: `project:remove @my.app` also removed the ports of `my-app`, `env:remove` could
+remove, and `port:list` list, another project's entries, and `bundle:start` did not
+recognise the mounted line of a bundle whose name holds `+`, so it waited out its start
+timeout and stopped the bundle. These lookups now match the names literally. The
+install scripts match the install prefix literally too: a prefix holding `c++` made
+`npm install -g gina` fail.
+
+These names come from your own registry and command line, or from anything that can
+reach the framework's command socket, which listens on loopback by default.
+
+**What to check:** nothing.
+
+Restart the framework with `gina framework:restart` to pick it up for `bundle:start`,
+which runs inside the framework process; the other commands pick it up on their next
+run, and installing 0.7.1 runs the new install scripts. Nothing to re-bake.
+
+### Fixed — a lookup no longer takes a bundle, project or environment for another whose name extends it (CLI; framework restart)
+
+- `bundle:remove api @shop` also removed the ports of `myapi@shop` and the port
+  registry entry of `api@shopping`.
+- `port:reset` removed the ports of the same bundle in a project whose name begins with
+  its project's.
+- While allocating ports, `bundle:add`, `bundle:copy` and `env:add` could give
+  environment `dev` the port assigned to `devel`, taking it from `devel`.
+- `project:add` and `port:reset` could skip an assignment as already made because
+  another value contained it (`api@shop/dev` inside `api@shop/devel` or
+  `myapi@shop/dev`).
+
+These lookups now match whole names. The first-character refusal of `bundle:add` also
+names the rejected bundle instead of printing `[ undefined ]`.
+
+**What to check:** if you ran one of these commands on names that extend one another,
+run `gina port:list @<project>` to check that each bundle still has its own ports.
+
+Restart the framework with `gina framework:restart` to pick it up for `bundle:start`,
+which runs inside the framework process; the other commands pick it up on their next
+run. Nothing to re-bake.
+
+### Fixed — with the output cache off, isaac no longer serves a page an earlier run cached (bundle restart)
+
+The built-in engine looked every `GET` up in the output cache even while
+[`server.cache.enable`](/guides/caching#server-level-cache-config) was off: two
+file-existence checks per request, and a page left on disk by an earlier run that had
+caching enabled could be served from there. It now looks the cache up only while
+`server.cache.enable` is on.
+
+**What to check:** nothing, unless you turned the output cache off and still saw cached
+pages — they now come from your routes.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the path helper no longer keeps every path it has seen (restart)
+
+The path helper (`_()`) added each distinct path it normalized to a list kept for the
+life of the process, and each `_()` call and each path object's `toString()` searched
+that list, so a bundle's memory and per-call CPU grew with the number of distinct paths
+it had ever seen: through the output cache's lookup, two per distinct request URL, query
+string included. Nothing read the list, and it is gone.
+
+`toString()` and `toUnixStyle()` return what they did. `toWin32Style()` now also
+converts a path whose trailing separator `mkdir()`, `mkdirSync()`, `rm()`, `rmSync()` or
+`isValidPath()` had stripped: it returned that path with forward slashes, although the
+[path helper reference](/globals/path) documents it as returning backslashes.
+
+**What to check:** nothing. Restart your bundles to pick this up. Nothing to re-bake.
+
+### Changed — less work per routed request (restart and re-bake)
+
+Several per-request steps are trimmed: values that do not change between requests (the
+encoded form rules exported to the page, the heap-limit label, the date stamp) are
+computed once, three configuration lookups read the loaded configuration instead of
+building a new one, and a bundle's resolved configuration stays in V8's fast property
+mode, which makes the router's per-request copy of it cheap. The global `setContext()` and
+`getConfig()` helpers bind the merge library once instead of resolving it on every call,
+and the controller's `set()` splits dotted names with string operations. In production the
+router probes a bundle's `controllers/setup.js` once, on the bundle's first request, instead
+of on every request, so adding or removing that file on a running production bundle takes a
+restart; development keeps the per-request probe. Measured with the
+framework's profiling harness on a JSON route, these changes together cut the CPU a
+routed request costs by about a third, from about 300 µs to about 205 µs.
+
+One of them is visible to code that inspects an instance. Constructing a class built
+with `inherits()` — every controller, on every routed request — no longer copies
+anything onto the instance: no own `prototype` property (it was enumerable, so
+`Object.keys()` and `JSON.stringify()` of an instance listed it), no stamp of the
+instance's name onto a shared prototype, and no own copies of the parent prototype's
+falsy members. Inherited members resolve through the prototype chain as before. The
+browser bundle carries the same constructor: rebuild your bundles to pick up the new
+`gina.min.js`.
+
+**What to check:** nothing, unless code reads `this.prototype` on an instance, or relies
+on `Object.keys()` or `JSON.stringify()` of an instance listing `prototype`, or you add or
+remove `controllers/setup.js` on a running production bundle without restarting it. Restart
+and rebuild your bundles to pick this up.
+
 ## 0.6.33 → 0.7.0
 
 ### Action required — check what carries over to `~/.gina/0.7` (shortVersion bump)
@@ -513,10 +1118,23 @@ answer `404` on a parameterised URL (a `GET` route on `/items/:id`) and `405` on
 route declaring several methods (`"GET,POST"`); only a single-method `GET` route
 on a static URL served it.
 
-**What to check:** nothing, unless a client relied on those `404` or `405`
-answers to `HEAD`. On the isaac engine the `access-control-allow-methods` header
-of a `HEAD` response now reads `HEAD` rather than `GET`, as it already did on the
-Express engine.
+**What to check:**
+
+- **A `GET` action that writes** — a record, a token it consumes, a state change —
+  now also runs for a `HEAD` on a parameterised or multi-method route, and on a
+  static route whose action reads `req.get.<param>` before writing (those answered
+  `404`, `405` or `500` before; see the next entry). A static route's action that
+  wrote before reading `req.get` already ran for a `HEAD`. The action runs even when
+  the route's `GET` is served from the output cache, which a `HEAD` never reads, so
+  a client that sends `HEAD` before `GET` — a link scanner, a preview fetcher —
+  triggers the write. Skip the write when `req.method === 'HEAD'` and let the action
+  end as usual with its `return self.render…(…)` (no body is sent for a `HEAD`), or
+  move the write behind a `POST`.
+- **A client that relied on those `404` or `405` answers** to `HEAD` now gets the
+  answer a `GET` would, without the body.
+- **On the isaac engine** the `access-control-allow-methods` header of a `HEAD`
+  response now reads `HEAD` rather than `GET`, as it already did on the Express
+  engine.
 
 Restart the bundle. Nothing to re-bake.
 

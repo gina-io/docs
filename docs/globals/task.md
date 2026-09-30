@@ -32,8 +32,8 @@ Executes a shell command.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `cwd` | `string` | `process.cwd()` | Working directory for the spawned process |
-| `tmp` | `string` | System temp dir | Directory where `out.log` and `err.log` are written during execution |
+| `cwd` | `string` | A directory derived from the framework's install location — pass it explicitly | Working directory for the spawned process; the calling process itself `chdir`s to it |
+| `tmp` | `string` | System temp dir | Base directory: each run creates a private `gina-run-*` directory (mode 0700) under it holding its `out.log` and `err.log`, removed with the directory when the process exits (since 0.7.1) |
 | `outToProcessSTD` | `boolean` | `false` | When `true`, pipes the child process stdin/stdout/stderr directly to the parent process streams |
 
 ### Return value
@@ -85,9 +85,12 @@ run('sass --watch src/scss:public/css', {
 
 ## Notes
 
-- Output is captured to temporary files (`out.log`, `err.log`) during execution and
-  read back as a single string on process exit. For long-running commands, prefer
-  `.onData()` for real-time feedback.
+- Output is captured to two temporary files (`out.log`, `err.log`) in a private per-run
+  directory under `tmp` during execution, read back as a single string on process exit
+  and removed with the directory. Since 0.7.1 concurrent runs never share those files
+  (they used to share one fixed pair in `tmp`), and a failure while reading them back
+  is delivered as the run's error. Both `.onData()` and `.onComplete()` fire on process
+  exit with the full captured output.
 - The spawned process inherits the current `process.env`.
 
 ---

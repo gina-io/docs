@@ -71,16 +71,20 @@ store.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `bundle` | `string` | Bundle name. When omitted, the calling bundle is detected from the call stack automatically. |
-| `confName` | `string` | Configuration block name (e.g. `'app'`, `'routing'`). When omitted, returns the full config object. |
+| `bundle` | `string` | Bundle name. When omitted (`getConfig()` or `getConfig(confName)`), the running bundle is used. Pass a falsy value with a `confName` (`getConfig(null, 'app')`) to use the bundle whose file makes the call, found from the call stack: the first file outside `node_modules` above the call. |
+| `confName` | `string` | Configuration block name (e.g. `'app'`, `'routing'`). A single argument is the `confName`. When omitted, returns the full config object. |
 
 ```js
-// From within a bundle — bundle name is inferred
-var appConf = getConfig();
+// From within a bundle — the running bundle
+var conf    = getConfig();        // the full config object
+var appConf = getConfig('app');   // a single argument is the confName
 
 // Explicit bundle and config block
 var routing = getConfig('frontend', 'routing');
 ```
+
+Code that can run from a package installed under `node_modules` should name the bundle: the
+call-stack lookup skips every file under `node_modules`, so from there it finds no bundle.
 
 ---
 
@@ -90,7 +94,7 @@ Loads and instantiates a library module from another bundle.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `bundle` | `string` | Bundle name. When omitted, auto-detected from the call stack. |
+| `bundle` | `string` | Bundle name. When omitted (`getLib(lib)`: a single argument is the `lib`), the bundle whose file makes the call, found from the call stack: the first file outside `node_modules` above the call. |
 | `lib` | `string` | Library name (filename without `.js`) |
 
 Returns a new instance of the library class with `getConfig()` attached to its

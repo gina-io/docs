@@ -123,6 +123,8 @@ When a tag calls `parser.on(types.VAR, fn)` and the callback returns falsy, the 
 
 With `autoescape: true` — the library's default; a gina bundle sets it with [`settings.swig.autoescape`](/reference/settings#swig), which is `false` until 0.8.0 — every `{{ … }}` is piped through the `e` filter automatically. A filter **wrongly** marked `.safe = true` bypasses this — double-check any new `.safe` annotation.
 
+On gina installed with npm, 0.5.25 to 0.7.0 silently ignored a bundle's `autoescape: true`; it is applied since 0.7.1 (see the [migration guide](/migration#070--071)).
+
 Shipping `.safe`: `safe`, `raw`, `json` / `json_encode` (which self-escape `<`, `>`, `&`, `'` before bypassing autoescape), and `url_encode`. `escape` / `e` are **not** flagged — an explicit `{{ x|e }}` avoids double-escaping because the HTML escape is idempotent, not because the autoescape pass is suppressed. `url_decode` is deliberately **not** `.safe` — decoded content can be arbitrary HTML, so its output stays autoescaped. Per-filter table: [Filters](./filters).
 
 `autoescape: false` disables escaping globally. Any consumer setting this is asserting they control template source entirely.

@@ -794,7 +794,9 @@ running bundle owns:
   `/_gina/storage/verify` endpoint, and the owning process does the work.
   The endpoints are always-on and gated by `app.json > admin.allowFrom`
   (loopback by default) — the same allowlist as `/_gina/info` and
-  `/_gina/cache/stats`.
+  `/_gina/cache/stats`. The CLI calls them on the bundle's own port as a direct
+  loopback caller; since 0.7.1 a request relayed by a proxy on the bundle's own
+  host is refused (see [`admin.allowFrom`](/reference/app#admin)).
 - **Bundle stopped** (every assigned port refuses the connection) — the
   command resolves the bundle's `settings.storage` and opens the store
   directly, offline.

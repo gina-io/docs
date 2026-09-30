@@ -392,7 +392,7 @@ When a container starts a daemon and keeps itself alive with the relay —
 `gina start`, then `gina bundle:start`, then `gina tail` in the foreground — the
 lines that reach `kubectl logs` are `gina tail`'s: the daemon discards a bundle's
 own stdout once the bundle has started, so the MQ relay is the only path a runtime
-line has to the collector, and it must stay on. Two consequences:
+line has to the collector, and it must stay on. Three consequences:
 
 - Do **not** set `GINA_LOG_STDOUT=true` there — it disables the transport `gina tail`
   reads.
@@ -401,6 +401,14 @@ line has to the collector, and it must stay on. Two consequences:
   with the same `ts`/`level`/`bundle`/`message` keys (plus the `group`/`msg`
   aliases). The relay carries no request context, so `requestId` and `durationMs`
   are not present on relayed lines.
+- Expect a bundle's **boot-time lines at `warn` and above in the `bundle:start`
+  output**, not in the tail's. The relay keeps no backlog, and in this order
+  `gina tail` connects after the bundle has started, so it never receives what the
+  bundle logged while it booted. From 0.7.1 `gina bundle:start` prints those lines
+  (`warn`, `warning`, `error`, `err`, `crit`, `alert`) before its `started` line,
+  and its output reaches `kubectl logs` like the tail's. They are text as the bundle
+  rendered them, even when the tail renders JSON. A tail already connected when the
+  bundle starts receives them too, so each appears twice.
 
 ### Per-request `requestId` and `durationMs`
 
@@ -526,6 +534,13 @@ gina tail
 `gina tail` is an alias for `gina framework:tail`. It connects to the MQ listener
 on port `8125` and streams formatted output from all running bundles to your terminal.
 
+The listener keeps no backlog: `gina tail` receives what bundles log after it has
+connected, and nothing from before. To see everything a bundle logs while it starts,
+start the tail first, as in the [development workflow](#typical-development-workflow)
+below. From 0.7.1 `gina bundle:start` also prints the lines a bundle logs at `warn`
+and above while it starts, so a boot warning reaches you even when your tail
+connects later.
+
 ### `--follow` — stay connected across restarts
 
 Without `--follow`, `gina tail` exits as soon as the MQ stream ends (e.g. when a
@@ -559,7 +574,7 @@ Pipe `gina tail` through `grep` to focus on a specific bundle:
 gina tail --follow | grep "api@myproject"
 
 # Only show warnings and above from any bundle
-gina tail --follow | grep -E "\[(emerg|alert|crit|err|warn)\]"
+gina tail --follow | grep -E "\[(emerg|alert|crit|error|err|warn|warning) *\]"
 
 # Exclude debug lines, keep everything else
 gina tail --follow | grep -v "\[debug"
@@ -567,6 +582,10 @@ gina tail --follow | grep -v "\[debug"
 # Watch a specific controller action across all bundles
 gina tail --follow | grep "\[HOME\]"
 ```
+
+The level name is padded to a fixed width (`[warn   ]`, `[emerg  ]`), and a line
+shows the name its logging call used: `warn` or `warning`, `error` or `err`. The
+warnings-and-above pattern therefore allows both spellings and the padding.
 
 ### Typical development workflow
 
@@ -592,13 +611,29 @@ printed to `process.stdout`. You can capture them at the OS level:
 
 Best for development. One terminal window shows all bundles and the framework.
 
-### Production — redirect stdout
+### Production — capture `gina tail`, or the container's stdout
 
-```bash
-gina bundle:start api @myapp > /var/log/myapp/api.log 2>&1 &
-```
+`gina bundle:start` returns once the bundle is up. Its output holds the start
+banner and, from 0.7.1, the lines the bundle logged at `warn` and above while it
+started, not the bundle's logs, so redirecting it does not capture them. Two ways
+to keep them:
 
-Pair with [logrotate](https://linux.die.net/man/8/logrotate) for rotation.
+- Under a framework daemon, redirect `gina tail --follow`, started **before** the
+  bundles, since it receives only what they log after it connects. Let it connect
+  before you start them: it logs `[MQTail] Connected …` once it has.
+
+  ```bash
+  gina tail --follow >> /var/log/myapp/gina.log 2>&1 &
+  gina bundle:start api @myapp
+  ```
+
+- In a container, start the bundle with `gina-container`: it runs the bundle in
+  the foreground and writes the bundle's own lines to its stdout. See
+  [Kubernetes &amp; Docker → Stdout logging](/guides/k8s-docker#stdout-logging).
+
+Pair a redirected file with [logrotate](https://linux.die.net/man/8/logrotate),
+using `copytruncate` since `gina tail` keeps the file open, or use the file
+transport below, which rotates on its own.
 
 ### File transport (experimental)
 
