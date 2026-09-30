@@ -21,6 +21,30 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Fixed — `storage:gc --dry-run` and `--driver=` work against a running bundle on isaac (bundle restart)
+
+On the isaac engine (the default), the storage maintenance endpoints of a running
+bundle — `/_gina/storage/stats`, `/_gina/storage/gc` and `/_gina/storage/verify`, which
+the `storage:*` commands call while the bundle runs — never saw their query string:
+isaac removes it from the request URL before these handlers run. Against a running
+bundle, `gina storage:gc --dry-run` therefore ran a real garbage collection, and
+`--driver=<name>` was ignored by `storage:stats`, `storage:gc` and `storage:verify`,
+which reported on or collected every driver. The handlers now read the query from the
+original request URL, so a dry run touches nothing and `--driver` scopes one driver, as
+[Maintenance: stats, gc and verify](/guides/storage#maintenance-stats-gc-and-verify)
+describes.
+
+**What to check:** if you ran `gina storage:gc --dry-run` against a running bundle on
+0.6.7 through 0.7.0, that run was a real collection — its output kept the `[ dry-run ]`
+header but reported `collected N blob(s)` rather than `would collect N` — and it removed
+every unreferenced blob past `sweepGrace`, on every `cas` driver. The periodic sweep
+collects the same blobs on its next pass, so nothing else changes — unless a driver
+sets `sweepInterval` to `"0s"`, which turns that sweep off to keep unreferenced blobs
+until you collect them yourself; those were removed. A stopped bundle (the CLI then
+opens the store itself) and the express engine were not affected.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Security — the `/_gina/*` control endpoints refuse a cross-site write whatever the shape of its URL (bundle restart)
 
 Since 0.6.10 a write from a page on another origin to a built-in control endpoint —
