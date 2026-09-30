@@ -21,6 +21,61 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Fixed — a page whose query string ends in a `/_gina/` endpoint path is answered by the page (bundle restart)
+
+A page URL whose query string ended in the path of a built-in endpoint — for instance
+`/web/?next=/_gina/health/check` — was answered by that endpoint instead of the page, on
+both engines: the health check, `/_gina/jobs/<id>`, `/_gina/instrument`, and in dev the
+[Inspector](/guides/inspector)'s `/_gina/inspector`, `/_gina/logs`, `/_gina/agent`,
+`/_gina/indexes` and `/_gina/reveal` tested the whole URL. During a
+[maintenance window](/guides/maintenance-mode) such a page got the endpoint's answer where
+its 503 was due, and a WebSocket upgrade to such a URL was taken by the Inspector agent.
+These endpoints now match the URL's path only; a prefix before `/_gina/` still works (the
+Inspector and health probes under a webroot rely on it). The dev endpoints
+`/_gina/inspector`, `/_gina/logs`, `/_gina/indexes` and `/_gina/reveal` also answer a URL
+that carries a query string (`/_gina/logs?x=1`), which got a 404 on the express engine — the
+maintenance 503 during a window — and the maintenance 503 on the isaac engine during a window.
+
+**What to check:** nothing, unless a page of yours passes a `/_gina/` path in its query
+string — a return-to parameter, for instance: it now gets the page.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the standalone Inspector and `gina inspector:open` accept a target URL with a query string (reload the Inspector)
+
+The standalone [Inspector](/guides/inspector) appends `/_gina/…` to its `?target=` value,
+and `gina inspector:open <url>` passes its URL argument through as that value. A pasted
+page URL with a query string or a fragment — `http://localhost:3100/page?x=1` — built
+`http://localhost:3100/page?x=1/_gina/agent`: the endpoint path landed in the query string,
+where the endpoints no longer look for it (see the fix above), and outside dev mode the agent
+key became part of another parameter, so the Inspector could not connect. The target's query
+string and fragment are now dropped, then its trailing slashes.
+
+**What to check:** nothing.
+
+Reload the Inspector window: the bundle reads the Inspector from the framework on every
+request, so there is nothing to restart or re-bake. `gina inspector:open` picks the change up
+on its next run.
+
+### Fixed — the Inspector's streams and the release-watch banner work over HTTP/2 (bundle restart)
+
+On the isaac engine (the default), `/_gina/logs` and `/_gina/agent` — the
+[Inspector](/guides/inspector)'s server-log and agent streams — and
+`/_gina/release/events`, which feeds the live [release-watch](/guides/release-watch)
+banner, never answered an HTTP/2 client. Each sent a `connection: keep-alive` header, which
+HTTP/2 forbids: node refused the response headers, logged
+`ERR_HTTP2_INVALID_CONNECTION_HEADERS` as a warning, and the stream never opened. A bundle
+with `"protocol": "http/2.0"` reached directly — a browser on the bundle's own port —
+therefore showed no server logs in the Inspector, had no agent stream, and its release-watch
+banner got no live events. HTTP/1.1 clients, and a proxy that talks HTTP/1.1 to the bundle,
+were not affected. The header now goes to HTTP/1.1 clients only. Affected: 0.3.0 through
+0.7.0 (`/_gina/release/events`: 0.5.18 through 0.7.0).
+
+**What to check:** nothing. A `[ SERVER ][ HTTP2 UNCAUGHT EXCEPTION ]` warning naming
+`ERR_HTTP2_INVALID_CONNECTION_HEADERS` in a bundle's log came from this, and stops.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — the health check, the routing map and the release-watch endpoints answer a URL with a query string (bundle restart)
 
 `/_gina/health/check`, `/_gina/assets/routing.json`, and — while
