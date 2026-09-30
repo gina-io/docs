@@ -21,6 +21,32 @@ upward to the target version.
 
 ## 0.7.0 → 0.7.1
 
+### Fixed — the maintenance IP allowlist lets a listed direct client through on isaac over HTTP/1.1 (bundle restart)
+
+Since maintenance mode shipped in 0.6.10, on the isaac engine serving HTTP/1.1 — the
+default engine and protocol — a client listed in
+[`server.maintenance.allowFrom`](/guides/maintenance-mode#the-ip-allowlist--only-for-direct-connections)
+was answered 503 like everyone else, on every page and static file, for the whole
+maintenance window: the allowlist never let a listed operator through. isaac's
+maintenance check admitted the client; isaac then rewrote the request's `Host` header
+without its port before handing the request on, and a second maintenance check read that
+port-less `Host` as the sign of a reverse proxy, closed the address arm and answered 503.
+The second check now keeps the first one's verdict. isaac rewrites `Host` only for a
+bundle serving HTTP/1.1, so a bundle serving HTTP/2 was not affected; nor were the express
+engine, the bypass key (the `?gina-maintenance-key=` link, its cookie and the
+`x-gina-maintenance-key` header) and a bundle with `server.proxy.requireForwardedHeaders: true`.
+
+**What to check:** if `allowFrom` lists a loopback address (`127.0.0.1`, `::1`) while a
+reverse proxy on the bundle's own host relays public traffic to it, make sure that proxy
+sends a forwarding header (`X-Forwarded-For`, for example) or a `Host` without its port. A
+proxy that does neither cannot be told from a direct client, so every visitor it relays
+now passes the window on isaac over HTTP/1.1 too — as it already did over HTTP/2 and on the
+express engine. Or drop the loopback entry and use the
+[bypass key](/guides/maintenance-mode#the-bypass-key--works-under-any-deployment), which
+does not depend on the network path.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — `storage:gc --dry-run` and `--driver=` work against a running bundle on isaac (bundle restart)
 
 On the isaac engine (the default), the storage maintenance endpoints of a running
