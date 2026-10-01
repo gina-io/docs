@@ -250,7 +250,11 @@ using the table it was rendered with until the page itself expires.
   `templates.json > _common`.
 
 **Precompressed files.** Over HTTP/1.1, gina serves `app.js.br` or `app.js.gz`
-instead of `app.js` when the browser accepts that encoding and the file exists.
+instead of `app.js` when the browser accepts that encoding and the file exists,
+with `Content-Encoding: br` or `gzip`. Every static gina serves over HTTP/1.1 in
+production carries `Vary: Accept-Encoding`, compressed or not and on the `304`
+too, so a shared cache keeps the copies apart; a `vary` you declare under
+`server.response.header` in your project's `env.json` is kept alongside it.
 Under a matching token the compressed file is served `immutable` only when it is
 not older than `app.js`, compared in whole seconds (compression tools that keep
 their source's timestamp truncate it); an older one is served `no-cache`, since
@@ -349,8 +353,8 @@ keying the header on the token's shape caches them for a year.
 
 | Environment | Headers sent | Browser behaviour |
 |---|---|---|
-| Production | `ETag`, `Last-Modified` | 304 on unchanged files; reused with no request while the browser's own estimate of freshness lasts |
-| Production, versioned URL (`?v=` + the file's current token) | `Cache-Control: public, max-age=31536000, immutable`, `ETag`, `Last-Modified` | No request until the URL changes |
+| Production | `ETag`, `Last-Modified`; over HTTP/1.1 also `Vary: Accept-Encoding` | 304 on unchanged files; reused with no request while the browser's own estimate of freshness lasts |
+| Production, versioned URL (`?v=` + the file's current token) | `Cache-Control: public, max-age=31536000, immutable`, `ETag`, `Last-Modified`; over HTTP/1.1 also `Vary: Accept-Encoding` | No request until the URL changes |
 | Dev | `cache-control: no-cache, no-store, must-revalidate` + `X-SourceMap` (JS/CSS only) | Always re-fetches |
 
 ---

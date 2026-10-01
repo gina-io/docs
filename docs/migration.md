@@ -72,7 +72,7 @@ default. What is versioned, what is not, and an nginx recipe:
   HTML snapshot test, a CDN or proxy rule keyed on the full URL — now sees a
   `?v=` suffix. Set `"assetVersioningEnabled": false` in `templates.json > _common`
   to keep the plain URLs.
-- A request without a token is answered exactly as before, so a front server
+- A request without a token keeps the cache headers it had, so a front server
   that serves your statics changes nothing on its own; add the nginx recipe from
   the statics reference to let browsers keep the files.
 - Regenerate precompressed `.br` / `.gz` files with their source.
@@ -147,6 +147,37 @@ stopped doing this in 0.7.1; the table's handler now matches the URL's path only
 
 **What to check:** nothing, unless a page of yours passes the routing table's path in its query
 string: it now gets the page.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a precompressed `.gz` file is sent as `Content-Encoding: gzip` (bundle restart)
+
+In production, over HTTP/1.1, gina serves a file's precompressed copy when the request accepts
+its coding. A `.gz` copy went out as `Content-Encoding: gz` — its file extension, which is not a
+content coding — and a client cannot decode that: Chromium does not run such a script. It now
+goes out as `Content-Encoding: gzip` (a `.br` copy was already sent as `br`), and so does the
+routing table's own `.gz` copy. By default gina tries brotli, then deflate, then gzip, so the `.gz` copy went
+only to a request accepting gzip but neither brotli nor deflate: for instance Go's HTTP client,
+which asks for gzip alone by default, or a proxy or CDN set to ask the origin for gzip. Browsers,
+which send `deflate` too, were not served it directly.
+
+**What to check:** if a cache or CDN in front of the bundle stored such responses, purge it.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — statics vary on `Accept-Encoding` (bundle restart)
+
+In production, the statics gina serves over HTTP/1.1, and the routing table on the isaac engine
+(the default), now carry `Vary: Accept-Encoding`, on the `200` and on the `304`. Without it, a
+shared cache (a CDN, a proxy cache) could store the brotli or gzip copy and hand it to a client
+that does not accept that coding, a risk that grows with 0.7.2, which lets a versioned file be
+cached for a year. Every such static carries it, compressed copy or not, since a cache cannot
+tell which files have one. A `vary` you declare under `server.response.header` in your project's
+`env.json` is kept, and is now sent on the `304` too. Statics served over HTTP/2, and everything
+in dev mode, are unchanged.
+
+**What to check:** a shared cache in front of the bundle now keeps the statics per
+`Accept-Encoding` value, images included.
 
 Restart the bundle. Nothing to re-bake.
 
