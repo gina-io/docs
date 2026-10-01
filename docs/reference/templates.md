@@ -69,6 +69,7 @@ values always win.
 | `ginaEnabled` | boolean | `true` | Include gina's built-in CSS and JS in every page. Set to `false` to exclude them entirely |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
 | `sriEnabled` | boolean | `false` | Opt-in [Subresource Integrity](#subresource-integrity-srienabled): add `integrity="sha384-..."` + `crossorigin="anonymous"` to every same-origin `<script>` and `<link rel="stylesheet">` whose file resolves on disk. *New in 0.6.23* |
+| `assetVersioningEnabled` | boolean | `true` | In production, append a content token (`?v=` + 10 hex of the file's SHA-384) to the same-origin asset URLs gina writes, so browsers can cache them for a year — see [Versioned asset URLs](/reference/statics#versioned-asset-urls). `false` keeps the plain URLs. *New in 0.7.2* |
 | `stylesheets` | array | gina default | List of stylesheet objects loaded on every page |
 | `javascripts` | array | gina default | List of script objects loaded on every page |
 

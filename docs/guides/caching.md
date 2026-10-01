@@ -34,6 +34,12 @@ flowchart LR
 
 Caching is opt-in and configured per route in `routing.json`.
 
+:::tip Browser caching of your assets
+This page covers the render cache — responses gina stores on the server. How long
+browsers keep your scripts and stylesheets is set separately, by the content token
+gina adds to their URLs: see [Versioned asset URLs](/reference/statics#versioned-asset-urls).
+:::
+
 ---
 
 ## Quick start

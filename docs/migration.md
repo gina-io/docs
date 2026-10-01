@@ -56,6 +56,34 @@ attach mode after upgrading so they load the new engine.io. If you cannot upgrad
 `"allowUpgrades": false` (or a single entry in `"transports"`) in the `ioServer` block
 avoids the upgrade the crash needs.
 
+### Added — versioned asset URLs, cached by browsers for a year (production; bundle restart)
+
+In production, the `<link>` and `<script>` tags gina writes from `templates.json`
+now end in `?v=` plus 10 hexadecimal characters of the file's SHA-384, and the
+statics gina serves answer `Cache-Control: public, max-age=31536000, immutable`
+when the token names the file's current bytes. Their HTTP/2 preload hints carry
+the same URLs, and the client routing table is fetched the same way. On by
+default. What is versioned, what is not, and an nginx recipe:
+[Versioned asset URLs](/reference/statics#versioned-asset-urls).
+
+**What to check:**
+
+- Anything that matches asset URLs exactly — a service-worker precache list, an
+  HTML snapshot test, a CDN or proxy rule keyed on the full URL — now sees a
+  `?v=` suffix. Set `"assetVersioningEnabled": false` in `templates.json > _common`
+  to keep the plain URLs.
+- A request without a token is answered exactly as before, so a front server
+  that serves your statics changes nothing on its own; add the rule from the
+  statics reference to let browsers keep the files.
+- Regenerate precompressed `.br` / `.gz` files with their source.
+
+Restart each bundle. If your build copies `gina.min.js` into your own static files
+instead of serving it through the default `js/vendor/gina` mapping, rebuild that
+copy before the restart. The new client appends the routing-table token, and it
+compares script URLs without their token; an older copy compares them exactly, so
+once the page loads a script under its versioned URL, a popin or a swapped region
+that includes a tag for the same file can run it a second time.
+
 ### Fixed — a form submitted while one of its uploads is still uploading waits for it (bundle restart and re-bake)
 
 A validator-bound form could be submitted while one of its staged uploads was still being
@@ -109,6 +137,18 @@ error element alike.
 instead, and `data.reason` if a navigation abort should be ignored.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a page whose query string ends in the routing table's path is answered by the page (bundle restart)
+
+A page URL whose query string ended in the path of the client routing table — for instance
+`/web/?next=/_gina/assets/routing.json` — was answered with the routing table instead of the
+page, on both engines: the table's handler tested the whole URL. The other built-in endpoints
+stopped doing this in 0.7.1; the table's handler now matches the URL's path only too.
+
+**What to check:** nothing, unless a page of yours passes the routing table's path in its query
+string: it now gets the page.
+
+Restart the bundle. Nothing to re-bake.
 
 ---
 
