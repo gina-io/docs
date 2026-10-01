@@ -277,7 +277,10 @@ gina.config.a11y = {
     // staged uploads — see the File uploads guide
     uploadStarted  : 'Envoi du fichier commencé',
     uploadComplete : 'Fichier envoyé',
-    fileRemoved    : '%s supprimé'
+    uploadPending  : 'En attente de la fin de l’envoi…',
+    fileRemoved    : '%s supprimé',
+    // a request that ends without an answer
+    transportError : 'Échec du transfert : la requête n’a pas abouti'
 };
 ```
 
@@ -293,9 +296,12 @@ in your translation, and put it wherever the sentence needs it.
 | `submitting` | `Submitting…` | a form submit request starts |
 | `uploadStarted` | `Upload started` | files are selected and staging begins |
 | `uploadComplete` | `Upload complete` | the staging request succeeds |
+| `uploadPending` | `Waiting for the upload to finish…` | a submit waits for one of the form's staged uploads ([details](/guides/file-uploads#submitting-while-an-upload-is-in-flight)) |
 | `fileRemoved` | `%s removed` | a staged file's reset/delete control removes it |
+| `transportError` | `Transport failure: the request did not complete` | a request ends without an answer (status `0`): it is the failure's `data.error`, which a staged upload shows in its error element and announces |
 
-*The three upload keys are new in 0.6.4.*
+*The `uploadStarted`, `uploadComplete` and `fileRemoved` keys are new in 0.6.4;
+`uploadPending` and `transportError` are new in 0.7.2.*
 
 ---
 
@@ -698,6 +704,7 @@ stateDiagram-v2
     Loading --> Idle: settled (any status)
     Loading --> Idle: network failure
     Loading --> Idle: superseded or aborted
+    Loading --> Idle: a staged upload it waited for failed
     Loading --> Idle: validation refused the submit
     Loading --> Idle: refused by the send rate limit
 ```
@@ -706,7 +713,9 @@ The last two are the reason this exists. A submit refused by validation, or by
 the send rate limit, never reaches the network at all — so nothing in the
 request lifecycle can release it, and only the framework knows the submit was
 refused. That is the case that used to leave a project's own loading state stuck
-on indefinitely.
+on indefinitely. A submit
+[waiting for a staged upload](/guides/file-uploads#submitting-while-an-upload-is-in-flight)
+that then fails is released the same way: it never sends (*since 0.7.2*).
 
 :::warning A hanging link request never releases
 Link requests carry no deadline, so a request that never terminates never
@@ -854,18 +863,27 @@ window.onSignupError = function (event, data) {
 | Failure | `data.status` | `data.transportError` |
 |---|---|---|
 | The server answered with an error status | that status (`500`, `422`, …) | `false` |
-| The request never reached the server — network down, connection refused, DNS failure, server restarting | `408` | `true` |
+| The request ended without an answer — network down, connection refused, DNS failure, server restarting, a proxy refusing the body while it is still being sent, a navigation away from the page | `408` | `true` |
 
 The second row is why matching on `status >= 400` alone is enough for the common
 case: a transport failure is reported as `408` so existing range checks keep
 working. Branch on `transportError` when you need to tell "the server rejected
-this" apart from "the server was never reached" — for example to offer a retry
-rather than surfacing a validation message:
+this" apart from "no answer came back" — for example to offer a retry rather than
+surfacing a validation message.
+
+*Since 0.7.2* such a failure also carries `data.reason`: `'unload'` when the page
+was being navigated away from — the browser aborts its requests, and the server may
+well have completed this one — `'transport'` otherwise. Its `data.error` text,
+*"Transport failure: the request did not complete"*, can be translated through
+[`gina.config.a11y.transportError`](#translating-the-status-announcements). (It used
+to say the request "did not reach the server", which is false for a proxy refusal
+and for a navigation abort.)
 
 ```js
 window.onSignupError = function (event, data) {
   if (data && data.transportError) {
-    showRetryBanner('We could not reach the server. Check your connection.');
+    if (data.reason === 'unload') return; // the page is going away
+    showRetryBanner('The request did not complete. Check your connection and try again.');
     return;
   }
   showServerErrors(data);

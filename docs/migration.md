@@ -19,6 +19,80 @@ upward to the target version.
 
 ---
 
+## 0.7.1 → 0.7.2
+
+### Security — a staged upload's error message is shown as text, never as markup (bundle restart and re-bake)
+
+When a staging request failed, the [staged-upload layer](/guides/file-uploads#the-client-upload-layer)
+wrote its error message into the upload's error element (`data-gina-form-upload-error`,
+default `<fieldId>-error`) with `innerHTML`. A non-JSON error body becomes that message
+verbatim, so a reverse proxy's or WAF's HTML error page — or a server error that echoes
+request text, such as Gina's own refusal of a file extension, which names the file — was
+parsed as live markup in the page. The element now builds its paragraph with
+`textContent`, so the message always shows as text. Affected: 0.1.1 through 0.7.1.
+
+**What to check:** your own `data-gina-form-upload-on-error` callback receives the same
+message (`data.message` or `data.error`); if it writes it into the page, write it as text
+too.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a form submitted while one of its uploads is still uploading waits for it (bundle restart and re-bake)
+
+A validator-bound form could be submitted while one of its staged uploads was still being
+sent, and the submit posted that upload's hidden metadata fields empty — an entry such as
+`"doc":[{"location":"",…}]` for a file that never finished staging. A submit now waits for
+every staged upload of its form that is still in flight, then sends once, collecting the
+metadata the upload has just written. While it waits, the submit control keeps its
+[loading state](/guides/forms-and-validation#loading-state) and the form's live region
+announces the wait once ([`uploadPending`](/guides/forms-and-validation#translating-the-status-announcements)).
+If an upload fails, the waiting submit is cancelled: nothing is sent, the loading state is
+released, and the upload's own error shows as usual. This covers the submit control,
+Enter, `requestSubmit()` and `$forms[id].submit()`; a direct `$forms[id].send(data)` call
+carries its own payload and is not held. See
+[Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight).
+
+**What to check:** nothing, unless your server relied on receiving a save before its
+upload finished — it now arrives after the upload, with the file's metadata. A page that
+holds the submit itself during uploads can drop that code; leaving it in place does no
+harm.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staged file input's placeholder value is no longer posted (bundle restart and re-bake)
+
+A form submit collected a staged file input's own value — the browser's placeholder
+`C:\fakepath\<name>` — into the payload. The upload travels through the hidden metadata
+fields, so the input itself is now left out of the payload; rules such as `isRequired`
+still see it. When `data-gina-form-upload-prefix` differed from the input's `name`, the
+placeholder was posted under the input's name, and a server that stored it kept a path
+instead of the staged file.
+
+**What to check:** nothing, unless your server read the input's own field — read the
+hidden `<prefix>[N][…]` fields instead.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a request that fails before its answer says it "did not complete", and the text can be translated (bundle restart and re-bake)
+
+A request that settles without a response (XHR status `0`) used to report
+*"Transport failure: the request did not reach the server"*. Two common causes did reach
+the server: a reverse proxy refusing a body that is too large — over HTTP/2 its `413`
+arrives while the browser is still sending — and a page navigation that aborted a request
+the server then completed. The message now reads
+*"Transport failure: the request did not complete"*, a project can replace it through
+`gina.config.a11y.transportError`, and the result carries `reason`: `'unload'` when the page
+was being navigated away from, `'transport'` otherwise. This reaches a form's
+[submit-error callback](/guides/forms-and-validation#declarative-callbacks) and the upload
+error element alike.
+
+**What to check:** code that matched the old sentence — test `data.transportError`
+instead, and `data.reason` if a navigation abort should be ignored.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+---
+
 ## 0.7.0 → 0.7.1
 
 ### Security — a GET of the routing table in another letter case no longer stops an isaac bundle (bundle restart)
