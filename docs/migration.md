@@ -37,6 +37,25 @@ too.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Security — the `engine.io` floor is raised to `^6.6.10`, closing CVE-2026-102599 (bundle restart)
+
+Gina now declares `engine.io` `^6.6.10` instead of `^6.6.7`. `6.6.10` is the first release
+patched for [GHSA-2gc4-cqfq-p2gv](https://github.com/advisories/GHSA-2gc4-cqfq-p2gv)
+(CVE-2026-102599): on an existing session, a transport-upgrade request that carries a
+different or missing protocol revision (`EIO`) could crash the process. Gina loads
+engine.io only for a bundle whose `settings.json` sets `ioServer.integrationMode` to
+`"attach"`, so only such a bundle was exposed — when its install resolved engine.io 6.6.0
+to 6.6.9 and transport upgrades were allowed, which is the default. `^6.6.7` already let a
+fresh install resolve a patched release, so the exposure came from an older install or a
+lockfile that kept an affected one; with the new floor, an install of this version cannot
+resolve an affected engine.io.
+
+**What to check:** nothing if no bundle sets `ioServer`. Otherwise, restart the bundles in
+attach mode after upgrading so they load the new engine.io. If you cannot upgrade yet,
+`npm update engine.io` moves an older lockfile to a patched release inside `^6.6.7`, or
+`"allowUpgrades": false` (or a single entry in `"transports"`) in the `ioServer` block
+avoids the upgrade the crash needs.
+
 ### Fixed — a form submitted while one of its uploads is still uploading waits for it (bundle restart and re-bake)
 
 A validator-bound form could be submitted while one of its staged uploads was still being
