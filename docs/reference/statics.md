@@ -165,6 +165,14 @@ strong identity check: any change to the file produces a new ETag.
 **Precedence** — `If-None-Match` (ETag) is checked first. `If-Modified-Since` is only
 evaluated when `If-None-Match` is absent.
 
+A file served without a `Cache-Control` header can also be reused with no
+request at all: browsers give it a lifetime of their own, estimated from its
+`Last-Modified` date ([RFC 9111 § 4.2.2](https://www.rfc-editor.org/rfc/rfc9111#section-4.2.2)
+suggests 10 % of the time since then). After a deploy, a returning browser can
+therefore run the previous version of a file for a while.
+[Versioned URLs](#versioned-asset-urls) avoid this for the stylesheets and scripts
+gina writes into pages.
+
 ### Dev mode (`NODE_ENV_IS_DEV=true`)
 
 All static responses carry `cache-control: no-cache, no-store, must-revalidate` —
@@ -249,51 +257,99 @@ their source's timestamp truncate it); an older one is served `no-cache`, since
 it may predate the current source. Regenerate compressed files whenever you
 rebuild their source.
 
-**Serving statics from nginx.** Gina compares the token with the bytes before it
-answers `immutable`; a front server cannot. Key the cache header on the token's
-shape instead:
+**Serving statics from nginx.** When nginx serves your static files from disk, a
+versioned URL changes nothing until nginx sends the cache header, and nginx cannot
+tell a current token from a stale one. Send the requests that carry a token to the
+bundle, which checks it, and keep serving every other request from disk:
 
 ```nginx
-map $arg_v $gina_asset_cache {
-    ~^[0-9a-f]{10}$  "public, max-age=31536000, immutable";
-    default          "no-cache";
+# A gina content token is 10 lower-case hexadecimal characters.
+# Quote the regular expression: nginx rejects unquoted braces here.
+map $arg_v $gina_versioned {
+    "~^[0-9a-f]{10}$"  1;
+    default            0;
 }
 
 server {
     # ...
-    location ~* \.(?:js|css)$ {
-        root /var/www/myproject/public;   # nginx finds the file; the query is ignored
-        add_header Cache-Control $gina_asset_cache;
+    location ^~ /css/ {
+        root /var/www/myproject/public;
+        add_header Cache-Control "no-cache";   # your headers for plain requests, unchanged
+
+        error_page 418 = @gina_versioned;      # a token: hand the request to the bundle
+        if ($gina_versioned) {
+            return 418;
+        }
+    }
+    # ...the same error_page and if in every location that serves files gina versions:
+    # the stylesheets and scripts declared in templates.json, and gina's own
+    # js/vendor/gina and css/vendor/gina
+
+    location @gina_versioned {
+        proxy_pass http://myproject_bundle;    # the bundle that renders the pages
     }
 }
 ```
 
-nginx inherits `add_header` directives only into a block that declares none of
-its own, so repeat inside this `location` any header your `server` block adds —
-security headers, for example.
+The bundle answers `immutable` only when the token names the file's current bytes,
+and `no-cache` to any other token. So the old tokens of a page rendered before a
+deploy, or those a revert brings back, never pin the wrong file for a year. Each
+browser fetches a versioned file from the bundle once per version and uses its own
+copy afterwards. The bundle also picks the precompressed file, as described above.
 
-Two preconditions, because nginx cannot check a token:
+- **Put them inside the location that serves the files.** When the longest
+  matching prefix location is marked `^~`, nginx does not check regular-expression
+  locations, so a separate `location ~* \.(js|css)$` never applies to those paths.
+- **Add no `Cache-Control` in the named location.** gina sets it, and an
+  `add_header Cache-Control` there sends a second one. A block that declares any
+  `add_header` inherits none from the `server` block, so a named location that
+  declares none keeps your server's headers.
+- **An `error_page` inside a location replaces the server's `error_page` directives
+  there.** Repeat the ones the location relies on, a custom 404 page for example,
+  next to the `error_page 418`.
+- Proxy with the settings your other proxied locations use (scheme, `Host`, TLS).
+  A request without a token, with an upper-case one, or with your own `?v=2` is
+  still served from disk, as before.
+- Inside a `location`, `if` is safe only with `return` or `rewrite … last`, which is
+  why the request leaves through `error_page 418`.
 
-1. **nginx must serve the bytes gina hashed.** True when the static files are
-   deployed with the same release as the running bundle. On a stack where the
-   files nginx serves can lag behind the code — a development setup that copies
-   assets separately — a stale copy would be cached for a year under a fresh
-   token: leave the rule out there.
-2. **Precompressed files (`gzip_static`, `brotli_static`) must be rebuilt with
-   their source.**
+**Keying the cache header on the token's shape** works with nginx alone, but nginx
+cannot check the token:
+
+```nginx
+map $arg_v $gina_asset_cache {
+    "~^[0-9a-f]{10}$"  "public, max-age=31536000, immutable";
+    default            "no-cache";
+}
+# in each location that serves the files:
+#     add_header Cache-Control $gina_asset_cache;
+```
+
+nginx then answers any 10-hex token with the file it has on disk, for a year. A page
+rendered before the files changed (kept by the render cache, served by a replica
+still on the old release, or loading during the deploy) names the old tokens, and
+the browsers that request them after the deploy keep the new bytes under the old
+token. A revert that restores the old files brings those tokens back, and those
+browsers keep running the reverted-away file, with no request, for up to a year.
+The rule also requires nginx to serve exactly the bytes gina hashed at every moment
+of a deploy, and precompressed files rebuilt with their source: `gzip_static` serves
+a stale `.gz` under the current token for a year. Prefer the recipe above.
 
 **Rebuilding assets without a restart.** Tokens follow the file (each is cached
 and re-validated against the file's size and modification time), so a rebuilt
 asset gets its new token on the next render. Pages already stored by the
-[render cache](/guides/caching) keep the tokens they were rendered with — their
-assets are revalidated instead of cached for a year — until you flush that cache
-or restart, as for [Subresource Integrity](/reference/templates#subresource-integrity-srienabled).
+[render cache](/guides/caching) keep the tokens they were rendered with until you
+flush that cache or restart, as for
+[Subresource Integrity](/reference/templates#subresource-integrity-srienabled).
+Where gina checks the tokens (the statics it serves itself, and the nginx recipe
+above), those pages' assets are revalidated instead of cached for a year; nginx
+keying the header on the token's shape caches them for a year.
 
 ### Summary
 
 | Environment | Headers sent | Browser behaviour |
 |---|---|---|
-| Production | `ETag`, `Last-Modified` | 304 on unchanged files |
+| Production | `ETag`, `Last-Modified` | 304 on unchanged files; reused with no request while the browser's own estimate of freshness lasts |
 | Production, versioned URL (`?v=` + the file's current token) | `Cache-Control: public, max-age=31536000, immutable`, `ETag`, `Last-Modified` | No request until the URL changes |
 | Dev | `cache-control: no-cache, no-store, must-revalidate` + `X-SourceMap` (JS/CSS only) | Always re-fetches |
 

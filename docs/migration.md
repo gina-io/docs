@@ -73,8 +73,8 @@ default. What is versioned, what is not, and an nginx recipe:
   `?v=` suffix. Set `"assetVersioningEnabled": false` in `templates.json > _common`
   to keep the plain URLs.
 - A request without a token is answered exactly as before, so a front server
-  that serves your statics changes nothing on its own; add the rule from the
-  statics reference to let browsers keep the files.
+  that serves your statics changes nothing on its own; add the nginx recipe from
+  the statics reference to let browsers keep the files.
 - Regenerate precompressed `.br` / `.gz` files with their source.
 
 Restart each bundle. If your build copies `gina.min.js` into your own static files
