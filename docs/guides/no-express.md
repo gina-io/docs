@@ -178,8 +178,9 @@ app.use(authenticate);          // Runs on EVERY route — even public ones
 app.get('/public', publicHandler);  // authenticate runs here too
 ```
 
-In Gina, middleware is declared per-route in `routing.json`. There is no global
-middleware stack. Each route explicitly lists the middleware it needs:
+In Gina, route middleware is declared in `routing.json`: on the route itself, or once for
+every route of a bundle in [`routing.global.json`](/reference/routing#routingglobaljson).
+Each route's chain is written down in one place:
 
 ```json
 {
@@ -197,9 +198,18 @@ middleware stack. Each route explicitly lists the middleware it needs:
 }
 ```
 
-The public page has no middleware. The dashboard has exactly two. There is no
-way for middleware to accidentally apply to the wrong route, and there is no
+The public page has no route middleware. The dashboard has exactly two. There is no
+way for route middleware to accidentally apply to the wrong route, and there is no
 ordering ambiguity.
+
+:::note Bundle-wide layers
+Layers a bundle registers in its `onInitialize` with `app.use` — the
+[session](/guides/sessions) and [CSRF](/guides/csrf) middleware, for instance — run for
+every routed request, before the route's own middleware. On the Isaac engine gina adds
+two layers of its own there: one passes an error raised in the chain to the bundle's
+`onError` handler, the other sets the response headers (CORS and
+`server.response.header`).
+:::
 
 ```mermaid
 flowchart LR

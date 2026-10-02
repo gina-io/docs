@@ -30,6 +30,11 @@ flowchart LR
 Every action must call exactly one terminal method. If an action returns without calling
 any of them, the request hangs.
 
+:::tip A JSON route without a controller
+A JSON route that needs no route middleware, template or gate can skip the controller
+build altogether: see [Fast lane](/guides/fast-lane).
+:::
+
 ---
 
 ## Controller files

@@ -84,6 +84,23 @@ compares script URLs without their token; an older copy compares them exactly, s
 once the page loads a script under its versioned URL, a popin or a swapped region
 that includes a tag for the same file can run it a second time.
 
+### Added — the fast lane: JSON routes answered without a controller (opt-in; bundle restart)
+
+A route can now skip the controller: `"param": { "lane": "users", "control": "list" }`
+serves it from the `list` function exported by the bundle's `lanes/users.js`, which
+answers with `ctx.json()` or `ctx.error()`. Everything gina does before the router still
+runs — the request id, CORS, the security headers, maintenance mode, statics, body
+parsing, the route match — and so does the bundle's own middleware, such as the session
+and CSRF layers. In 0.7.2 a lane route declares no gate, no route middleware and no
+cache: the boot refuses one that does. See [Fast lane](/guides/fast-lane).
+
+**What to check:** nothing for existing routes, unless one already uses a `param` key
+named `lane` for its own data. Such a route is now treated as a lane route, and the boot
+refuses it, naming the route, unless the bundle's `lanes/` directory holds a matching
+module. Rename the key.
+
+Restart the bundle. Nothing to re-bake.
+
 ### Fixed — a form submitted while one of its uploads is still uploading waits for it (bundle restart and re-bake)
 
 A validator-bound form could be submitted while one of its staged uploads was still being
