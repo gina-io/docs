@@ -236,6 +236,38 @@ The assignments are gone. The answers clients receive are unchanged.
 
 Restart the bundle. Nothing to re-bake.
 
+### Fixed — the SQLite session store reads its path from `file` (bundle restart)
+
+The [sessions guide](/guides/sessions#configuring-the-store) and the
+[connectors reference](/reference/connectors) showed a persistent SQLite session store with its
+path in `database`, and that configuration stopped the boot. Two parts of gina read the
+`session` entry: the session store took `database` as a path, while the model layer, which
+opens a SQLite connector for every `connectors.json` entry, takes `database` as a database
+name under the gina home, so it tried to open `~/.gina/<path>.sqlite` and failed. Only `file`
+is read as a path by both, and the session store did not read it. It now reads `file` first,
+as the SQLite job and kv stores already do, and the examples use `file`.
+
+**What to check:** put the store's path, or `":memory:"`, in `file`:
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "session": {
+    "connector": "sqlite",
+    "file"     : "/app/data/sessions.db",
+    "ttl"      : 86400
+  }
+}
+```
+
+- A configuration that boots today behaves as before: `database` on its own is still read when
+  `file` is unset, and `database` and `file` set to the same path still name that path.
+- Once the base entry uses `file`, a `connectors.<env>.json` overlay that switches one
+  environment to memory must set `"file": ":memory:"`, because `file` wins over `database`.
+- With neither key, the store's file is `~/.gina/sessions-<bundle>.db`. The guides gave
+  `~/.gina/<shortVersion>/sessions-<bundle>.db`, which was wrong.
+
+Restart the bundle. Nothing to re-bake.
+
 ---
 
 ## 0.7.0 → 0.7.1
