@@ -198,6 +198,44 @@ in dev mode, are unchanged.
 
 Restart the bundle. Nothing to re-bake.
 
+### Fixed — HTTP/2 error answers are counted with their status in the metrics (bundle restart)
+
+On a bundle serving HTTP/2, an error answered by gina's server-level error path — a `404`
+for a missing route, a `405`, a `500` — was counted in
+[`gina_http_requests_total`](/guides/observability#http-request-counter) as `status="200"`
+under `route="__no_route__"`. The answer goes out on the raw HTTP/2 stream, and the response
+object in front of it kept its default status, which is what the metrics read when the
+response finishes. The client always received the right status. The response now carries the
+code it sends, so these requests are counted as they already were over HTTP/1.1: a `404` as
+`status="404"` under `route="__not_found__"` (see
+[Cardinality safety](/guides/observability#cardinality-safety)).
+
+**What to check:** an error-rate panel or alert built on these metrics now sees the HTTP/2
+errors it missed, so its rate rises to the true value.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — no more `headersSent` errors after a response is sent (bundle restart)
+
+Five places in gina assigned `headersSent` on a response after sending it. `headersSent` is
+read-only on Node's response objects, and these files run in strict mode, so each assignment
+threw a `TypeError` after the client already had its answer:
+
+- with the [nunjucks engine](/templating/nunjucks) over HTTP/2, every rendered page logged
+  `Unhandled promise rejection: TypeError: Cannot set property headersSent …`;
+- with a [redis render cache](/guides/caching#redis-shared-l2-across-replicas) over HTTP/2, the
+  first request for each cached URL after a restart, or on a fresh replica (the one answered
+  with `detail=redis`), logged the same error and wrote no access-log line;
+- [`self.renderXML()`](/guides/controller#selfrenderxmlxmlcontent-contenttype) skipped its
+  cleanup over HTTP/2, and over HTTP/1.1 it could call the action's `next()` after the response
+  had ended.
+
+The assignments are gone. The answers clients receive are unchanged.
+
+**What to check:** nothing; those error lines stop.
+
+Restart the bundle. Nothing to re-bake.
+
 ---
 
 ## 0.7.0 → 0.7.1
