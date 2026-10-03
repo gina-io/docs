@@ -19,6 +19,49 @@ upward to the target version.
 
 ---
 
+## 0.7.2 → 0.7.3
+
+### Fixed — a `GINA_VERSION` that names no installed framework is refused (next `gina` command)
+
+The `gina` CLI checked only the installed package's own framework version. A
+`GINA_VERSION` exported in the environment, or set with `--version=<v>` on any
+command, could therefore name a version that is not installed — `latest`, or a
+number such as `0.6.9` — and the command then migrated `~/.gina` to it: a `latest`
+key in every per-version entry of `main.json` and `gina.db`, an empty
+`~/.gina/latest/` directory, `gina version` printing `vlatest`. The command carried
+on as if nothing were wrong.
+
+Such a value is now refused before the command runs and before `~/.gina` is
+migrated. The CLI prints the directory it expected and exits 1; for a version
+number it also prints the command that installs that version side by side:
+
+```text
+gina: framework version 0.0.1 is not installed (expected at <gina>/framework/v0.0.1).
+GINA_VERSION, exported or set with --version=, must name an installed framework version; the installed package version is 0.7.3. Unset or correct it.
+To install it side by side:
+  $ env -u GINA_VERSION gina framework:add 0.0.1
+```
+
+`gina start`, which starts the framework in the background, prints the same
+message but still exits 0. A version installed side by side with
+[`framework:add`](/cli/cli-framework#frameworkadd) is accepted as before.
+
+A `--<name>=<value>` argument also keeps its value exactly as given. When the flag
+name had no hyphen of its own, the value's first hyphen became `_`, so
+`--version=0.7.2-alpha.2` reached the CLI as `0.7.2_alpha.2`.
+
+**What to check:** nothing, unless a script, a shell profile or a container
+exports `GINA_VERSION`, or passes `--version=`, with a value that names no
+installed version. That command now stops with the message above instead of
+rewriting `~/.gina`: unset the variable or set it to an installed version. Keys
+that an earlier run already wrote are not removed. With the variable unset,
+`framework:version`, `framework:list`, `framework:update`, `project:build` and the
+next minor-version migration were measured to behave the same with them as
+without; `gina framework:list --all` shows one extra `vlatest` row, registered
+but not installed.
+
+---
+
 ## 0.7.1 → 0.7.2
 
 ### Security — a staged upload's error message is shown as text, never as markup (bundle restart and re-bake)
