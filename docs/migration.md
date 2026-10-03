@@ -155,6 +155,78 @@ instead, and `data.reason` if a navigation abort should be ignored.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — choosing another file while one is uploading stages the new file (bundle restart and re-bake)
+
+Choosing another file on a staged input while its previous file was still being sent did
+nothing: the new selection was never sent, nothing was logged, and the first upload then
+filled the form's hidden fields with the metadata of the file the user had just replaced,
+while the input showed the new one. The earlier staging request is now cancelled and the new
+file staged. The cancelled request ends quietly, with no error and no on-error callback, and a
+submit already waiting for the upload waits for the new one. See
+[Choosing another file while one is uploading](/guides/file-uploads#choosing-another-file-while-one-is-uploading).
+
+**What to check:** your staging action may now see a request that ends early, or store a file
+no form ever claims. Clean those up as you clean up files staged by a user who left the page.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staging error reaches the on-error callback without an error element (bundle restart and re-bake)
+
+When a staged input had no error element, a failed staging request made the client throw before
+the error event and the [`data-gina-form-upload-on-error`](/guides/file-uploads#attributes)
+callback, so the callback never ran, for an HTTP error and a transport failure alike. The error
+element is now optional: without one, the message is announced through the form's live region,
+the callback runs, and in dev mode a console warning names the missing element. The element is
+also looked up from the file input's own `data-gina-form-upload-error`. It used to be read from
+the form's last input, so a custom element was honoured only when the file input came last. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** an on-error callback on an input without an error element now runs, so make
+sure it does what you meant. A file input that is not the last input of its form now shows its
+staging errors in the element its `data-gina-form-upload-error` names.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — two forms with same-named staged inputs keep their uploads apart (bundle restart and re-bake)
+
+Each staged file input sends through a virtual upload form, whose id was `gina-upload-<name>`
+for a name without brackets. Two forms on one page with staged inputs of the same bracket-less
+name (`name="doc"`) therefore shared one upload form: the second form's upload filled the
+**first** form's hidden fields and left its own empty. For a bracket-less name the upload
+form's id now ends with the form id, `gina-upload-doc-<form id>`, as a bracketed name's id
+already did. Bracketed names keep their ids.
+
+**What to check:** code that names a bracket-less upload form's id literally, in an event
+listener, a selector or a `gina.validator.$forms[…]` lookup, must use the new id. Read it from
+the file input's `data-gina-form-virtual` attribute instead of building it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staged file input works again after its popin is closed and reopened (bundle restart and re-bake)
+
+In a [popin constructed with a validator](/guides/popin#forms-inside-popins), a staged file input
+stopped working once the popin had been closed and reopened: every selection threw
+`setAttribute is not a function` and sent no staging request, so the file was never staged and
+the on-success callback never ran. The input reused the upload form of its previous selection,
+which had left the page with the popin's content. It now builds a new one.
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `gina.popin.close(name)` tears down the popin's forms (bundle restart and re-bake)
+
+Closing a popin constructed with a validator through `gina.popin.close(name)` skipped the
+teardown of its forms, which its close button and its own `close()` performed. The forms stayed
+registered against their removed markup, so on the next open they were not bound again: they
+lost their rules, their submit handling and their declared events, and a staged upload in them
+sent nothing. `gina.popin.close(name)` now tears them down as the other two do. See
+[Forms inside popins](/guides/popin#forms-inside-popins).
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a page whose query string ends in the routing table's path is answered by the page (bundle restart)
 
 A page URL whose query string ended in the path of the client routing table — for instance

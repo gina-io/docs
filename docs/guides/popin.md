@@ -257,6 +257,14 @@ With one, each form in the content is bound through
 form in a modal popin lives inside a `showModal()` dialog — where everything
 outside is inert — its validation live region stays inside the form itself.
 
+Closing the popin tears its forms down — through its close button, its own
+`close()`, or `gina.popin.close(name)` — and reopening it binds the new content's
+forms again, [staged file inputs](/guides/file-uploads#the-client-upload-layer)
+included. *Changed in 0.7.2:* `gina.popin.close(name)` used to skip that
+teardown, so a reopened form was not bound again: it lost its rules, its submit
+handling and its declared events. Before 0.7.2 a staged file input in a reopened
+popin also sent nothing, after any of these three closes.
+
 A contained form's `text/html` answer replaces **this popin's** content — the
 popin is chosen by containment, not by whichever one happens to be open. A form
 that declares its own

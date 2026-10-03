@@ -501,7 +501,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-action` | URL (or route name) the chosen file is POSTed to for staging. Defaults to the route `upload-to-tmp-xml`. |
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
-| `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. |
+| `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. Optional — see [When staging fails](#when-staging-fails). |
 | `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
 | `data-gina-form-upload-dropzone` | Id of an element to bind as a drag-and-drop target for this input. **Explicit id only — no default**; without the attribute the feature is inactive. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
@@ -734,6 +734,14 @@ through the form's live region. *Changed in 0.7.2:* it is always written as
 **text** — a reverse proxy's HTML error page, or a message that echoes the file
 name, shows as characters, never as markup.
 
+*Changed in 0.7.2:* the error element is optional. Without one, the message is
+announced through the form's live region, the `data-gina-form-upload-on-error`
+callback still runs, and in dev mode a console warning names the missing
+element. Before 0.7.2 a missing element made the client throw before the
+callback, which then never ran. The element is the one the **file input**
+names: the attribute used to be read from the form's last input, so a custom
+`data-gina-form-upload-error` was honoured only when the file input came last.
+
 A request that ends without an answer (XHR status `0`) — a dropped connection, a
 reverse proxy refusing an oversized body while the browser is still sending it,
 a navigation away from the page — shows
@@ -745,6 +753,25 @@ and a `reason`: `'unload'` when the page was being navigated away from,
 `'transport'` otherwise. *Changed in 0.7.2* — the text used to say the request
 "did not reach the server", which is false for the proxy and navigation cases,
 and could not be translated.
+
+### Choosing another file while one is uploading
+
+*Changed in 0.7.2.* Choosing another file while the input's previous file is
+still being sent stages the new one. The earlier staging request is cancelled
+and ends quietly — no error message, no `data-gina-form-upload-on-error`
+callback — as a
+[superseded request](/guides/forms-and-validation#a-superseded-request-is-not-an-error)
+does. A submit already
+[waiting for the upload](#submitting-while-an-upload-is-in-flight) waits for the
+new request and sends its metadata. Before 0.7.2 the new selection was dropped
+without a word while the input showed it, and the first upload then filled the
+form with the metadata of the file the user had just replaced.
+
+Cancelling the client's wait does not undo the server's work: the cancelled
+request may have reached your staging action, which can see a request that ends
+early, or store the file just before the cancel. No submitted form ever claims
+that file — like one staged by a user who then left the page — so clean it up
+the same way.
 
 ### Submitting while an upload is in flight
 
