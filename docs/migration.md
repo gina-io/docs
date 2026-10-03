@@ -43,8 +43,8 @@ To install it side by side:
 ```
 
 `gina start`, which starts the framework in the background, prints the same
-message but still exits 0. A version installed side by side with
-[`framework:add`](/cli/cli-framework#frameworkadd) is accepted as before.
+message and exits 1 as well (see the next section). A version installed side by
+side with [`framework:add`](/cli/cli-framework#frameworkadd) is accepted as before.
 
 A `--<name>=<value>` argument also keeps its value exactly as given. When the flag
 name had no hyphen of its own, the value's first hyphen became `_`, so
@@ -59,6 +59,25 @@ that an earlier run already wrote are not removed. With the variable unset,
 next minor-version migration were measured to behave the same with them as
 without; `gina framework:list --all` shows one extra `vlatest` row, registered
 but not installed.
+
+### Fixed — `gina start` returns a non-zero exit code when the framework does not start (next `gina start`)
+
+`gina start` and `gina framework:start` start the framework in the background and
+return once it reports that it is ready. When the framework stopped before that —
+the refusal above, or an error while it boots — the command still exited 0, so a
+script that tests the exit code read success. It now exits with the framework's
+own exit code (1 if that code was 0), or with 128 plus the signal number when a
+signal stopped it. A framework that is ready, or already running, still gives 0.
+See [Exit codes](/cli/cli-framework#start-exit-codes).
+
+A warning printed on standard error before the framework was ready (a
+deprecation notice, for example) also ended the command with 1, and the
+framework, cut off from its output, then stopped, so the start failed. The
+warning is now printed and the start carries on.
+
+**What to check:** a script that runs `gina start` and stops on a non-zero exit
+(`set -e`, `&&`) now stops when the framework did not start, where it used to
+carry on as if it had. Nothing changes for a start that succeeds.
 
 ---
 

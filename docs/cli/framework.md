@@ -26,6 +26,23 @@ gina start    # start the framework socket server
 gina stop     # stop the framework socket server
 ```
 
+### Exit codes {#start-exit-codes}
+
+`gina start` and `gina framework:start` return once the framework reports that it is ready, or that it is already running.
+
+| Exit | When |
+|------|------|
+| `0` | The framework is ready, or was already running. |
+| The framework's own code | The framework stopped before it was ready (a refused `GINA_VERSION`, an error while it boots). `1` when that code was `0`. |
+| `128` + the signal number | A signal stopped the framework before it was ready (`137` for `SIGKILL`). |
+| `1` | A debugger line, or `address already in use`, appeared on standard error before the framework was ready. |
+
+A warning on standard error, such as a deprecation notice, is printed and does not end the start.
+
+:::note
+If another program already listens on the framework port, `gina start` currently reports the framework as already running and exits `0`.
+:::
+
 ---
 
 ## `gina --help` / `gina help`
