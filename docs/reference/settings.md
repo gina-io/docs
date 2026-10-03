@@ -39,7 +39,8 @@ The primary server settings file.
     "engine"   : "isaac",
     "protocol" : "http/2.0",
     "scheme"   : "https",
-    "address"  : "0.0.0.0"
+    "address"  : "0.0.0.0",
+    "cache"    : { "enable": false }
   },
   "region": {
     "culture"  : "en_CM",
@@ -55,7 +56,7 @@ The primary server settings file.
     "24HourTimeFormat"    : true
   },
   "cache": {
-    "enable": false
+    "type": "memory"
   }
 }
 ```
@@ -74,6 +75,7 @@ The primary server settings file.
 | `keepAliveTimeout` | string | `"5s"` | Keep-alive socket timeout (e.g. `"5s"`, `"30s"`) |
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |
+| `cache` | object | — | The render/output cache's switch and bundle-wide defaults: `enable` (default `false`), `path`, `ttl` (default `3600`), `sliding`, `maxAge`, `maxEntries` (default `1000`). See [`cache`](#cache) |
 | `proxy.requireForwardedHeaders` | boolean | `false` | Opt-in deterministic reverse-proxy classification: when `true`, only requests carrying `X-Forwarded-Host` are classified as proxied — the port-less-Host heuristic is disabled, so internal service-DNS calls (health probes on app routes, mesh hops, sibling-bundle calls) can never rewrite the worker's proxy-host context. Enable only behind a front proxy that always sends `X-Forwarded-Host`. *New in 0.5.25* |
 | `query.circuitBreaker.enabled` | boolean | `false` | Arm the per-authority circuit breaker for `self.query()`. Must be strictly `true` — any other value leaves it dormant. After `failureThreshold` consecutive transport-class failures to one authority (each already representing a call whose own retries were exhausted), further calls fail fast with a `CIRCUIT_OPEN` error (status `503`, `retryable: false`, plus `authority` and `retryAfterMs`) instead of hammering a dead upstream. Gates both HTTP/1.x and HTTP/2 above the protocol dispatch. Resolved once at engine start — changes need a bundle restart. *New in 0.6.13* |
 | `query.circuitBreaker.failureThreshold` | integer | `5` | Consecutive transport-class failures (per `hostname:port`) that open the circuit. Application responses — whatever their status — and caller bugs never count. An invalid value on an enabled block refuses the boot. *New in 0.6.13* |
@@ -178,32 +180,52 @@ formatting defaults.
 
 ### `cache`
 
-Master switch for route-level response caching. Per-route `cache` fields in
-`routing.json` are ignored when caching is disabled here.
+The render/output cache is configured in two blocks: `server.cache` holds the
+on/off switch and the bundle-wide defaults, and the top-level `cache` block
+names the default storage backend.
 
 ```json
 {
+  "server": {
+    "cache": {
+      "enable" : true,
+      "path"   : "/var/cache/myproject",
+      "ttl"    : 3600,
+      "sliding": false,
+      "maxAge" : 86400
+    }
+  },
   "cache": {
-    "type"   : "memory",
-    "enable" : true,
-    "path"   : "/var/cache/myproject",
-    "ttl"    : 3600,
-    "sliding": false,
-    "maxAge" : 86400
+    "type": "memory"
   }
 }
 ```
 
+**`server.cache`** can be set here, in a per-environment
+[`settings.server.cache.${env}.json`](#settingsservercacheenvjson), or under the
+bundle and the environment in the project's `env.json`. When more than one sets
+the same key, the per-environment file wins, then `settings.json`, then
+`env.json`.
+
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `enable` | boolean | `false` | Master on/off switch |
+| `enable` | boolean | `false` | Master on/off switch: `true` (or `"true"`) turns the cache on. While it is off, nothing is stored in or served from the cache, whatever the per-route `cache` fields in `routing.json` declare |
+| `path` | string | — | Directory for `fs`-type cached files |
+| `ttl` | number (seconds) | `3600` | Default TTL when a route's `cache` config does not set one |
+| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding`. Not supported with `redis` |
+| `maxAge` | number (seconds) | `0` | Bundle-wide absolute lifetime ceiling; routes inherit it when they omit `maxAge`. Only meaningful when `sliding` is `true`; `0` sets no ceiling |
+| `maxEntries` | number | `1000` | Upper bound on entries held in the in-memory cache; the least recently used are evicted past it. A value of `0` or less is ignored and the default applies |
+
+**The top-level `cache` block** is the place for `type`, `store` and `name`. It
+does not turn the cache on: the six keys the framework sets by default
+(`enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries`) are ignored
+there, because those defaults take precedence over that block.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
 | `type` | `"memory"` \| `"fs"` \| `"redis"` | `"memory"` | Bundle-wide default storage backend; routes inherit it when they set `cache` but omit `type`. A per-route `cache.type` always wins |
 | `store` | string | — | Required when `type` is `"redis"` — names the [`connectors.json`](./connectors) entry holding the redis connection |
-| `path` | string | — | Directory for `fs`-type cached files |
-| `ttl` | number (seconds) | — | Default TTL when a route's `cache` config does not set one |
-| `sliding` | boolean | `false` | Bundle-wide sliding-window default; routes inherit it when they omit `sliding`. Not supported with `redis` |
-| `maxAge` | number (seconds) | — | Bundle-wide absolute lifetime ceiling; routes inherit it when they omit `maxAge`. Only meaningful when `sliding` is `true` |
-| `maxEntries` | number | `1000` | Upper bound on entries held in the in-memory cache; the least recently used are evicted past it. A value of `0` or less is ignored and the default applies |
+| `name` | string | `"gina-cache"` | The RFC 9211 `Cache-Status` identifier the cache reports; see [the Cache-Status identifier](../guides/caching#the-cache-status-identifier) |
 
 Three `redis` rules are checked at boot and fail the bundle loudly rather than
 silently disabling the cache: `store` must be set, `sliding: true` is rejected
@@ -735,8 +757,10 @@ When the env does not match, the file is parsed but its section key resolves to
 ```
 
 With both files present, running with `NODE_ENV=dev` disables caching; running
-with `NODE_ENV=prod` enables it with a 2-hour TTL. The base `settings.json`
-`cache` block acts as the fallback for any other environment.
+with `NODE_ENV=prod` enables it with a 2-hour default TTL. In an environment
+that has no such file, `server.cache` in `settings.json` applies, then the
+project's `env.json`, and the cache stays off if none of them turns it on. The
+top-level `settings.json` `cache` block never turns it on: see [`cache`](#cache).
 
 ---
 
