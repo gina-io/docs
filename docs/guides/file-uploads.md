@@ -410,7 +410,9 @@ The `data-gina-form-upload-*` attributes turn a plain `<input type="file">` into
 a staged uploader: the file is sent to a temporary endpoint **as soon as it is
 chosen**, a preview appears, and hidden metadata fields are written into your
 real form so its eventual submit carries only lightweight references — not the
-binary. (Before 0.5.16 this was also the only way to keep text fields alongside
+binary, and not the file input's own value either (*since 0.7.2*: the browser's
+`C:\fakepath\<name>` placeholder is left out of the payload, while rules such as
+`isRequired` still see the input). (Before 0.5.16 this was also the only way to keep text fields alongside
 an upload, because multipart requests dropped non-file parts. Those fields are
 [captured now](#receiving-uploads-in-a-controller), so the staging layer is
 about UX — previews, per-file removal, a lightweight final submit — not field
@@ -499,7 +501,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-action` | URL (or route name) the chosen file is POSTed to for staging. Defaults to the route `upload-to-tmp-xml`. |
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
-| `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. |
+| `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. Optional — see [When staging fails](#when-staging-fails). |
 | `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
 | `data-gina-form-upload-dropzone` | Id of an element to bind as a drag-and-drop target for this input. **Explicit id only — no default**; without the attribute the feature is inactive. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
@@ -707,7 +709,8 @@ The indicator's lifecycle is managed end-to-end: `preparing` from the moment a
 file is selected (file reading and body assembly happen before the first network
 frame), `processing` once the browser has finished sending the bytes, `complete`
 fills the bar on success, a staging error empties it (state `error` — the error
-message renders in the `-error` element as usual), and removing a staged file
+message renders in the `-error` element as usual, see
+[When staging fails](#when-staging-fails)), and removing a staged file
 (reset/delete) clears the indicator entirely.
 
 *The `processing` state is new in 0.5.25.* It covers the server post-processing
@@ -722,6 +725,84 @@ appearing frozen. Style it like any other state:
     opacity: .6;
 }
 ```
+
+### When staging fails
+
+The server's error message shows in the input's error element
+(`data-gina-form-upload-error`, default `<fieldId>-error`) and is announced
+through the form's live region. *Changed in 0.7.2:* it is always written as
+**text** — a reverse proxy's HTML error page, or a message that echoes the file
+name, shows as characters, never as markup.
+
+*Changed in 0.7.2:* the error element is optional. Without one, the message is
+announced through the form's live region, the `data-gina-form-upload-on-error`
+callback still runs, and in dev mode a console warning names the missing
+element. Before 0.7.2 a missing element made the client throw before the
+callback, which then never ran. The element is the one the **file input**
+names: the attribute used to be read from the form's last input, so a custom
+`data-gina-form-upload-error` was honoured only when the file input came last.
+
+A request that ends without an answer (XHR status `0`) — a dropped connection, a
+reverse proxy refusing an oversized body while the browser is still sending it,
+a navigation away from the page — shows
+*"Transport failure: the request did not complete"*. Translate it through
+`gina.config.a11y.transportError` (see
+[Translating the status announcements](/guides/forms-and-validation#translating-the-status-announcements)).
+The result passed to `data-gina-form-upload-on-error` carries `transportError: true`
+and a `reason`: `'unload'` when the page was being navigated away from,
+`'transport'` otherwise. *Changed in 0.7.2* — the text used to say the request
+"did not reach the server", which is false for the proxy and navigation cases,
+and could not be translated.
+
+### Choosing another file while one is uploading
+
+*Changed in 0.7.2.* Choosing another file while the input's previous file is
+still being sent stages the new one. The earlier staging request is cancelled
+and ends quietly — no error message, no `data-gina-form-upload-on-error`
+callback — as a
+[superseded request](/guides/forms-and-validation#a-superseded-request-is-not-an-error)
+does. A submit already
+[waiting for the upload](#submitting-while-an-upload-is-in-flight) waits for the
+new request and sends its metadata. Before 0.7.2 the new selection was dropped
+without a word while the input showed it, and the first upload then filled the
+form with the metadata of the file the user had just replaced.
+
+Cancelling the client's wait does not undo the server's work: the cancelled
+request may have reached your staging action, which can see a request that ends
+early, or store the file just before the cancel. No submitted form ever claims
+that file — like one staged by a user who then left the page — so clean it up
+the same way.
+
+### Submitting while an upload is in flight
+
+*New in 0.7.2.* A submit made while one of the form's staged uploads is still
+being sent **waits for it**. Nothing is posted yet: the submit control keeps its
+[loading state](/guides/forms-and-validation#loading-state), and the form's live
+region announces the wait once (`uploadPending`, default
+*"Waiting for the upload to finish…"*, translatable through
+[`gina.config.a11y`](/guides/forms-and-validation#translating-the-status-announcements)).
+When the last upload of the form settles:
+
+- **every upload succeeded** — the submit runs again the way it came in (the
+  submit control, Enter, `requestSubmit()` or `$forms[id].submit()`), so the
+  fields are collected afresh, with the metadata the uploads just wrote, then
+  validated and sent once;
+- **an upload failed** — the waiting submit is cancelled: nothing is sent, the
+  loading state is released, and the upload's error shows as usual. The user
+  submits again once the file is dealt with.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Waiting: submit while an upload is in flight
+    Waiting --> Waiting: another upload of the form is still in flight
+    Waiting --> Sent: every upload succeeded (fields collected again)
+    Waiting --> Cancelled: an upload failed, or the form left the page
+```
+
+A second activation while the submit is already waiting adds nothing. A direct
+`gina.validator.$forms[id].send(data)` call carries its own payload and is not
+held. Before 0.7.2 the submit went out at once and posted the upload's hidden
+fields empty.
 
 ## Drag-and-drop (dropzone)
 
@@ -791,6 +872,11 @@ This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
 - **No client-side size or type checking.** The client does not pre-validate a
   file's size or extension before staging — enforcement is server-side only (the
   upload-group rules). Do not assume the browser blocked anything.
+- **A staging request that never answers keeps a waiting submit waiting.** The
+  client sets no timeout on staging requests, so a submit
+  [waiting for an upload](#submitting-while-an-upload-is-in-flight) stays waiting
+  until that request settles. Make sure the staging route — and any proxy in
+  front of it — always answers.
 
 ---
 

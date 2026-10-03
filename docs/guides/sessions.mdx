@@ -129,7 +129,7 @@ Requires Node.js ≥ 22.5.0 — or [Bun](https://bun.sh) ≥ 1.2, where the buil
 {
   "session": {
     "connector"      : "sqlite",
-    "database"       : ":memory:",
+    "file"           : ":memory:",
     "ttl"            : 86400,
     "prefix"         : "sess:",
     "cleanupInterval": 900
@@ -143,16 +143,20 @@ For a persistent file store (survives restarts):
 {
   "session": {
     "connector": "sqlite",
-    "database" : "/app/data/sessions.db",
+    "file"     : "/app/data/sessions.db",
     "ttl"      : 86400
   }
 }
 ```
 
+:::warning Use `file` for the path — not `database`
+Every `connectors.json` entry is also visible to the model layer at boot, which treats `database` as a database *name* (resolved under the gina home directory) — a filesystem path there fails the boot. Keep the path, or `":memory:"`, in `file`. The session store reads `file` from 0.7.2; earlier versions read only `database`, so there set both keys to the same value.
+:::
+
 | Field | Default | Description |
 |---|---|---|
 | `connector` | — | Must be `"sqlite"` |
-| `database` | `~/.gina/${shortVersion}/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` |
+| `file` | `~/.gina/sessions-${bundle}.db` | Path to the SQLite file, or `":memory:"` |
 | `ttl` | (cookie `maxAge` / 1000, then `86400`) | Session TTL in seconds |
 | `prefix` | `"sess:"` | Key prefix stored in the DB |
 | `cleanupInterval` | `900` | Seconds between expired-session purges. Set `0` to disable. |
@@ -190,7 +194,7 @@ Point dev at an in-memory store without touching `connectors.json`:
 ```json title="src/api/config/connectors.dev.json"
 {
   "session": {
-    "database": ":memory:"
+    "file": ":memory:"
   }
 }
 ```

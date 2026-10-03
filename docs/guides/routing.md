@@ -111,7 +111,8 @@ unique across the project.
 | `method` | — | `"GET"` | HTTP method(s). Comma-separated for multiple: `"GET, POST"` |
 | `namespace` | — | — | Maps to `controller.<namespace>.js` and the views subdirectory |
 | `requirements` | — | — | Regex or validator constraints per URL parameter |
-| `param.control` | ✓ | — | Controller method to invoke |
+| `param.control` | ✓ | — | Controller method to invoke — on a [fast-lane](./fast-lane.md) route, the function the lane module exports |
+| `param.lane` | — | — | Serve the route through the [fast lane](./fast-lane.md): a module under the bundle's `lanes/` directory answers it, without a controller |
 | `param.file` | — | rule name | Template path relative to the namespace views dir |
 | `param.section` | — | — | Auto-promoted to `page.section` for sub-section dispatch — a single template fans out to per-section partials based on the matched route |
 | `param.title` | — | rule name | Page title — lands on `page.view.title` (the browser-tab title). Applied verbatim; the stripped route name is the fallback when omitted, and a controller-set `data.page.view.title` wins |

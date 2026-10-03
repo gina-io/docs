@@ -19,6 +19,329 @@ upward to the target version.
 
 ---
 
+## 0.7.1 → 0.7.2
+
+### Security — a staged upload's error message is shown as text, never as markup (bundle restart and re-bake)
+
+When a staging request failed, the [staged-upload layer](/guides/file-uploads#the-client-upload-layer)
+wrote its error message into the upload's error element (`data-gina-form-upload-error`,
+default `<fieldId>-error`) with `innerHTML`. A non-JSON error body becomes that message
+verbatim, so a reverse proxy's or WAF's HTML error page — or a server error that echoes
+request text, such as Gina's own refusal of a file extension, which names the file — was
+parsed as live markup in the page. The element now builds its paragraph with
+`textContent`, so the message always shows as text. Affected: 0.1.1 through 0.7.1.
+
+**What to check:** your own `data-gina-form-upload-on-error` callback receives the same
+message (`data.message` or `data.error`); if it writes it into the page, write it as text
+too.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — the `engine.io` floor is raised to `^6.6.10`, closing CVE-2026-102599 (bundle restart)
+
+Gina now declares `engine.io` `^6.6.10` instead of `^6.6.7`. `6.6.10` is the first release
+patched for [GHSA-2gc4-cqfq-p2gv](https://github.com/advisories/GHSA-2gc4-cqfq-p2gv)
+(CVE-2026-102599): on an existing session, a transport-upgrade request that carries a
+different or missing protocol revision (`EIO`) could crash the process. Gina loads
+engine.io only for a bundle whose `settings.json` sets `ioServer.integrationMode` to
+`"attach"`, so only such a bundle was exposed — when its install resolved engine.io 6.6.0
+to 6.6.9 and transport upgrades were allowed, which is the default. `^6.6.7` already let a
+fresh install resolve a patched release, so the exposure came from an older install or a
+lockfile that kept an affected one; with the new floor, an install of this version cannot
+resolve an affected engine.io.
+
+**What to check:** nothing if no bundle sets `ioServer`. Otherwise, restart the bundles in
+attach mode after upgrading so they load the new engine.io. If you cannot upgrade yet,
+`npm update engine.io` moves an older lockfile to a patched release inside `^6.6.7`, or
+`"allowUpgrades": false` (or a single entry in `"transports"`) in the `ioServer` block
+avoids the upgrade the crash needs.
+
+### Added — versioned asset URLs, cached by browsers for a year (production; bundle restart)
+
+In production, the `<link>` and `<script>` tags gina writes from `templates.json`
+now end in `?v=` plus 10 hexadecimal characters of the file's SHA-384, and the
+statics gina serves answer `Cache-Control: public, max-age=31536000, immutable`
+when the token names the file's current bytes. Their HTTP/2 preload hints carry
+the same URLs, and the client routing table is fetched the same way. On by
+default. What is versioned, what is not, and an nginx recipe:
+[Versioned asset URLs](/reference/statics#versioned-asset-urls).
+
+**What to check:**
+
+- Anything that matches asset URLs exactly — a service-worker precache list, an
+  HTML snapshot test, a CDN or proxy rule keyed on the full URL — now sees a
+  `?v=` suffix. Set `"assetVersioningEnabled": false` in `templates.json > _common`
+  to keep the plain URLs.
+- A request without a token keeps the cache headers it had, so a front server
+  that serves your statics changes nothing on its own; add the nginx recipe from
+  the statics reference to let browsers keep the files.
+- Regenerate precompressed `.br` / `.gz` files with their source.
+
+Restart each bundle. If your build copies `gina.min.js` into your own static files
+instead of serving it through the default `js/vendor/gina` mapping, rebuild that
+copy before the restart. The new client appends the routing-table token, and it
+compares script URLs without their token; an older copy compares them exactly, so
+once the page loads a script under its versioned URL, a popin or a swapped region
+that includes a tag for the same file can run it a second time.
+
+### Added — the fast lane: JSON routes answered without a controller (opt-in; bundle restart)
+
+A route can now skip the controller: `"param": { "lane": "users", "control": "list" }`
+serves it from the `list` function exported by the bundle's `lanes/users.js`, which
+answers with `ctx.json()` or `ctx.error()`. Everything gina does before the router still
+runs — the request id, CORS, the security headers, maintenance mode, statics, body
+parsing, the route match — and so does the bundle's own middleware, such as the session
+and CSRF layers. In 0.7.2 a lane route declares no gate, no route middleware and no
+cache: the boot refuses one that does. See [Fast lane](/guides/fast-lane).
+
+**What to check:** nothing for existing routes, unless one already uses a `param` key
+named `lane` for its own data. Such a route is now treated as a lane route, and the boot
+refuses it, naming the route, unless the bundle's `lanes/` directory holds a matching
+module. Rename the key.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a form submitted while one of its uploads is still uploading waits for it (bundle restart and re-bake)
+
+A validator-bound form could be submitted while one of its staged uploads was still being
+sent, and the submit posted that upload's hidden metadata fields empty — an entry such as
+`"doc":[{"location":"",…}]` for a file that never finished staging. A submit now waits for
+every staged upload of its form that is still in flight, then sends once, collecting the
+metadata the upload has just written. While it waits, the submit control keeps its
+[loading state](/guides/forms-and-validation#loading-state) and the form's live region
+announces the wait once ([`uploadPending`](/guides/forms-and-validation#translating-the-status-announcements)).
+If an upload fails, the waiting submit is cancelled: nothing is sent, the loading state is
+released, and the upload's own error shows as usual. This covers the submit control,
+Enter, `requestSubmit()` and `$forms[id].submit()`; a direct `$forms[id].send(data)` call
+carries its own payload and is not held. See
+[Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight).
+
+**What to check:** nothing, unless your server relied on receiving a save before its
+upload finished — it now arrives after the upload, with the file's metadata. A page that
+holds the submit itself during uploads can drop that code; leaving it in place does no
+harm.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staged file input's placeholder value is no longer posted (bundle restart and re-bake)
+
+A form submit collected a staged file input's own value — the browser's placeholder
+`C:\fakepath\<name>` — into the payload. The upload travels through the hidden metadata
+fields, so the input itself is now left out of the payload; rules such as `isRequired`
+still see it. When `data-gina-form-upload-prefix` differed from the input's `name`, the
+placeholder was posted under the input's name, and a server that stored it kept a path
+instead of the staged file.
+
+**What to check:** nothing, unless your server read the input's own field — read the
+hidden `<prefix>[N][…]` fields instead.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a request that fails before its answer says it "did not complete", and the text can be translated (bundle restart and re-bake)
+
+A request that settles without a response (XHR status `0`) used to report
+*"Transport failure: the request did not reach the server"*. Two common causes did reach
+the server: a reverse proxy refusing a body that is too large — over HTTP/2 its `413`
+arrives while the browser is still sending — and a page navigation that aborted a request
+the server then completed. The message now reads
+*"Transport failure: the request did not complete"*, a project can replace it through
+`gina.config.a11y.transportError`, and the result carries `reason`: `'unload'` when the page
+was being navigated away from, `'transport'` otherwise. This reaches a form's
+[submit-error callback](/guides/forms-and-validation#declarative-callbacks) and the upload
+error element alike.
+
+**What to check:** code that matched the old sentence — test `data.transportError`
+instead, and `data.reason` if a navigation abort should be ignored.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — choosing another file while one is uploading stages the new file (bundle restart and re-bake)
+
+Choosing another file on a staged input while its previous file was still being sent did
+nothing: the new selection was never sent, nothing was logged, and the first upload then
+filled the form's hidden fields with the metadata of the file the user had just replaced,
+while the input showed the new one. The earlier staging request is now cancelled and the new
+file staged. The cancelled request ends quietly, with no error and no on-error callback, and a
+submit already waiting for the upload waits for the new one. See
+[Choosing another file while one is uploading](/guides/file-uploads#choosing-another-file-while-one-is-uploading).
+
+**What to check:** your staging action may now see a request that ends early, or store a file
+no form ever claims. Clean those up as you clean up files staged by a user who left the page.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staging error reaches the on-error callback without an error element (bundle restart and re-bake)
+
+When a staged input had no error element, a failed staging request made the client throw before
+the error event and the [`data-gina-form-upload-on-error`](/guides/file-uploads#attributes)
+callback, so the callback never ran, for an HTTP error and a transport failure alike. The error
+element is now optional: without one, the message is announced through the form's live region,
+the callback runs, and in dev mode a console warning names the missing element. The element is
+also looked up from the file input's own `data-gina-form-upload-error`. It used to be read from
+the form's last input, so a custom element was honoured only when the file input came last. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** an on-error callback on an input without an error element now runs, so make
+sure it does what you meant. A file input that is not the last input of its form now shows its
+staging errors in the element its `data-gina-form-upload-error` names.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — two forms with same-named staged inputs keep their uploads apart (bundle restart and re-bake)
+
+Each staged file input sends through a virtual upload form, whose id was `gina-upload-<name>`
+for a name without brackets. Two forms on one page with staged inputs of the same bracket-less
+name (`name="doc"`) therefore shared one upload form: the second form's upload filled the
+**first** form's hidden fields and left its own empty. For a bracket-less name the upload
+form's id now ends with the form id, `gina-upload-doc-<form id>`, as a bracketed name's id
+already did. Bracketed names keep their ids.
+
+**What to check:** code that names a bracket-less upload form's id literally, in an event
+listener, a selector or a `gina.validator.$forms[…]` lookup, must use the new id. Read it from
+the file input's `data-gina-form-virtual` attribute instead of building it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staged file input works again after its popin is closed and reopened (bundle restart and re-bake)
+
+In a [popin constructed with a validator](/guides/popin#forms-inside-popins), a staged file input
+stopped working once the popin had been closed and reopened: every selection threw
+`setAttribute is not a function` and sent no staging request, so the file was never staged and
+the on-success callback never ran. The input reused the upload form of its previous selection,
+which had left the page with the popin's content. It now builds a new one.
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `gina.popin.close(name)` tears down the popin's forms (bundle restart and re-bake)
+
+Closing a popin constructed with a validator through `gina.popin.close(name)` skipped the
+teardown of its forms, which its close button and its own `close()` performed. The forms stayed
+registered against their removed markup, so on the next open they were not bound again: they
+lost their rules, their submit handling and their declared events, and a staged upload in them
+sent nothing. `gina.popin.close(name)` now tears them down as the other two do. See
+[Forms inside popins](/guides/popin#forms-inside-popins).
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a page whose query string ends in the routing table's path is answered by the page (bundle restart)
+
+A page URL whose query string ended in the path of the client routing table — for instance
+`/web/?next=/_gina/assets/routing.json` — was answered with the routing table instead of the
+page, on both engines: the table's handler tested the whole URL. The other built-in endpoints
+stopped doing this in 0.7.1; the table's handler now matches the URL's path only too.
+
+**What to check:** nothing, unless a page of yours passes the routing table's path in its query
+string: it now gets the page.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — a precompressed `.gz` file is sent as `Content-Encoding: gzip` (bundle restart)
+
+In production, over HTTP/1.1, gina serves a file's precompressed copy when the request accepts
+its coding. A `.gz` copy went out as `Content-Encoding: gz` — its file extension, which is not a
+content coding — and a client cannot decode that: Chromium does not run such a script. It now
+goes out as `Content-Encoding: gzip` (a `.br` copy was already sent as `br`), and so does the
+routing table's own `.gz` copy. By default gina tries brotli, then deflate, then gzip, so the `.gz` copy went
+only to a request accepting gzip but neither brotli nor deflate: for instance Go's HTTP client,
+which asks for gzip alone by default, or a proxy or CDN set to ask the origin for gzip. Browsers,
+which send `deflate` too, were not served it directly.
+
+**What to check:** if a cache or CDN in front of the bundle stored such responses, purge it.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — statics vary on `Accept-Encoding` (bundle restart)
+
+In production, the statics gina serves over HTTP/1.1, and the routing table on the isaac engine
+(the default), now carry `Vary: Accept-Encoding`, on the `200` and on the `304`. Without it, a
+shared cache (a CDN, a proxy cache) could store the brotli or gzip copy and hand it to a client
+that does not accept that coding, a risk that grows with 0.7.2, which lets a versioned file be
+cached for a year. Every such static carries it, compressed copy or not, since a cache cannot
+tell which files have one. A `vary` you declare under `server.response.header` in your project's
+`env.json` is kept, and is now sent on the `304` too. Statics served over HTTP/2, and everything
+in dev mode, are unchanged.
+
+**What to check:** a shared cache in front of the bundle now keeps the statics per
+`Accept-Encoding` value, images included.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — HTTP/2 error answers are counted with their status in the metrics (bundle restart)
+
+On a bundle serving HTTP/2, an error answered by gina's server-level error path — a `404`
+for a missing route, a `405`, a `500` — was counted in
+[`gina_http_requests_total`](/guides/observability#http-request-counter) as `status="200"`
+under `route="__no_route__"`. The answer goes out on the raw HTTP/2 stream, and the response
+object in front of it kept its default status, which is what the metrics read when the
+response finishes. The client always received the right status. The response now carries the
+code it sends, so these requests are counted as they already were over HTTP/1.1: a `404` as
+`status="404"` under `route="__not_found__"` (see
+[Cardinality safety](/guides/observability#cardinality-safety)).
+
+**What to check:** an error-rate panel or alert built on these metrics now sees the HTTP/2
+errors it missed, so its rate rises to the true value.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — no more `headersSent` errors after a response is sent (bundle restart)
+
+Five places in gina assigned `headersSent` on a response after sending it. `headersSent` is
+read-only on Node's response objects, and these files run in strict mode, so each assignment
+threw a `TypeError` after the client already had its answer:
+
+- with the [nunjucks engine](/templating/nunjucks) over HTTP/2, every rendered page logged
+  `Unhandled promise rejection: TypeError: Cannot set property headersSent …`;
+- with a [redis render cache](/guides/caching#redis-shared-l2-across-replicas) over HTTP/2, the
+  first request for each cached URL after a restart, or on a fresh replica (the one answered
+  with `detail=redis`), logged the same error and wrote no access-log line;
+- [`self.renderXML()`](/guides/controller#selfrenderxmlxmlcontent-contenttype) skipped its
+  cleanup over HTTP/2, and over HTTP/1.1 it could call the action's `next()` after the response
+  had ended.
+
+The assignments are gone. The answers clients receive are unchanged.
+
+**What to check:** nothing; those error lines stop.
+
+Restart the bundle. Nothing to re-bake.
+
+### Fixed — the SQLite session store reads its path from `file` (bundle restart)
+
+The [sessions guide](/guides/sessions#configuring-the-store) and the
+[connectors reference](/reference/connectors) showed a persistent SQLite session store with its
+path in `database`, and that configuration stopped the boot. Two parts of gina read the
+`session` entry: the session store took `database` as a path, while the model layer, which
+opens a SQLite connector for every `connectors.json` entry, takes `database` as a database
+name under the gina home, so it tried to open `~/.gina/<path>.sqlite` and failed. Only `file`
+is read as a path by both, and the session store did not read it. It now reads `file` first,
+as the SQLite job and kv stores already do, and the examples use `file`.
+
+**What to check:** put the store's path, or `":memory:"`, in `file`:
+
+```json title="src/<bundle>/config/connectors.json"
+{
+  "session": {
+    "connector": "sqlite",
+    "file"     : "/app/data/sessions.db",
+    "ttl"      : 86400
+  }
+}
+```
+
+- A configuration that boots today behaves as before: `database` on its own is still read when
+  `file` is unset, and `database` and `file` set to the same path still name that path.
+- Once the base entry uses `file`, a `connectors.<env>.json` overlay that switches one
+  environment to memory must set `"file": ":memory:"`, because `file` wins over `database`.
+- With neither key, the store's file is `~/.gina/sessions-<bundle>.db`. The guides gave
+  `~/.gina/<shortVersion>/sessions-<bundle>.db`, which was wrong.
+
+Restart the bundle. Nothing to re-bake.
+
+---
+
 ## 0.7.0 → 0.7.1
 
 ### Security — a GET of the routing table in another letter case no longer stops an isaac bundle (bundle restart)

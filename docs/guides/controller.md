@@ -30,6 +30,11 @@ flowchart LR
 Every action must call exactly one terminal method. If an action returns without calling
 any of them, the request hangs.
 
+:::tip A JSON route without a controller
+A JSON route that needs no route middleware, template or gate can skip the controller
+build altogether: see [Fast lane](/guides/fast-lane).
+:::
+
 ---
 
 ## Controller files
@@ -1538,8 +1543,9 @@ header and propagating it on outbound calls is covered in
 
 ## Dev mode hot-reload
 
-In dev mode (`NODE_ENV_IS_DEV=true`) the framework automatically starts `WatcherService`
-and registers watchers for:
+In dev mode (`NODE_ENV_IS_DEV=true`) the framework starts `WatcherService` once the bundle
+calls `onStarted()` in its `index.js` (see [Watchers](/reference/watchers); the `index.js`
+gina scaffolds leaves that call commented out), and registers watchers for:
 
 | Watched path | Dirty flag | Effect |
 |---|---|---|
@@ -1549,8 +1555,8 @@ and registers watchers for:
 
 `require.cache` is evicted **only when a watched file has actually changed** — not on every
 request. This eliminates the per-request eviction overhead while keeping the instant-feedback
-DX. If the watcher context is unavailable (production or non-dev env), the router falls
-back to per-request eviction transparently.
+DX. Without the watcher, dev mode evicts and re-requires the controller files on every
+request; production loads them once.
 
 > **Do not rely on module-level variables** in controller files or `controller.js` — they are
 > evicted and re-required on each change, resetting any state they hold.

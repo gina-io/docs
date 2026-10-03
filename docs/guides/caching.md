@@ -13,7 +13,7 @@ prereqs:
 
 Gina can cache rendered HTML pages and JSON responses so that repeated
 requests to the same URL are served directly from memory or disk, bypassing
-the controller and template engine entirely. Caching is configured per route in `routing.json` and controlled at the server level in `settings.json`, giving you fine-grained control over what is cached, for how long, and when entries are evicted.
+the controller and template engine entirely. Caching is configured per route in `routing.json` and switched on for the whole bundle by `server.cache.enable`, giving you fine-grained control over what is cached, for how long, and when entries are evicted.
 
 ```mermaid
 flowchart LR
@@ -32,13 +32,38 @@ flowchart LR
     F --> D
 ```
 
-Caching is opt-in and configured per route in `routing.json`.
+Caching is opt-in: the cache stays off until you [turn it on for the
+bundle](#quick-start), and it then serves the routes that declare a `cache`
+field in `routing.json`.
+
+:::tip Browser caching of your assets
+This page covers the render cache — responses gina stores on the server. How long
+browsers keep your scripts and stylesheets is set separately, by the content token
+gina adds to their URLs: see [Versioned asset URLs](/reference/statics#versioned-asset-urls).
+:::
 
 ---
 
 ## Quick start
 
-Add a `cache` field to any route:
+**1. Turn the cache on for the bundle.** It is off by default. Set `enable` in
+the `cache` block under `server` in the bundle's `settings.json`:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "cache": { "enable": true }
+  }
+}
+```
+
+This turns it on in every environment. To keep it off while you develop, put
+`{ "enable": true }` in `src/<bundle>/config/settings.server.cache.prod.json`
+instead, which applies to `prod` only. The top-level `cache` block of
+`settings.json` does not turn the cache on: see
+[Server-level cache config](#server-level-cache-config).
+
+**2. Add a `cache` field to any route:**
 
 ```json title="src/<bundle>/config/routing.json"
 {
@@ -54,7 +79,8 @@ Add a `cache` field to any route:
 ```
 
 The first `GET /` request renders and stores the response. Every subsequent
-request is served from the cache until the entry expires.
+request is served from the cache until the entry expires, and its
+[`Cache-Status`](#cache-status-response-header) header reports a `hit`.
 
 :::danger Never cache a route you protect
 
@@ -104,6 +130,12 @@ The `cache` field accepts either a shorthand string or a full object.
 
 Only `GET` requests are cached. `POST`, `PUT`, `DELETE`, and other methods
 always bypass the cache.
+
+A route's `cache` field also gives its response a `Cache-Control: private,
+max-age=<ttl>` header (the route's `ttl`, or the bundle default), so the
+visitor's browser may reuse the response for that long without asking again.
+The header is sent whether or not the server cache is on; on a response served
+from the cache, `max-age` is the time its entry has left.
 
 ---
 
@@ -183,8 +215,10 @@ already rendered, instead of cold-starting its own cache.
 "cache": { "type": "redis", "ttl": 3600 }
 ```
 
-Redis needs a connection, named by `server.cache.store` in `settings.json`, which
-points at a `connectors.json` redis entry:
+Redis needs a connection, named by `store` in the `settings.json` `cache` block,
+which points at a `connectors.json` redis entry. As for every backend, the cache
+itself must also be [turned on](#server-level-cache-config) with
+`server.cache.enable`:
 
 ```json title="src/<bundle>/config/settings.json"
 {
@@ -436,31 +470,69 @@ warms actually happen — without inspecting server logs (the server's
 
 ## Server-level cache config
 
-The `cache` block in `settings.json` controls global cache behavior:
+Two blocks configure the cache for a whole bundle: `server.cache`, which turns
+it on and holds the bundle-wide defaults, and the top-level `cache` block of
+`settings.json`, which names the default storage backend.
+
+### The switch and the defaults: `server.cache`
 
 ```json title="src/<bundle>/config/settings.json"
 {
-  "cache": {
-    "type"   : "memory",
-    "enable" : "true",
-    "path"   : "/path/to/cache/dir",
-    "ttl"    : 3600,
-    "sliding": false,
-    "maxAge" : 86400
+  "server": {
+    "cache": {
+      "enable" : true,
+      "path"   : "/path/to/cache/dir",
+      "ttl"    : 3600,
+      "sliding": false,
+      "maxAge" : 86400
+    }
   }
 }
 ```
 
 | Field | Description |
 |---|---|
-| `enable` | Master switch. Set to `"true"` to activate caching. Per-route `cache` fields are ignored when this is `"false"`. |
+| `enable` | Master switch: `true` (or `"true"`) turns the render cache on. Defaults to `false`; while it is off, no response is stored in or served from the cache, whatever the routes declare. |
+| `path` | Directory for `fs`-type cached files. |
+| `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. Defaults to `3600`. |
+| `sliding` | Bundle-wide [sliding-window](#expiration-modes) default, inherited by routes that omit `sliding`. Boolean; defaults to `false`. |
+| `maxAge` | Bundle-wide [absolute lifetime ceiling](#expiration-modes) in seconds, inherited by routes that omit `maxAge`. Only meaningful when `sliding` is `true`; `0`, the default, sets no ceiling. |
+| `maxEntries` | Upper bound on entries held in the in-memory cache; the least recently used are evicted past it. Defaults to `1000`. |
+
+`server.cache` can be set in three places. When more than one sets the same
+key, the first in this list wins:
+
+1. `src/<bundle>/config/settings.server.cache.<env>.json`, for one environment
+   only (see [the settings reference](/reference/settings#settingsservercacheenvjson)).
+2. `src/<bundle>/config/settings.json`, under `server`, for every environment.
+3. The project's `env.json`, under the bundle and the environment:
+   `{ "<bundle>": { "prod": { "server": { "cache": { "enable": true } } } } }`.
+
+A key that none of them sets keeps the framework default given above.
+
+### The default backend: the top-level `cache` block
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "cache": {
+    "type": "memory"
+  }
+}
+```
+
+| Field | Description |
+|---|---|
 | `type` | Bundle-wide default storage backend (`"memory"` \| `"fs"` \| `"redis"`), inherited by routes that set `cache` but omit `type`. Defaults to `"memory"`. A per-route `cache.type` always wins. |
 | `store` | **Required for `redis`.** The name of a `connectors.json` redis entry (`{ "<name>": { "connector": "redis", "host": …, "port": … } }`) that provides the shared L2 connection. Ignored by `memory` / `fs`. See [redis](#redis-shared-l2-across-replicas). |
 | `name` | Optional [RFC 9211](https://www.rfc-editor.org/rfc/rfc9211.html) `Cache-Status` identifier reported on the wire (default `gina-cache` — the wire is unchanged when unset). A letter followed by up to 63 of `[A-Za-z0-9._-]` (a conservative RFC 8941 token subset); an invalid value is ignored with a boot warn. See [the Cache-Status identifier](#the-cache-status-identifier). |
-| `path` | Directory for `fs`-type cached files. |
-| `ttl` | Default TTL in seconds (fractional values such as `0.5` are supported) used when a route's `cache` config does not specify one. |
-| `sliding` | Bundle-wide [sliding-window](#expiration-modes) default, inherited by routes that omit `sliding`. Boolean; defaults to `false`. |
-| `maxAge` | Bundle-wide [absolute lifetime ceiling](#expiration-modes) in seconds, inherited by routes that omit `maxAge`. Only meaningful when `sliding` is `true`. |
+
+:::caution The top-level `cache` block does not turn the cache on
+Use it for `type`, `store` and `name`. The six keys the framework sets by
+default (`enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries`) are
+ignored there, because those defaults take precedence over that block. If an earlier version
+of this page led you to put `"enable": "true"` there, move it under
+`server.cache`, as above.
+:::
 
 ---
 
