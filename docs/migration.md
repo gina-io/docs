@@ -282,7 +282,9 @@ Closing a popin constructed with a validator through `gina.popin.close(name)` sk
 teardown of its forms, which its close button and its own `close()` performed. The forms stayed
 registered against their removed markup, so on the next open they were not bound again: they
 lost their rules, their submit handling and their declared events, and a staged upload in them
-sent nothing. `gina.popin.close(name)` now tears them down as the other two do. See
+sent nothing. `gina.popin.close(name)` now tears them down as the other two do. A
+[client navigation](/guides/client-navigation#after-a-swap) closes an open popin through the
+same call, so it skipped that teardown too, and is fixed with it. See
 [Forms inside popins](/guides/popin#forms-inside-popins).
 
 **What to check:** nothing.
