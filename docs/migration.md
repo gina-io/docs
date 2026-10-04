@@ -79,6 +79,46 @@ warning is now printed and the start carries on.
 (`set -e`, `&&`) now stops when the framework did not start, where it used to
 carry on as if it had. Nothing changes for a start that succeeds.
 
+### Fixed — a client navigation that closes a popin leaves focus on the swapped region (bundle restart and re-bake)
+
+A [client navigation](/guides/client-navigation#after-a-swap) closes the popin
+that is open when it swaps the page. It closed it only after moving focus to the
+swapped region and applying its scroll decision, and closing a popin returns
+focus to the element that opened it: focus was left on that trigger and the page
+scrolled back down to it, whether the popin was modal or not. The navigation now
+closes the popin first, so the region keeps the focus and the page keeps the
+navigation's scroll position — the top, the `#hash` target, or the position
+restored on Back/Forward.
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `send()` no longer depends on the event being dispatched when it runs (bundle restart and re-bake)
+
+A [staged file input](/guides/file-uploads#the-client-upload-layer) uploads
+through a virtual form the validator registers as
+`gina.validator.$forms['gina-upload-…']`. That form's `send()` took the upload
+group from the event being dispatched when it ran: the input's own `change` event
+when you pick or drop a file, which was correct. Called from your own code it went
+wrong. With no event being dispatched it failed with a TypeError, reported to the
+input's error callback, while the request still went out with no multipart
+boundary and no group; inside an unrelated event (a click on another element, for
+example) the file was staged under that element's `data-gina-form-upload-group`.
+The group now always comes from the input the virtual form uploads for, and is
+`untagged` when the input sets none.
+
+A `send()` called with no data, on any form, read its payload from that event too:
+with no event being dispatched it threw, sent nothing and left the form marked as
+sending, so, with the default rate limit, the form refused to send again. It now
+sends a request with an empty body.
+
+**What to check:** nothing, unless your code calls `send()` on a staged upload's
+virtual form, whose file is now staged in its input's group, or calls `send()`
+with no data, which now sends an empty request instead of throwing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.1 → 0.7.2
