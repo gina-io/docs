@@ -79,6 +79,35 @@ warning is now printed and the start carries on.
 (`set -e`, `&&`) now stops when the framework did not start, where it used to
 carry on as if it had. Nothing changes for a start that succeeds.
 
+### Fixed — `gina start` stops when another program holds the framework port (next `gina start`)
+
+When the framework port (`8124` unless set with `gina framework:set --port=`) was
+already in use, `gina start` trusted any entry of `~/.gina/procs.json` for that
+port without checking it. A port held by another program read « already running »
+(« with PID `null` » when no entry named the port), a stale entry left by a
+framework that had stopped was reported as running under its dead pid, and both
+exited 0 while a half-started framework kept the MQ port (`8125`) busy. Any other
+error opening the port, such as `EACCES`, left `gina start` waiting forever.
+
+`gina start` now reports « already running » only when a pid recorded for the
+port is a running gina framework, on Node as on Bun. Otherwise it exits 1 with the
+cause, the fix and, outside Windows, the command that finds the program holding
+the port, and releases the MQ port:
+
+```text
+gina: cannot start the framework: port 8124 is held by another program, not a running gina framework.
+Free the port, or move the framework: gina framework:set --port=<port>
+Find the holder: lsof -nP -iTCP:8124 -sTCP:LISTEN
+```
+
+Any other error opening the port exits 1 with that error. See
+[Exit codes](/cli/cli-framework#start-exit-codes).
+
+**What to check:** a script or a container that runs `gina start` while another
+program holds the framework port used to read success; it now stops with exit 1.
+Free the port, or move the framework with `gina framework:set --port=`. A second
+`gina start` while the framework runs still exits 0.
+
 ### Fixed — a client navigation that closes a popin leaves focus on the swapped region (bundle restart and re-bake)
 
 A [client navigation](/guides/client-navigation#after-a-swap) closes the popin
