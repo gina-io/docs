@@ -66,7 +66,6 @@ values always win.
 | `html` | string | `${templatesPath}/html` | Directory containing template HTML files |
 | `handlers` | string | `${templatesPath}/handlers` | Directory containing client-side JS handler files |
 | `routeNameAsFilenameEnabled` | boolean | `true` | When `true`, the route name is used as the default template filename if `param.file` is not set |
-| `ginaEnabled` | boolean | `true` | Include gina's built-in CSS and JS in every page. Set to `false` to exclude them entirely |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
 | `sriEnabled` | boolean | `false` | Opt-in [Subresource Integrity](#subresource-integrity-srienabled): add `integrity="sha384-..."` + `crossorigin="anonymous"` to every same-origin `<script>` and `<link rel="stylesheet">` whose file resolves on disk. *New in 0.6.23* |
 | `assetVersioningEnabled` | boolean | `true` | In production, append a content token (`?v=` + 10 hex of the file's SHA-384) to the same-origin asset URLs gina writes, so browsers can cache them for a year — see [Versioned asset URLs](/reference/statics#versioned-asset-urls). `false` keeps the plain URLs. *New in 0.7.2* |
@@ -294,15 +293,25 @@ name must still resolve to a real route.
 
 ---
 
-## Disabling the gina toolbar
+## Hiding the status bar and gina's assets {#hiding-the-status-bar-and-ginas-assets}
 
-The gina dev toolbar is injected automatically in `dev` mode. To disable it for
-a specific page, set `ginaEnabled: false` on that template:
+In `dev`, gina injects its [status bar](/guides/inspector#status-bar) into every
+HTML page; in production it never does (see
+[Inspector — Production](/guides/inspector#production)). To render one page
+without it, pass `false` as the second argument of `render()`:
+
+```javascript
+self.render(data, false);
+```
+
+To keep gina's own CSS and JS out of a page, set `javascriptsExcluded` and
+`stylesheetsExcluded` to `"**"` in that page's entry:
 
 ```json
 {
   "pdf-preview": {
-    "ginaEnabled": false,
+    "javascriptsExcluded": "**",
+    "stylesheetsExcluded": "**",
     "stylesheets": [
       { "name": "pdf", "url": "/css/pdf.css" }
     ]
@@ -310,7 +319,12 @@ a specific page, set `ginaEnabled: false` on that template:
 }
 ```
 
-To disable the toolbar for the entire bundle, set `ginaEnabled: false` in `_common`.
+The page then loads its own stylesheets and scripts only: `_common`'s are left
+out as well, and so is gina's client loader. In `dev` the status bar is still
+injected into it.
+
+Before 0.7.3 this page documented a `ginaEnabled` key for both purposes. Nothing
+ever read it, so setting it had no effect; it is ignored, and can be removed.
 
 ---
 
@@ -322,7 +336,6 @@ To disable the toolbar for the entire bundle, set `ginaEnabled: false` in `_comm
     "layout"                 : "${templatesPath}/html/layout.html",
     "handlers"               : "${templatesPath}/handlers",
     "routeNameAsFilenameEnabled": true,
-    "ginaEnabled"            : true,
     "javascriptsDeferEnabled": true,
     "stylesheets": [
       { "name": "main",    "url": "/css/main.css",    "isCommon": true },

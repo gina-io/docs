@@ -196,6 +196,40 @@ every proxy in front of a bundle has a larger buffer (nginx:
 `preloadHintsMaxSize`, or set it to `0`. See
 [Preload hints](/guides/https#preload-hints).
 
+### Fixed — a page no longer answers 500 because of its layout's assets (bundle restart)
+
+On an `http/2.0` bundle, gina reads a page's layout, and the stylesheets the
+layout links by hand, to build the page's preload hints and the Inspector's list
+of its assets. That reading threw, and the page answered `500` in dev and in
+production, when one of those stylesheets held an unquoted `url(#id)` (the SVG
+reference in `fill: url(#grad)`, for example) or a `url()` with no dot in its
+path, and when the first asset of the layout was an `<img>` with a `srcset` and
+no `src`. Such pages now render.
+
+**What to check:** nothing.
+
+### Fixed — more of a layout's assets get a preload hint (bundle restart)
+
+The `link` header of an `http/2.0` page's `200` names the images, stylesheets and
+scripts written in its layout. Gina read the layout one source line at a time and
+kept the last URL on each line, so tags sharing a line were read as one:
+`<img src="a.png"><script src="b.js"></script>` preloaded the script as an image
+and left the image out, a stylesheet followed by an image on one line lost both,
+a one-line `<picture>` lost its `<img>`, and a minified layout got no hint at
+all. Each tag is now read on its own.
+
+Three more cases now get their hints:
+
+- a URL written with the webroot, such as `{{ page.environment.webroot }}img/logo.png`
+  under a webroot other than `/`, behind a path-prefixing proxy too;
+- a layout image whose file one of the layout's stylesheets also names in a
+  `url()`;
+- every layout asset of a bundle installed under a directory whose name holds
+  `404`.
+
+**What to check:** such pages now send more hints, still within
+[`preloadHintsMaxSize`](/guides/https#size-limit), 1,024 bytes by default.
+
 ### Fixed — a page's own `false` overrides a `_common` switch (bundle restart)
 
 A page entry in `templates.json` that set a `_common` switch to `false` —
@@ -205,7 +239,24 @@ value was combined with `_common`'s, and that combination turned `false` and
 did.
 
 **What to check:** a page entry that sets a switch to `false` now has its effect.
-A bundle-wide `false` in `_common` behaved correctly before and is unchanged.
+For `javascriptsDeferEnabled`, that page's scripts now go before `</body>`
+without `defer`, as documented, where they used to be deferred in `<head>`. A
+bundle-wide `false` in `_common` behaved correctly before and is unchanged.
+
+### Fixed — `ginaEnabled` was never read, and is gone from the reference (nothing to change)
+
+The [`templates.json` reference](/reference/templates) documented a `ginaEnabled`
+key: set to `false`, it was to keep gina's CSS and JS out of a page and hide the
+dev toolbar. Nothing ever read it, so it had no effect; it is gone from the
+reference and from the framework's own `templates.json`. A bundle that sets it
+keeps working, the key being ignored as before.
+
+To render a page without the dev status bar, call `self.render(data, false)`; to
+keep gina's own CSS and JS out of a page, set its `javascriptsExcluded` and
+`stylesheetsExcluded` to `"**"`. See
+[Hiding the status bar and gina's assets](/reference/templates#hiding-the-status-bar-and-ginas-assets).
+
+**What to check:** a `ginaEnabled` key in your `templates.json` can be removed.
 
 ---
 
