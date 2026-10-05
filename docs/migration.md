@@ -19,6 +19,247 @@ upward to the target version.
 
 ---
 
+## 0.7.2 → 0.7.3
+
+### Fixed — a `GINA_VERSION` that names no installed framework is refused (next `gina` command)
+
+The `gina` CLI checked only the installed package's own framework version. A
+`GINA_VERSION` exported in the environment, or set with `--version=<v>` on any
+command, could therefore name a version that is not installed — `latest`, or a
+number such as `0.6.9` — and the command then migrated `~/.gina` to it: a `latest`
+key in every per-version entry of `main.json` and `gina.db`, an empty
+`~/.gina/latest/` directory, `gina version` printing `vlatest`. The command carried
+on as if nothing were wrong.
+
+Such a value is now refused before the command runs and before `~/.gina` is
+migrated. The CLI prints the directory it expected and exits 1; for a version
+number it also prints the command that installs that version side by side:
+
+```text
+gina: framework version 0.0.1 is not installed (expected at <gina>/framework/v0.0.1).
+GINA_VERSION, exported or set with --version=, must name an installed framework version; the installed package version is 0.7.3. Unset or correct it.
+To install it side by side:
+  $ env -u GINA_VERSION gina framework:add 0.0.1
+```
+
+`gina start`, which starts the framework in the background, prints the same
+message and exits 1 as well (see the next section). A version installed side by
+side with [`framework:add`](/cli/cli-framework#frameworkadd) is accepted as before.
+
+A `--<name>=<value>` argument also keeps its value exactly as given. When the flag
+name had no hyphen of its own, the value's first hyphen became `_`, so
+`--version=0.7.2-alpha.2` reached the CLI as `0.7.2_alpha.2`.
+
+**What to check:** nothing, unless a script, a shell profile or a container
+exports `GINA_VERSION`, or passes `--version=`, with a value that names no
+installed version. That command now stops with the message above instead of
+rewriting `~/.gina`: unset the variable or set it to an installed version. Keys
+that an earlier run already wrote are not removed. With the variable unset,
+`framework:version`, `framework:list`, `framework:update`, `project:build` and the
+next minor-version migration were measured to behave the same with them as
+without; `gina framework:list --all` shows one extra `vlatest` row, registered
+but not installed.
+
+### Fixed — `gina start` returns a non-zero exit code when the framework does not start (next `gina start`)
+
+`gina start` and `gina framework:start` start the framework in the background and
+return once it reports that it is ready. When the framework stopped before that —
+the refusal above, or an error while it boots — the command still exited 0, so a
+script that tests the exit code read success. It now exits with the framework's
+own exit code (1 if that code was 0), or with 128 plus the signal number when a
+signal stopped it. A framework that is ready, or already running, still gives 0.
+See [Exit codes](/cli/cli-framework#start-exit-codes).
+
+A warning printed on standard error before the framework was ready (a
+deprecation notice, for example) also ended the command with 1, and the
+framework, cut off from its output, then stopped, so the start failed. The
+warning is now printed and the start carries on.
+
+**What to check:** a script that runs `gina start` and stops on a non-zero exit
+(`set -e`, `&&`) now stops when the framework did not start, where it used to
+carry on as if it had. Nothing changes for a start that succeeds.
+
+### Fixed — `gina start` stops when another program holds the framework port (next `gina start`)
+
+When the framework port (`8124` unless set with `gina framework:set --port=`) was
+already in use, `gina start` trusted any entry of `~/.gina/procs.json` for that
+port without checking it. A port held by another program read « already running »
+(« with PID `null` » when no entry named the port), a stale entry left by a
+framework that had stopped was reported as running under its dead pid, and both
+exited 0 while a half-started framework kept the MQ port (`8125`) busy. Any other
+error opening the port, such as `EACCES`, left `gina start` waiting forever.
+
+`gina start` now reports « already running » only when a pid recorded for the
+port is a running gina framework, on Node as on Bun. Otherwise it exits 1 with the
+cause, the fix and, outside Windows, the command that finds the program holding
+the port, and releases the MQ port:
+
+```text
+gina: cannot start the framework: port 8124 is held by another program, not a running gina framework.
+Free the port, or move the framework: gina framework:set --port=<port>
+Find the holder: lsof -nP -iTCP:8124 -sTCP:LISTEN
+```
+
+Any other error opening the port exits 1 with that error. See
+[Exit codes](/cli/cli-framework#start-exit-codes).
+
+**What to check:** a script or a container that runs `gina start` while another
+program holds the framework port used to read success; it now stops with exit 1.
+Free the port, or move the framework with `gina framework:set --port=`. A second
+`gina start` while the framework runs still exits 0.
+
+### Fixed — a client navigation that closes a popin leaves focus on the swapped region (bundle restart and re-bake)
+
+A [client navigation](/guides/client-navigation#after-a-swap) closes the popin
+that is open when it swaps the page. It closed it only after moving focus to the
+swapped region and applying its scroll decision, and closing a popin returns
+focus to the element that opened it: focus was left on that trigger and the page
+scrolled back down to it, whether the popin was modal or not. The navigation now
+closes the popin first, so the region keeps the focus and the page keeps the
+navigation's scroll position — the top, the `#hash` target, or the position
+restored on Back/Forward.
+
+**What to check:** nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `send()` no longer depends on the event being dispatched when it runs (bundle restart and re-bake)
+
+A [staged file input](/guides/file-uploads#the-client-upload-layer) uploads
+through a virtual form the validator registers as
+`gina.validator.$forms['gina-upload-…']`. That form's `send()` took the upload
+group from the event being dispatched when it ran: the input's own `change` event
+when you pick or drop a file, which was correct. Called from your own code it went
+wrong. With no event being dispatched it failed with a TypeError, reported to the
+input's error callback, while the request still went out with no multipart
+boundary and no group; inside an unrelated event (a click on another element, for
+example) the file was staged under that element's `data-gina-form-upload-group`.
+The group now always comes from the input the virtual form uploads for, and is
+`untagged` when the input sets none.
+
+A `send()` called with no data, on any form, read its payload from that event too:
+with no event being dispatched it threw, sent nothing and left the form marked as
+sending, so, with the default rate limit, the form refused to send again. It now
+sends a request with an empty body.
+
+**What to check:** nothing, unless your code calls `send()` on a staged upload's
+virtual form, whose file is now staged in its input's group, or calls `send()`
+with no data, which now sends an empty request instead of throwing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — no 103 Early Hints over HTTP/1.1 by default (bundle restart)
+
+Since 0.6.28, an `http/2.0` bundle in production sent its automatic
+`103 Early Hints` over HTTP/1.1 as well as HTTP/2. Over HTTP/1.1 a 103 reaches
+what sits between the browser and the bundle, typically a reverse proxy, and nginx
+older than 1.29 — the versions Ubuntu 22.04 and 24.04 and Debian 12 package —
+takes an upstream 103 for the final response: behind it, every HTML page failed
+(in Chromium: `ERR_HTTP2_PROTOCOL_ERROR`). Browsers act on a 103 only over HTTP/2
+and HTTP/3, so nothing was gained over HTTP/1.1.
+
+Gina now sends no 103 over HTTP/1.1, automatic or from `self.setEarlyHints()`,
+unless `settings.json > server.earlyHintsOverHTTP1` is `true`. Turn it on only
+behind a proxy that passes 103 responses on (nginx 1.29 or later with
+`early_hints`, Apache). With it on, `self.setEarlyHints([a, b])` delivers both
+entries: Node.js refused the `', '`-joined list gina handed it, so an explicit
+hint with several entries was never sent over HTTP/1.1. See
+[Preload hints over HTTP/1.1](/guides/https#preload-hints-over-http11).
+
+**What to check:** a browser connected to the bundle over HTTP/2 gets its 103 as
+before. Behind a proxy that talks HTTP/1.1 to the bundle the 103 now stops; if
+that proxy passes 103 responses on and you rely on them, set
+`earlyHintsOverHTTP1: true`.
+
+### Fixed — preload hints are limited to 1,024 bytes, so a page no longer outgrows a proxy's header buffer (bundle restart)
+
+The automatic preload hints of an `http/2.0` bundle in production — the
+`103 Early Hints` and the `link` header of the `200` — had no size limit: one
+entry per stylesheet and script declared in `templates.json` and per image in the
+layout. Behind a proxy with a small response-header buffer — nginx's
+`proxy_buffer_size` is one memory page, 4 KiB on most Linux hosts — a page with
+many of them was answered `502 Bad Gateway` (« upstream sent too big header »).
+
+Each hint is now limited to `preloadHintsMaxSize` bytes (`templates.json`, 1,024
+by default; `0` = no limit): it keeps its entries in order and stops at the last
+one that fits. `preloadHintsEnabled: false` sends neither hint. Both can be set
+in `_common` or in a page's own entry. A URL both declared and written in the
+layout is now hinted once, and the stylesheets and scripts written in the layout
+are now hinted too, except those the browser could not match a preload to (a tag
+with `integrity` or `crossorigin`, a `media` other than `all` or `screen`, an
+alternate stylesheet, a `type="module"` or `nomodule` script).
+
+**What to check:** a page that declares many stylesheets and scripts now sends
+fewer hints; the assets left out still load, once the browser reads the page. If
+every proxy in front of a bundle has a larger buffer (nginx:
+`proxy_buffer_size 16k;` and `proxy_buffers 8 16k;`), you can raise
+`preloadHintsMaxSize`, or set it to `0`. See
+[Preload hints](/guides/https#preload-hints).
+
+### Fixed — a page no longer answers 500 because of its layout's assets (bundle restart)
+
+On an `http/2.0` bundle, gina reads a page's layout, and the stylesheets the
+layout links by hand, to build the page's preload hints and the Inspector's list
+of its assets. That reading threw, and the page answered `500` in dev and in
+production, when one of those stylesheets held an unquoted `url(#id)` (the SVG
+reference in `fill: url(#grad)`, for example) or a `url()` with no dot in its
+path, and when the first asset of the layout was an `<img>` with a `srcset` and
+no `src`. Such pages now render.
+
+**What to check:** nothing.
+
+### Fixed — more of a layout's assets get a preload hint (bundle restart)
+
+The `link` header of an `http/2.0` page's `200` names the images, stylesheets and
+scripts written in its layout. Gina read the layout one source line at a time and
+kept the last URL on each line, so tags sharing a line were read as one:
+`<img src="a.png"><script src="b.js"></script>` preloaded the script as an image
+and left the image out, a stylesheet followed by an image on one line lost both,
+a one-line `<picture>` lost its `<img>`, and a minified layout got no hint at
+all. Each tag is now read on its own.
+
+Three more cases now get their hints:
+
+- a URL written with the webroot, such as `{{ page.environment.webroot }}img/logo.png`
+  under a webroot other than `/`, behind a path-prefixing proxy too;
+- a layout image whose file one of the layout's stylesheets also names in a
+  `url()`;
+- every layout asset of a bundle installed under a directory whose name holds
+  `404`.
+
+**What to check:** such pages now send more hints, still within
+[`preloadHintsMaxSize`](/guides/https#size-limit), 1,024 bytes by default.
+
+### Fixed — a page's own `false` overrides a `_common` switch (bundle restart)
+
+A page entry in `templates.json` that set a `_common` switch to `false` —
+`assetVersioningEnabled`, for example — got `_common`'s `true` back: the page's
+value was combined with `_common`'s, and that combination turned `false` and
+`true` into `true`. A page's own boolean now wins; strings and numbers already
+did.
+
+**What to check:** a page entry that sets a switch to `false` now has its effect.
+For `javascriptsDeferEnabled`, that page's scripts now go before `</body>`
+without `defer`, as documented, where they used to be deferred in `<head>`. A
+bundle-wide `false` in `_common` behaved correctly before and is unchanged.
+
+### Fixed — `ginaEnabled` was never read, and is gone from the reference (nothing to change)
+
+The [`templates.json` reference](/reference/templates) documented a `ginaEnabled`
+key: set to `false`, it was to keep gina's CSS and JS out of a page and hide the
+dev toolbar. Nothing ever read it, so it had no effect; it is gone from the
+reference and from the framework's own `templates.json`. A bundle that sets it
+keeps working, the key being ignored as before.
+
+To render a page without the dev status bar, call `self.render(data, false)`; to
+keep gina's own CSS and JS out of a page, set its `javascriptsExcluded` and
+`stylesheetsExcluded` to `"**"`. See
+[Hiding the status bar and gina's assets](/reference/templates#hiding-the-status-bar-and-ginas-assets).
+
+**What to check:** a `ginaEnabled` key in your `templates.json` can be removed.
+
+---
+
 ## 0.7.1 → 0.7.2
 
 ### Security — a staged upload's error message is shown as text, never as markup (bundle restart and re-bake)
@@ -220,7 +461,9 @@ Closing a popin constructed with a validator through `gina.popin.close(name)` sk
 teardown of its forms, which its close button and its own `close()` performed. The forms stayed
 registered against their removed markup, so on the next open they were not bound again: they
 lost their rules, their submit handling and their declared events, and a staged upload in them
-sent nothing. `gina.popin.close(name)` now tears them down as the other two do. See
+sent nothing. `gina.popin.close(name)` now tears them down as the other two do. A
+[client navigation](/guides/client-navigation#after-a-swap) closes an open popin through the
+same call, so it skipped that teardown too, and is fixed with it. See
 [Forms inside popins](/guides/popin#forms-inside-popins).
 
 **What to check:** nothing.

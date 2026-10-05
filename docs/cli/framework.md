@@ -26,6 +26,31 @@ gina start    # start the framework socket server
 gina stop     # stop the framework socket server
 ```
 
+### Exit codes {#start-exit-codes}
+
+`gina start` and `gina framework:start` return once the framework reports that it is ready, or that it is already running.
+
+| Exit | When |
+|------|------|
+| `0` | The framework is ready, or was already running: a gina framework recorded for its port in `~/.gina/procs.json` is still running. |
+| `1` | Another program holds the framework port, or `~/.gina/procs.json` names a pid for it that is not running or is not a gina framework. |
+| `1` | The framework could not open its port for another reason, such as `EACCES`; that error is printed. |
+| The framework's own code | The framework stopped before it was ready (a refused `GINA_VERSION`, an error while it boots). `1` when that code was `0`. |
+| `128` + the signal number | A signal stopped the framework before it was ready (`137` for `SIGKILL`). |
+| `1` | A debugger line, or `address already in use`, appeared on standard error before the framework was ready. |
+
+A warning on standard error, such as a deprecation notice, is printed and does not end the start.
+
+When another program holds the framework port, the start prints the cause, the fix and, outside Windows, a command that finds that program, then releases the MQ port:
+
+```text
+gina: cannot start the framework: port 8124 is held by another program, not a running gina framework.
+Free the port, or move the framework: gina framework:set --port=<port>
+Find the holder: lsof -nP -iTCP:8124 -sTCP:LISTEN
+```
+
+When `~/.gina/procs.json` names a pid for the port, the first line names it instead: `…; /home/me/.gina/procs.json names pid 4321, which is not running.`, or `which is not a gina framework.` when another program now has that pid.
+
 ---
 
 ## `gina --help` / `gina help`

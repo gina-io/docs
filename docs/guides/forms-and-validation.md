@@ -1282,7 +1282,7 @@ exposing:
 | Method | Effect |
 |---|---|
 | `.submit()` | trigger validation + submit programmatically |
-| `.send(data)` | send a payload over AJAX (skips re-validation) |
+| `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
 | `.reBind()` | re-scan the form after you have changed its DOM |
 | `.destroy()` | unbind the form and remove its listeners |
 | `.resetFields()` | restore fields to their initial values |

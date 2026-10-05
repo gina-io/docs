@@ -219,11 +219,142 @@ The most common settings to tune, set in `settings.json`:
 
 Full reference: [settings.json → server](../reference/settings#server).
 
-### 103 Early Hints
+### Preload hints
 
-`Link: <url>; rel=preload` headers are sent as an informational response before the final HTML, allowing the browser to start fetching CSS and JS while the template is still rendering. No action needed on your part — the framework handles it automatically for bundles that declare static assets.
+In production, a bundle whose `protocol` is `http/2.0` tells the browser which
+stylesheets, scripts and images a page needs before the browser has read the page,
+so it can start fetching them sooner. Gina sends these preload hints in two places:
 
-To send custom early hints from a controller action:
+- **`103 Early Hints`** — an informational response sent before the page is
+  rendered. It lists the stylesheets and scripts declared for the page in
+  [`templates.json`](/reference/templates): `_common`, the page's own entry, and
+  gina's own CSS and JS. Over HTTP/2 only, unless you
+  [turn it on over HTTP/1.1](#preload-hints-over-http11).
+- **The `link` header of the final `200`** — the same declared stylesheets and
+  scripts, then the images, stylesheets and scripts written in the page's layout.
+  Pages rendered with Swig's default loader carry it; with Nunjucks or a custom
+  async template loader, only the 103 is sent.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant P as Reverse proxy (nginx)
+    participant G as Bundle (http/2.0, production)
+
+    alt the browser reaches the bundle over HTTP/2
+        B->>G: GET /orders
+        G-->>B: 103 Early Hints<br/>link: the declared stylesheets and scripts
+        Note over B: starts fetching them while the page renders
+        G-->>B: 200 OK<br/>link: the same, then the layout's assets
+    else a proxy talks HTTP/1.1 to the bundle
+        B->>P: GET /orders (HTTP/2)
+        P->>G: GET /orders (HTTP/1.1)
+        Note over G: no 103 over HTTP/1.1,<br/>unless earlyHintsOverHTTP1 is true
+        G-->>P: 200 OK<br/>link: at most preloadHintsMaxSize bytes
+        Note over P: the whole header block must fit<br/>proxy_buffer_size, or nginx answers 502
+        P-->>B: 200 OK + link
+    end
+```
+
+Each URL is hinted once, even when it is both declared and written in the layout.
+No hint is sent in dev mode, for an XHR request, or for an asset with
+[Subresource Integrity](/reference/templates#subresource-integrity-srienabled),
+since a hint carries no integrity metadata. A tag written in the layout is not
+hinted when the browser could not match the preload to it: a stylesheet whose
+`media` is not `all` or `screen`, an alternate stylesheet, a `type="module"` or
+`nomodule` script, and any tag with an `integrity` or `crossorigin` attribute.
+
+#### Size limit
+
+A reverse proxy reads a response's headers into a fixed buffer, and refuses a
+response whose headers do not fit. nginx's
+[`proxy_buffer_size`](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffer_size)
+holds the whole header block and defaults to one memory page, 4 KiB on most Linux
+hosts; beyond it nginx answers `502 Bad Gateway` and logs « upstream sent too big
+header ». Each hint grows by an entry of 50 to 70 bytes per asset, so a page
+declaring a hundred stylesheets, or a layout holding two hundred images, could not
+get through.
+
+Since 0.7.3 each hint is limited to `preloadHintsMaxSize` bytes, 1,024 by default:
+room for fifteen to twenty entries, which leaves about 3 KiB of nginx's default
+buffer for the page's other headers (cookies, a Content-Security-Policy, the
+security headers). The entries keep their order — the declared stylesheets, the
+declared scripts, then the layout's assets — and a hint stops at the last entry
+that fits. An asset left out is still loaded as usual, once the browser reads the
+page.
+
+| Proxy | Default limit on response headers |
+|---|---|
+| nginx | `proxy_buffer_size`: one memory page, 4 KiB or 8 KiB depending on the platform, for the whole header block |
+| ingress-nginx (Kubernetes) | `proxy-buffer-size: 4k`, for the whole header block |
+| Apache `mod_proxy_http` | `responsefieldsize`: 8,192 bytes per header line |
+
+Most other proxies, load balancers and CDNs allow larger header blocks. Check each
+proxy in front of the bundle before raising the limit.
+
+#### Changing the limit
+
+Set the two keys in `templates.json`, under `_common` for the whole bundle or in a
+page's own entry:
+
+```json title="src/<bundle>/config/templates.json"
+{
+  "_common": {
+    "preloadHintsMaxSize": 2048
+  },
+  "report-print": {
+    "preloadHintsEnabled": false
+  }
+}
+```
+
+| Key | Default | Effect |
+|---|---|---|
+| `preloadHintsMaxSize` | `1024` | Bytes per hint. `0` sends every entry. Any value that is not a whole number of 0 or more falls back to `1024`, with one warning per process |
+| `preloadHintsEnabled` | `true` | `false` sends neither the 103 nor the `link` header. Calls to `self.setEarlyHints()` are not affected |
+
+Raise the limit only when every proxy in front of the bundle has room for it. With
+nginx, give the location that proxies your pages larger buffers:
+
+```nginx
+location / {
+    proxy_pass        https://myproject_bundle;
+    proxy_buffer_size 16k;
+    proxy_buffers     8 16k;
+}
+```
+
+#### Over HTTP/1.1 {#preload-hints-over-http11}
+
+Since 0.7.3, gina sends no 103 over HTTP/1.1 — neither the automatic one nor those
+of `self.setEarlyHints()` — unless the bundle asks for it. Browsers act on a 103
+only over HTTP/2 and HTTP/3, so over HTTP/1.1 it reaches only what sits between
+them and the bundle, typically a reverse proxy. nginx older than 1.29, which
+includes the versions packaged by Ubuntu 22.04 and 24.04 and Debian 12, takes an
+upstream 103 for the final response, and every HTML page behind it fails (in
+Chromium: `ERR_HTTP2_PROTOCOL_ERROR`).
+
+Behind a proxy that passes 103 responses on — nginx 1.29 or later with the
+[`early_hints`](https://nginx.org/en/docs/http/ngx_http_core_module.html#early_hints)
+directive, or Apache — turn it on in the bundle's `settings.json`:
+
+```json title="src/<bundle>/config/settings.json"
+{
+  "server": {
+    "earlyHintsOverHTTP1": true
+  }
+}
+```
+
+It must be the boolean `true`. The 103 then carries the same entries, limited to
+`preloadHintsMaxSize`; nginx counts it against `proxy_buffer_size` as well.
+Node.js checks each entry as a single `Link` value and refuses an entry whose
+parameter holds a space, such as an `imagesrcset`: that whole 103 is then dropped.
+
+#### Custom hints — `self.setEarlyHints()`
+
+To hint an asset gina cannot know about, such as an image chosen at runtime or a
+font, call `self.setEarlyHints()` at the start of the action:
 
 ```javascript
 self.setEarlyHints([
@@ -232,7 +363,12 @@ self.setEarlyHints([
 ]);
 ```
 
-On HTTP/2, this uses `stream.additionalHeaders({ ':status': 103 })`. On HTTP/1.1, it falls back to `res.writeEarlyHints()`. The call is best-effort — a hint failure never affects the main response.
+On HTTP/2 the 103 is sent at once, through
+`stream.additionalHeaders({ ':status': 103 })`, with the entries joined into one
+`link` header and no size limit. On HTTP/1.1 it is sent only when
+`earlyHintsOverHTTP1` is `true`, through `res.writeEarlyHints()`, limited to
+`preloadHintsMaxSize`. The call is best-effort: a hint that fails never affects
+the main response.
 
 ### Stream limits
 

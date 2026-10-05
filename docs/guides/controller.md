@@ -1452,6 +1452,11 @@ time the template has not been rendered yet; those still reach the browser
 through the `Link` header on the final `200`, which carries the declared assets
 *and* the parsed ones.
 
+Both are limited to `preloadHintsMaxSize` bytes (1,024 by default) and can be
+turned off with `preloadHintsEnabled: false` in `templates.json`; since 0.7.3 the
+103 goes out over HTTP/1.1 only when `settings.json > server.earlyHintsOverHTTP1`
+is `true`. See [Preload hints](/guides/https#preload-hints).
+
 Three cases send no automatic hint: an XHR/fragment request (there is no document
 load to preload for), dev mode, and any asset with
 [Subresource Integrity](/reference/templates#subresource-integrity-srienabled) enabled —
@@ -1475,10 +1480,13 @@ The 103 is sent immediately when called.
 | Transport | Mechanism |
 |---|---|
 | HTTP/2 | `stream.additionalHeaders({ ':status': 103, 'link': '...' })` |
-| HTTP/1.1 | `res.writeEarlyHints({ link: '...' })` |
+| HTTP/1.1 | `res.writeEarlyHints({ link: [ ... ] })`, one element per entry — only when `settings.json > server.earlyHintsOverHTTP1` is `true` |
 
-`links` is a `Link` header value string or an array of strings. Multiple values
-are joined with `', '` into one header.
+`links` is a `Link` header value string or an array of strings. Over HTTP/2,
+multiple values are joined with `', '` into one header. Over HTTP/1.1 they are
+handed to Node.js one by one, limited to the page's `preloadHintsMaxSize`; an
+entry whose parameter holds a space (an `imagesrcset`) makes Node.js drop that
+103.
 
 ```js
 this.home = function(req, res, next) {
@@ -1507,11 +1515,13 @@ self
 - Errors from the underlying write are caught and discarded — a hint failure never
   affects the main response.
 
-:::note HTTP/2 only delivers measurable gains
-Browsers only act on 103 responses over HTTPS/HTTP/2 connections. On plain HTTP/1.1
-the informational response is still sent but many browsers ignore it. The automatic
-103 from CSS/JS hints only fires in HTTP/2 non-dev mode (dev mode uses per-request
-cache eviction, not the preload list).
+:::note HTTP/2 only
+Browsers act on 103 responses only over HTTP/2 and HTTP/3. Since 0.7.3 gina sends
+none over HTTP/1.1 unless `settings.json > server.earlyHintsOverHTTP1` is `true`:
+an nginx older than 1.29 between the browser and the bundle takes a 103 for the
+final response and breaks the page. The automatic 103 from CSS/JS hints only fires
+in HTTP/2 non-dev mode (dev mode uses per-request cache eviction, not the preload
+list). See [Preload hints](/guides/https#preload-hints).
 :::
 
 ---

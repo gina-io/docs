@@ -186,7 +186,10 @@ A successful fragment swap does more than set `innerHTML`:
   uses: one rule for injected HTML, wherever it came from.
 - **Popins** — an open [popin](/guides/popin) is closed: a real navigation
   would have unloaded it, and after a swap it would sit over content it no
-  longer belongs to.
+  longer belongs to. It is closed before the focus and scroll below, since
+  closing a popin returns focus to the element that opened it. *Changed in
+  0.7.3:* it used to be closed after them, which left focus on that element and
+  scrolled the page back to it.
 - **History** — a `pushState` entry per navigation. Back/Forward re-fetch the
   fragment and restore the scroll position saved on the entry being left.
 - **Focus and scroll** — the region receives focus (it is given

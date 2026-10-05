@@ -147,6 +147,12 @@ version. The socket server and other bundles are unaffected.
 registry in `~/.gina/main.json` before the process is spawned. An emergency log
 is emitted and start is aborted if the version is not installed.
 
+The CLI-wide override is checked too: a `GINA_VERSION` exported in the
+environment, or `--version=<v>` on any `gina` command, must name an installed
+framework version — the package's own, or one added side by side with
+[`framework:add`](../cli/framework.md#frameworkadd). Any other value is refused
+before the command runs, and `~/.gina` is not migrated.
+
 `gina bundle:add` writes `gina_version` automatically (set to the current
 framework version). See the [bundle CLI reference](../cli/bundle.md#per-bundle-framework-version)
 for the full flag documentation.

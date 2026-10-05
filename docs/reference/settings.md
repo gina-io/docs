@@ -72,6 +72,7 @@ The primary server settings file.
 | `allowInsecure` | boolean | `false` | Asserts that TLS terminates upstream (service mesh, ingress/load balancer, reverse proxy — the [h2c topology](/guides/https#h2c--cleartext-http2)): the boot-time cleartext-transport warning outside the `local` scope becomes a single info line. Same vocabulary as `mcp.json > server > allowInsecure`. *New in 0.5.26* |
 | `address` | string | `"0.0.0.0"` | Bind address. Use `"127.0.0.1"` for IPv4-only or `"::"` for IPv6-only |
 | `allowHTTP1` | boolean | `true` | Accept HTTP/1.1 connections on the HTTP/2 server |
+| `earlyHintsOverHTTP1` | boolean | `false` | Send `103 Early Hints` over HTTP/1.1 too: the automatic [preload hints](/guides/https#preload-hints) and `self.setEarlyHints()`. Off by default: browsers act on a 103 only over HTTP/2 and HTTP/3, and nginx older than 1.29 takes an upstream 103 for the final response, which breaks every page behind it. Turn it on only behind a proxy that passes 103 responses on (nginx 1.29 or later with `early_hints`, Apache). Must be the boolean `true`. *New in 0.7.3* |
 | `keepAliveTimeout` | string | `"5s"` | Keep-alive socket timeout (e.g. `"5s"`, `"30s"`) |
 | `headersTimeout` | string | `"5500ms"` | Headers timeout — must be greater than `keepAliveTimeout` |
 | `backlog` | number | `511` | Connection queue length |

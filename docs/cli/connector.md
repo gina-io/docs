@@ -224,7 +224,7 @@ After the write, the exact install command for the matching driver is printed â€
 Two CLI flags use longer names than their schema property names:
 
 - **`--connector-port=`** (not `--port=`): `--port=` is reserved by the framework for its own socket port (8124 by default) and is intercepted by `bin/cli` before the handler runs. The written JSON entry still uses the property name `port`.
-- **`--driver-version=`** (not `--version=`): the framework auto-converts any `--<key>=<value>` flag to a `GINA_<KEY>` env var, so `--version=^5.0.0` would set `GINA_VERSION=^5.0.0` and trigger a framework version migration. The written JSON entry still uses the property name `version`.
+- **`--driver-version=`** (not `--version=`): the framework auto-converts any `--<key>=<value>` flag to a `GINA_<KEY>` env var, so `--version=^5.0.0` would set `GINA_VERSION=^5.0.0`, which the CLI refuses because it names no installed framework version. The written JSON entry still uses the property name `version`.
 
 These aliases exist to avoid collisions with framework-level flags; the on-disk JSON shape is unchanged.
 :::

@@ -66,10 +66,11 @@ values always win.
 | `html` | string | `${templatesPath}/html` | Directory containing template HTML files |
 | `handlers` | string | `${templatesPath}/handlers` | Directory containing client-side JS handler files |
 | `routeNameAsFilenameEnabled` | boolean | `true` | When `true`, the route name is used as the default template filename if `param.file` is not set |
-| `ginaEnabled` | boolean | `true` | Include gina's built-in CSS and JS in every page. Set to `false` to exclude them entirely |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
 | `sriEnabled` | boolean | `false` | Opt-in [Subresource Integrity](#subresource-integrity-srienabled): add `integrity="sha384-..."` + `crossorigin="anonymous"` to every same-origin `<script>` and `<link rel="stylesheet">` whose file resolves on disk. *New in 0.6.23* |
 | `assetVersioningEnabled` | boolean | `true` | In production, append a content token (`?v=` + 10 hex of the file's SHA-384) to the same-origin asset URLs gina writes, so browsers can cache them for a year — see [Versioned asset URLs](/reference/statics#versioned-asset-urls). `false` keeps the plain URLs. *New in 0.7.2* |
+| `preloadHintsEnabled` | boolean | `true` | Send the [preload hints](#preload-hints) of an `http/2.0` bundle in production: the `103 Early Hints` and the `link` header of the `200`. `false` sends neither; `self.setEarlyHints()` is not affected. *New in 0.7.3* |
+| `preloadHintsMaxSize` | number | `1024` | Bytes per preload hint: each keeps its entries in order and stops at the last one that fits, so a reverse proxy's header buffer is not outgrown. `0` = no limit. *New in 0.7.3* |
 | `stylesheets` | array | gina default | List of stylesheet objects loaded on every page |
 | `javascripts` | array | gina default | List of script objects loaded on every page |
 
@@ -133,6 +134,32 @@ Behaviour worth knowing before enabling it:
   loader injects dynamically when a page arrives without it.
 
 The algorithm is fixed at `sha384` on purpose; there is no knob.
+
+### Preload hints {#preload-hints}
+
+*New in 0.7.3.* An `http/2.0` bundle in production sends a `103 Early Hints`
+before each HTML page and a `link` header on its `200`, naming the stylesheets
+and scripts declared here and the assets written in the layout, so the browser
+starts fetching them early. Each is limited to `preloadHintsMaxSize` bytes,
+1,024 by default, so that it fits a reverse proxy's header buffer — nginx's
+`proxy_buffer_size` is one memory page, 4 KiB on most Linux hosts, and a page
+whose headers outgrow it is answered `502`.
+
+```json
+{
+  "_common": {
+    "preloadHintsMaxSize": 2048
+  },
+  "report-print": {
+    "preloadHintsEnabled": false
+  }
+}
+```
+
+`0` sends every entry; any value that is not a whole number of 0 or more falls
+back to `1024`, with one warning per process. Raise the limit only when every
+proxy in front of the bundle has room for it. What the hints contain, the
+HTTP/1.1 policy and the nginx settings: [Preload hints](/guides/https#preload-hints).
 
 ### Stylesheet object
 
@@ -218,6 +245,11 @@ either the route's `param.control` value or the route's `param.file` path.
 - The `home` page loads `main.css` + `app.js` from `_common`, then appends `home.css` and `home.js`.
 - The `invoice-detail` page uses a different layout and gets `invoice.css` appended.
 
+A page entry can also set one of the `_common` switches above
+(`assetVersioningEnabled`, `preloadHintsEnabled`, …) or `preloadHintsMaxSize`;
+the page's own value wins. Before 0.7.3, a page that set a switch to `false` got
+`_common`'s `true` back.
+
 ---
 
 ## Sharing a block across several pages
@@ -261,15 +293,25 @@ name must still resolve to a real route.
 
 ---
 
-## Disabling the gina toolbar
+## Hiding the status bar and gina's assets {#hiding-the-status-bar-and-ginas-assets}
 
-The gina dev toolbar is injected automatically in `dev` mode. To disable it for
-a specific page, set `ginaEnabled: false` on that template:
+In `dev`, gina injects its [status bar](/guides/inspector#status-bar) into every
+HTML page; in production it never does (see
+[Inspector — Production](/guides/inspector#production)). To render one page
+without it, pass `false` as the second argument of `render()`:
+
+```javascript
+self.render(data, false);
+```
+
+To keep gina's own CSS and JS out of a page, set `javascriptsExcluded` and
+`stylesheetsExcluded` to `"**"` in that page's entry:
 
 ```json
 {
   "pdf-preview": {
-    "ginaEnabled": false,
+    "javascriptsExcluded": "**",
+    "stylesheetsExcluded": "**",
     "stylesheets": [
       { "name": "pdf", "url": "/css/pdf.css" }
     ]
@@ -277,7 +319,12 @@ a specific page, set `ginaEnabled: false` on that template:
 }
 ```
 
-To disable the toolbar for the entire bundle, set `ginaEnabled: false` in `_common`.
+The page then loads its own stylesheets and scripts only: `_common`'s are left
+out as well, and so is gina's client loader. In `dev` the status bar is still
+injected into it.
+
+Before 0.7.3 this page documented a `ginaEnabled` key for both purposes. Nothing
+ever read it, so setting it had no effect; it is ignored, and can be removed.
 
 ---
 
@@ -289,7 +336,6 @@ To disable the toolbar for the entire bundle, set `ginaEnabled: false` in `_comm
     "layout"                 : "${templatesPath}/html/layout.html",
     "handlers"               : "${templatesPath}/handlers",
     "routeNameAsFilenameEnabled": true,
-    "ginaEnabled"            : true,
     "javascriptsDeferEnabled": true,
     "stylesheets": [
       { "name": "main",    "url": "/css/main.css",    "isCommon": true },
