@@ -70,6 +70,8 @@ values always win.
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |
 | `sriEnabled` | boolean | `false` | Opt-in [Subresource Integrity](#subresource-integrity-srienabled): add `integrity="sha384-..."` + `crossorigin="anonymous"` to every same-origin `<script>` and `<link rel="stylesheet">` whose file resolves on disk. *New in 0.6.23* |
 | `assetVersioningEnabled` | boolean | `true` | In production, append a content token (`?v=` + 10 hex of the file's SHA-384) to the same-origin asset URLs gina writes, so browsers can cache them for a year — see [Versioned asset URLs](/reference/statics#versioned-asset-urls). `false` keeps the plain URLs. *New in 0.7.2* |
+| `preloadHintsEnabled` | boolean | `true` | Send the [preload hints](#preload-hints) of an `http/2.0` bundle in production: the `103 Early Hints` and the `link` header of the `200`. `false` sends neither; `self.setEarlyHints()` is not affected. *New in 0.7.3* |
+| `preloadHintsMaxSize` | number | `1024` | Bytes per preload hint: each keeps its entries in order and stops at the last one that fits, so a reverse proxy's header buffer is not outgrown. `0` = no limit. *New in 0.7.3* |
 | `stylesheets` | array | gina default | List of stylesheet objects loaded on every page |
 | `javascripts` | array | gina default | List of script objects loaded on every page |
 
@@ -133,6 +135,32 @@ Behaviour worth knowing before enabling it:
   loader injects dynamically when a page arrives without it.
 
 The algorithm is fixed at `sha384` on purpose; there is no knob.
+
+### Preload hints {#preload-hints}
+
+*New in 0.7.3.* An `http/2.0` bundle in production sends a `103 Early Hints`
+before each HTML page and a `link` header on its `200`, naming the stylesheets
+and scripts declared here and the assets written in the layout, so the browser
+starts fetching them early. Each is limited to `preloadHintsMaxSize` bytes,
+1,024 by default, so that it fits a reverse proxy's header buffer — nginx's
+`proxy_buffer_size` is one memory page, 4 KiB on most Linux hosts, and a page
+whose headers outgrow it is answered `502`.
+
+```json
+{
+  "_common": {
+    "preloadHintsMaxSize": 2048
+  },
+  "report-print": {
+    "preloadHintsEnabled": false
+  }
+}
+```
+
+`0` sends every entry; any value that is not a whole number of 0 or more falls
+back to `1024`, with one warning per process. Raise the limit only when every
+proxy in front of the bundle has room for it. What the hints contain, the
+HTTP/1.1 policy and the nginx settings: [Preload hints](/guides/https#preload-hints).
 
 ### Stylesheet object
 
@@ -217,6 +245,11 @@ either the route's `param.control` value or the route's `param.file` path.
 
 - The `home` page loads `main.css` + `app.js` from `_common`, then appends `home.css` and `home.js`.
 - The `invoice-detail` page uses a different layout and gets `invoice.css` appended.
+
+A page entry can also set one of the `_common` switches above
+(`assetVersioningEnabled`, `preloadHintsEnabled`, …) or `preloadHintsMaxSize`;
+the page's own value wins. Before 0.7.3, a page that set a switch to `false` got
+`_common`'s `true` back.
 
 ---
 

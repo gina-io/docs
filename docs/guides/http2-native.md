@@ -242,7 +242,9 @@ this.home = function(req, res, next) {
 ```
 
 On HTTP/2 connections, `setEarlyHints` sends a HEADERS frame with `:status: 103`
-via `stream.additionalHeaders()`. On HTTP/1.1, it falls back to `res.writeEarlyHints()`.
+via `stream.additionalHeaders()`. On HTTP/1.1 it sends one, through
+`res.writeEarlyHints()`, only when `settings.json > server.earlyHintsOverHTTP1` is
+`true` — see [Preload hints](/guides/https#preload-hints).
 The call is best-effort — a hint failure never affects the main response.
 
 The browser receives the 103 response immediately and begins fetching the hinted

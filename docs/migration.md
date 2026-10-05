@@ -148,6 +148,65 @@ with no data, which now sends an empty request instead of throwing.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — no 103 Early Hints over HTTP/1.1 by default (bundle restart)
+
+Since 0.6.28, an `http/2.0` bundle in production sent its automatic
+`103 Early Hints` over HTTP/1.1 as well as HTTP/2. Over HTTP/1.1 a 103 reaches
+what sits between the browser and the bundle, typically a reverse proxy, and nginx
+older than 1.29 — the versions Ubuntu 22.04 and 24.04 and Debian 12 package —
+takes an upstream 103 for the final response: behind it, every HTML page failed
+(in Chromium: `ERR_HTTP2_PROTOCOL_ERROR`). Browsers act on a 103 only over HTTP/2
+and HTTP/3, so nothing was gained over HTTP/1.1.
+
+Gina now sends no 103 over HTTP/1.1, automatic or from `self.setEarlyHints()`,
+unless `settings.json > server.earlyHintsOverHTTP1` is `true`. Turn it on only
+behind a proxy that passes 103 responses on (nginx 1.29 or later with
+`early_hints`, Apache). With it on, `self.setEarlyHints([a, b])` delivers both
+entries: Node.js refused the `', '`-joined list gina handed it, so an explicit
+hint with several entries was never sent over HTTP/1.1. See
+[Preload hints over HTTP/1.1](/guides/https#preload-hints-over-http11).
+
+**What to check:** a browser connected to the bundle over HTTP/2 gets its 103 as
+before. Behind a proxy that talks HTTP/1.1 to the bundle the 103 now stops; if
+that proxy passes 103 responses on and you rely on them, set
+`earlyHintsOverHTTP1: true`.
+
+### Fixed — preload hints are limited to 1,024 bytes, so a page no longer outgrows a proxy's header buffer (bundle restart)
+
+The automatic preload hints of an `http/2.0` bundle in production — the
+`103 Early Hints` and the `link` header of the `200` — had no size limit: one
+entry per stylesheet and script declared in `templates.json` and per image in the
+layout. Behind a proxy with a small response-header buffer — nginx's
+`proxy_buffer_size` is one memory page, 4 KiB on most Linux hosts — a page with
+many of them was answered `502 Bad Gateway` (« upstream sent too big header »).
+
+Each hint is now limited to `preloadHintsMaxSize` bytes (`templates.json`, 1,024
+by default; `0` = no limit): it keeps its entries in order and stops at the last
+one that fits. `preloadHintsEnabled: false` sends neither hint. Both can be set
+in `_common` or in a page's own entry. A URL both declared and written in the
+layout is now hinted once, and the stylesheets and scripts written in the layout
+are now hinted too, except those the browser could not match a preload to (a tag
+with `integrity` or `crossorigin`, a `media` other than `all` or `screen`, an
+alternate stylesheet, a `type="module"` or `nomodule` script).
+
+**What to check:** a page that declares many stylesheets and scripts now sends
+fewer hints; the assets left out still load, once the browser reads the page. If
+every proxy in front of a bundle has a larger buffer (nginx:
+`proxy_buffer_size 16k;` and `proxy_buffers 8 16k;`), you can raise
+`preloadHintsMaxSize`, or set it to `0`. See
+[Preload hints](/guides/https#preload-hints).
+
+### Fixed — a page's own `false` overrides a `_common` switch (bundle restart)
+
+A page entry in `templates.json` that set a `_common` switch to `false` —
+`assetVersioningEnabled`, for example — got `_common`'s `true` back: the page's
+value was combined with `_common`'s, and that combination turned `false` and
+`true` into `true`. A page's own boolean now wins; strings and numbers already
+did.
+
+**What to check:** a page entry that sets a switch to `false` now has its effect.
+A bundle-wide `false` in `_common` behaved correctly before and is unchanged.
+
 ---
 
 ## 0.7.1 → 0.7.2

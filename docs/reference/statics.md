@@ -226,7 +226,9 @@ A revalidation of a versioned URL (`If-None-Match`) is answered `304` as before;
 over HTTP/2, the `304` for the current token repeats
 `Cache-Control: public, max-age=31536000, immutable`. The HTTP/2 preload
 hints — the `link` response header and `103 Early Hints` — name the same
-versioned URLs as the tags, so no asset is fetched twice.
+versioned URLs as the tags, so no asset is fetched twice. They are limited in
+size, so that a proxy's header buffer is not outgrown: see
+[Preload hints](/guides/https#preload-hints).
 
 **The routing table.** The client fetches `/_gina/assets/routing.json` on every
 page load. Gina's own `<script>` tag carries the table's token in
@@ -316,6 +318,11 @@ copy afterwards. The bundle also picks the precompressed file, as described abov
   still served from disk, as before.
 - Inside a `location`, `if` is safe only with `return` or `rewrite … last`, which is
   why the request leaves through `error_page 418`.
+- The location that proxies your **pages** receives their preload hints in the
+  `link` header. With nginx's default `proxy_buffer_size` (one memory page, 4 KiB
+  on most Linux hosts), keep `preloadHintsMaxSize` at its default of 1,024 bytes;
+  to raise it, raise that location's buffers first — see
+  [Preload hints](/guides/https#preload-hints).
 
 **Keying the cache header on the token's shape** works with nginx alone, but nginx
 cannot check the token:
