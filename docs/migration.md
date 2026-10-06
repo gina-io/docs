@@ -62,6 +62,20 @@ missing is now sent `SIGTERM` as well, as one with a pid file is, instead of
 **What to check:** nothing. A framework whose pid file is in place is found and
 stopped as before.
 
+### Fixed — a `<select>`'s live check shows its error from the whole-form pass (bundle restart and re-bake)
+
+After a `<select>` changes, the validator checks the select alone, then the whole
+form, and shows each pass's error for that select only. The second pass looked the
+error up under the form's name instead of the select's, so it displayed nothing: an
+error only the whole-form pass finds, such as a rule comparing the select with
+another field, did not appear on the live check. It now looks the error up under
+the select's name.
+
+**What to check:** nothing. A select whose single-field check already showed its
+error behaves as before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.2 → 0.7.3
