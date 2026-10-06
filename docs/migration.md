@@ -48,6 +48,34 @@ there, and the settings schema marks them deprecated at that place. See
 there` line at boot. Move the key under `server.cache`, in `settings.json`,
 `settings.server.cache.<env>.json` or the project `env.json`.
 
+### Security — one GET request could stop the bundle: a bracket field nested inside a `null` slot (bundle restart and re-bake)
+
+A request whose form-encoded data first set a field to `null` through a JSON value
+and then nested a bracket-notation field inside it, such as `a=[null]&a[0][b]=1`
+or `a={"x":null}&a[x][y]=1`, made the nesting helper throw a `TypeError`. As with
+[the numeric-segment case fixed in 0.6.33](#security--one-get-request-could-stop-the-bundle-a-bracket-field-name-with-a-numeric-segment-restart-and-re-bake),
+where it threw decided the damage:
+
+- **The `inheritedData` query parameter of a GET or HEAD request** is parsed with
+  no guard, so the throw reached the process as an `uncaughtException` and **the
+  bundle exited**: one unauthenticated request was enough, on any URL, because the
+  parse runs before routing (measured on the default engine: exit code 143, the
+  next request refused).
+- **A form-encoded POST, PUT or PATCH body** answered `500`.
+
+The helper now replaces a `null` slot with a fresh container and nests through it:
+`a=[null]&a[0][b]=1` gives `{ a: [ { b: '1' } ] }`. A slot holding any other
+primitive still ignores the nested field, as before: `a=[true]&a[0][b]=1` gives
+`{ a: [ true ] }`. Affected: every release from at least 0.6.0 through 0.7.3. A
+security advisory accompanies this fix.
+
+**What to check:** nothing to change. Under a supervisor that restarts a bundle on
+exit, one such request per restart kept it down: a
+`[ FRAMEWORK ][ uncaughtException ] TypeError: Cannot read properties of null`
+line naming `parseLocalObj` in your logs was this.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
 
 The `fs` strategy wrote its entries under `server.cache.path`, but a restarted
@@ -166,6 +194,22 @@ relative paths are unchanged. See
 [Redirecting instead of answering with an error](/guides/controller#throwerror-fallback).
 
 **What to check:** nothing. A redirect that answered `404` now redirects.
+
+### Fixed — a staged upload no longer posts the replaced file's preview metadata (bundle restart and re-bake)
+
+A form that declares `[preview][location|uri|width|height]` sub-field inputs for a
+staged upload (see [Persisting the preview](/guides/file-uploads#persisting-the-preview))
+now leaves each one empty when the replacement file's staging response does not
+carry that preview value. On an edit form, the declared inputs used to keep the
+replaced file's preview metadata and posted it with the new file; a partial preview
+left the sub-fields it lacked stale the same way. The documented rule, that a
+declared sub-field the response does not carry is left empty, now holds. Forms that
+declare no preview sub-fields are unchanged.
+
+**What to check:** a server that worked around stale preview fields can drop that
+workaround once its bundles are re-baked.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
 ---
 
