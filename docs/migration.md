@@ -138,6 +138,22 @@ describes.
 **What to check:** nothing, unless a script relied on `gina image:run demo`
 naming its container `demo`: pass `--name=demo` for that.
 
+### Fixed — an XHR request answered through a `throwError()` fallback gets a response (bundle restart)
+
+`self.throwError(err)` answers an error that carries `fallback` (a URL or a
+route object) with a redirect to it, when the request is an XHR request or the
+route renders no template. For an XHR request that carries params (a form body
+or a query), or comes from a popin, that redirect answers with the
+`isXhrRedirect` JSON, and the JSON was dropped: the request was never answered,
+and its client waited until its own timeout, a `self.query` call made from
+another bundle on behalf of an XHR request included. It now receives the JSON.
+Non-XHR requests, and XHR requests without params, already received their 301
+or 303 and are unchanged. See
+[Redirects and the request method](/guides/routing#redirects-and-the-request-method).
+
+**What to check:** nothing. The answer is the one `self.redirect()` gives the
+same request.
+
 ---
 
 ## 0.7.2 → 0.7.3
