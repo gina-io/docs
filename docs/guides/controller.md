@@ -452,6 +452,27 @@ self.throwError(404, 'Not found');
 self.throwError(new Error('Forbidden'));  // reads err.status for the HTTP code
 ```
 
+#### Redirecting instead of answering with an error {#throwerror-fallback}
+
+When the error carries `fallback`, `throwError()` answers with a redirect to it
+instead of an error response, on an XHR request or on a route that renders no
+template. `fallback` is a URL, used as written (the webroot is not prepended), or
+a route object from [`lib.routing.getRoute()`](/guides/routing#reverse-routing--libroutinggetroute):
+
+```js
+var err = new Error('Session expired');
+err.fallback = '/account/login';                           // a URL, used as written
+// or a route object:
+// err.fallback = lib.routing.getRoute('login@account');
+return self.throwError(err);
+```
+
+The redirect answers as [`self.redirect()`](#selfredirecturl-ignorewebroot) does:
+with a `301` by default, with a `303` when the request method is unsafe (see
+[Redirects and the request method](/guides/routing#redirects-and-the-request-method)),
+and with the `isXhrRedirect` JSON for an XHR request that carries params or comes
+from a popin. On any other request the error is answered as usual.
+
 #### Incident ref
 
 Every JSON error body carries a top-level **`ref`** — a short, voice-relayable

@@ -154,6 +154,19 @@ or 303 and are unchanged. See
 **What to check:** nothing. The answer is the one `self.redirect()` gives the
 same request.
 
+### Fixed — a redirect to an absolute URL on `localhost` or another dot-less host (bundle restart)
+
+`self.redirect()` took an absolute URL whose host has no dot, such as
+`http://localhost:<port>/…`, a single-label host like a container service name,
+or a bracketed IPv6 address, for a route name, and answered with a `404` naming
+the current URL. It now redirects to it. A `throwError()` fallback given as a
+route object failed the same way on a bundle served from `localhost`, because the
+route object's URL is such an absolute URL. URLs on dotted hosts, route names and
+relative paths are unchanged. See
+[Redirecting instead of answering with an error](/guides/controller#throwerror-fallback).
+
+**What to check:** nothing. A redirect that answered `404` now redirects.
+
 ---
 
 ## 0.7.2 → 0.7.3
