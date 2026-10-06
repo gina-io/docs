@@ -288,6 +288,28 @@ carry an internal `_uuid` until then.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
+
+`gina.validator.$forms[id].reBind()` detached nothing before binding the form
+again, so every call added one more copy of each listener on the form, its
+fields and its submit button. On Safari, a re-bound `autocomplete="off"` field
+inserted one character per re-bind on each keystroke; after a re-bind, a
+`.on('submit')` handler was bypassed (the validator sent the form itself) and
+registering `.on()` again added a second handler. `.reBind()` now detaches
+exactly what the previous bind attached, then binds again; the handlers
+registered with `.on()` and the declarative `data-gina-form-event-on-*`
+callbacks survive it. `.destroy()` removes them too, so a form destroyed and
+bound again starts clean and its submit button works; a form destroyed after
+it left the document (a popin replacing its content) keeps them until the
+element is gone, so an answer still on its way reaches its callback. See
+[Forms and validation](/guides/forms-and-validation#programmatic-api-and-events).
+
+**What to check:** code that restored a form's `gina.events` keys around
+`.reBind()` to avoid the stacking can be removed. A `.on()` handler registered
+before a `.reBind()` keeps running after it: register it once.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.2 → 0.7.3
