@@ -76,6 +76,19 @@ error behaves as before.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `image:run` without `--name` leaves the container name to podman (next `gina image:run`)
+
+`gina image:run <image>` took the image reference as the container name when
+`--name` was not given. A usual `repo:tag` reference was refused with
+`invalid --name`, so the command failed in its plain form, and a reference that
+is also a valid container name, such as `demo`, named the container after the
+image. The container name now comes from `--name` only: without it podman picks
+one and `name` is `null` in the output, as [`image:run`](/cli/cli-image#imagerun)
+describes.
+
+**What to check:** nothing, unless a script relied on `gina image:run demo`
+naming its container `demo`: pass `--name=demo` for that.
+
 ---
 
 ## 0.7.2 → 0.7.3
