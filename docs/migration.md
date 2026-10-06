@@ -46,6 +46,22 @@ with 128 plus the signal number when a signal stopped it. See
 code now sees a failed restart, where it could read success. A restart that
 succeeds still gives 0.
 
+### Fixed — `framework:status` and `gina stop` find a framework on Bun whose pid file is missing (next `gina framework:status` / `gina stop`)
+
+When a framework's pid file was missing, `framework:status` and `gina stop` looked
+for the framework by its `gina-v<version>` process title, which Bun does not show
+to `ps`. For a framework running on Bun, `framework:status` therefore printed
+`Gina is not running`, and `gina stop` printed `Gina v<version> is not running`,
+exited 0 and left the framework running. Both now also read the framework's own
+record in `~/.gina/procs.json`, and act on it only while `ps` shows that pid
+running as the framework: `framework:status` lists it and writes its pid file
+back, and `gina stop` sends it `SIGTERM`. A framework on Node whose pid file is
+missing is now sent `SIGTERM` as well, as one with a pid file is, instead of
+`SIGKILL`. See [`framework:status`](/cli/cli-framework#frameworkstatus).
+
+**What to check:** nothing. A framework whose pid file is in place is found and
+stopped as before.
+
 ---
 
 ## 0.7.2 → 0.7.3
