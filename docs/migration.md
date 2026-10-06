@@ -21,6 +21,55 @@ upward to the target version.
 
 ## 0.7.3 → 0.7.4
 
+### Changed — a route's `Cache-Control` follows the server cache switch (routes with a `cache` field)
+
+A route's `cache` field used to give every response of that route a
+`Cache-Control: private, max-age=<ttl>` header, whether or not the bundle's
+server cache was on. It now does so only while `server.cache.enable` is on and
+the request is a `GET` — the same gate as the cache write. With the cache off
+(the usual development setting, or a bundle whose cache is switched off),
+responses carry no `Cache-Control` from the route, so a browser no longer reuses
+a page or a JSON answer for the route's whole `ttl` while the server stores
+nothing. See [Caching](/guides/caching#configuration-reference).
+
+**What to check:** a bundle that keeps its server cache off and relied on that
+header for browser caching now serves those routes fresh on every request. Turn
+the cache on (`server.cache.enable`), or set the header in the controller.
+
+### Deprecated — `enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries` in `settings.json`'s top-level `cache` block
+
+Those six keys are read from `server.cache` only and have always been ignored
+in the top-level `cache` block, which carries the default backend (`type`,
+`store`, `name`). A bundle now logs a boot warning naming each one it finds
+there, and the settings schema marks them deprecated at that place. See
+[the settings reference](/reference/settings#cache).
+
+**What to check:** a `[render-cache] settings.json > cache.<key> is ignored
+there` line at boot. Move the key under `server.cache`, in `settings.json`,
+`settings.server.cache.<env>.json` or the project `env.json`.
+
+### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
+
+The `fs` strategy wrote its entries under `server.cache.path`, but a restarted
+process read them back from the project's default `cache` directory, so the
+first request of each cached URL rendered again. Read-back, and the offline
+reclaim of `gina cache:clear`, now use the bundle's `server.cache.path`. See
+[Surviving a restart](/guides/caching#surviving-a-restart).
+
+**What to check:** nothing with the default path. With a custom path, the first
+request after a restart now answers `Cache-Status: …; hit; detail=fs`.
+
+### Fixed — `settings.<env>.json` is applied (bundles carrying one)
+
+A per-environment settings file with no section was nested under a `<env>` key
+of the bundle's settings instead of being merged at the top level, so nothing in
+it took effect. It is now merged as `settings.<section>.<env>.json` is for its
+section, and wins over `settings.json` for the env it names. See
+[`settings.server.cache.${env}.json`](/reference/settings#settingsservercacheenvjson).
+
+**What to check:** a bundle with a `settings.<env>.json` it believed inert now
+has that file's content applied for that env.
+
 ### Fixed — `gina start --inspect-gina` returns the framework's exit code (next `gina start --inspect-gina`)
 
 With `--inspect-gina`, `gina start` runs the framework under the Node.js

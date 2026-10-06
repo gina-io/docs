@@ -66,10 +66,11 @@ bundle is reachable, without removing anything or mutating the live cache.
 array for the all-bundles form).
 
 :::note
-The offline reclaim assumes the default cache root (`<project_path>/cache`, the
-resolved default `server.cache.path`). A bundle that overrides
-`server.cache.path` to a custom absolute path is still flushed in-heap, but its
-on-disk orphans are not auto-reclaimed.
+The offline reclaim targets the bundle's own `server.cache.path`, resolved for
+the project's default env from `settings.server.cache.<env>.json`,
+`settings.json` and the project `env.json` (`<project_path>/cache` by default).
+Until 0.7.3 it assumed the default root, so a bundle with its own
+`server.cache.path` kept its on-disk orphans.
 :::
 
 See [Caching → Flushing the cache](/guides/caching#flushing-the-cache).

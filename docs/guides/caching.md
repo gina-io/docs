@@ -127,15 +127,19 @@ The `cache` field accepts either a shorthand string or a full object.
 | `sliding` | boolean | server default | Enable sliding-window expiration. Inherits [`server.cache.sliding`](#server-level-cache-config) (default `false`) when omitted. |
 | `maxAge` | number (seconds, fractional ok) | server default | Absolute lifetime ceiling. Only meaningful when `sliding: true`. Inherits [`server.cache.maxAge`](#server-level-cache-config) when omitted. |
 | `invalidateOnEvents` | string[] | — | Event names that immediately evict this entry (see [Event-driven invalidation](#event-driven-invalidation)). |
+| `visibility` | `"private"` \| `"public"` | `"private"` | The `Cache-Control` visibility sent with the response while the server cache is on: `private` (the visitor's browser only) or `public` (shared caches too). Stored with the entry, so a hit replays it. |
 
 Only `GET` requests are cached. `POST`, `PUT`, `DELETE`, and other methods
 always bypass the cache.
 
-A route's `cache` field also gives its response a `Cache-Control: private,
-max-age=<ttl>` header (the route's `ttl`, or the bundle default), so the
+While the server cache is on, a route's `cache` field also gives its `GET`
+responses a `Cache-Control: <visibility>, max-age=<ttl>` header (the route's
+`ttl`, or the bundle default; `visibility` defaults to `private`), so the
 visitor's browser may reuse the response for that long without asking again.
-The header is sent whether or not the server cache is on; on a response served
-from the cache, `max-age` is the time its entry has left.
+On a response served from the cache, `max-age` is the time its entry has left.
+With the server cache off, the route adds no `Cache-Control` at all: nothing on
+the server stores the response, so the browser is not told to reuse it either
+(since 0.7.4 — earlier releases sent the header whatever the switch).
 
 ---
 
@@ -197,10 +201,11 @@ response headers). Both files are removed together on eviction. Leave the
 response is simply re-rendered on the next request).
 
 :::note Cache path
-Restart read-back resolves files under `server.cache.path`, which the framework
-default ties to the top-level `cachePath` (`${projectPath}/cache`). If you
-override either independently, keep both pointing at the same directory so the
-read-back finds the written files.
+Restart read-back resolves files under `server.cache.path`, the directory the
+entries are written to (since 0.7.4 — until 0.7.3 it looked under the top-level
+`cachePath`, `${projectPath}/cache`, so a bundle with its own `server.cache.path`
+rendered every cached URL once more after a restart). The framework default ties
+both to the same directory.
 :::
 
 ### `redis` (shared L2 across replicas)
@@ -531,7 +536,8 @@ Use it for `type`, `store` and `name`. The six keys the framework sets by
 default (`enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries`) are
 ignored there, because those defaults take precedence over that block. If an earlier version
 of this page led you to put `"enable": "true"` there, move it under
-`server.cache`, as above.
+`server.cache`, as above. Since 0.7.4 the bundle logs a boot warning for each of
+those keys it finds in the top-level block, naming `server.cache`.
 :::
 
 ---

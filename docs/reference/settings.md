@@ -220,7 +220,8 @@ the same key, the per-environment file wins, then `settings.json`, then
 **The top-level `cache` block** is the place for `type`, `store` and `name`. It
 does not turn the cache on: the six keys the framework sets by default
 (`enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries`) are ignored
-there, because those defaults take precedence over that block.
+there, because those defaults take precedence over that block. Since 0.7.4 the
+bundle logs a boot warning for each of them it finds there, naming `server.cache`.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -742,6 +743,11 @@ use is to disable caching locally while keeping it active in production.
 The `${env}` in the filename must match `NODE_ENV` for the file to take effect.
 When the env does not match, the file is parsed but its section key resolves to
 `server.cache.${env}` — an unused key — so it has no impact.
+
+The same rule covers every settings file, `settings[.<section>][.<env>].json`:
+a `settings.<env>.json` with no section is merged at the top level and wins
+over `settings.json` for the env it names (since 0.7.4 — until 0.7.3 it was
+nested under a `<env>` key and had no effect).
 
 ```json title="src/frontend/config/settings.server.cache.dev.json"
 {
