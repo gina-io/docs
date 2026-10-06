@@ -139,6 +139,29 @@ missing is now sent `SIGTERM` as well, as one with a pid file is, instead of
 **What to check:** nothing. A framework whose pid file is in place is found and
 stopped as before.
 
+### Fixed — `gina stop` signals only the framework, and keeps other versions' pid files (next `gina stop` / `gina framework:restart`)
+
+`gina stop` read and removed the pid file of every framework version in the run
+directory (`~/.gina/run`) before choosing the one to stop. Stopping one version
+therefore deregistered every other version running beside it, and `gina reset`,
+which looks for running frameworks in those pid files, could miss them. It then
+sent `SIGTERM` to the pid that `~/.gina/procs.json` records for the version
+whenever a pid file held the same pid, whatever process that pid now was: a
+reused pid, or one recorded in another container's pid namespace when containers
+share the run directory. It also sent `SIGCONT` to the record's `fakeDaemonPid`,
+which names the `gina` wrapper that exits once the framework is ready, and printed
+`Gina v<version> has been stopped` whether or not it had signalled anything.
+
+It now reads and removes only its own version's pid file, and sends `SIGTERM`
+only while `ps` shows that pid running as the framework. Where `ps` cannot
+identify a process (Windows, an image without `ps`), it signals the pid that the
+pid file and the record both name, as before. `framework:restart` runs
+`gina stop`, so it changes the same way. See [`framework:stop`](/cli/cli-framework#frameworkstop).
+
+**What to check:** nothing. A running framework is stopped as before. If you run
+several framework versions side by side, stopping one no longer removes the
+others' pid files.
+
 ### Fixed — a `<select>`'s live check shows its error from the whole-form pass (bundle restart and re-bake)
 
 After a `<select>` changes, the validator checks the select alone, then the whole
