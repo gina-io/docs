@@ -19,6 +19,21 @@ upward to the target version.
 
 ---
 
+## 0.7.3 → 0.7.4
+
+### Fixed — `gina start --inspect-gina` returns the framework's exit code (next `gina start --inspect-gina`)
+
+With `--inspect-gina`, `gina start` runs the framework under the Node.js
+inspector, and the framework waits for a debugger before it runs any code. When
+the framework then stopped before it was ready, the command returned 1 and
+reported `exit code 0`, whatever the framework's own code had been. It now
+returns that code, or 128 plus the signal number when a signal stopped it, as
+`gina start` does without the flag. See [Exit codes](/cli/cli-framework#start-exit-codes).
+
+**What to check:** nothing. A start that succeeds still gives 0.
+
+---
+
 ## 0.7.2 → 0.7.3
 
 ### Fixed — a `GINA_VERSION` that names no installed framework is refused (next `gina` command)
