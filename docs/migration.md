@@ -270,6 +270,24 @@ and now gives `/users/42/edit`.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `filter(fn)` on a Collection result filters (bundle restart and re-bake)
+
+`filter()` on a `Collection`, or on an array one of its query methods returns
+(`find()`, `orderBy()`, `limit()`, `notIn()`, and so on), now takes a function and
+filters like `Array.prototype.filter`: the callback gets `(row, index, array)`, a
+second argument is its `this`, and the result keeps the methods of a `find()`
+result, so `.toRaw()` and the chain still work. Those arrays carry their own
+`filter`, a field projection, and it read a function as a field name:
+`rows.filter(fn)` returned an empty array with no error. A field name or a list of
+field names still projects each row: `rows.filter('id')` returns `[{ id: … }, …]`.
+
+**What to check:** code that worked around this with an index loop, or with
+`.toRaw()` before `.filter(fn)`, keeps working and can now call `.filter(fn)`
+directly. As with any query result, call `.toRaw()` before saving the rows: they
+carry an internal `_uuid` until then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.2 → 0.7.3
