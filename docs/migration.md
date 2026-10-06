@@ -252,6 +252,24 @@ workaround once its bundles are re-baked.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a `:placeholder` in `param.path`, `param.title` or `param.namespace` takes its value as written (bundle restart and re-bake)
+
+A route's `param.path`, `param.title` and `param.namespace` take the value of a
+`:placeholder` they contain, on a matched request and through
+[`getRoute()`](/api/routing). They took it through a string replacement, so `$`
+sequences in the value were expanded as replacement patterns: a request to
+`/user/$%60` on a `/user/:id` route gave `"title": "User :id"` the value
+`User User `, and `$&`, `$'` and `$$` inserted the placeholder, the text after it,
+or a single `$`. The value is now written as it is, as the URL and `param.file`
+already were. `getRoute()` also dropped the `/` that follows such a placeholder in
+those three fields: `"path": "/users/:id/edit"` with `id: 42` gave `/users/42edit`,
+and now gives `/users/42/edit`.
+
+**What to check:** code that rebuilt the missing `/` around `getRoute()`'s
+`param.path`, `param.title` or `param.namespace` can drop that step.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.2 → 0.7.3
