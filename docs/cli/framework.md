@@ -106,6 +106,10 @@ Restart the framework socket server.
 gina framework:restart
 ```
 
+The command stops the framework, then starts it again with `gina start`. When the
+framework does not start again, it prints what the start printed and one line naming
+the failure, then exits with the start's [exit code](#start-exit-codes).
+
 ---
 
 ## `framework:status`

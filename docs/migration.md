@@ -32,6 +32,20 @@ returns that code, or 128 plus the signal number when a signal stopped it, as
 
 **What to check:** nothing. A start that succeeds still gives 0.
 
+### Fixed — `framework:restart` exits non-zero when the framework does not start again (next `gina framework:restart`)
+
+`framework:restart` stops the framework, then starts it with `gina start`. When the
+framework did not start again, the command returned 0, with no framework running, if
+the failed start had already written its pid file; otherwise it ended with an uncaught
+error and exit code 1, losing the start's own code. It now prints what the start
+printed and one line naming the failure, then exits with the start's exit code, or
+with 128 plus the signal number when a signal stopped it. See
+[`framework:restart`](/cli/cli-framework#frameworkrestart).
+
+**What to check:** a script that runs `gina framework:restart` and tests its exit
+code now sees a failed restart, where it could read success. A restart that
+succeeds still gives 0.
+
 ---
 
 ## 0.7.2 → 0.7.3
