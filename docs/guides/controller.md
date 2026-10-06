@@ -483,9 +483,12 @@ scopes**, production included:
 { "status": 404, "error": "Not Found", "message": "Invoice not found", "ref": "A1B2C3" }
 ```
 
-Note that `error` holds the **status text** for the code, and the text you passed lands
-in `message` — so a client that wants to display your sentence should read `message`,
-not `error`.
+In the `(code, err)` and `(res, code, err)` forms, `error` holds the **status text** for
+the code, and the text you passed lands in `message`. In the one-argument form
+`self.throwError(err)`, `error` holds the error's own `error` — or, when it has none, its
+`message` (an `Error`'s message included), else the status text — and since 0.7.4 its
+`message` lands in `message` as well. Either way, a client that wants to display your
+sentence should read `message`, not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
 stack is stripped from the wire — see below. A stack passed *as* the message, as in
@@ -508,13 +511,15 @@ So support can grep a user-relayed `ref` and land on the exact failure — even
 in production, where the wire response never carried the stack. The `ref`
 composes with the always-on request id (it does not replace it).
 
-**Supplying your own ref.** Pass a `ref` on the error object to correlate a
-throw with your own tracking id. It is honoured when relay-safe (word
+**Supplying your own ref.** Pass a `ref` on the error object — a plain object or an
+`Error` — to correlate a throw with your own tracking id. It is honoured in every call
+form (in the one-argument form `self.throwError(err)` since 0.7.4) when relay-safe (word
 characters, dots or dashes, up to 32 chars); anything else is replaced with a
 fresh minted ref (so it can never be used to forge a log line):
 
 ```js
 self.throwError(res, 500, { ref: 'ORDER-42', message: 'payment capture failed' });
+self.throwError({ status: 502, message: 'payment capture failed', ref: 'ORDER-42' });
 ```
 
 **Custom error pages** receive the same value as `data.ref`, so you can surface
@@ -1095,6 +1100,7 @@ not an `Error` instance:
     status  : 502           // HTTP status code from the upstream response
   , error   : "Bad Gateway" // human-readable label for the status
   , message : "..."         // upstream response body or reason phrase
+  , ref     : "A1B2C3"      // the upstream's incident ref, when it sent one
 }
 ```
 
@@ -1114,10 +1120,17 @@ self.query(opt, function(err, data) {
 
     // Option C — explicit error page with a specific code
     // return self.throwError(err.status || 500, err.message);
+
+    // Option D — relay the upstream's error as it came
+    // return self.throwError(err);
   }
   self.render(data);
 });
 ```
+
+Relaying with `self.throwError(err)` (Option D) keeps the upstream's status, its
+`message` and its incident `ref` (since 0.7.4), so the ref your client sees is the one in
+the upstream bundle's log line.
 
 **Async callbacks are owned too.** If the function you pass — to the callback
 form or to `.onComplete()` — is `async` and its promise rejects, the framework

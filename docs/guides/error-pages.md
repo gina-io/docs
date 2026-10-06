@@ -106,9 +106,10 @@ All fields live under `page.data`:
 | `session` | A snapshot of the session user (or of the session itself when no user is set). |
 | `stack` | The stack trace, when an `Error` object carried one. Present in **every** scope — see the caution below. |
 
-The `error` / `message` split matches the JSON error surface: `error` holds
-the status text, and the text you passed to `throwError` lands in `message`
-(see [Controllers → Incident ref](/guides/controller#incident-ref)).
+The `error` / `message` split matches the JSON error surface: in the
+`(code, err)` and `(res, code, err)` forms `error` holds the status text, and the
+text you passed to `throwError` lands in `message` (for the one-argument form, see
+[Controllers → Incident ref](/guides/controller#incident-ref)).
 
 Outside the local scope, an `error` or `message` that carries a stack trace —
 for example from `self.throwError(res, 500, err.stack)` — arrives cut to its

@@ -137,7 +137,7 @@ self.throwError(res, 404, 'User not found');
 { "status": 404, "error": "Not Found", "message": "User not found", "ref": "A1B2C3" }
 ```
 
-Mobile SDKs can then check for the presence of `"error"` as a single convention rather than parsing status codes alone. Read `"message"` for the human-readable detail — `"error"` is the status text for the code, not the message you passed.
+Mobile SDKs can then check for the presence of `"error"` as a single convention rather than parsing status codes alone. Read `"message"` for the human-readable detail — in this form `"error"` is the status text for the code, not the message you passed.
 
 ---
 

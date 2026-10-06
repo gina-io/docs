@@ -195,6 +195,24 @@ relative paths are unchanged. See
 
 **What to check:** nothing. A redirect that answered `404` now redirects.
 
+### Fixed — `throwError(err)` with one error object keeps its `message` and its `ref` (bundle restart)
+
+`self.throwError(err)` with a single plain object kept only its `status` and `error`: the
+object's `message` reached neither the JSON body, nor the built-in error page, nor the
+server's incident log line, and a `ref` on a plain object or on an `Error` was replaced
+with a fresh one. This hit the relay between bundles: `self.query()` hands its callback
+the upstream's error body as a plain object, so `return self.throwError(err)` answered
+without the upstream's sentence, under a ref that matched no upstream log line. The
+object's `message` and a relay-safe `ref` are now kept, as the `(code, err)` and
+`(res, code, err)` forms already did, and a [fast lane](/guides/fast-lane) route's
+`ctx.error(err)` answers the same way. `error` is unchanged: in this form it holds the
+object's own `error`, or its `message` when it has none. See
+[Incident ref](/guides/controller#incident-ref).
+
+**What to check:** a client that reads `message` now receives it in this form too. On the
+built-in error page, an answer whose `error` and `message` carry the same text shows it
+twice, as a one-argument `Error` already did.
+
 ### Fixed — a staged upload no longer posts the replaced file's preview metadata (bundle restart and re-bake)
 
 A form that declares `[preview][location|uri|width|height]` sub-field inputs for a
