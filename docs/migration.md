@@ -117,6 +117,36 @@ advisory accompanies this fix.
 
 Server-side: **restart the bundle**.
 
+### Security — an error response could be built from another request (bundle restart)
+
+The engine-level error responder (`self.throwError()`, and the 404 / 405 / parse-error and
+upload-limit responses the framework raises itself) read the request from a single Server-wide slot
+that every incoming request overwrites. In every environment except
+[development](/concepts/environments#development-environment-benefits), when an error was raised
+after an asynchronous gap — an `async` action or hook that rejected, a gate that failed after a
+database call — and another request had arrived in that gap, the error response was built from that
+other request:
+
+- the wrong body shape: an XHR / API caller could receive the HTML error page, a page request the
+  JSON body;
+- another request's decoded URL on the pairing log line and, through a
+  [custom error page](/guides/error-pages), its URL, its route and **its session user** in the
+  rendered page;
+- `Access-Control-Allow-Origin` computed from the other request's `Origin`.
+
+The responder now resolves the request from the response it is answering, so each error is built
+from its own request. Affected: every release through 0.7.3. A security advisory accompanies this
+fix. Two adjacent defects in the same responder are fixed in the same release: an extensionless HTML
+URL's built-in fallback page is now served `text/html` instead of `undefined` (its status code and
+incident ref were already correct), and a CORS preflight request that errored before routing no
+longer stops the bundle.
+
+**What to check:** nothing to change — the error contract is unchanged, it is now honoured under
+concurrency. A custom error template that displays `page.data.session` was the sharpest exposure;
+the built-in fallback page never rendered it.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
 
 A route middleware method declared `async`, or returning a promise, that rejected — an error thrown
