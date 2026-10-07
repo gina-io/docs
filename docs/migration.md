@@ -164,6 +164,33 @@ written.
 
 Server-side: **restart the bundle**.
 
+### Fixed — `getUrl` in a render with no request degrades instead of throwing (bundle restart)
+
+The `getUrl` template filter read the request's headers for every rule name
+(`'home' | getUrl`, `'home@admin' | getUrl`) and for every path given a bundle as its base
+(`'/dashboard' | getUrl(null, 'admin')`). When the render context had no request — a mail or a
+scheduled-task renderer that builds the filters itself, outside any request — the filter threw
+`TypeError: Cannot read properties of undefined (reading 'headers')` and the render failed. A
+context with no bundle configuration threw on every form, a plain path included. Both template
+engines (swig and nunjucks) carried the defect.
+
+Such a render now gets its URL from what the process knows: the target bundle's configured
+hostname, or the worker's proxy host when one is known. That is the resolution a
+[`getRoute()`](/guides/routing#reverse-routing--libroutinggetroute) call gets when it is made with
+no request in scope. A render made inside a request is unchanged.
+
+**What to check:**
+
+- Nothing to change. If you worked around this (by rendering such templates inside a request, or
+  by composing the URL yourself), the workaround is no longer needed for the filter to run.
+- A URL built outside a request cannot know which public host a visitor uses. Behind a proxy it
+  carries the proxy host once the worker knows it (from the proxy configuration, or from the first
+  proxied request it served) and the bundle's own hostname before that.
+- Two cases still fail, now with a named error instead of a `TypeError`: a base that names an
+  unknown bundle, and a render for which no bundle configuration can be resolved.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
 
 The `fs` strategy wrote its entries under `server.cache.path`, but a restarted
