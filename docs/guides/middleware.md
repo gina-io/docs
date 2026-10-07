@@ -88,9 +88,9 @@ methods while everything else falls through to shared. See
 
 ## Writing a middleware
 
-A middleware file exports a plain constructor function. The framework instantiates it
-with `new Middleware()` and then calls the method whose name matches the last segment
-of the dotted path.
+A middleware file exports a plain constructor function. For each request the framework
+constructs an instance of it, as `new Middleware()` would, and then calls the method whose
+name matches the last segment of the dotted path.
 
 ```js
 // src/frontend/middlewares/auth/index.js
@@ -181,23 +181,30 @@ this.checkScope = async function(req, res, next, done) {
 
 ## Available methods
 
-Every middleware gets the same methods as a controller action, injected at load time:
+Every middleware gets the same methods as a controller action. They are the methods of the
+request being served: the instance is constructed for that request on a prototype layer of
+its own, so the methods are reachable from the constructor body and still answer that
+request after an `await` or in a callback. Nothing is written onto your class.
 
 | Method | Description |
 |---|---|
 | `self.getConfig(key)` | Read bundle configuration (`settings.json`, `app.json`, etc.) |
+| `self.getLocales([languageCode])` | Return the locales of the request's resolved language, or of the language code given |
 | `self.getFormsRules()` | Return the form validation rules the client selected (see [below](#reading-form-validation-rules)) |
 | `self.render(data)` | Render an HTML response and terminate the request |
 | `self.renderJSON(data)` | Render a JSON response and terminate the request |
+| `self.renderWithoutLayout(data)` | Render the current view without its layout and terminate the request |
 | `self.redirect(url, permanent)` | Issue a redirect and terminate the request |
 | `self.throwError(res, code, err)` | Send an error response |
 | `self.isXMLRequest()` | True when the request has `X-Requested-With: XMLHttpRequest` |
 | `self.isWithCredentials()` | True when the request sends credentials |
+| `self.isCacheless()` | True in the development environment (`NODE_ENV_IS_DEV` is `true`) |
 | `self.isHaltedRequest([session])` | True when a request was paused (see below) |
 | `self.pauseRequest(data[, requestStorage])` | Snapshot the current request for later resumption |
 | `self.resumeRequest([requestStorage])` | Replay a paused request |
 | `self.query(...)` | Run a model query |
 | `self.requireController(ns, opts)` | Load another namespace's controller |
+| `self.checkBundleStatus(bundle[, cb])` | Ping another bundle's health check; `cb(err, { isAlive })`, or a promise when `cb` is omitted |
 
 The `pauseRequest` / `resumeRequest` / `isHaltedRequest` trio is covered in full — with the
 login-replay flow and a worked example — in

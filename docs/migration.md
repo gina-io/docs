@@ -76,6 +76,47 @@ line naming `parseLocalObj` in your logs was this.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Security — a route middleware's deferred answer could reach another request (bundle restart)
+
+In every environment except [the development environment](/concepts/environments#development-environment-benefits),
+the controller methods the framework gives a route middleware — `self.renderJSON()`,
+`self.redirect()`, `self.throwError()`, `self.render()`, `self.query()`, `self.getConfig()` and
+the others listed in [Available methods](/guides/middleware#available-methods) — were written onto
+the middleware class itself, for each request. That class comes from Node's module cache and is
+shared by every request, and a method is looked up when it is called. So a middleware that called
+one of these methods after an `await`, or in a callback, used the methods of whichever request had
+last passed through the same middleware file: its answer could be written to another request in
+flight, and the request it belonged to was never answered. A bundle's `controllers/setup.js` had
+the same defect: its members were written onto the exported function.
+
+Not affected: the development environment, where a middleware file is reloaded on every request; a
+bundle-local middleware that has a shared middleware of the same name, which gets a fresh class per
+request; and calls made before the middleware's first `await` or callback.
+
+Each middleware instance is now constructed on a prototype layer of its own that carries its
+request's methods, and each `setup.js` run gets a receiver of its own. Nothing is written onto the
+middleware class or onto the `setup.js` export. Affected: every release through 0.7.3. A security
+advisory accompanies this fix.
+
+**What to check:**
+
+- A middleware written as [the guide](/guides/middleware#writing-a-middleware) shows needs no
+  change. Calls made in the constructor body still work, and so do the middleware's own properties,
+  the members of its exported prototype and `instanceof`.
+- In a middleware constructor, `new.target` is now the per-request constructor and
+  `Object.getPrototypeOf(this)` is the per-request layer, not your class. Test with `instanceof`
+  instead.
+- In `setup.js`, `this` is now an object that inherits from the exported function. Read the
+  framework members through `this`, not through the function's own name or `module.exports`. State
+  stored on `this` no longer carries over from one run to the next, and `this` can no longer be
+  called as a function. When the nunjucks engine runs `setup.js` to register its filters, `this`
+  carries `engine` and `throwError`, as before, and no longer shows the members a request had
+  left on the export.
+- A workaround that copied the methods onto the instance in the constructor keeps working, and can
+  be removed.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
 
 The `fs` strategy wrote its entries under `server.cache.path`, but a restarted
