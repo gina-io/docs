@@ -147,6 +147,43 @@ the built-in fallback page never rendered it.
 
 Server-side: **restart the bundle**.
 
+### Security — a template run in an action could resolve another request's context (bundle restart)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` find their context when they are
+called: the render's own store first, then a process-wide slot that every call of the filter
+factory stamped, including the call each page render makes. [0.6.30](#0629--0630) made the default
+render path read its own store. Two paths still read the slot:
+
+- **A template executed in a controller action outside `self.render()`**, through the engine handle
+  (`self.engine.compile(tpl)(data)`, `compileFile`), resolved the context of whichever request had
+  rendered last on the worker: its negotiated culture, and absolute URLs built from that request's
+  host. No concurrency was needed; one earlier render was enough.
+- **A render with no request** (a scheduled task, a worker, a WebSocket handler) that set no context
+  of its own read the last request's context the same way.
+
+Inside a request the filters now resolve that request's own context, and the process-wide slot is
+neither read nor written there. A call of the filter factory made inside a request is bound to that
+request. Outside a request the slot is used as before, and it now only ever holds a context that
+was set outside a request. Affected: every release through 0.7.3. A security advisory accompanies
+this fix.
+
+**What to check:**
+
+- Nothing to change for templates rendered with `self.render()`.
+- A template you run yourself in an action now sees the current request: its culture, its host. If
+  you compensated there for a wrong language or wrong links, the compensation is no longer needed.
+- Code that calls the filter factory and then renders still resolves the context it passed. Inside
+  a request that context is kept for that request only. It no longer appears on the factory's
+  process-wide slot, so code that read that slot directly after a render (an internal, never
+  documented) no longer finds a request's context there.
+- A render made outside any request, with no context of its own, gets the bundle's configuration
+  and no request. See
+  [the `getUrl` note below](#fixed--geturl-in-a-render-with-no-request-degrades-instead-of-throwing-bundle-restart).
+- The default nunjucks render path now runs inside the render store, like the swig one. Nothing to
+  change.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
 
 A route middleware method declared `async`, or returning a promise, that rejected — an error thrown
