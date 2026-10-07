@@ -117,6 +117,23 @@ advisory accompanies this fix.
 
 Server-side: **restart the bundle**.
 
+### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
+
+A route middleware method declared `async`, or returning a promise, that rejected — an error thrown
+after an `await`, or thrown by a later middleware it handed over to through `done` — left its
+request unanswered until the client or a proxy timed out, and the rejection reached the process
+unhandled. The request is now answered with a 500 that names the middleware, as a rejected
+controller action or [reserved hook](#fixed--an-exception-in-onready-or-setup-now-answers-500-instead-of-vanishing)
+already was. The response carries an `#ERRREF` correlation reference; the full detail is on the
+paired server log line.
+
+**What to check:** a middleware whose rejection used to be survivable (its request hung, but
+nothing else failed) now produces a 500. Catch the errors you can recover from inside the method.
+If the middleware had already answered before it rejected, no 500 is sent; only the log line is
+written.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
 
 The `fs` strategy wrote its entries under `server.cache.path`, but a restarted

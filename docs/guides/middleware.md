@@ -177,6 +177,10 @@ this.checkScope = async function(req, res, next, done) {
 };
 ```
 
+If the promise an `async` method returns rejects, the framework answers the request with a 500
+that names the middleware: the client gets an `#ERRREF` correlation reference, and the detail
+goes to the server log. Catch the errors you can recover from inside the method.
+
 ---
 
 ## Available methods
