@@ -228,6 +228,37 @@ no request in scope. A render made inside a request is unchanged.
 
 Server-side: **restart the bundle**.
 
+### Fixed — an async job runs with no render context (bundle restart)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` look for their context in the render's
+own store first. [0.6.31](#0630--0631) detached an [async job](/guides/async-jobs) from the request
+that created it, but from the request's store only: the job kept the render store of the chain
+that started it.
+
+- **A job created while a render context was active** ran with that context, the `req` and `res`
+  of its request included.
+- **A job that had waited for a worker slot** ran with the render context of the job that freed
+  the slot, whichever request had created either one. Its retries did too.
+
+A template filter called in such a job resolved that request's context: `getUrl` built its
+absolute URLs from that request's host. This held even when the job had passed a context of its
+own to the filter factory, because the render store is read first.
+
+A job now runs with no render context, for its whole lifecycle. A template it executes resolves
+as [a render made outside any request](#security--a-template-run-in-an-action-could-resolve-another-requests-context-bundle-restart)
+does: from the context the job passed to the filter factory, else from the bundle's configuration
+and no request. Affected: 0.4.6 through 0.7.3.
+
+**What to check:**
+
+- Nothing to change for a job that runs no template.
+- A job that renders with a context of its own (code that calls the filter factory, then renders)
+  resolves that context, as the same code does outside a job.
+- A job that renders with no context of its own is a render made outside a request: see
+  [the `getUrl` note above](#fixed--geturl-in-a-render-with-no-request-degrades-instead-of-throwing-bundle-restart).
+
+Server-side: **restart the bundle**.
+
 ### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
 
 The `fs` strategy wrote its entries under `server.cache.path`, but a restarted

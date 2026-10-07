@@ -47,6 +47,8 @@ The deferred function runs **after** the request has completed, so it must not r
 
 :::info Request context
 A job runs inside a **detached copy** of the request context that created it: the request's id and its proxy context (the host it was addressed at, whether it arrived through a proxy) — never its `req` / `res` / `next`. So a log line the job writes carries the creating request's id, an absolute URL it builds with `getRoute().toUrl()` uses that request's host, and a framework error it raises through the global `getConfig()` / `getLib()` helpers is logged (fatal) or thrown to the job (non-fatal) rather than written to any client. The copy covers the job's whole lifecycle — the deferred function, a retry, the completion webhook. A job started outside a request (boot, a cron task) runs with no request context at all. Before 0.6.31 a job ran under whichever request's job had just freed the worker slot; see the [0.6.31 migration note](/migration#0630--0631).
+
+A job has no render context either. A template filter it calls (`getUrl`, `getWebroot`, `t`, `tIcu`) resolves as in a render made outside a request: from the context the job passed to the filter factory, else from the bundle's configuration. Before 0.7.4 a job kept the render context of the chain that started it — the page render of the request that created it, or of the job that had just freed the worker slot; see the [0.7.4 migration note](/migration#073--074).
 :::
 
 ---
