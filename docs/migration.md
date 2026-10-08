@@ -551,6 +551,24 @@ returns no row.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a bundle with a custom async swig template loader renders again (bundle restart)
+
+From 0.6.30 to 0.7.3, a bundle that renders its templates through a
+[custom async template loader](/templating/async-loaders) (`settings.template.swig.loader`)
+answered every page render with a 500, and the server log carried
+`TypeError: swigMod.Swig is not a constructor`. Since 0.6.30 each bundle renders through
+an engine of its own, and the async render path was handed that engine, while it builds a
+separate engine from the swig module and needs the module itself. It receives the module
+again, and the pages render from the same loader configuration. A bundle with no `loader`
+block was not affected, nor was the nunjucks loader (`settings.template.nunjucks.loader`).
+
+**What to check:** nothing has to change. If you moved your templates back to disk, or
+stayed on 0.6.29, to get around it, the loader works again. One limit remains: a filter a
+bundle registers in `controllers/setup.js` is not available to templates served by the
+async loader; it is tracked as a separate fix.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` detached nothing before binding the form
