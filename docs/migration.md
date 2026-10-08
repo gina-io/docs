@@ -535,6 +535,22 @@ accepted and has no effect: `skipEval` is a constructor option
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a dotted Collection filter key holding `(`, `)` or `[` matches nothing instead of throwing (bundle restart and re-bake)
+
+A [Collection](/api/collection) filter key with a dot is a property path:
+`find({ 'address.city': 'Paris' })`, also inside an array of objects
+(`'reviews[*].ratings.score'`). A dotted key that is not a property path matches
+nothing. One case threw instead: a key whose last segment held `(`, `)` or `[`,
+such as `find({ 'address.ci(ty': 'Paris' })`, threw a `SyntaxError` out of the
+search. A regular expression was built from the key and never read; it is gone, and
+such a key now matches nothing like the others.
+
+**What to check:** nothing has to change. Code that caught that `SyntaxError`
+around a search whose key comes from a caller no longer sees it: the search
+returns no row.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` detached nothing before binding the form
