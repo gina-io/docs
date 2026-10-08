@@ -471,6 +471,48 @@ carry an internal `_uuid` until then.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a Collection search option matches the value as text, on every search (bundle restart and re-bake)
+
+`setSearchOption(field, 'isCaseSensitive', false)` on a [Collection](/api/collection)
+makes the next search compare `field` without regard to case. Two defects sat in
+the statement that built its pattern:
+
+- **The value was read as a pattern.** It was spliced unescaped into the rule's
+  template (`^%s$`). A value holding an unbalanced parenthesis threw a
+  `SyntaxError` out of `find()` / `findOne()`; a dot matched any character, so
+  `find({ name: 'a.b' })` also returned `axb`, and `update()` or `delete()` with the
+  same filter then acted on both rows; `acme (uk)` did not find `Acme (UK)`.
+- **Only the first search on an instance was right.** The first value was written
+  back onto the rule table, so every later option search on that instance matched
+  the first value: `find({ name: 'alice' })` then `find({ name: 'bob' })` returned
+  Alice twice, and one search over two option fields matched nothing. With a rule
+  table passed to the constructor, the first value followed the options object to
+  every instance built from it.
+
+The value is now matched as text, whole, and the rule table is never written: a
+dot, a parenthesis or any other character means itself, and every search starts
+from the rule's own template. A value with no pattern character matches exactly as
+before.
+
+**What to check:**
+
+- Code that passed a pattern as the value under a search option (`'a.*'`) and
+  relied on it: the value is text now. To change how the value is anchored, pass a
+  template to the constructor, in which `%s` stands for the value:
+  `new Collection(rows, { searchOptionRules: { isCaseSensitive: { false: { re: '^%s', modifiers: 'i' } } } })`
+  makes the case-insensitive search a prefix search.
+- Code that built a new `Collection` for each lookup to get a right answer keeps
+  working; one instance can now serve several lookups.
+- A value that comes from a request. Two things still read a value as something
+  other than text, with or without a search option: a value holding `<`, `>` or `=`
+  is a comparison (`'>= 1'`), and `not null`, in any case, matches every defined,
+  non-null value. Passing `{ searchOptionRules: { skipEval: true } }` to the
+  constructor turns the comparison off for plain (non-dotted) keys. Nothing turns
+  `not null` off: refuse or rewrite that value before the search when a caller can
+  supply it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` detached nothing before binding the form
