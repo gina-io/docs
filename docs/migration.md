@@ -513,6 +513,28 @@ before.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — the object form of a Collection search option works (bundle restart and re-bake)
+
+`setSearchOption()` on a [Collection](/api/collection) takes either three
+arguments, `setSearchOption('name', 'isCaseSensitive', false)`, or one object
+keyed by field: `setSearchOption({ name: { isCaseSensitive: false } })`. The
+object form tested each top-level key, a field name, against the rule table, so
+that shape threw `undefined is not an allowed searchOption !` and only the
+three-argument form was usable.
+
+The object form now checks each field's rule names: an unknown rule is refused by
+name, and a field entry that is not an object of rules is refused by field. It
+reads `'true'` / `'false'` as booleans like the three-argument form, and it copies
+the options, so your object is neither kept nor changed. One difference between
+the two forms: three arguments add a rule to what an earlier call set, field by
+field; one object replaces it.
+
+**What to check:** nothing has to change. A top-level `skipEval` in the object is
+accepted and has no effect: `skipEval` is a constructor option
+(`new Collection(rows, { searchOptionRules: { skipEval: true } })`).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` detached nothing before binding the form
