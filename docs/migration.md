@@ -551,6 +551,28 @@ returns no row.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — Collection `update()` writes each matched row back in its own place (bundle restart and re-bake)
+
+`update(filter, set)` on a [Collection](/api/collection) merges `set` into every
+row the filter matches, then writes each merged row back over the row it came
+from. When the filter matched several rows that have no `id`, every merged row
+was written over the first of them: a row was lost, another appeared twice and
+the others were not updated, with no error. A single matched row could be
+written over another row once an earlier `update()` or `toRaw()` had run on the
+same collection. Rows sharing the same `id` were affected too. Each merged row
+now goes back over the row it came from.
+
+Rows found by another Collection (`a.update(b.find({ … }), set)`) were not
+written at all. They are now written by their `id`.
+
+**What to check:** data saved from such an `update()` may hold one row twice in
+the place of a lost one. A collection whose rows all carry a unique `id`, or
+their own `_uuid`, was not affected. As with any query result, call `.toRaw()`
+before saving the rows: the ones the call did not update carry an internal
+`_uuid` until then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a bundle with a custom async swig template loader renders again (bundle restart)
 
 From 0.6.30 to 0.7.3, a bundle that renders its templates through a
