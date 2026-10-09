@@ -204,6 +204,61 @@ this fix.
 
 Server-side: **restart the bundle**.
 
+### Security — a value taken from a request could start a log line of its own (bundle restart and re-bake)
+
+In the default text format the logger turned the two written characters backslash + `n`
+inside a logged string into a real line feed (backslash + `r` likewise, and backslash + `t`
+into a tab), and it wrote a real line feed held by a logged value as it was. A value taken
+from a request could therefore start a physical line of its own in the log, shaped like a
+genuine record (log injection, CWE-117). Escaping the value first with `JSON.stringify` did not
+prevent it: the two characters it writes were turned back into a line feed. Several of the
+framework's own lines print such a value, among them the multipart upload messages, the
+request-body parse warnings and the error line written for every error response.
+
+What changed:
+
+- **A written backslash + `n`, `r` or `t` is written as it is.** Only a real line feed, carriage
+  return or tab is handled, as before.
+- **A logged object or array is written on one line.** Its keys and its string values, nested
+  arrays included, are written with their control characters as visible escapes: `\n`, `\r`,
+  `\t`, and `\uXXXX` for the other control characters and the two Unicode line separators.
+- **The framework's own lines write a request value the same way**: the upload messages, the
+  body-parse warnings, the validator warnings, the route placeholder warning, the template file
+  name lines and the error lines. An error line keeps a real line break only before a stack
+  frame or a `caused by:` line.
+- **On the default engine, a query string with no `=` that is not JSON** (`/page?v2`) is reported
+  by its length and the name of the error, at `warn`. It used to print an error stack that quoted
+  the query string.
+- **The log redaction reads through the visible escapes.** A credential right after an escaped
+  line break is masked as it was before the escapes existed, and a credential that itself holds
+  a written backslash + `n`, `r` or `t` (a password in a connection string, a registered
+  secret), which was printed until now, is masked too.
+
+Affected: every release through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- **A log call that relied on a written `\n` to break the line** now prints the two characters.
+  Pass a real line feed.
+- **A multi-line string held inside a logged object** now prints on one line. Pass the `Error`
+  itself to keep a multi-line stack, or pass the string as its own argument.
+- **A search or an alert that matches the error line's detail.** A line break that no stack
+  frame follows is now written as `\n`, so a 404 logs `Page not found: \n/path` on one
+  line where it used two. The request-body parse warnings print the parser's message, where
+  they printed its stack.
+- **The upload `400` messages** name the field, the group or the extension with its control
+  characters shown.
+- **JSON format** (`GINA_LOG_FORMAT=json`): still one line per message, as before; the `message`
+  value follows the same changes.
+- **A value you log yourself** is covered when you pass it inside an object you build. A real
+  line feed in a string you log still starts a new line, and the message of an `Error` you log
+  is written as it is. See
+  [Logging → Line breaks in a logged value](/guides/logging#line-breaks-in-a-logged-value).
+
+Browser-bundled (the validator and the routing library changed): **restart the bundle and
+re-bake** your bundles (`gina bundle:build`). The framework daemon and a running `gina tail`
+take the logger change at their own restart.
+
 ### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
 
 A route middleware method declared `async`, or returning a promise, that rejected — an error thrown

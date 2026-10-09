@@ -23,6 +23,13 @@ All methods accept any number of arguments. Objects are serialised with a
 custom recursive formatter; functions are stringified; primitives are
 space-separated.
 
+In the text format a string argument is written as it is; the keys and the
+string values of an object or an array are written on one line, with their
+control characters as visible escapes (`\n`, `\r`, `\t`, `\uXXXX`); an
+`Error` keeps its multi-line stack. See
+[Line breaks in a logged value](/guides/logging#line-breaks-in-a-logged-value)
+for what this means for a value that came from a request.
+
 ```js
 console.emerg(msg, ...args)    // code 0 — also exits the process
 console.alert(msg, ...args)    // code 1
