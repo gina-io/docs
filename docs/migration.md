@@ -566,10 +566,9 @@ Rows found by another Collection (`a.update(b.find({ … }), set)`) were not
 written at all. They are now written by their `id`.
 
 **What to check:** data saved from such an `update()` may hold one row twice in
-the place of a lost one. A collection whose rows all carry a unique `id`, or
-their own `_uuid`, was not affected. As with any query result, call `.toRaw()`
-before saving the rows: the ones the call did not update carry an internal
-`_uuid` until then.
+the place of a lost one. A collection whose rows all carry a unique `id` was not
+affected. As with any query result, call `.toRaw()` before saving the rows: the
+ones the call did not update carry an internal `_uuid` until then.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
