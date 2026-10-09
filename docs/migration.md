@@ -36,6 +36,26 @@ nothing. See [Caching](/guides/caching#configuration-reference).
 header for browser caching now serves those routes fresh on every request. Turn
 the cache on (`server.cache.enable`), or set the header in the controller.
 
+### Changed — the SQLite driver is taken under Node.js's current class name (bundle restart; nothing to change)
+
+Node.js 26.11.0 renamed the `node:sqlite` class from `DatabaseSync` to
+`Database`, and kept `DatabaseSync` as a deprecated alias (DEP0210, a
+documentation-only deprecation). Gina reached the class through the old name
+only. It now takes `Database` where the runtime exports it, and `DatabaseSync`
+everywhere else.
+
+Nothing changes on a current runtime: Node.js 26.11 and later export one class
+under both names, and older Node.js and Bun export `DatabaseSync` only. The
+change matters on a later runtime that drops the alias. The
+[SQLite connector](/data/sqlite-orm), the session store, the async-job store,
+the key-value store, the storage metadata store and the framework's own state
+store all resolve their driver through one place, and they would have failed to
+open a database there.
+
+**What to do:** nothing. The change applies at the next bundle restart. Your own
+code that calls `require('node:sqlite').DatabaseSync` keeps working for as long
+as Node.js keeps the alias.
+
 ### Deprecated — `enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries` in `settings.json`'s top-level `cache` block
 
 Those six keys are read from `server.cache` only and have always been ignored
