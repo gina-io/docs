@@ -259,6 +259,53 @@ Browser-bundled (the validator and the routing library changed): **restart the b
 re-bake** your bundles (`gina bundle:build`). The framework daemon and a running `gina tail`
 take the logger change at their own restart.
 
+### Security — a resolved secret holding a quote or a control character could be written to the log in full (bundle restart)
+
+The log redaction masks every value the secrets resolver substituted for a `${secret:KEY}`
+placeholder. Since 0.6.19, when that redaction was introduced, the value was matched as
+configured, while several log paths write a string in an escaped or rewritten form before the
+redaction runs. A secret holding one of the characters below then no longer matched, and it was
+written to the log in full (CWE-532):
+
+- **Through `console.log` with an object or an array, or inside a JSON string built with
+  `JSON.stringify` and logged through `console.log`:** a secret holding a double quote, a
+  backslash, a lone surrogate, or any control character — a line feed, a carriage return and a
+  tab included, so any multi-line key. The same JSON string logged through a level method
+  printed all of them but a line feed and a tab.
+- **Inside an object passed to a level method** (`console.info`, `console.error`, …): a secret
+  holding a double quote or a single quote.
+- **Inside a plain string passed to a level method:** a secret holding a carriage return, or the
+  two written characters backslash + `n`.
+
+A secret holding none of these characters was masked on every path.
+
+What changed: the redaction also reads a logged message with its visible escapes decoded — the
+quote escapes of a string value, and the escapes written for a line feed, a carriage return, a
+tab and the other control characters — and masks whatever either reading finds.
+
+Five shapes are still printed: a secret holding a backslash, a backspace (U+0008), a form feed
+(U+000C) or a lone surrogate, when it reaches the log JSON-escaped (an object or an array
+through `console.log`, or a JSON string built with `JSON.stringify`, at any level); and a secret
+holding a carriage return inside a plain string passed to a level method. Passing the object
+itself to a level method masks all five. See
+[Logging → Redacting credentials from logs](/guides/logging#redacting-credentials-from-logs).
+
+Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- **Whether one of your resolved secrets holds one of these characters** — a quote, a backslash
+  or a line break (a multi-line key) are the likely ones — and whether your code logs a
+  configuration or connection object, or a `JSON.stringify` of one. If both hold, treat that
+  secret as disclosed to anyone with log access: rotate it, and apply your retention process to
+  the logs written since 0.6.19.
+- **A key stored on several lines** is now masked where `console.log` used to print it. One
+  with Windows line endings is still printed inside a plain string passed to a level method:
+  pass the object that holds it, or store the key on one line.
+
+Server-side only: **restart the bundle**. The logger is not in the browser bundle, so no re-bake
+is needed.
+
 ### Fixed — a logged object can no longer make a log call throw (bundle restart)
 
 Up to 0.7.3 a log call could throw in your own code because of the object it logged:
