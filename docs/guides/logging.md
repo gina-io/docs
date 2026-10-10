@@ -581,6 +581,21 @@ the log.
 {"env": "A=1\npassword=[REDACTED]"}
 ```
 
+The same holds for the quotes of a string value. Inside a logged object,
+`console.info` and the other level methods write a double quote as `\"` and a
+single quote as `\'`, and `console.log` renders an object with
+`JSON.stringify`, which writes a double quote as `\"`. Both escapes are read
+back too, so a resolved secret that holds a quote is masked inside a logged
+object, and through `console.log` in an object or an array.
+
+```text
+{"dsn": "[REDACTED]"}
+```
+
+One shape is still printed: a secret that holds a backslash, logged through
+`console.log`, where `JSON.stringify` writes each backslash as two. Log such a
+value through a level method (`console.info`, `console.error`, …) instead.
+
 ### Adding your own patterns
 
 A bare long-hex path segment is **deliberately not** a default: a content-address
