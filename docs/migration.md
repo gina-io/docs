@@ -280,20 +280,25 @@ written to the log in full (CWE-532):
   keeps its connection options), logged at any level or through `console.log`, alone or inside
   an object: a secret holding a backslash, a lone surrogate, or any control character, a line
   break included.
+- **Inside the message of an `Error` that another `Error` holds** (its `cause`, a member of an
+  `AggregateError`): a secret holding a line break.
+- **Inside a JSON string, or a `util.inspect` string, that your code built and that a logged
+  object or an `Error` then holds** (the value is rendered a second time): a secret holding one
+  of the characters above — which ones depends on the two writers involved.
 
 A secret holding none of these characters was masked on every path.
 
-What changed: the redaction also reads a logged message with its visible escapes decoded — the
-quote escapes of a string value, and the escapes written for a line feed, a carriage return, a
-tab and the other control characters — and masks whatever either reading finds.
+What changed: the redaction reads a logged message through the escapes each of these writers
+adds — the logger's own (the quote escapes of a string value, the escapes written for a line
+break and the other control characters) and each layer written by `JSON.stringify` or
+`util.inspect`, up to three layers — and a secret's line breaks match the layout those writers
+give them (a carriage return written as a line feed, a long value split after each line feed, an
+indented message). Whatever any reading finds is masked.
 
-Some secrets are still printed, depending on the renderer that writes the value: a secret
-holding a backslash, a backspace (U+0008), a form feed (U+000C) or a lone surrogate, when
-`JSON.stringify` writes it (an object, an array or an object key through `console.log`, or a JSON
-string you build, at any level); a secret holding a backslash, a lone surrogate or a control
-character, inside an `Error` that carries it in one of its own properties; and a secret holding
-a carriage return, inside a plain string passed to a level method. A secret with no backslash,
-no control character and no lone surrogate is masked on all of them. See
+Not masked: a value that is not written as its own characters (the bytes of a `Buffer`, base64,
+URL-encoding, the escapes of another serialiser); a value under more than three layers of
+escaping; and a secret that sits inside a longer string of more than 10,000 characters held by
+an `Error`, which Node cuts. See
 [Logging → Redacting credentials from logs](/guides/logging#redacting-credentials-from-logs).
 
 Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
@@ -306,9 +311,8 @@ Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
   its connection options. If both hold, treat that
   secret as disclosed to anyone with log access: rotate it, and apply your retention process to
   the logs written since 0.6.19.
-- **A key stored on several lines** is now masked in an object or a JSON string logged through
-  `console.log`. One with Windows line endings is still printed inside a plain string passed to
-  a level method: pass the object that holds it, or store the key on one line.
+- **A key stored on several lines** is now masked wherever it is logged as text: in a plain
+  string, in an object or a JSON string, and inside an `Error`, with Unix or Windows line endings.
 
 Server-side only: **restart the bundle**. The logger is not in the browser bundle, so no re-bake
 is needed.

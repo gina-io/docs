@@ -554,8 +554,8 @@ Two rule sources compose:
   `?code=FR&sort=name` logs unchanged.
 - **`secrets`** — every value the [secrets resolver](/guides/secrets) substituted for a
   `${secret:KEY}` placeholder in this bundle's configs is masked verbatim wherever it
-  appears, so a connection string or a connector error does not print a password —
-  with the exceptions listed at the end of this section.
+  appears, so a connection string or a connector error does not print a password.
+  The end of this section says how far that reaches, and what it does not cover.
   Values shorter than 8 characters are skipped (a boot warning names the config path).
 
 ```text
@@ -593,29 +593,39 @@ object, and through `console.log` in an object or an array.
 {"dsn": "[REDACTED]"}
 ```
 
-Some secrets are still printed, depending on which renderer writes the value.
-The redaction reads the escapes of the logger's own object writer; three other
-renderers write a value differently:
+A resolved secret is followed further than that. Three more writers change a
+value before the redaction reads the message: `JSON.stringify` — an object, an
+array or a key logged through `console.log`, or a JSON string you build and
+then log — and `util.inspect` — an `Error`, at any level or through
+`console.log` — escape the backslash itself and write a control character or a
+lone surrogate in their own way; `util.inspect` also splits a long multi-line
+value after each line feed and indents the message of a nested `Error`; and a
+level method writes a carriage return in a plain string as a line feed. From
+0.7.4 the secret values are read through all of it: each layer of escaping is
+read back, up to three layers, because a value can be rendered more than once
+(an `Error` held by a logged object, a JSON string held by an object or by an
+`Error`), and a secret's line breaks match the layout those writers give them.
+So a multi-line key, or a password holding a backslash, is masked whichever of
+these wrote it:
 
-- **`JSON.stringify`** — an object, an array or an object key logged through
-  `console.log`, or a JSON string you build and then log at any level: a secret
-  that holds a backslash, a backspace (U+0008), a form feed (U+000C) or a lone
-  surrogate is printed.
-- **`util.inspect`** — an `Error` that carries the value in one of its own
-  properties (a driver error that keeps its connection options), logged at any
-  level or through `console.log`, alone or inside an object: a secret that holds
-  a backslash, a lone surrogate or a control character is printed (a tab, a line
-  feed and a carriage return only when the `Error` sits inside an object logged
-  through `console.log`).
-- **A plain string passed to a level method**: a secret that holds a carriage
-  return (alone, or followed by a line feed: a multi-line key with Windows line
-  endings) is printed, because a level method writes a carriage return as a line
-  feed before the redaction runs.
+```text
+{"key": "[REDACTED]"}
+Error: connect failed
+    at connect (/srv/app/models/db.js:12:11) {
+  options: { host: 'db.internal', password: '[REDACTED]' }
+}
+```
 
-A secret that holds no backslash, no control character and no lone surrogate is
-masked on every one of these paths. A plain object or an array passed to a level
-method (`console.info('label', obj)`) masks every character, unless the value
-sits inside an `Error` that it holds.
+What is not masked:
+
+- **A value that is not written as its own characters** — the bytes of a
+  `Buffer`, base64, URL-encoding, the escapes of a serialiser other than
+  `JSON.stringify` and `util.inspect`.
+- **A value under more than three layers of escaping.**
+- **A secret inside a longer string of more than 10,000 characters that an
+  `Error` holds.** Node cuts such a string at 10,000 characters. When the secret
+  is the whole string, the head Node keeps is masked; when it sits further
+  inside, the part before the cut can be printed.
 
 ### Adding your own patterns
 
