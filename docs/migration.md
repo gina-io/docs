@@ -815,6 +815,29 @@ before a `.reBind()` keeps running after it: register it once.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — an exception while the request data is parsed is answered, and the bundle keeps running (bundle restart)
+
+The framework parses the data of a request before it routes it: the query of a
+`GET`, `HEAD` or `DELETE`, the body of a `POST`, `PUT` or `PATCH`. The `POST`,
+`PUT` and `PATCH` body branches answered an exception raised there with a `500`.
+The others ran with no guard, so an exception reached the process as an
+`uncaughtException` and **the bundle exited** (code 143). That is the path the
+request-parsing defects fixed in 0.6.31, in 0.6.33 and in this release each took.
+
+The whole parse is now guarded. An exception raised while the request data is
+parsed is answered with a `500` through the same surface as
+[`self.throwError()`](/guides/controller#incident-ref): JSON carrying a `ref`
+for an XHR or API request, your [custom error page](/guides/error-pages) for an
+HTML one, and one error-level log line that pairs the `ref` with the stack. No
+input is known to raise such an exception today. The guard is a net under the
+parse, and what it catches is logged so that its cause gets fixed. Both engines.
+
+**What to check:** nothing to change. A log line holding `Could not evaluate GET
+request data.` (or another method) under a `[ ref … ]` marks a request the guard
+answered: it names a defect in the parser, worth reporting.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ---
 
 ## 0.7.2 → 0.7.3

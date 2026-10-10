@@ -135,6 +135,9 @@ development.
   extension (`.json`, `.png`, …) gets the built-in fallback page instead.
 - **Errors while rendering the error page fall back to the built-in page** —
   the framework never loops through your template a second time.
+- **An error raised before your action runs is served the same way** — a
+  request whose data the framework fails to parse is answered with your
+  `500.html` (since 0.7.4).
 - The built-in fallback page also shows the status and the incident ref, so
   even an unconfigured error stays relayable.
 

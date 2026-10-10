@@ -606,6 +606,14 @@ field keeps its own types, and an `application/json` body is parsed verbatim.
 The full contract is on the [data helper](/globals/data) page.
 :::
 
+:::note When the parse itself fails
+The request data is parsed before your action runs. If the framework raises an
+exception while it parses it, the request is answered with a `500` through the
+same surface as [`self.throwError()`](#incident-ref): JSON carrying a `ref`, or
+your [custom error page](/guides/error-pages) for an HTML request. The server
+log pairs that `ref` with the stack, and the bundle keeps running (since 0.7.4).
+:::
+
 **`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
 need to distinguish between POST, PUT, and PATCH:
 
