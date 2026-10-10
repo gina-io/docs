@@ -259,6 +259,29 @@ Browser-bundled (the validator and the routing library changed): **restart the b
 re-bake** your bundles (`gina bundle:build`). The framework daemon and a running `gina tail`
 take the logger change at their own restart.
 
+### Fixed — a logged object can no longer make a log call throw (bundle restart)
+
+Up to 0.7.3 a log call could throw in your own code because of the object it logged:
+
+- an object with its own key named `count`, such as a parsed body `{"count": 5}`, made a
+  levelled call such as `console.info()` throw `TypeError: obj.count is not a function`;
+- a null-prototype object, such as the result of `querystring.parse()` or of
+  `Object.create(null)`, made both a levelled call and `console.log()` throw
+  `TypeError: Cannot convert object to primitive value`;
+- an array element `{"toString": "x"}` made a levelled call throw the same way, and a
+  `Symbol`, passed as an argument or held by a logged object, made the call throw as well.
+
+From 0.7.4 each of these is written like any other value: the null-prototype object like a
+plain one, the `Symbol` as `Symbol(description)`. An object inside an array is still written
+`[object Object]`, whatever its prototype. An object with its own `hasOwnProperty` key, which
+used to lose the commas between its keys, is written with them. Every other value is written
+exactly as before.
+
+**What to do:** restart the bundle. The logger is not in the browser bundle, so no re-bake is
+needed. The framework daemon and a running `gina tail` take the change at their own restart.
+Logging an object a client shaped is still best avoided: see
+[Logging a value that came from a request](/guides/logging#logging-a-value-that-came-from-a-request).
+
 ### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
 
 A route middleware method declared `async`, or returning a promise, that rejected — an error thrown

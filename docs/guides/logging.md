@@ -482,6 +482,10 @@ Build the object yourself and log the fields you need, rather than logging an
 object the client shaped (`req.body`, `req.get`): its keys are the client's text
 as well.
 
+Up to 0.7.3 such an object could also make the log call throw: a key named
+`count`, or a null-prototype object such as the result of `querystring.parse()`.
+From 0.7.4 it is written like any other object; the advice above still stands.
+
 ### What the framework's own lines do
 
 The lines Gina writes with a value taken from the request use the same visible
