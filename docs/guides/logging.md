@@ -592,9 +592,14 @@ object, and through `console.log` in an object or an array.
 {"dsn": "[REDACTED]"}
 ```
 
-One shape is still printed: a secret that holds a backslash, logged through
-`console.log`, where `JSON.stringify` writes each backslash as two. Log such a
-value through a level method (`console.info`, `console.error`, …) instead.
+Four shapes are still printed: a secret that holds a backslash, a backspace
+(U+0008), a form feed (U+000C) or a lone surrogate, when it reaches the log
+JSON-escaped — an object logged through `console.log`, or a JSON string built
+with `JSON.stringify` and logged at any level. `JSON.stringify` writes those
+characters as `\\`, `\b`, `\f` and `\uXXXX`, which the decoded reading does not
+read. Pass the object itself to a level method (`console.info`,
+`console.error`, …), or the value inside a plain string, and all four are
+masked.
 
 ### Adding your own patterns
 
