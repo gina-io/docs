@@ -554,7 +554,8 @@ Two rule sources compose:
   `?code=FR&sort=name` logs unchanged.
 - **`secrets`** — every value the [secrets resolver](/guides/secrets) substituted for a
   `${secret:KEY}` placeholder in this bundle's configs is masked verbatim wherever it
-  appears, so a connection string or a connector error can never print a password.
+  appears, so a connection string or a connector error does not print a password —
+  with the exceptions listed at the end of this section.
   Values shorter than 8 characters are skipped (a boot warning names the config path).
 
 ```text
@@ -592,14 +593,18 @@ object, and through `console.log` in an object or an array.
 {"dsn": "[REDACTED]"}
 ```
 
-Four shapes are still printed: a secret that holds a backslash, a backspace
-(U+0008), a form feed (U+000C) or a lone surrogate, when it reaches the log
-JSON-escaped — an object logged through `console.log`, or a JSON string built
-with `JSON.stringify` and logged at any level. `JSON.stringify` writes those
-characters as `\\`, `\b`, `\f` and `\uXXXX`, which the decoded reading does not
-read. Pass the object itself to a level method (`console.info`,
-`console.error`, …), or the value inside a plain string, and all four are
-masked.
+Five shapes are still printed, on three paths. A secret that holds a
+backslash, a backspace (U+0008), a form feed (U+000C) or a lone surrogate is
+printed when it reaches the log JSON-escaped — an object or an array logged
+through `console.log`, or a JSON string built with `JSON.stringify` and logged
+at any level: `JSON.stringify` writes those characters as `\\`, `\b`, `\f` and
+`\uXXXX`, which the decoded reading does not read. A secret that holds a
+carriage return (alone, or followed by a line feed: a multi-line key with
+Windows line endings) is printed when it sits inside a plain string passed to a
+level method, because a level method writes a carriage return as a line feed
+before the redaction runs. Pass the object itself to a level method
+(`console.info('label', obj)`, `console.error`, …) and all five are masked; a
+plain string does not mask the carriage-return shape.
 
 ### Adding your own patterns
 
