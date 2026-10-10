@@ -593,18 +593,29 @@ object, and through `console.log` in an object or an array.
 {"dsn": "[REDACTED]"}
 ```
 
-Five shapes are still printed, on three paths. A secret that holds a
-backslash, a backspace (U+0008), a form feed (U+000C) or a lone surrogate is
-printed when it reaches the log JSON-escaped — an object or an array logged
-through `console.log`, or a JSON string built with `JSON.stringify` and logged
-at any level: `JSON.stringify` writes those characters as `\\`, `\b`, `\f` and
-`\uXXXX`, which the decoded reading does not read. A secret that holds a
-carriage return (alone, or followed by a line feed: a multi-line key with
-Windows line endings) is printed when it sits inside a plain string passed to a
-level method, because a level method writes a carriage return as a line feed
-before the redaction runs. Pass the object itself to a level method
-(`console.info('label', obj)`, `console.error`, …) and all five are masked; a
-plain string does not mask the carriage-return shape.
+Some secrets are still printed, depending on which renderer writes the value.
+The redaction reads the escapes of the logger's own object writer; three other
+renderers write a value differently:
+
+- **`JSON.stringify`** — an object, an array or an object key logged through
+  `console.log`, or a JSON string you build and then log at any level: a secret
+  that holds a backslash, a backspace (U+0008), a form feed (U+000C) or a lone
+  surrogate is printed.
+- **`util.inspect`** — an `Error` that carries the value in one of its own
+  properties (a driver error that keeps its connection options), logged at any
+  level or through `console.log`, alone or inside an object: a secret that holds
+  a backslash, a lone surrogate or a control character is printed (a tab, a line
+  feed and a carriage return only when the `Error` sits inside an object logged
+  through `console.log`).
+- **A plain string passed to a level method**: a secret that holds a carriage
+  return (alone, or followed by a line feed: a multi-line key with Windows line
+  endings) is printed, because a level method writes a carriage return as a line
+  feed before the redaction runs.
+
+A secret that holds no backslash, no control character and no lone surrogate is
+masked on every one of these paths. A plain object or an array passed to a level
+method (`console.info('label', obj)`) masks every character, unless the value
+sits inside an `Error` that it holds.
 
 ### Adding your own patterns
 

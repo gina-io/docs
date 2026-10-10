@@ -276,6 +276,10 @@ written to the log in full (CWE-532):
   holding a double quote or a single quote.
 - **Inside a plain string passed to a level method:** a secret holding a carriage return, or the
   two written characters backslash + `n`.
+- **Inside an `Error` that carries the value in one of its own properties** (a driver error that
+  keeps its connection options), logged at any level or through `console.log`, alone or inside
+  an object: a secret holding a backslash, a lone surrogate, or any control character, a line
+  break included.
 
 A secret holding none of these characters was masked on every path.
 
@@ -283,11 +287,13 @@ What changed: the redaction also reads a logged message with its visible escapes
 quote escapes of a string value, and the escapes written for a line feed, a carriage return, a
 tab and the other control characters — and masks whatever either reading finds.
 
-Five shapes are still printed: a secret holding a backslash, a backspace (U+0008), a form feed
-(U+000C) or a lone surrogate, when it reaches the log JSON-escaped (an object or an array
-through `console.log`, or a JSON string built with `JSON.stringify`, at any level); and a secret
-holding a carriage return inside a plain string passed to a level method. Passing the object
-itself to a level method masks all five. See
+Some secrets are still printed, depending on the renderer that writes the value: a secret
+holding a backslash, a backspace (U+0008), a form feed (U+000C) or a lone surrogate, when
+`JSON.stringify` writes it (an object, an array or an object key through `console.log`, or a JSON
+string you build, at any level); a secret holding a backslash, a lone surrogate or a control
+character, inside an `Error` that carries it in one of its own properties; and a secret holding
+a carriage return, inside a plain string passed to a level method. A secret with no backslash,
+no control character and no lone surrogate is masked on all of them. See
 [Logging → Redacting credentials from logs](/guides/logging#redacting-credentials-from-logs).
 
 Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
@@ -296,12 +302,13 @@ Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
 
 - **Whether one of your resolved secrets holds one of these characters** — a quote, a backslash
   or a line break (a multi-line key) are the likely ones — and whether your code logs a
-  configuration or connection object, or a `JSON.stringify` of one. If both hold, treat that
+  configuration or connection object, a `JSON.stringify` of one, or a driver error that keeps
+  its connection options. If both hold, treat that
   secret as disclosed to anyone with log access: rotate it, and apply your retention process to
   the logs written since 0.6.19.
-- **A key stored on several lines** is now masked where `console.log` used to print it. One
-  with Windows line endings is still printed inside a plain string passed to a level method:
-  pass the object that holds it, or store the key on one line.
+- **A key stored on several lines** is now masked in an object or a JSON string logged through
+  `console.log`. One with Windows line endings is still printed inside a plain string passed to
+  a level method: pass the object that holds it, or store the key on one line.
 
 Server-side only: **restart the bundle**. The logger is not in the browser bundle, so no re-bake
 is needed.
