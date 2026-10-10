@@ -670,6 +670,53 @@ ones the call did not update carry an internal `_uuid` until then.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — Collection `find()` lists a row once when it matches several filters (bundle restart and re-bake)
+
+`find()` on a [Collection](/api/collection) given two or more filter objects
+returns the rows matching at least one of them (an OR clause). A row matching
+two of the filters was listed twice — the same object, twice — and a row
+matching three of them three times. `limit(n)` on such a result dropped a real
+row, and a call chained on it met the row twice. The result now holds each
+matching row once, in collection order.
+
+```js
+var col = new Collection([{ name: 'a', g: 'x' }, { name: 'b', g: 'x' }, { name: 'c', g: 'y' }]);
+col.find({ name: 'a' }, { g: 'x' });   // before: a, a, b — now: a, b
+```
+
+**What to check:** code that counted the rows of such a result, or took its
+first `n` rows, now sees each row once. A call whose filters cannot match the
+same row (two values of one key, `find({ type: 'a' }, { type: 'b' })`) returns
+what it returned before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — Collection `delete()` and `notIn()` remove the rows they found (bundle restart and re-bake)
+
+`delete(filter)` and `notIn(filter)` on a [Collection](/api/collection) return
+the rows the filter does not match. They located each row to remove by a key
+read from the first row found: the internal `_uuid`, else `id`. Once `toRaw()`
+or `update()` had stripped that `_uuid` from the collection's rows:
+
+- rows with no `id` made the call throw `No comparison key defined !`;
+- rows sharing an `id` lost the first row holding that `id` instead of the row
+  found, with no error.
+
+The no-key form, `delete(filter, false)`, threw the same way on rows with no
+`id`, and removed nothing when the filter used a dotted key (`'address.city'`).
+
+Each row found is now removed as itself, whatever keys it carries. A key you
+name (`delete(filter, 'name')`) and rows passed in from elsewhere
+(`notIn(rows, 'id')`) are compared by key as before; rows passed in from
+elsewhere still need the named key, a `_uuid` or an `id`.
+
+**What to check:** data saved from a `delete()` on rows sharing an `id` may have
+lost the wrong row. If you caught `No comparison key defined !` around such a
+call, the call now returns its rows. A collection whose rows all carry a unique
+`id` was not affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a bundle with a custom async swig template loader renders again (bundle restart)
 
 From 0.6.30 to 0.7.3, a bundle that renders its templates through a
