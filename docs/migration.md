@@ -833,11 +833,20 @@ input is known to raise such an exception today. The guard is a net under the
 parse, and what it catches is logged so that its cause gets fixed. Both engines.
 
 A `multipart/form-data` body is parsed by a separate, streaming path with its own
-listeners; those are guarded too. An exception raised while a multipart request is
-parsed is answered with the same `500` on every supported Node version — where before
-it exited the bundle on Node.js 22, and was reported as a `400` "Malformed
-multipart/form-data request" on Node.js 24 and later. A genuinely malformed multipart
-body is still answered `400`.
+listeners — for a text field, for a file part and for the end of the body; those are
+guarded too. An exception raised in one of them is answered with the same `500` on
+every supported Node version. Before, it exited the bundle on Node.js 22. On Node.js 24
+and later the outcome depended on the listener: an exception in the text-field listener
+was reported as a `400` "Malformed multipart/form-data request"; one in the file
+listener was answered that `400` and the bundle then exited; one in the end-of-body
+listener got no answer and the bundle exited. A genuinely malformed multipart body is
+still answered `400`.
+
+Not covered: the handlers nested inside a file part — those of the temporary file's
+write stream and of the file stream — run outside this guard, and an exception raised
+in a handler of the write stream still ends the bundle. A write *error* (a full disk, a
+revoked permission) is another path and is answered `500`: see
+[Probing the write-error crash-guard](/guides/file-uploads#probing-the-write-error-crash-guard).
 
 **What to check:** nothing to change. A log line holding `Could not evaluate GET
 request data.` (or another method) under a `[ ref … ]` marks a request the guard
