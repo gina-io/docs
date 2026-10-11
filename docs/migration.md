@@ -832,6 +832,13 @@ HTML one, and one error-level log line that pairs the `ref` with the stack. No
 input is known to raise such an exception today. The guard is a net under the
 parse, and what it catches is logged so that its cause gets fixed. Both engines.
 
+A `multipart/form-data` body is parsed by a separate, streaming path with its own
+listeners; those are guarded too. An exception raised while a multipart request is
+parsed is answered with the same `500` on every supported Node version — where before
+it exited the bundle on Node.js 22, and was reported as a `400` "Malformed
+multipart/form-data request" on Node.js 24 and later. A genuinely malformed multipart
+body is still answered `400`.
+
 **What to check:** nothing to change. A log line holding `Could not evaluate GET
 request data.` (or another method) under a `[ ref … ]` marks a request the guard
 answered: it names a defect in the parser, worth reporting.
