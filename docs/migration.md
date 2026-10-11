@@ -842,15 +842,24 @@ listener was answered that `400` and the bundle then exited; one in the end-of-b
 listener got no answer and the bundle exited. A genuinely malformed multipart body is
 still answered `400`.
 
-Not covered: the handlers nested inside a file part — those of the temporary file's
-write stream and of the file stream — run outside this guard, and an exception raised
-in a handler of the write stream still ends the bundle. A write *error* (a full disk, a
-revoked permission) is another path and is answered `500`: see
-[Probing the write-error crash-guard](/guides/file-uploads#probing-the-write-error-crash-guard).
+The callbacks nested inside a file part are guarded as well: the `error` and `finish`
+handlers of the temporary file's write stream, its close callback, the `end` handler of
+the file stream, and the callback of the
+[`autoTmpCleanupTimeout`](/guides/file-uploads#configuring-uploads) timer. A request
+that carries a file is handed to your action from the close callback, so before this
+release the same exception was answered `500` for a body without a file and ended the
+bundle for a body with one. An exception raised in one of these callbacks is now
+answered with the same `500`. When the request is already answered, it is logged with
+its stack instead: a write *error* (a full disk, a revoked permission) answers its own
+`500` — see
+[Probing the write-error crash-guard](/guides/file-uploads#probing-the-write-error-crash-guard)
+— and the cleanup timer runs after the answer.
 
 **What to check:** nothing to change. A log line holding `Could not evaluate GET
 request data.` (or another method) under a `[ ref … ]` marks a request the guard
-answered: it names a defect in the parser, worth reporting.
+answered: it names a defect in the parser, worth reporting. So does a line holding
+`[ onListenerThrow ] not answered:`, which the multipart guard writes, with the stack,
+when it catches an exception after the request was answered.
 
 Server-side only: **restart the bundle** — no re-bake.
 
