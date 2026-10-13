@@ -522,6 +522,86 @@ pid file and the record both name, as before. `framework:restart` runs
 several framework versions side by side, stopping one no longer removes the
 others' pid files.
 
+### Fixed — `bundle:start` exits non-zero when the bundle does not start (next `gina framework:restart`)
+
+`gina bundle:start` exited `0` for every outcome: a crash while the bundle booted, a
+port another program held, the startup timeout, a refusal, and a bundle that was
+already running. It now exits `0` when the bundle listens, or when it already runs;
+`1` when another program holds the port, with a line naming the port and, outside
+Windows, a command that finds the holder; the bundle's own exit code when it stops
+before it is ready (`1` when that code is `0`), or `128` plus the signal number; and
+`1` on the timeout and on a refusal. `bundle:start @<project>` exits `1` when any of
+its bundles did not start. See [Exit codes](/cli/cli-bundle#bundle-start-exit-codes).
+
+A start while the bundle already runs starts nothing and prints
+`[ <bundle>@<project> ] is already running with PID [ <pid> ]`. It used to start a
+second process, which wrote its own pid into the bundle's pid file, could not bind the
+port, and removed the file as it exited, so
+[`bundle:status`](/cli/cli-bundle#bundlestatus) then reported the running bundle as
+stopped. A bundle that exits `0` before it is ready is reported at once, where the
+command waited out the timeout. With `--inspect` and the debugger port in use, node
+starts the bundle without the inspector: the command prints its hint and now waits for
+the start, where it ended at once.
+
+`project:start` and `bundle:restart` run `bundle:start`, so they see the same codes.
+
+**What to check:** a script or a container that runs `gina bundle:start` and stops on
+a non-zero exit (`set -e`, `&&`) now stops when the bundle did not start, where it
+carried on. A second `bundle:start` while the bundle runs still exits `0`. The codes
+come from the framework: until you run `gina framework:restart` (or `gina stop` and
+`gina start`), a framework started before the update keeps the old behaviour.
+
+### Fixed — a bundle that cannot bind its port exits `1` (bundle restart)
+
+When another program held a bundle's port, or the bind was refused (`EACCES`), the
+default engine logged the error and the boot went on: the bundle printed its
+readiness line and, with nothing listening, exited `0`. Under
+[`gina-container`](/guides/k8s-docker), which exits with the bundle's code, the
+container exited `0`. Until the server listens, a bind error now prints
+`[ FRAMEWORK ] abort: could not listen on port <port>: <code> (…)` on stderr and the
+bundle exits `1`; the readiness line is printed only once the server listens.
+
+**What to check:** a container whose bundle cannot bind its port now exits `1`, so a
+restart policy such as `on-failure` restarts it. Nothing changes for a bundle that
+listens. Server-side only: **restart the bundle**, no re-bake.
+
+### Fixed — a refused `bundle:start` no longer stops the framework (next `gina framework:restart`)
+
+`bundle:start` runs inside the framework's own process. A start refused before
+anything ran (an unregistered `@<project>`, an invalid bundle name) ended that
+process with exit code `1` while the command exited `0`, so every later command found
+no framework running. The refusal now ends only that command, with exit code `1`, and
+the framework keeps running. An error thrown while the framework prepares the command
+is handled the same way.
+
+**What to check:** nothing. Run `gina framework:restart` once to pick it up.
+
+### Fixed — `bundle:restart` exits non-zero when the bundle did not restart (next `gina bundle:restart`)
+
+`bundle:restart` stops the bundle, then starts it. It now exits `1` when the start
+fails (with the start's own codes) and when the start exits `0` without a new bundle
+process running: a stop that missed the bundle (a pid file naming another process)
+left the old bundle serving, and the restart exited `0`. On a failure it prints what
+its stop and start steps said. `bundle:restart @<project>` exits `1` when any bundle
+did not restart, where only the last bundle decided it. `project:restart` runs it, so
+it changes the same way. See [`bundle:restart`](/cli/cli-bundle#bundlerestart).
+
+**What to check:** a script that runs `gina bundle:restart` and tests its exit code now
+sees a restart that did not happen, where it read success.
+
+### Fixed — `project:start` leaves the framework's pid file and record alone (next `gina project:start`)
+
+`gina project:start` registered itself as the running framework: it wrote its own pid
+into `~/.gina/run/gina-v<version>.pid`, which was then removed, and its exit removed the
+framework's entry from `~/.gina/procs.json`, while the framework kept running. `gina
+start` reads that entry to recognise a framework that is already running. Only the
+framework's own start registers the framework now; `service:start` took the same path
+and changes the same way.
+
+**What to check:** nothing. If a `project:start` already removed them, `gina
+framework:restart` on Node finds the framework by its process title and writes both
+again.
+
 ### Fixed — a `<select>`'s live check shows its error from the whole-form pass (bundle restart and re-bake)
 
 After a `<select>` changes, the validator checks the select alone, then the whole
@@ -949,7 +1029,9 @@ file when it exited. While a worker was running:
 
 - `bundle:stop` signalled the worker instead of the bundle;
 - `bundle:restart` exited `0` while the old bundle kept serving: the new start failed on
-  the port the old process still held, and `bundle:start` reports that as a success.
+  the port the old process still held, and `bundle:start` reported that as a success
+  (fixed in this release: see
+  [`bundle:start` exits non-zero](#fixed--bundlestart-exits-non-zero-when-the-bundle-does-not-start-next-gina-frameworkrestart)).
 
 Once the worker had exited, the bundle had no pid file, so
 [`bundle:status`](/cli/cli-bundle#bundlestatus) reported it as stopped.
@@ -962,7 +1044,7 @@ exit never removes the bundle's mount link.
 
 - A worker that sets `process.isMinion = true` itself keeps working: the value is the same.
 - A worker started before the update keeps the old registration until it exits. While it
-  runs, the first `bundle:restart` of its bundle ends only that worker and exits `0`, with
+  runs, the first `bundle:restart` of its bundle ends only that worker and exits `1`, with
   the old bundle still serving: run `bundle:restart` a second time to restart the bundle.
 
 No bundle restart is needed: a worker spawned after the update registers the new way. A

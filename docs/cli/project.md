@@ -169,6 +169,9 @@ Start all bundles defined in a project's `manifest.json`.
 gina project:start @<project>
 ```
 
+It runs [`bundle:start @<project>`](/cli/cli-bundle#bundle-start-exit-codes) and exits
+`1` when any bundle did not start.
+
 ---
 
 ## `project:restart`
@@ -181,6 +184,9 @@ stopped, then started again, one after another. The `--` flags you pass, such as
 ```bash
 gina project:restart @<project>
 ```
+
+It exits `1` when any bundle did not restart (see
+[`bundle:restart`](/cli/cli-bundle#bundlerestart)).
 
 ---
 
