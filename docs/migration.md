@@ -543,7 +543,8 @@ command waited out the timeout. With `--inspect` and the debugger port in use, n
 starts the bundle without the inspector: the command prints its hint and now waits for
 the start, where it ended at once.
 
-`project:start` and `bundle:restart` run `bundle:start`, so they see the same codes.
+`project:start` and `bundle:restart` run `bundle:start`, and exit `1` when it exits non-zero,
+whatever its code.
 
 **What to check:** a script or a container that runs `gina bundle:start` and stops on
 a non-zero exit (`set -e`, `&&`) now stops when the bundle did not start, where it
