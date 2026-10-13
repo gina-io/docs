@@ -56,10 +56,21 @@ Joins the array elements with the default separator.
 
 ### `.count()`
 
-Returns the number of own enumerable properties.
+Returns the number of own enumerable properties. Every own key counts, one named
+`hasOwnProperty` included: each key is tested with the built-in
+`Object.prototype.hasOwnProperty`, so no key of the object changes the result.
 
 ```js
-{ a: 1, b: 2 }.count();   // → 2
+({ a: 1, b: 2 }).count();                  // → 2
+({ hasOwnProperty: 'x', a: 1 }).count();   // → 2
+```
+
+An object with no prototype, such as the result of `querystring.parse()` or of
+`Object.create(null)`, inherits no `count()` to call. Reach the helper directly to
+count it:
+
+```js
+Object.prototype.count.call(require('querystring').parse('a=1&b=2'));   // → 2
 ```
 
 ---

@@ -886,6 +886,38 @@ paired with its ref names the cause.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — a request field named `hasOwnProperty` reaches your action (bundle restart and re-bake)
+
+Up to 0.7.3, a field named `hasOwnProperty` in a request's query or body emptied what
+your action received, with no error:
+
+- on a `GET` or `HEAD`, `req.get` was empty, and on a `DELETE`, `req.delete` was empty:
+  every field of the query was dropped, not only that one;
+- on a `POST` or `PATCH`, `req.body` stayed the raw body string (the form text, or the
+  JSON text), while `req.post` and `req.patch` were complete.
+
+The cause was the [`count()`](/globals/prototypes#count) helper Gina installs on
+`Object.prototype`. It tested each key with `this.hasOwnProperty(key)`, an ordinary
+property lookup, so on an object holding its own `hasOwnProperty` field the call failed
+and the helper returned 0; the framework decides from that count whether to hand the
+parsed data over. The helper now tests each key with the built-in
+`Object.prototype.hasOwnProperty`. Every other count is unchanged.
+
+Two places that made the same lookup are fixed too: `functionCount()`, which threw on
+such an object, and the `is` rule of the [validator](/guides/forms-and-validation),
+which answered « could not evaluate » when the data it validated held a field named
+`hasOwnProperty`.
+
+**What to check:**
+
+- A `req.post.count()` or `req.get.count()` in your own code now counts that field. If
+  you relied on a count of 0 to skip such a request, that request is handled now.
+- `Object.prototype.count.call(obj)` now counts an object with no prototype, such as the
+  result of `querystring.parse()`, which it read as 0 before.
+
+**Restart the bundle and re-bake each bundle:** the browser bundle carries its own copy
+of the helper and of the validator.
+
 ---
 
 ## 0.7.2 → 0.7.3
