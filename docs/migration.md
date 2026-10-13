@@ -863,6 +863,29 @@ when it catches an exception after the request was answered.
 
 Server-side only: **restart the bundle** — no re-bake.
 
+### Fixed — an error page whose dispatch fails is answered with the built-in page (bundle restart)
+
+On an HTML request, an error that reaches
+[`self.throwError()`](/guides/controller#selfthrowerrorres-code-err) is answered with
+your [custom error page](/guides/error-pages) when the bundle has one for its status:
+the framework dispatches that page through the router. When building the error page's
+controller raised, the router called `throwError()` again for the same request, and that
+call dispatched the page again. The cycle ran until the call stack overflowed: the
+request got no answer and **the bundle exited** (code 143), on Node.js 22, 24, 25 and 26.
+
+The error page is now dispatched at most once per request. An error raised during that
+dispatch is answered with the built-in error page, which shows the status and the
+[incident ref](/guides/controller#incident-ref) of that second error; its error-level
+log line pairs the ref with the cause, and the line of the first error carries the same
+request id. A request whose error page dispatches normally gets your page as before. No
+input is known to make the dispatch raise today. Both engines.
+
+**What to check:** nothing to change. A built-in error page served by a bundle that has
+a custom page for that status means the dispatch of your page failed: the log line
+paired with its ref names the cause.
+
+Server-side only: **restart the bundle** — no re-bake.
+
 ---
 
 ## 0.7.2 → 0.7.3
