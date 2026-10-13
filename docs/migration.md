@@ -317,6 +317,27 @@ Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
 Server-side only: **restart the bundle**. The logger is not in the browser bundle, so no re-bake
 is needed.
 
+### Security — a query field named `__proto__` could change the prototype of `req.delete` (bundle restart)
+
+On the default engine, a `DELETE` request whose query string carried a field named
+`__proto__` holding a JSON value (`?__proto__=%7B%22polluted%22%3A1%7D&a=1`) changed the
+**prototype** of `req.delete` on every request to that path after the first:
+`req.delete.polluted` read `1` while `Object.keys(req.delete)` and `hasOwnProperty` saw
+nothing, and an injected `count`, `hasOwnProperty` or `toString` made
+`req.delete.count()`, `req.delete.hasOwnProperty()` or a string conversion throw, which
+answered that request with a `500`. It stayed within that one request object. `GET`
+requests and request bodies were not affected: their top-level `__proto__`,
+`constructor` and `prototype` fields have been dropped since 0.6.33.
+
+A query field named `__proto__`, `constructor` or `prototype` is now dropped from
+`req.delete` too, on every engine, and `req.delete` is a plain object holding the
+query's own fields.
+
+**What to check:** a query parameter literally named `constructor` or `prototype` no
+longer reaches `req.delete`: rename it, as for `req.get` since 0.6.33.
+
+Server-side only: **restart the bundle**, no re-bake.
+
 ### Fixed — a logged object can no longer make a log call throw (bundle restart)
 
 Up to 0.7.3 a log call could throw in your own code because of the object it logged:
@@ -947,6 +968,20 @@ exit never removes the bundle's mount link.
 No bundle restart is needed: a worker spawned after the update registers the new way. A
 bundle whose pid file an older worker already removed gets it back the next time the
 bundle starts.
+
+### Fixed — `req.delete` keeps its methods with Express 4 and the `simple` query parser (bundle restart)
+
+A bundle running `engine: "express"` on Express 4 with `app.set('query parser',
+'simple')`, or with any query parser that returns an object without a prototype,
+received `req.delete` with no prototype on every `DELETE` to a path after the first:
+the documented `req.delete.count()` and `req.delete.hasOwnProperty()` were not
+functions. `req.delete` is now a plain object holding the query's own fields. Express
+4's default parser and Express 5 were not affected.
+
+**What to check:** nothing to change. Code that reached the helper through
+`Object.prototype.count.call(req.delete)` keeps working.
+
+Server-side only: **restart the bundle**, no re-bake.
 
 ---
 
