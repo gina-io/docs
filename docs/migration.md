@@ -918,6 +918,36 @@ which answered « could not evaluate » when the data it validated held a field 
 **Restart the bundle and re-bake each bundle:** the browser bundle carries its own copy
 of the helper and of the validator.
 
+### Fixed — a worker child no longer takes over its bundle's pid file (no bundle restart)
+
+A *worker* is a child process your bundle spawns from an entry named `child.js` or
+`child-*.js`, passing `--argv-filename=<context file>`: Gina loads it with the bundle's
+context and registers it under the bundle's name. Up to 0.7.3 it registered with a pid
+file, so it wrote its own pid into `~/.gina/run/<bundle>@<project>.pid` and removed that
+file when it exited. While a worker was running:
+
+- `bundle:stop` signalled the worker instead of the bundle;
+- `bundle:restart` exited `0` while the old bundle kept serving: the new start failed on
+  the port the old process still held, and `bundle:start` reports that as a success.
+
+Once the worker had exited, the bundle had no pid file, so
+[`bundle:status`](/cli/cli-bundle#bundlestatus) reported it as stopped.
+
+A worker now registers without a pid file. Its `gina: <bundle>@<project>` title and its
+signal handlers are unchanged, and Gina sets `process.isMinion` to `true` in it, so its
+exit never removes the bundle's mount link.
+
+**What to check:**
+
+- A worker that sets `process.isMinion = true` itself keeps working: the value is the same.
+- A worker started before the update keeps the old registration until it exits. While it
+  runs, the first `bundle:restart` of its bundle ends only that worker and exits `0`, with
+  the old bundle still serving: run `bundle:restart` a second time to restart the bundle.
+
+No bundle restart is needed: a worker spawned after the update registers the new way. A
+bundle whose pid file an older worker already removed gets it back the next time the
+bundle starts.
+
 ---
 
 ## 0.7.2 → 0.7.3
