@@ -691,6 +691,22 @@ See [Previews and removal](/guides/file-uploads#previews-and-removal) and
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a popin trigger loads its popin once on a page with several popin instances (bundle restart and re-bake)
+
+Each `new Popin()` registers a document click proxy that claims the triggers of its
+own instance by matching their id against the instance id, and the match had no
+delimiter after that id. Instance ids are `gina-popins-` followed by a shared
+counter (`gina-popins-gp-1`, `gina-popins-gp-14`), so the proxy of
+`gina-popins-gp-1` also claimed the triggers of `gina-popins-gp-14`, and one click
+fired both proxies: the popin loaded twice, and the second load replaced the form
+the first had bound, which then submitted natively. The match now requires the `-`
+that follows the instance id in every trigger id.
+
+**What to check:** nothing to change. A page that worked around the double load —
+one popin instance per page, or a form re-bound after the load — can drop that.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — `image:run` without `--name` leaves the container name to podman (next `gina image:run`)
 
 `gina image:run <image>` took the image reference as the container name when
