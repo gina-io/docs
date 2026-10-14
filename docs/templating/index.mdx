@@ -51,6 +51,8 @@ self.setTemplate('reports/summary', '.njk');
 self.render(data);
 ```
 
+The path is relative to the section's template root (the `html` directory of templates.json) and must stay inside it. Since 0.7.4, a value that resolves outside, through a `..` segment or an absolute path, makes the render answer 500 instead of reading the file: a request value passed to `setTemplate()` cannot reach files outside the root, though it can still select any template inside it, so keep validating which templates a request may choose.
+
 The dispatch precedence mirrors the template-file resolution itself — the `setTemplate` override extension first, then the section's `ext`, then the `.html` default — so the engine choice always matches the file that gets rendered. Bundles whose templates.json declares a `.njk` section get the same fail-fast `NUNJUCKS_NOT_INSTALLED` startup check as `render.engine: "nunjucks"` bundles: `npm install nunjucks` in the project root before declaring `.njk` sections.
 
 ## Same template, five engines

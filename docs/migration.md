@@ -338,6 +338,40 @@ longer reaches `req.delete`: rename it, as for `req.get` since 0.6.33.
 
 Server-side only: **restart the bundle**, no re-bake.
 
+### Security — a template path taken from the request could leave the template root (bundle restart)
+
+A page template path that a controller builds from request data, through `self.setTemplate(value)`
+or `req.routing.param.file = value` in an action, could resolve outside the bundle's template root.
+The swig renderer joined the value under the root without checking where it landed: a `..` segment,
+a `..` separated by backslashes (a `%5C` in a URL segment survived path normalisation), or, for a
+value starting with `.`, a path read relative to the working directory. The nunjucks renderer relied
+on its loader, which accepted a sibling directory whose name starts with the root's (`html2/` next
+to `html/`). A request could then read any `.html` file the process can read, rendered through the
+template engine. The handler shown in the [0.4.1 notes](#040--041),
+`self.setTemplate('errors/' + req.params.code)`, was affected.
+
+The router's own placeholder fill had the same flaw for a `:placeholder` inside `param.file`: a
+query or body value named like the placeholder replaced the URL segment that had passed the route's
+requirement. The router now rejects a request value that would escape as a path component.
+
+Both renderers now resolve the path they are about to read and answer **500** when it lies outside
+the section's template root, the `html` directory of templates.json (`templates/html` by default).
+Affected: every release through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- Nothing to change for templates under `html`, including a static `../` prefix in `param.file` that
+  resolves back inside it.
+- A bundle that renders templates kept outside `html` (in `templates/emailing/`, say) widens its
+  root: set `"html": "${templatesPath}"`, or another directory that contains them, in
+  [templates.json](/reference/templates).
+- Custom error pages are not affected, including the shared ones in `<sharedPath>/errors`.
+- A `param.path` used as a template path is confined the same way.
+- The confinement does not choose templates for you: keep validating which templates a request may
+  select.
+
+Server-side: **restart the bundle**.
+
 ### Fixed — a logged object can no longer make a log call throw (bundle restart)
 
 Up to 0.7.3 a log call could throw in your own code because of the object it logged:
@@ -13410,7 +13444,7 @@ A controller action can now choose its template at request time — useful for a
 
 ```js
 this.dispatch = function(req, res, next) {
-    self.setTemplate('errors/' + req.params.code);   // resolved verbatim under the templates root
+    self.setTemplate('errors/' + req.params.code);   // resolved under the templates root (confined to it since 0.7.4)
     self.render({ title: 'Error' });
 };
 ```

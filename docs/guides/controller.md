@@ -1626,7 +1626,7 @@ documented. Methods without a link are described here in one line.
 - [`redirect`](#selfredirecturl-ignorewebroot) · [`throwError`](#selfthrowerrorres-code-err) · [`forward404Unless`](#selfforward404unlesscondition-req-res-next) — above.
 - [`downloadFromLocal`](#selfdownloadfromlocalfilename) · [`downloadFromURL`](#selfdownloadfromurlurl-options-cb) — above.
 - [`setEarlyHints`](#103-early-hints) · [`setPriority`](#response-priority) — above. `sendTrailers(fields)` — records opt-in HTTP/2 response trailers, best-effort, sent after the body by every response method.
-- `setTemplate(file, ext)` — override the route's template path or extension at action time — [Templating](/templating).
+- `setTemplate(file, ext)` — override the route's template path or extension at action time; the path must resolve inside the section's template root — [Templating](/templating).
 
 **Request state**
 
