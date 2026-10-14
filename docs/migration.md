@@ -929,9 +929,25 @@ again, and the pages render from the same loader configuration. A bundle with no
 block was not affected, nor was the nunjucks loader (`settings.template.nunjucks.loader`).
 
 **What to check:** nothing has to change. If you moved your templates back to disk, or
-stayed on 0.6.29, to get around it, the loader works again. One limit remains: a filter a
-bundle registers in `controllers/setup.js` is not available to templates served by the
-async loader; it is tracked as a separate fix.
+stayed on 0.6.29, to get around it, the loader works again. The filters, tags and
+extensions a bundle registers in `controllers/setup.js` reach those templates too, from this
+release: see the next entry.
+
+Server-side: **restart the bundle**.
+
+### Fixed — `setup.js` filters, tags and extensions reach templates served by an async swig loader (bundle restart)
+
+A filter, tag or extension a bundle registers through `this.engine` in
+`controllers/setup.js` (or through `self.engine` in an action) did not reach the templates a
+[custom async template loader](/templating/async-loaders) serves: such a template answered a
+500, with `Invalid filter "<name>"` (for a tag, `Unexpected tag "<name>"`) in the server log.
+The async render path renders through an engine of its own, which never received the
+bundle's registrations. It now receives them, including those a later request's `setup.js`
+makes. A bundle with no `loader` block was not affected.
+
+**What to check:** nothing has to change. A bundle filter that has the name of one of gina's
+own filters (`nl2br`, `getUrl`, …) keeps rendering gina's filter there, as it already did for
+templates on disk, where gina registers its filters again at each render.
 
 Server-side: **restart the bundle**.
 
@@ -4956,7 +4972,9 @@ engine handed to `setup.js` is the same instance that renders that bundle, and a
 registration made through it also reaches the swig module. So an application that
 compiles a template through the module it imported itself — an entity rendering a
 message outside any request, say — keeps seeing that bundle's filters, as it did
-before.
+before. A bundle whose templates come from a custom async loader is the exception: it
+renders on an engine of its own, which receives the bundle's `setup.js` registrations
+from [0.7.4](#073--074).
 
 The reverse is not true, and that is the part to check. Registrations made
 directly on the swig module never reach bundle template rendering: each bundle's
