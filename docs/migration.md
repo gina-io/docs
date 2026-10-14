@@ -617,6 +617,46 @@ error behaves as before.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a staged upload's reset and a saved file's delete reach every file, and the next file is submitted (bundle restart and re-bake)
+
+The upload client layer kept a file's hidden `<name>[i][…]` fields in step with its
+selection only in part:
+
+- After a reset, the next file chosen in the same input was staged and previewed,
+  but the form submitted no file: its hidden fields were built for the input's
+  first selection only. A later selection with more files than the first got no
+  fields for the new ones either. The fields are now built on every selection.
+- The declared `[preview][*]` fields a reset or a delete removed never came back,
+  so the next file's preview was not submitted. They now come back, empty, with
+  the next selection.
+- A reset or a delete acted only on the `<img>` elements of the preview container.
+  A staged file shown without an image kept its fields, the server was not asked to
+  remove it, and the form submitted it; an image inside the `<li>` of a `<ul>`
+  container was not reached; on a multi-file input the reset threw, and a delete
+  left the other files' fields behind. They now act on the input's files, in one
+  removal request.
+- With a preview container whose id is not `<input id>-preview`, the container
+  itself was taken for the reset link and no reset was bound; with no preview
+  container at all, the staged file's fields stayed empty. Both work now.
+- With `data-gina-form-upload-prefix`, a reset left the file's fields in the form
+  after the server had been told to remove it.
+
+See [Previews and removal](/guides/file-uploads#previews-and-removal) and
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:**
+
+- An edit form that shows a saved file without an image: mark that file's node with
+  `data-upload-original-filename="<file name>"`, or its delete link stays inert.
+- A page that removed the virtual upload form after a reset, to work around the
+  first point, can drop that code; it keeps working if it stays.
+- A replacement without a preview submits the declared preview fields empty, as
+  [Persisting the preview](/guides/file-uploads#persisting-the-preview) says.
+- A reset or a delete still removes every file of its input, whichever of the
+  input's controls is activated.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — `image:run` without `--name` leaves the container name to podman (next `gina image:run`)
 
 `gina image:run <image>` took the image reference as the container name when
