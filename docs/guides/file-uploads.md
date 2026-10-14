@@ -546,6 +546,14 @@ A reset or a delete removes **every** file of its input, whichever of the
 input's controls is activated, in one request naming them all. A file input that
 holds several files cannot drop just one of them.
 
+By default the reset request is a `POST` of `{ "files": [ … ] }` to the reset
+action. It names each staged file by the `originalFilename` your staging answer
+returned, followed by its preview's `originalFilename` when the answer described
+a preview. A staging action that stores files with `self.store()` finds them
+under those names, since `store()` publishes each file under its original name.
+One that stores them under other names, a generated one for instance, has to map
+each `originalFilename` back to the file it stored.
+
 *Changed in 0.7.4.* The reset and the delete act on the input's files. They used
 to act only on the `<img>` elements of the preview container, so a file shown
 without an image kept its hidden fields and was submitted after its reset, an
