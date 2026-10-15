@@ -19,6 +19,30 @@ upward to the target version.
 
 ---
 
+## 0.7.4 → 0.7.5
+
+### Fixed — `reBind()` keeps the rule set a form names with `data-gina-form-rule` (bundle restart and re-bake)
+
+`gina.validator.$forms[id].reBind()` re-bound a form with an empty rule set when
+the form's `id` names no rule set and its rules come from `data-gina-form-rule`
+(`<form id="order-2" data-gina-form-rule="order">`). A bind given no rule —
+`.reBind()`, `.bind()`, or `getFormById()` on an unbound form — looked the rule
+set up by the form's id alone, while the first bind takes it from the attribute.
+After the re-bind no field was live-checked and the submit control kept its
+gated mark: typing no longer re-evaluated it, and the first click on a valid
+form was refused. Before 0.7.4 the listeners of the previous bind stayed
+attached across a `.reBind()` and could hide this; since 0.7.4 detaches them,
+the gate stayed shut. A bind given no rule now reads `data-gina-form-rule`
+first, when it names a known rule set, then the id. See
+[Forms and validation](/guides/forms-and-validation#programmatic-api-and-events).
+
+**What to check:** nothing has to change. A form whose `id` names its rule set
+(`<form id="order" data-gina-form-rule="order">`) was not affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+---
+
 ## 0.7.3 → 0.7.4
 
 ### Changed — a route's `Cache-Control` follows the server cache switch (routes with a `cache` field)

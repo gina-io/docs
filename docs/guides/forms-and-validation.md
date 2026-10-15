@@ -1319,6 +1319,11 @@ content — keeps them until the element is gone, so an answer still on its way
 reaches your callback. Code that restored the form's `gina.events` keys around
 `.reBind()` to work around the stacking is no longer needed.
 
+*Fixed in 0.7.5:* a form whose `id` names no rule set keeps the rule set it
+names with `data-gina-form-rule` across `.reBind()` (and `.bind()`). In 0.7.4
+such a form was re-bound with no rules, so its submit control stayed gated while
+the user typed and the first click on a valid form was refused.
+
 :::note You don't construct the validator to make it run
 The validator **boots itself at page load**, so a rule-bound form
 (`data-gina-form-rule` + a rule set) validates with no bundle code at all — the
