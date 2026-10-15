@@ -50,6 +50,27 @@ URL's template renders instead of a `500`.
 Server-side only: **restart the bundle**. The browser bundle's copy of the router changes too,
 but nothing it does in the browser changes.
 
+### Security — the router refuses an escaping value in `param.path` and `param.namespace` (bundle restart)
+
+A route can put a `:placeholder` of its URL in `param.path` or `param.namespace`. The router
+wrote the URL value into those two fields before its path-traversal check ran, so a value
+holding a `..` segment or starting with a separator was not refused there: a URL segment such
+as `..%5C..%5Cx`, or a query key the route folds in through its `requirements`. The template
+renderers' own check refused the resulting template path (500). The router now refuses such a
+value itself, with a 500, as the 0.7.3 → 0.7.4 entry on template paths below says it does.
+
+**What to check:**
+
+- A redirect route that takes `param.path` from a request value starting with `/` answers 500:
+  `"url": "/go"`, `"param": { "control": "redirect", "next": ":next", "path": ":next" }`, requested
+  as `/go?next=/dashboard`. That has been the case since 0.7.4 when `next` has no requirement, and
+  is now the case when it has one too. `param.path` is meant as a fixed target: write the target
+  there, or redirect from an action with [`self.redirect()`](/guides/controller).
+- Values that stay inside the root (`/page/home`, `?ns=docs`) behave as before.
+
+Server-side only: **restart the bundle**. The browser bundle's copy of the router changes too,
+but nothing it does in the browser changes.
+
 ### Fixed — `reBind()` keeps the rule set a form names with `data-gina-form-rule` (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` re-bound a form with an empty rule set when
