@@ -195,6 +195,48 @@ only while the pid is written.
 Server-side only: **restart the bundle**, and the framework (`gina framework:restart`) for its
 own pid file.
 
+### Fixed — a Collection filter on one field of an array of objects finds its rows (bundle restart and re-bake)
+
+A [Collection](/api/collection) filter key `'<array>[*].<field>'` reads `<field>` from each
+element of the row's array, and the row matches when one element matches:
+`find({ 'tags[*].label': 'news' })`, the form the API reference shows. On an array of objects
+it found no row: each element was compared as a whole, and an object never matched. A dotted
+rest (`'reviews[*].ratings.score'`) takes another path and was not affected. The field of each
+element is now read, and compared like a plain key.
+
+```js
+var col = new Collection([{ id: 1, tags: [{ label: 'news' }, { label: 'sport' }] }, { id: 2, tags: [{ label: 'tech' }] }]);
+col.find({ 'tags[*].label': 'sport' });   // before: [] — now: the row with id 1
+```
+
+**What to check:**
+
+- A filter of this form now returns the rows it missed, so `update()` and `delete()` given it
+  now act on them.
+- The field is compared like a plain key: a value holding `<`, `>` or `=` is a comparison
+  (`'>= 4'`), and `not null` matches every defined, non-null value. Passing
+  `{ searchOptionRules: { skipEval: true } }` to the constructor turns the comparison off for
+  it, as for a plain key (see the 0.7.3 → 0.7.4 entry on search options below).
+- A search option set on such a key, `setSearchOption('tags[*].label', 'isCaseSensitive', false)`,
+  does not apply to it.
+- An element that is not an object (a string, a number, `null`) is compared as itself, as
+  before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `setSearchOption()` refuses `skipEval` given to a field (bundle restart and re-bake)
+
+`setSearchOption()` on a [Collection](/api/collection) accepted `skipEval` as the rule of a
+field, in both forms: `setSearchOption('name', 'skipEval', true)` and
+`setSearchOption({ name: { skipEval: true } })`. The next search then matched no row on that
+field, with no error. Both forms now throw an `Error` naming the constructor option.
+
+**What to check:** a call of either form now throws. `skipEval` is a constructor option:
+`new Collection(rows, { searchOptionRules: { skipEval: true } })`. A top-level `skipEval` in
+the object form (`setSearchOption({ skipEval: true })`) is still accepted and has no effect.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.3 → 0.7.4
