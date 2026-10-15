@@ -237,6 +237,20 @@ the object form (`setSearchOption({ skipEval: true })`) is still accepted and ha
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — gina stops with one clear message on native Windows (no restart)
+
+Gina does not run natively on Windows. There, the npm install stopped with a stack trace
+(`Windows in not yet fully supported`), and an install that skipped the install scripts, a Bun
+install or `npm install --ignore-scripts`, let the first `gina`, `gina-init` or
+`gina-container` command crash with an unrelated error such as
+`TypeError: Cannot read properties of undefined`. Each of these now stops at its first step
+with exit code 1 and one message pointing to
+[Installation › Windows](/getting-started/installation#windows): run gina inside WSL2 or a
+Docker container.
+
+Nothing changes on macOS or Linux, inside WSL2 or in a container, so there is nothing to
+restart.
+
 ---
 
 ## 0.7.3 → 0.7.4
