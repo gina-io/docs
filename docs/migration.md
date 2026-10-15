@@ -91,6 +91,36 @@ first, when it names a known rule set, then the id. See
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a process that creates the run directory is registered like any other (bundle restart)
+
+A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
+the `rundir` your settings name) — a container boot whose run directory was not created
+beforehand, or a bundle started after the directory was removed — ran without its process
+title (`gina: <bundle>@<project>`), without its `SIGTERM`, `uncaughtException` and exit
+handlers, and without a pid file. `bundle:stop` and `bundle:status` could not find it, and a
+`SIGTERM` ended it without draining its requests. It is now registered like any other
+process. When the directory cannot be created, the log says so and reports the pid file that
+could not be written.
+
+**What to check:** nothing has to change.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — pid files are written whole (bundle restart)
+
+A pid file was created empty, and its pid was written a moment later. A `gina` command
+running at that moment — its start-up check removes the run-directory files that hold no
+pid — could delete it, and `bundle:status`, the « already running » check of `bundle:start`
+and the other readers took the process for not running. A pid file is now written to a
+temporary file in the run directory and renamed into place, so it appears whole or not at
+all, and a pid file that cannot be written is reported in the log instead of being ignored.
+
+**What to check:** nothing has to change. The temporary file, `.<name>.pid.<pid>.tmp`, exists
+only while the pid is written.
+
+Server-side only: **restart the bundle**, and the framework (`gina framework:restart`) for its
+own pid file.
+
 ---
 
 ## 0.7.3 → 0.7.4
