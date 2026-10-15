@@ -152,6 +152,12 @@ process** and owns the full shutdown lifecycle:
 gina-container <bundle> @<project>
 ```
 
+Since 0.7.4 a bundle that cannot bind its port (another program holds it, or `EACCES`)
+ends its boot with exit code `1` and the line
+`[ FRAMEWORK ] abort: could not listen on port <port>: <code> (…)` on stderr, so the
+launcher exits `1`: a restart policy that acts on failures (`on-failure`) sees it. It
+used to exit `0`.
+
 Since 0.6.30 the launcher also applies the [container logging preset](#stdout-logging)
 itself: unless `GINA_LOG_STDOUT` is already set in the container's environment, it sets
 it to `true` before its own logger and the bundle's initialise — JSON lines on stdout, no

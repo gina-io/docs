@@ -247,6 +247,18 @@ the nested templates in its chain are currently recompiled per render (a swig-co
 constraint); both still skip the default per-request engine rebuild.
 :::
 
+## Bundle filters, tags and extensions
+
+Since Gina `v0.7.4`, the filters, tags and extensions your bundle registers through
+`this.engine` in `controllers/setup.js` (or through `self.engine` in an action) are
+available to the templates the swig loader (`template.swig.loader`) serves, as they are
+to templates on disk. The loader renders through an engine of its own, and Gina passes
+your registrations to it at render time, including those a later request's `setup.js`
+makes.
+
+A bundle filter that has the name of one of Gina's own filters (`getUrl`, `getWebroot`,
+`nl2br`, …) does not replace Gina's in a rendered template, on either render path.
+
 ## Dispatch flow
 
 ```mermaid

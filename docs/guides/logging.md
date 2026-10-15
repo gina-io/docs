@@ -434,6 +434,89 @@ if it is malformed.
 
 ---
 
+## Line breaks in a logged value
+
+A log is only useful when one message is one record. In the text format a line
+feed inside a logged value starts a new physical line, and a value that came
+from a request can be shaped so that the new line reads like a genuine record
+(log injection, CWE-117). From 0.7.4 the logger and the framework's own lines
+write such a value on the line it belongs to.
+
+How each kind of argument is written in the text format:
+
+```mermaid
+flowchart TD
+    A["console.info(a, b, ...)"] --> B{"argument"}
+    B -->|"a string"| S["written as it is"]
+    B -->|"an object or an array"| O["one line: control characters<br/>shown as visible escapes"]
+    B -->|"an Error"| E["message, stack and cause chain<br/>on several lines"]
+```
+
+| Argument | How it is written |
+|----------|-------------------|
+| A string | As it is, a carriage return being written as a line feed. A real line feed in it starts a new line, as with Node's own console. The two written characters backslash + `n` stay two characters: up to 0.7.3 they were turned into a real line feed. |
+| An object or an array | On one line. Its keys and its string values, nested arrays included, are written with their control characters as visible escapes. |
+| An `Error` | Its message, its stack and its `cause` chain, on several lines, whether it is a direct argument or held by a logged object. |
+
+The visible escapes are `\n`, `\r` and `\t` for a line feed, a carriage return
+and a tab, and `\uXXXX` for the other control characters (U+0000 to U+001F,
+U+007F to U+009F) and for the two Unicode line separators (U+2028, U+2029).
+A character outside that set is never changed.
+
+### Logging a value that came from a request
+
+Pass the value inside an object you build, or escape it yourself:
+
+```js
+// one line: a line feed in the value is written as the two characters backslash + n
+console.info('[SEARCH] query', { value: req.get.q });
+
+// the same guarantee with a string you build
+console.info('[SEARCH] query ' + JSON.stringify(req.get.q));
+
+// not this: a line feed in the value starts a new line of the log
+console.info('[SEARCH] query ' + req.get.q);
+```
+
+Build the object yourself and log the fields you need, rather than logging an
+object the client shaped (`req.body`, `req.get`): its keys are the client's text
+as well.
+
+Up to 0.7.3 such an object could also make the log call throw: a key named
+`count`, or a null-prototype object such as the result of `querystring.parse()`.
+From 0.7.4 it is written like any other object; the advice above still stands.
+
+### What the framework's own lines do
+
+The lines Gina writes with a value taken from the request use the same visible
+escapes: the multipart upload messages, the request-body parse warnings, the
+validator warnings, the route placeholder warning, the template file name
+lines, and the error line written for every error response.
+
+An error line keeps a real line break only before a stack frame or a
+`caused by:` line; any other line break in the error's detail is written as
+`\n`. A 404 therefore logs on two lines, not three:
+
+```text
+[2026 Oct 09 22:39:54] [error  ][frontend@myproject] [ BUNDLE ][ frontend ][ ref 1EF5B9 ][ req 2a43360f ] GET [ 404 ] /nope
+Page not found: \n/nope
+```
+
+### What is not escaped
+
+- **A real line feed in a string you log** still starts a new line. Log the value
+  inside an object, or `JSON.stringify` it, as above.
+- **The message of an `Error` you log** is written as it is. An error whose
+  message quotes a request value carries that value's line breaks.
+- **A line shaped like a stack frame** (whitespace, `at`, then any text) keeps its
+  line break on an error line, because a stack passed by your code is logged
+  whole and a crafted frame line cannot be told from a real one.
+
+When a collector parses the stream, use [structured (JSON) logging](#structured-json-logging):
+one message is always one line there, whatever its content.
+
+---
+
 ## Redacting credentials from logs
 
 The access line logs the request URL as received — `GET [200] /reset?token=…` —
@@ -471,7 +554,8 @@ Two rule sources compose:
   `?code=FR&sort=name` logs unchanged.
 - **`secrets`** — every value the [secrets resolver](/guides/secrets) substituted for a
   `${secret:KEY}` placeholder in this bundle's configs is masked verbatim wherever it
-  appears, so a connection string or a connector error can never print a password.
+  appears, so a connection string or a connector error does not print a password.
+  The end of this section says how far that reaches, and what it does not cover.
   Values shorter than 8 characters are skipped (a boot warning names the config path).
 
 ```text
@@ -484,6 +568,64 @@ Error: route not found for /invite?otp=[REDACTED]
 The last example is the 404 error line: the URL appears twice in one record —
 once in the prefix and once inside the error's own message — and both copies are
 masked, because the rules run over the whole message, not over the URL field alone.
+
+The rules also read through the [visible escapes](#line-breaks-in-a-logged-value)
+a logged value is written with. A message that holds one is read twice, as
+written and with each escape read as the character it stands for, and whatever
+either reading finds is masked: a credential right after an escaped line break
+(a `password=` line of a multi-line value, a multi-line key resolved from a
+`${secret:KEY}` placeholder) is masked, and so is a credential that itself holds a written
+backslash + `n`. The escape stays as written; nothing decoded is put back in
+the log.
+
+```text
+{"env": "A=1\npassword=[REDACTED]"}
+```
+
+The same holds for the quotes of a string value. Inside a logged object,
+`console.info` and the other level methods write a double quote as `\"` and a
+single quote as `\'`, and `console.log` renders an object with
+`JSON.stringify`, which writes a double quote as `\"`. Both escapes are read
+back too, so a resolved secret that holds a quote is masked inside a logged
+object, and through `console.log` in an object or an array.
+
+```text
+{"dsn": "[REDACTED]"}
+```
+
+A resolved secret is followed further than that. Three more writers change a
+value before the redaction reads the message: `JSON.stringify` — an object, an
+array or a key logged through `console.log`, or a JSON string you build and
+then log — and `util.inspect` — an `Error`, at any level or through
+`console.log` — escape the backslash itself and write a control character or a
+lone surrogate in their own way; `util.inspect` also splits a long multi-line
+value after each line feed and indents the message of a nested `Error`; and a
+level method writes a carriage return in a plain string as a line feed. From
+0.7.4 the secret values are read through all of it: each layer of escaping is
+read back, up to three layers, because a value can be rendered more than once
+(an `Error` held by a logged object, a JSON string held by an object or by an
+`Error`), and a secret's line breaks match the layout those writers give them.
+So a multi-line key, or a password holding a backslash, is masked whichever of
+these wrote it:
+
+```text
+{"key": "[REDACTED]"}
+Error: connect failed
+    at connect (/srv/app/models/db.js:12:11) {
+  options: { host: 'db.internal', password: '[REDACTED]' }
+}
+```
+
+What is not masked:
+
+- **A value that is not written as its own characters** — the bytes of a
+  `Buffer`, base64, URL-encoding, the escapes of a serialiser other than
+  `JSON.stringify` and `util.inspect`.
+- **A value under more than three layers of escaping.**
+- **A secret inside a longer string of more than 10,000 characters that an
+  `Error` holds.** Node cuts such a string at 10,000 characters. When the secret
+  is the whole string, the head Node keeps is masked; when it sits further
+  inside, the part before the cut can be printed.
 
 ### Adding your own patterns
 

@@ -19,6 +19,1161 @@ upward to the target version.
 
 ---
 
+## 0.7.3 → 0.7.4
+
+### Changed — a route's `Cache-Control` follows the server cache switch (routes with a `cache` field)
+
+A route's `cache` field used to give every response of that route a
+`Cache-Control: private, max-age=<ttl>` header, whether or not the bundle's
+server cache was on. It now does so only while `server.cache.enable` is on and
+the request is a `GET` — the same gate as the cache write. With the cache off
+(the usual development setting, or a bundle whose cache is switched off),
+responses carry no `Cache-Control` from the route, so a browser no longer reuses
+a page or a JSON answer for the route's whole `ttl` while the server stores
+nothing. See [Caching](/guides/caching#configuration-reference).
+
+**What to check:** a bundle that keeps its server cache off and relied on that
+header for browser caching now serves those routes fresh on every request. Turn
+the cache on (`server.cache.enable`), or set the header in the controller.
+
+### Changed — the SQLite driver is taken under Node.js's current class name (bundle restart; nothing to change)
+
+Node.js 26.11.0 renamed the `node:sqlite` class from `DatabaseSync` to
+`Database`, and kept `DatabaseSync` as a deprecated alias (DEP0210, a
+documentation-only deprecation). Gina reached the class through the old name
+only. It now takes `Database` where the runtime exports it, and `DatabaseSync`
+everywhere else.
+
+Nothing changes on a current runtime: Node.js 26.11 and later export one class
+under both names, and older Node.js and Bun export `DatabaseSync` only. The
+change matters on a later runtime that drops the alias. The
+[SQLite connector](/data/sqlite-orm), the session store, the async-job store,
+the key-value store, the storage metadata store and the framework's own state
+store all resolve their driver through one place, and they would have failed to
+open a database there.
+
+**What to do:** nothing. The change applies at the next bundle restart. Your own
+code that calls `require('node:sqlite').DatabaseSync` keeps working for as long
+as Node.js keeps the alias.
+
+### Deprecated — `enable`, `path`, `ttl`, `sliding`, `maxAge` and `maxEntries` in `settings.json`'s top-level `cache` block
+
+Those six keys are read from `server.cache` only and have always been ignored
+in the top-level `cache` block, which carries the default backend (`type`,
+`store`, `name`). A bundle now logs a boot warning naming each one it finds
+there, and the settings schema marks them deprecated at that place. See
+[the settings reference](/reference/settings#cache).
+
+**What to check:** a `[render-cache] settings.json > cache.<key> is ignored
+there` line at boot. Move the key under `server.cache`, in `settings.json`,
+`settings.server.cache.<env>.json` or the project `env.json`.
+
+### Security — one GET request could stop the bundle: a bracket field nested inside a `null` slot (bundle restart and re-bake)
+
+A request whose form-encoded data first set a field to `null` through a JSON value
+and then nested a bracket-notation field inside it, such as `a=[null]&a[0][b]=1`
+or `a={"x":null}&a[x][y]=1`, made the nesting helper throw a `TypeError`. As with
+[the numeric-segment case fixed in 0.6.33](#security--one-get-request-could-stop-the-bundle-a-bracket-field-name-with-a-numeric-segment-restart-and-re-bake),
+where it threw decided the damage:
+
+- **The `inheritedData` query parameter of a GET or HEAD request** is parsed with
+  no guard, so the throw reached the process as an `uncaughtException` and **the
+  bundle exited**: one unauthenticated request was enough, on any URL, because the
+  parse runs before routing (measured on the default engine: exit code 143, the
+  next request refused).
+- **A form-encoded POST, PUT or PATCH body** answered `500`.
+
+The helper now replaces a `null` slot with a fresh container and nests through it:
+`a=[null]&a[0][b]=1` gives `{ a: [ { b: '1' } ] }`. A slot holding any other
+primitive still ignores the nested field, as before: `a=[true]&a[0][b]=1` gives
+`{ a: [ true ] }`. Affected: every release from at least 0.6.0 through 0.7.3. A
+security advisory accompanies this fix.
+
+**What to check:** nothing to change. Under a supervisor that restarts a bundle on
+exit, one such request per restart kept it down: a
+`[ FRAMEWORK ][ uncaughtException ] TypeError: Cannot read properties of null`
+line naming `parseLocalObj` in your logs was this.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — a route middleware's deferred answer could reach another request (bundle restart)
+
+In every environment except [the development environment](/concepts/environments#development-environment-benefits),
+the controller methods the framework gives a route middleware — `self.renderJSON()`,
+`self.redirect()`, `self.throwError()`, `self.render()`, `self.query()`, `self.getConfig()` and
+the others listed in [Available methods](/guides/middleware#available-methods) — were written onto
+the middleware class itself, for each request. That class comes from Node's module cache and is
+shared by every request, and a method is looked up when it is called. So a middleware that called
+one of these methods after an `await`, or in a callback, used the methods of whichever request had
+last passed through the same middleware file: its answer could be written to another request in
+flight, and the request it belonged to was never answered. A bundle's `controllers/setup.js` had
+the same defect: its members were written onto the exported function.
+
+Not affected: the development environment, where a middleware file is reloaded on every request; a
+bundle-local middleware that has a shared middleware of the same name, which gets a fresh class per
+request; and calls made before the middleware's first `await` or callback.
+
+Each middleware instance is now constructed on a prototype layer of its own that carries its
+request's methods, and each `setup.js` run gets a receiver of its own. Nothing is written onto the
+middleware class or onto the `setup.js` export. Affected: every release through 0.7.3. A security
+advisory accompanies this fix.
+
+**What to check:**
+
+- A middleware written as [the guide](/guides/middleware#writing-a-middleware) shows needs no
+  change. Calls made in the constructor body still work, and so do the middleware's own properties,
+  the members of its exported prototype and `instanceof`.
+- In a middleware constructor, `new.target` is now the per-request constructor and
+  `Object.getPrototypeOf(this)` is the per-request layer, not your class. Test with `instanceof`
+  instead.
+- In `setup.js`, `this` is now an object that inherits from the exported function. Read the
+  framework members through `this`, not through the function's own name or `module.exports`. State
+  stored on `this` no longer carries over from one run to the next, and `this` can no longer be
+  called as a function. When the nunjucks engine runs `setup.js` to register its filters, `this`
+  carries `engine` and `throwError`, as before, and no longer shows the members a request had
+  left on the export.
+- A workaround that copied the methods onto the instance in the constructor keeps working, and can
+  be removed.
+
+Server-side: **restart the bundle**.
+
+### Security — an error response could be built from another request (bundle restart)
+
+The engine-level error responder (`self.throwError()`, and the 404 / 405 / parse-error and
+upload-limit responses the framework raises itself) read the request from a single Server-wide slot
+that every incoming request overwrites. In every environment except
+[development](/concepts/environments#development-environment-benefits), when an error was raised
+after an asynchronous gap — an `async` action or hook that rejected, a gate that failed after a
+database call — and another request had arrived in that gap, the error response was built from that
+other request:
+
+- the wrong body shape: an XHR / API caller could receive the HTML error page, a page request the
+  JSON body;
+- another request's decoded URL on the pairing log line and, through a
+  [custom error page](/guides/error-pages), its URL, its route and **its session user** in the
+  rendered page;
+- `Access-Control-Allow-Origin` computed from the other request's `Origin`.
+
+The responder now resolves the request from the response it is answering, so each error is built
+from its own request. Affected: every release through 0.7.3. A security advisory accompanies this
+fix. Two adjacent defects in the same responder are fixed in the same release: an extensionless HTML
+URL's built-in fallback page is now served `text/html` instead of `undefined` (its status code and
+incident ref were already correct), and a CORS preflight request that errored before routing no
+longer stops the bundle.
+
+**What to check:** nothing to change — the error contract is unchanged, it is now honoured under
+concurrency. A custom error template that displays `page.data.session` was the sharpest exposure;
+the built-in fallback page never rendered it.
+
+Server-side: **restart the bundle**.
+
+### Security — a template run in an action could resolve another request's context (bundle restart)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` find their context when they are
+called: the render's own store first, then a process-wide slot that every call of the filter
+factory stamped, including the call each page render makes. [0.6.30](#0629--0630) made the default
+render path read its own store. Two paths still read the slot:
+
+- **A template executed in a controller action outside `self.render()`**, through the engine handle
+  (`self.engine.compile(tpl)(data)`, `compileFile`), resolved the context of whichever request had
+  rendered last on the worker: its negotiated culture, and absolute URLs built from that request's
+  host. No concurrency was needed; one earlier render was enough.
+- **A render with no request** (a scheduled task, a worker, a WebSocket handler) that set no context
+  of its own read the last request's context the same way.
+
+Inside a request the filters now resolve that request's own context, and the process-wide slot is
+neither read nor written there. A call of the filter factory made inside a request is bound to that
+request. Outside a request the slot is used as before, and it now only ever holds a context that
+was set outside a request. Affected: every release through 0.7.3. A security advisory accompanies
+this fix.
+
+**What to check:**
+
+- Nothing to change for templates rendered with `self.render()`.
+- A template you run yourself in an action now sees the current request: its culture, its host. If
+  you compensated there for a wrong language or wrong links, the compensation is no longer needed.
+- Code that calls the filter factory and then renders still resolves the context it passed. Inside
+  a request that context is kept for that request only. It no longer appears on the factory's
+  process-wide slot, so code that read that slot directly after a render (an internal, never
+  documented) no longer finds a request's context there.
+- A render made outside any request, with no context of its own, gets the bundle's configuration
+  and no request. See
+  [the `getUrl` note below](#fixed--geturl-in-a-render-with-no-request-degrades-instead-of-throwing-bundle-restart).
+- The default nunjucks render path now runs inside the render store, like the swig one. Nothing to
+  change.
+
+Server-side: **restart the bundle**.
+
+### Security — a value taken from a request could start a log line of its own (bundle restart and re-bake)
+
+In the default text format the logger turned the two written characters backslash + `n`
+inside a logged string into a real line feed (backslash + `r` likewise, and backslash + `t`
+into a tab), and it wrote a real line feed held by a logged value as it was. A value taken
+from a request could therefore start a physical line of its own in the log, shaped like a
+genuine record (log injection, CWE-117). Escaping the value first with `JSON.stringify` did not
+prevent it: the two characters it writes were turned back into a line feed. Several of the
+framework's own lines print such a value, among them the multipart upload messages, the
+request-body parse warnings and the error line written for every error response.
+
+What changed:
+
+- **A written backslash + `n`, `r` or `t` is written as it is.** Only a real line feed, carriage
+  return or tab is handled, as before.
+- **A logged object or array is written on one line.** Its keys and its string values, nested
+  arrays included, are written with their control characters as visible escapes: `\n`, `\r`,
+  `\t`, and `\uXXXX` for the other control characters and the two Unicode line separators.
+- **The framework's own lines write a request value the same way**: the upload messages, the
+  body-parse warnings, the validator warnings, the route placeholder warning, the template file
+  name lines and the error lines. An error line keeps a real line break only before a stack
+  frame or a `caused by:` line.
+- **On the default engine, a query string with no `=` that is not JSON** (`/page?v2`) is reported
+  by its length and the name of the error, at `warn`. It used to print an error stack that quoted
+  the query string.
+- **The log redaction reads through the visible escapes.** A credential right after an escaped
+  line break is masked as it was before the escapes existed, and a credential that itself holds
+  a written backslash + `n`, `r` or `t` (a password in a connection string, a registered
+  secret), which was printed until now, is masked too.
+
+Affected: every release through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- **A log call that relied on a written `\n` to break the line** now prints the two characters.
+  Pass a real line feed.
+- **A multi-line string held inside a logged object** now prints on one line. Pass the `Error`
+  itself to keep a multi-line stack, or pass the string as its own argument.
+- **A search or an alert that matches the error line's detail.** A line break that no stack
+  frame follows is now written as `\n`, so a 404 logs `Page not found: \n/path` on one
+  line where it used two. The request-body parse warnings print the parser's message, where
+  they printed its stack.
+- **The upload `400` messages** name the field, the group or the extension with its control
+  characters shown.
+- **JSON format** (`GINA_LOG_FORMAT=json`): still one line per message, as before; the `message`
+  value follows the same changes.
+- **A value you log yourself** is covered when you pass it inside an object you build. A real
+  line feed in a string you log still starts a new line, and the message of an `Error` you log
+  is written as it is. See
+  [Logging → Line breaks in a logged value](/guides/logging#line-breaks-in-a-logged-value).
+
+Browser-bundled (the validator and the routing library changed): **restart the bundle and
+re-bake** your bundles (`gina bundle:build`). The framework daemon and a running `gina tail`
+take the logger change at their own restart.
+
+### Security — a resolved secret holding a quote or a control character could be written to the log in full (bundle restart)
+
+The log redaction masks every value the secrets resolver substituted for a `${secret:KEY}`
+placeholder. Since 0.6.19, when that redaction was introduced, the value was matched as
+configured, while several log paths write a string in an escaped or rewritten form before the
+redaction runs. A secret holding one of the characters below then no longer matched, and it was
+written to the log in full (CWE-532):
+
+- **Through `console.log` with an object or an array, or inside a JSON string built with
+  `JSON.stringify` and logged through `console.log`:** a secret holding a double quote, a
+  backslash, a lone surrogate, or any control character — a line feed, a carriage return and a
+  tab included, so any multi-line key. The same JSON string logged through a level method
+  printed all of them but a line feed and a tab.
+- **Inside an object passed to a level method** (`console.info`, `console.error`, …): a secret
+  holding a double quote or a single quote.
+- **Inside a plain string passed to a level method:** a secret holding a carriage return, or the
+  two written characters backslash + `n`.
+- **Inside an `Error` that carries the value in one of its own properties** (a driver error that
+  keeps its connection options), logged at any level or through `console.log`, alone or inside
+  an object: a secret holding a backslash, a lone surrogate, or any control character, a line
+  break included.
+- **Inside the message of an `Error` that another `Error` holds** (its `cause`, a member of an
+  `AggregateError`): a secret holding a line break.
+- **Inside a JSON string, or a `util.inspect` string, that your code built and that a logged
+  object or an `Error` then holds** (the value is rendered a second time): a secret holding one
+  of the characters above — which ones depends on the two writers involved.
+
+A secret holding none of these characters was masked on every path.
+
+What changed: the redaction reads a logged message through the escapes each of these writers
+adds — the logger's own (the quote escapes of a string value, the escapes written for a line
+break and the other control characters) and each layer written by `JSON.stringify` or
+`util.inspect`, up to three layers — and a secret's line breaks match the layout those writers
+give them (a carriage return written as a line feed, a long value split after each line feed, an
+indented message). Whatever any reading finds is masked.
+
+Not masked: a value that is not written as its own characters (the bytes of a `Buffer`, base64,
+URL-encoding, the escapes of another serialiser); a value under more than three layers of
+escaping; and a secret that sits inside a longer string of more than 10,000 characters held by
+an `Error`, which Node cuts. See
+[Logging → Redacting credentials from logs](/guides/logging#redacting-credentials-from-logs).
+
+Affected: 0.6.19 through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- **Whether one of your resolved secrets holds one of these characters** — a quote, a backslash
+  or a line break (a multi-line key) are the likely ones — and whether your code logs a
+  configuration or connection object, a `JSON.stringify` of one, or a driver error that keeps
+  its connection options. If both hold, treat that
+  secret as disclosed to anyone with log access: rotate it, and apply your retention process to
+  the logs written since 0.6.19.
+- **A key stored on several lines** is now masked wherever it is logged as text: in a plain
+  string, in an object or a JSON string, and inside an `Error`, with Unix or Windows line endings.
+
+Server-side only: **restart the bundle**. The logger is not in the browser bundle, so no re-bake
+is needed.
+
+### Security — a query field named `__proto__` could change the prototype of `req.delete` (bundle restart)
+
+On the default engine, a `DELETE` request whose query string carried a field named
+`__proto__` holding a JSON value (`?__proto__=%7B%22polluted%22%3A1%7D&a=1`) changed the
+**prototype** of `req.delete` on every request to that path after the first:
+`req.delete.polluted` read `1` while `Object.keys(req.delete)` and `hasOwnProperty` saw
+nothing, and an injected `count`, `hasOwnProperty` or `toString` made
+`req.delete.count()`, `req.delete.hasOwnProperty()` or a string conversion throw, which
+answered that request with a `500`. It stayed within that one request object. `GET`
+requests and request bodies were not affected: their top-level `__proto__`,
+`constructor` and `prototype` fields have been dropped since 0.6.33.
+
+A query field named `__proto__`, `constructor` or `prototype` is now dropped from
+`req.delete` too, on every engine, and `req.delete` is a plain object holding the
+query's own fields.
+
+**What to check:** a query parameter literally named `constructor` or `prototype` no
+longer reaches `req.delete`: rename it, as for `req.get` since 0.6.33.
+
+Server-side only: **restart the bundle**, no re-bake.
+
+### Security — a template path taken from the request could leave the template root (bundle restart)
+
+A page template path that a controller builds from request data, through `self.setTemplate(value)`
+or `req.routing.param.file = value` in an action, could resolve outside the bundle's template root.
+The swig renderer joined the value under the root without checking where it landed: a `..` segment,
+a `..` separated by backslashes (a `%5C` in a URL segment survived path normalisation), or, for a
+value starting with `.`, a path read relative to the working directory. The nunjucks renderer relied
+on its loader, which accepted a sibling directory whose name starts with the root's (`html2/` next
+to `html/`). A request could then read any `.html` file the process can read, rendered through the
+template engine. The handler shown in the [0.4.1 notes](#040--041),
+`self.setTemplate('errors/' + req.params.code)`, was affected.
+
+The router's own placeholder fill had the same flaw for a `:placeholder` inside `param.file`: a
+query or body value named like the placeholder replaced the URL segment that had passed the route's
+requirement. The router now rejects a request value that would escape as a path component.
+
+Both renderers now resolve the path they are about to read and answer **500** when it lies outside
+the section's template root, the `html` directory of templates.json (`templates/html` by default).
+Affected: every release through 0.7.3. A security advisory accompanies this fix.
+
+**What to check:**
+
+- Nothing to change for templates under `html`, including a static `../` prefix in `param.file` that
+  resolves back inside it.
+- A bundle that renders templates kept outside `html` (in `templates/emailing/`, say) widens its
+  root: set `"html": "${templatesPath}"`, or another directory that contains them, in
+  [templates.json](/reference/templates).
+- Custom error pages are not affected, including the shared ones in `<sharedPath>/errors`.
+- A `param.path` used as a template path is confined the same way.
+- The confinement does not choose templates for you: keep validating which templates a request may
+  select.
+
+Server-side: **restart the bundle**.
+
+### Fixed — a logged object can no longer make a log call throw (bundle restart)
+
+Up to 0.7.3 a log call could throw in your own code because of the object it logged:
+
+- an object with its own key named `count`, such as a parsed body `{"count": 5}`, made a
+  levelled call such as `console.info()` throw `TypeError: obj.count is not a function`;
+- a null-prototype object, such as the result of `querystring.parse()` or of
+  `Object.create(null)`, made both a levelled call and `console.log()` throw
+  `TypeError: Cannot convert object to primitive value`;
+- an array element `{"toString": "x"}` made a levelled call throw the same way, and a
+  `Symbol`, passed as an argument or held by a logged object, made the call throw as well.
+
+From 0.7.4 each of these is written like any other value: the null-prototype object like a
+plain one, the `Symbol` as `Symbol(description)`. An object inside an array is still written
+`[object Object]`, whatever its prototype. An object with its own `hasOwnProperty` key, which
+used to lose the commas between its keys, is written with them. Every other value is written
+exactly as before.
+
+**What to do:** restart the bundle. The logger is not in the browser bundle, so no re-bake is
+needed. The framework daemon and a running `gina tail` take the change at their own restart.
+Logging an object a client shaped is still best avoided: see
+[Logging a value that came from a request](/guides/logging#logging-a-value-that-came-from-a-request).
+
+### Fixed — an async route middleware that rejects is answered with a 500 (bundle restart)
+
+A route middleware method declared `async`, or returning a promise, that rejected — an error thrown
+after an `await`, or thrown by a later middleware it handed over to through `done` — left its
+request unanswered until the client or a proxy timed out, and the rejection reached the process
+unhandled. The request is now answered with a 500 that names the middleware, as a rejected
+controller action or [reserved hook](#fixed--an-exception-in-onready-or-setup-now-answers-500-instead-of-vanishing)
+already was. The response carries an `#ERRREF` correlation reference; the full detail is on the
+paired server log line.
+
+**What to check:** a middleware whose rejection used to be survivable (its request hung, but
+nothing else failed) now produces a 500. Catch the errors you can recover from inside the method.
+If the middleware had already answered before it rejected, no 500 is sent; only the log line is
+written.
+
+Server-side: **restart the bundle**.
+
+### Fixed — `getUrl` in a render with no request degrades instead of throwing (bundle restart)
+
+The `getUrl` template filter read the request's headers for every rule name
+(`'home' | getUrl`, `'home@admin' | getUrl`) and for every path given a bundle as its base
+(`'/dashboard' | getUrl(null, 'admin')`). When the render context had no request — a mail or a
+scheduled-task renderer that builds the filters itself, outside any request — the filter threw
+`TypeError: Cannot read properties of undefined (reading 'headers')` and the render failed. A
+context with no bundle configuration threw on every form, a plain path included. Both template
+engines (swig and nunjucks) carried the defect.
+
+Such a render now gets its URL from what the process knows: the target bundle's configured
+hostname, or the worker's proxy host when one is known. That is the resolution a
+[`getRoute()`](/guides/routing#reverse-routing--libroutinggetroute) call gets when it is made with
+no request in scope. A render made inside a request is unchanged.
+
+**What to check:**
+
+- Nothing to change. If you worked around this (by rendering such templates inside a request, or
+  by composing the URL yourself), the workaround is no longer needed for the filter to run.
+- A URL built outside a request cannot know which public host a visitor uses. Behind a proxy it
+  carries the proxy host once the worker knows it (from the proxy configuration, or from the first
+  proxied request it served) and the bundle's own hostname before that.
+- Two cases still fail, now with a named error instead of a `TypeError`: a base that names an
+  unknown bundle, and a render for which no bundle configuration can be resolved.
+
+Server-side: **restart the bundle**.
+
+### Fixed — an async job runs with no render context (bundle restart)
+
+The template filters `getUrl`, `getWebroot`, `t` and `tIcu` look for their context in the render's
+own store first. [0.6.31](#0630--0631) detached an [async job](/guides/async-jobs) from the request
+that created it, but from the request's store only: the job kept the render store of the chain
+that started it.
+
+- **A job created while a render context was active** ran with that context, the `req` and `res`
+  of its request included.
+- **A job that had waited for a worker slot** ran with the render context of the job that freed
+  the slot, whichever request had created either one. Its retries did too.
+
+A template filter called in such a job resolved that request's context: `getUrl` built its
+absolute URLs from that request's host. This held even when the job had passed a context of its
+own to the filter factory, because the render store is read first.
+
+A job now runs with no render context, for its whole lifecycle. A template it executes resolves
+as [a render made outside any request](#security--a-template-run-in-an-action-could-resolve-another-requests-context-bundle-restart)
+does: from the context the job passed to the filter factory, else from the bundle's configuration
+and no request. Affected: 0.4.6 through 0.7.3.
+
+**What to check:**
+
+- Nothing to change for a job that runs no template.
+- A job that renders with a context of its own (code that calls the filter factory, then renders)
+  resolves that context, as the same code does outside a job.
+- A job that renders with no context of its own is a render made outside a request: see
+  [the `getUrl` note above](#fixed--geturl-in-a-render-with-no-request-degrades-instead-of-throwing-bundle-restart).
+
+Server-side: **restart the bundle**.
+
+### Fixed — a custom `server.cache.path` keeps its `fs` entries across a restart (bundles with `"type": "fs"` routes and their own `server.cache.path`)
+
+The `fs` strategy wrote its entries under `server.cache.path`, but a restarted
+process read them back from the project's default `cache` directory, so the
+first request of each cached URL rendered again. Read-back, and the offline
+reclaim of `gina cache:clear`, now use the bundle's `server.cache.path`. See
+[Surviving a restart](/guides/caching#surviving-a-restart).
+
+**What to check:** nothing with the default path. With a custom path, the first
+request after a restart now answers `Cache-Status: …; hit; detail=fs`.
+
+### Fixed — `settings.<env>.json` is applied (bundles carrying one)
+
+A per-environment settings file with no section was nested under a `<env>` key
+of the bundle's settings instead of being merged at the top level, so nothing in
+it took effect. It is now merged as `settings.<section>.<env>.json` is for its
+section, and wins over `settings.json` for the env it names. See
+[`settings.server.cache.${env}.json`](/reference/settings#settingsservercacheenvjson).
+
+**What to check:** a bundle with a `settings.<env>.json` it believed inert now
+has that file's content applied for that env.
+
+### Fixed — `gina start --inspect-gina` returns the framework's exit code (next `gina start --inspect-gina`)
+
+With `--inspect-gina`, `gina start` runs the framework under the Node.js
+inspector, and the framework waits for a debugger before it runs any code. When
+the framework then stopped before it was ready, the command returned 1 and
+reported `exit code 0`, whatever the framework's own code had been. It now
+returns that code, or 128 plus the signal number when a signal stopped it, as
+`gina start` does without the flag. See [Exit codes](/cli/cli-framework#start-exit-codes).
+
+**What to check:** nothing. A start that succeeds still gives 0.
+
+### Fixed — `framework:restart` exits non-zero when the framework does not start again (next `gina framework:restart`)
+
+`framework:restart` stops the framework, then starts it with `gina start`. When the
+framework did not start again, the command returned 0, with no framework running, if
+the failed start had already written its pid file; otherwise it ended with an uncaught
+error and exit code 1, losing the start's own code. It now prints what the start
+printed and one line naming the failure, then exits with the start's exit code, or
+with 128 plus the signal number when a signal stopped it. See
+[`framework:restart`](/cli/cli-framework#frameworkrestart).
+
+**What to check:** a script that runs `gina framework:restart` and tests its exit
+code now sees a failed restart, where it could read success. A restart that
+succeeds still gives 0.
+
+### Fixed — `framework:status` and `gina stop` find a framework on Bun whose pid file is missing (next `gina framework:status` / `gina stop`)
+
+When a framework's pid file was missing, `framework:status` and `gina stop` looked
+for the framework by its `gina-v<version>` process title, which Bun does not show
+to `ps`. For a framework running on Bun, `framework:status` therefore printed
+`Gina is not running`, and `gina stop` printed `Gina v<version> is not running`,
+exited 0 and left the framework running. Both now also read the framework's own
+record in `~/.gina/procs.json`, and act on it only while `ps` shows that pid
+running as the framework: `framework:status` lists it and writes its pid file
+back, and `gina stop` sends it `SIGTERM`. A framework on Node whose pid file is
+missing is now sent `SIGTERM` as well, as one with a pid file is, instead of
+`SIGKILL`. See [`framework:status`](/cli/cli-framework#frameworkstatus).
+
+**What to check:** nothing. A framework whose pid file is in place is found and
+stopped as before.
+
+### Fixed — `gina stop` signals only the framework, and keeps other versions' pid files (next `gina stop` / `gina framework:restart`)
+
+`gina stop` read and removed the pid file of every framework version in the run
+directory (`~/.gina/run`) before choosing the one to stop. Stopping one version
+therefore deregistered every other version running beside it, and `gina reset`,
+which looks for running frameworks in those pid files, could miss them. It then
+sent `SIGTERM` to the pid that `~/.gina/procs.json` records for the version
+whenever a pid file held the same pid, whatever process that pid now was: a
+reused pid, or one recorded in another container's pid namespace when containers
+share the run directory. It also sent `SIGCONT` to the record's `fakeDaemonPid`,
+which names the `gina` wrapper that exits once the framework is ready, and printed
+`Gina v<version> has been stopped` whether or not it had signalled anything.
+
+It now reads and removes only its own version's pid file, and sends `SIGTERM`
+only while `ps` shows that pid running as the framework. Where `ps` cannot
+identify a process (Windows, an image without `ps`), it signals the pid that the
+pid file and the record both name, as before. `framework:restart` runs
+`gina stop`, so it changes the same way. See [`framework:stop`](/cli/cli-framework#frameworkstop).
+
+**What to check:** nothing. A running framework is stopped as before. If you run
+several framework versions side by side, stopping one no longer removes the
+others' pid files.
+
+### Fixed — `bundle:start` exits non-zero when the bundle does not start (next `gina framework:restart`)
+
+`gina bundle:start` exited `0` for every outcome: a crash while the bundle booted, a
+port another program held, the startup timeout, a refusal, and a bundle that was
+already running. It now exits `0` when the bundle listens, or when it already runs;
+`1` when another program holds the port, with a line naming the port and, outside
+Windows, a command that finds the holder; the bundle's own exit code when it stops
+before it is ready (`1` when that code is `0`), or `128` plus the signal number; and
+`1` on the timeout and on a refusal. `bundle:start @<project>` exits `1` when any of
+its bundles did not start. See [Exit codes](/cli/cli-bundle#bundle-start-exit-codes).
+
+A start while the bundle already runs starts nothing and prints
+`[ <bundle>@<project> ] is already running with PID [ <pid> ]`. It used to start a
+second process, which wrote its own pid into the bundle's pid file, could not bind the
+port, and removed the file as it exited, so
+[`bundle:status`](/cli/cli-bundle#bundlestatus) then reported the running bundle as
+stopped. A bundle that exits `0` before it is ready is reported at once, where the
+command waited out the timeout. With `--inspect` and the debugger port in use, node
+starts the bundle without the inspector: the command prints its hint and now waits for
+the start, where it ended at once.
+
+`project:start` and `bundle:restart` run `bundle:start`, and exit `1` when it exits non-zero,
+whatever its code.
+
+**What to check:** a script or a container that runs `gina bundle:start` and stops on
+a non-zero exit (`set -e`, `&&`) now stops when the bundle did not start, where it
+carried on. A second `bundle:start` while the bundle runs still exits `0`. The codes
+come from the framework: until you run `gina framework:restart` (or `gina stop` and
+`gina start`), a framework started before the update keeps the old behaviour.
+
+### Fixed — a bundle that cannot bind its port exits `1` (bundle restart)
+
+When another program held a bundle's port, or the bind was refused (`EACCES`), the
+default engine logged the error and the boot went on: the bundle printed its
+readiness line and, with nothing listening, exited `0`. Under
+[`gina-container`](/guides/k8s-docker), which exits with the bundle's code, the
+container exited `0`. Until the server listens, a bind error now prints
+`[ FRAMEWORK ] abort: could not listen on port <port>: <code> (…)` on stderr and the
+bundle exits `1`; the readiness line is printed only once the server listens.
+
+**What to check:** a container whose bundle cannot bind its port now exits `1`, so a
+restart policy such as `on-failure` restarts it. Nothing changes for a bundle that
+listens. Server-side only: **restart the bundle**, no re-bake.
+
+### Fixed — a refused `bundle:start` no longer stops the framework (next `gina framework:restart`)
+
+`bundle:start` runs inside the framework's own process. A start refused before
+anything ran (an unregistered `@<project>`, an invalid bundle name) ended that
+process with exit code `1` while the command exited `0`, so every later command found
+no framework running. The refusal now ends only that command, with exit code `1`, and
+the framework keeps running. An error thrown while the framework prepares the command
+is handled the same way.
+
+**What to check:** nothing. Run `gina framework:restart` once to pick it up.
+
+### Fixed — `bundle:restart` exits non-zero when the bundle did not restart (next `gina bundle:restart`)
+
+`bundle:restart` stops the bundle, then starts it. It now exits `1` when the start
+fails (with the start's own codes) and when the start exits `0` without a new bundle
+process running: a stop that missed the bundle (a pid file naming another process)
+left the old bundle serving, and the restart exited `0`. On a failure it prints what
+its stop and start steps said. `bundle:restart @<project>` exits `1` when any bundle
+did not restart, where only the last bundle decided it. `project:restart` runs it, so
+it changes the same way. See [`bundle:restart`](/cli/cli-bundle#bundlerestart).
+
+**What to check:** a script that runs `gina bundle:restart` and tests its exit code now
+sees a restart that did not happen, where it read success.
+
+### Fixed — `project:start` leaves the framework's pid file and record alone (next `gina project:start`)
+
+`gina project:start` registered itself as the running framework: it wrote its own pid
+into `~/.gina/run/gina-v<version>.pid`, which was then removed, and its exit removed the
+framework's entry from `~/.gina/procs.json`, while the framework kept running. `gina
+start` reads that entry to recognise a framework that is already running. Only the
+framework's own start registers the framework now; `service:start` took the same path
+and changes the same way.
+
+**What to check:** nothing. If a `project:start` already removed them, `gina
+framework:restart` on Node finds the framework by its process title and writes both
+again.
+
+### Fixed — a `<select>`'s live check shows its error from the whole-form pass (bundle restart and re-bake)
+
+After a `<select>` changes, the validator checks the select alone, then the whole
+form, and shows each pass's error for that select only. The second pass looked the
+error up under the form's name instead of the select's, so it displayed nothing: an
+error only the whole-form pass finds, such as a rule comparing the select with
+another field, did not appear on the live check. It now looks the error up under
+the select's name.
+
+**What to check:** nothing. A select whose single-field check already showed its
+error behaves as before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a staged upload's reset and a saved file's delete reach every file, and the next file is submitted (bundle restart and re-bake)
+
+The upload client layer kept a file's hidden `<name>[i][…]` fields in step with its
+selection only in part:
+
+- After a reset, the next file chosen in the same input was staged and previewed,
+  but the form submitted no file: its hidden fields were built for the input's
+  first selection only. A later selection with more files than the first got no
+  fields for the new ones either. The fields are now built on every selection.
+- The declared `[preview][*]` fields a reset or a delete removed never came back,
+  so the next file's preview was not submitted. They now come back, empty, with
+  the next selection.
+- A reset or a delete acted only on the `<img>` elements of the preview container.
+  A staged file shown without an image kept its fields, the server was not asked to
+  remove it, and the form submitted it; an image inside the `<li>` of a `<ul>`
+  container was not reached; on a multi-file input the reset threw, and a delete
+  left the other files' fields behind. They now act on the input's files, in one
+  removal request.
+- With a preview container whose id is not `<input id>-preview`, the container
+  itself was taken for the reset link and no reset was bound; with no preview
+  container at all, the staged file's fields stayed empty. Both work now.
+- With `data-gina-form-upload-prefix`, a reset left the file's fields in the form
+  after the server had been told to remove it.
+
+See [Previews and removal](/guides/file-uploads#previews-and-removal) and
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:**
+
+- An edit form that shows a saved file without an image: mark that file's node with
+  `data-upload-original-filename="<file name>"`, or its delete link stays inert.
+- A page that removed the virtual upload form after a reset, to work around the
+  first point, can drop that code; it keeps working if it stays.
+- A replacement without a preview submits the declared preview fields empty, as
+  [Persisting the preview](/guides/file-uploads#persisting-the-preview) says.
+- A reset or a delete still removes every file of its input, whichever of the
+  input's controls is activated.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a popin trigger loads its popin once on a page with several popin instances (bundle restart and re-bake)
+
+Each `new Popin()` registers a document click proxy that claims the triggers of its
+own instance by matching their id against the instance id, and the match had no
+delimiter after that id. Instance ids are `gina-popins-` followed by a shared
+counter (`gina-popins-gp-1`, `gina-popins-gp-14`), so the proxy of
+`gina-popins-gp-1` also claimed the triggers of `gina-popins-gp-14`, and one click
+fired both proxies: the popin loaded twice, and the second load replaced the form
+the first had bound, which then submitted natively. The match now requires the `-`
+that follows the instance id in every trigger id.
+
+**What to check:** nothing to change. A page that worked around the double load —
+one popin instance per page, or a form re-bound after the load — can drop that.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `image:run` without `--name` leaves the container name to podman (next `gina image:run`)
+
+`gina image:run <image>` took the image reference as the container name when
+`--name` was not given. A usual `repo:tag` reference was refused with
+`invalid --name`, so the command failed in its plain form, and a reference that
+is also a valid container name, such as `demo`, named the container after the
+image. The container name now comes from `--name` only: without it podman picks
+one and `name` is `null` in the output, as [`image:run`](/cli/cli-image#imagerun)
+describes.
+
+**What to check:** nothing, unless a script relied on `gina image:run demo`
+naming its container `demo`: pass `--name=demo` for that.
+
+### Fixed — an XHR request answered through a `throwError()` fallback gets a response (bundle restart)
+
+`self.throwError(err)` answers an error that carries `fallback` (a URL or a
+route object) with a redirect to it, when the request is an XHR request or the
+route renders no template. For an XHR request that carries params (a form body
+or a query), or comes from a popin, that redirect answers with the
+`isXhrRedirect` JSON, and the JSON was dropped: the request was never answered,
+and its client waited until its own timeout, a `self.query` call made from
+another bundle on behalf of an XHR request included. It now receives the JSON.
+Non-XHR requests, and XHR requests without params, already received their 301
+or 303 and are unchanged. See
+[Redirects and the request method](/guides/routing#redirects-and-the-request-method).
+
+**What to check:** nothing. The answer is the one `self.redirect()` gives the
+same request.
+
+### Fixed — a redirect to an absolute URL on `localhost` or another dot-less host (bundle restart)
+
+`self.redirect()` took an absolute URL whose host has no dot, such as
+`http://localhost:<port>/…`, a single-label host like a container service name,
+or a bracketed IPv6 address, for a route name, and answered with a `404` naming
+the current URL. It now redirects to it. A `throwError()` fallback given as a
+route object failed the same way on a bundle served from `localhost`, because the
+route object's URL is such an absolute URL. URLs on dotted hosts, route names and
+relative paths are unchanged. See
+[Redirecting instead of answering with an error](/guides/controller#throwerror-fallback).
+
+**What to check:** nothing. A redirect that answered `404` now redirects.
+
+### Fixed — `throwError(err)` with one error object keeps its `message` and its `ref` (bundle restart)
+
+`self.throwError(err)` with a single plain object kept only its `status` and `error`: the
+object's `message` reached neither the JSON body, nor the built-in error page, nor the
+server's incident log line, and a `ref` on a plain object or on an `Error` was replaced
+with a fresh one. This hit the relay between bundles: `self.query()` hands its callback
+the upstream's error body as a plain object, so `return self.throwError(err)` answered
+without the upstream's sentence, under a ref that matched no upstream log line. The
+object's `message` and a relay-safe `ref` are now kept, as the `(code, err)` and
+`(res, code, err)` forms already did, and a [fast lane](/guides/fast-lane) route's
+`ctx.error(err)` answers the same way. `error` is unchanged: in this form it holds the
+object's own `error`, or its `message` when it has none. See
+[Incident ref](/guides/controller#incident-ref).
+
+**What to check:** a client that reads `message` now receives it in this form too. On the
+built-in error page, an answer whose `error` and `message` carry the same text shows it
+twice, as a one-argument `Error` already did.
+
+### Fixed — a staged upload no longer posts the replaced file's preview metadata (bundle restart and re-bake)
+
+A form that declares `[preview][location|uri|width|height]` sub-field inputs for a
+staged upload (see [Persisting the preview](/guides/file-uploads#persisting-the-preview))
+now leaves each one empty when the replacement file's staging response does not
+carry that preview value. On an edit form, the declared inputs used to keep the
+replaced file's preview metadata and posted it with the new file; a partial preview
+left the sub-fields it lacked stale the same way. The documented rule, that a
+declared sub-field the response does not carry is left empty, now holds. Forms that
+declare no preview sub-fields are unchanged.
+
+**What to check:** a server that worked around stale preview fields can drop that
+workaround once its bundles are re-baked.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `:placeholder` in `param.path`, `param.title` or `param.namespace` takes its value as written (bundle restart and re-bake)
+
+A route's `param.path`, `param.title` and `param.namespace` take the value of a
+`:placeholder` they contain, on a matched request and through
+[`getRoute()`](/api/routing). They took it through a string replacement, so `$`
+sequences in the value were expanded as replacement patterns: a request to
+`/user/$%60` on a `/user/:id` route gave `"title": "User :id"` the value
+`User User `, and `$&`, `$'` and `$$` inserted the placeholder, the text after it,
+or a single `$`. The value is now written as it is, as the URL and `param.file`
+already were. `getRoute()` also dropped the `/` that follows such a placeholder in
+those three fields: `"path": "/users/:id/edit"` with `id: 42` gave `/users/42edit`,
+and now gives `/users/42/edit`.
+
+**What to check:** code that rebuilt the missing `/` around `getRoute()`'s
+`param.path`, `param.title` or `param.namespace` can drop that step.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `filter(fn)` on a Collection result filters (bundle restart and re-bake)
+
+`filter()` on a `Collection`, or on an array one of its query methods returns
+(`find()`, `orderBy()`, `limit()`, `notIn()`, and so on), now takes a function and
+filters like `Array.prototype.filter`: the callback gets `(row, index, array)`, a
+second argument is its `this`, and the result keeps the methods of a `find()`
+result, so `.toRaw()` and the chain still work. Those arrays carry their own
+`filter`, a field projection, and it read a function as a field name:
+`rows.filter(fn)` returned an empty array with no error. A field name or a list of
+field names still projects each row: `rows.filter('id')` returns `[{ id: … }, …]`.
+
+**What to check:** code that worked around this with an index loop, or with
+`.toRaw()` before `.filter(fn)`, keeps working and can now call `.filter(fn)`
+directly. As with any query result, call `.toRaw()` before saving the rows: they
+carry an internal `_uuid` until then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a Collection search option matches the value as text, on every search (bundle restart and re-bake)
+
+`setSearchOption(field, 'isCaseSensitive', false)` on a [Collection](/api/collection)
+makes the next search compare `field` without regard to case. Two defects sat in
+the statement that built its pattern:
+
+- **The value was read as a pattern.** It was spliced unescaped into the rule's
+  template (`^%s$`). A value holding an unbalanced parenthesis threw a
+  `SyntaxError` out of `find()` / `findOne()`; a dot matched any character, so
+  `find({ name: 'a.b' })` also returned `axb`, and `update()` or `delete()` with the
+  same filter then acted on both rows; `acme (uk)` did not find `Acme (UK)`.
+- **Only the first search on an instance was right.** The first value was written
+  back onto the rule table, so every later option search on that instance matched
+  the first value: `find({ name: 'alice' })` then `find({ name: 'bob' })` returned
+  Alice twice, and one search over two option fields matched nothing. With a rule
+  table passed to the constructor, the first value followed the options object to
+  every instance built from it.
+
+The value is now matched as text, whole, and the rule table is never written: a
+dot, a parenthesis or any other character means itself, and every search starts
+from the rule's own template. A value with no pattern character matches exactly as
+before.
+
+**What to check:**
+
+- Code that passed a pattern as the value under a search option (`'a.*'`) and
+  relied on it: the value is text now. To change how the value is anchored, pass a
+  template to the constructor, in which `%s` stands for the value:
+  `new Collection(rows, { searchOptionRules: { isCaseSensitive: { false: { re: '^%s', modifiers: 'i' } } } })`
+  makes the case-insensitive search a prefix search.
+- Code that built a new `Collection` for each lookup to get a right answer keeps
+  working; one instance can now serve several lookups.
+- A value that comes from a request. Two things still read a value as something
+  other than text, with or without a search option: a value holding `<`, `>` or `=`
+  is a comparison (`'>= 1'`), and `not null`, in any case, matches every defined,
+  non-null value. Passing `{ searchOptionRules: { skipEval: true } }` to the
+  constructor turns the comparison off for plain (non-dotted) keys. Nothing turns
+  `not null` off: refuse or rewrite that value before the search when a caller can
+  supply it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — the object form of a Collection search option works (bundle restart and re-bake)
+
+`setSearchOption()` on a [Collection](/api/collection) takes either three
+arguments, `setSearchOption('name', 'isCaseSensitive', false)`, or one object
+keyed by field: `setSearchOption({ name: { isCaseSensitive: false } })`. The
+object form tested each top-level key, a field name, against the rule table, so
+that shape threw `undefined is not an allowed searchOption !` and only the
+three-argument form was usable.
+
+The object form now checks each field's rule names: an unknown rule is refused by
+name, and a field entry that is not an object of rules is refused by field. It
+reads `'true'` / `'false'` as booleans like the three-argument form, and it copies
+the options, so your object is neither kept nor changed. One difference between
+the two forms: three arguments add a rule to what an earlier call set, field by
+field; one object replaces it.
+
+**What to check:** nothing has to change. A top-level `skipEval` in the object is
+accepted and has no effect: `skipEval` is a constructor option
+(`new Collection(rows, { searchOptionRules: { skipEval: true } })`).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a dotted Collection filter key holding `(`, `)` or `[` matches nothing instead of throwing (bundle restart and re-bake)
+
+A [Collection](/api/collection) filter key with a dot is a property path:
+`find({ 'address.city': 'Paris' })`, also inside an array of objects
+(`'reviews[*].ratings.score'`). A dotted key that is not a property path matches
+nothing. One case threw instead: a key whose last segment held `(`, `)` or `[`,
+such as `find({ 'address.ci(ty': 'Paris' })`, threw a `SyntaxError` out of the
+search. A regular expression was built from the key and never read; it is gone, and
+such a key now matches nothing like the others.
+
+**What to check:** nothing has to change. Code that caught that `SyntaxError`
+around a search whose key comes from a caller no longer sees it: the search
+returns no row.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — Collection `update()` writes each matched row back in its own place (bundle restart and re-bake)
+
+`update(filter, set)` on a [Collection](/api/collection) merges `set` into every
+row the filter matches, then writes each merged row back over the row it came
+from. When the filter matched several rows that have no `id`, every merged row
+was written over the first of them: a row was lost, another appeared twice and
+the others were not updated, with no error. A single matched row could be
+written over another row once an earlier `update()` or `toRaw()` had run on the
+same collection. Rows sharing the same `id` were affected too. Each merged row
+now goes back over the row it came from.
+
+Rows found by another Collection (`a.update(b.find({ … }), set)`) were not
+written at all. They are now written by their `id`.
+
+**What to check:** data saved from such an `update()` may hold one row twice in
+the place of a lost one. A collection whose rows all carry a unique `id` was not
+affected. As with any query result, call `.toRaw()` before saving the rows: the
+ones the call did not update carry an internal `_uuid` until then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — Collection `find()` lists a row once when it matches several filters (bundle restart and re-bake)
+
+`find()` on a [Collection](/api/collection) given two or more filter objects
+returns the rows matching at least one of them (an OR clause). A row matching
+two of the filters was listed twice — the same object, twice — and a row
+matching three of them three times. `limit(n)` on such a result dropped a real
+row, and a call chained on it met the row twice. The result now holds each
+matching row once, in collection order.
+
+```js
+var col = new Collection([{ name: 'a', g: 'x' }, { name: 'b', g: 'x' }, { name: 'c', g: 'y' }]);
+col.find({ name: 'a' }, { g: 'x' });   // before: a, a, b — now: a, b
+```
+
+**What to check:** code that counted the rows of such a result, or took its
+first `n` rows, now sees each row once. A call whose filters cannot match the
+same row (two values of one key, `find({ type: 'a' }, { type: 'b' })`) returns
+what it returned before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — Collection `delete()` and `notIn()` remove the rows they found (bundle restart and re-bake)
+
+`delete(filter)` and `notIn(filter)` on a [Collection](/api/collection) return
+the rows the filter does not match. They located each row to remove by a key
+read from the first row found: the internal `_uuid`, else `id`. Once `toRaw()`
+or `update()` had stripped that `_uuid` from the collection's rows:
+
+- rows with no `id` made the call throw `No comparison key defined !`;
+- rows sharing an `id` lost the first row holding that `id` instead of the row
+  found, with no error.
+
+The no-key form, `delete(filter, false)`, threw the same way on rows with no
+`id`, and removed nothing when the filter used a dotted key (`'address.city'`).
+
+Each row found is now removed as itself, whatever keys it carries. A key you
+name (`delete(filter, 'name')`) and rows passed in from elsewhere
+(`notIn(rows, 'id')`) are compared by key as before; rows passed in from
+elsewhere still need the named key, a `_uuid` or an `id`.
+
+**What to check:** data saved from a `delete()` on rows sharing an `id` may have
+lost the wrong row. If you caught `No comparison key defined !` around such a
+call, the call now returns its rows. A collection whose rows all carry a unique
+`id` was not affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a bundle with a custom async swig template loader renders again (bundle restart)
+
+From 0.6.30 to 0.7.3, a bundle that renders its templates through a
+[custom async template loader](/templating/async-loaders) (`settings.template.swig.loader`)
+answered every page render with a 500, and the server log carried
+`TypeError: swigMod.Swig is not a constructor`. Since 0.6.30 each bundle renders through
+an engine of its own, and the async render path was handed that engine, while it builds a
+separate engine from the swig module and needs the module itself. It receives the module
+again, and the pages render from the same loader configuration. A bundle with no `loader`
+block was not affected, nor was the nunjucks loader (`settings.template.nunjucks.loader`).
+
+**What to check:** nothing has to change. If you moved your templates back to disk, or
+stayed on 0.6.29, to get around it, the loader works again. The filters, tags and
+extensions a bundle registers in `controllers/setup.js` reach those templates too, from this
+release: see the next entry.
+
+Server-side: **restart the bundle**.
+
+### Fixed — `setup.js` filters, tags and extensions reach templates served by an async swig loader (bundle restart)
+
+A filter, tag or extension a bundle registers through `this.engine` in
+`controllers/setup.js` (or through `self.engine` in an action) did not reach the templates a
+[custom async template loader](/templating/async-loaders) serves: such a template answered a
+500, with `Invalid filter "<name>"` (for a tag, `Unexpected tag "<name>"`) in the server log.
+The async render path renders through an engine of its own, which never received the
+bundle's registrations. It now receives them, including those a later request's `setup.js`
+makes. A bundle with no `loader` block was not affected.
+
+**What to check:** nothing has to change. A bundle filter that has the name of one of gina's
+own filters (`nl2br`, `getUrl`, …) keeps rendering gina's filter there, as it already did for
+templates on disk, where gina registers its filters again at each render.
+
+Server-side: **restart the bundle**.
+
+### Fixed — `reBind()` no longer stacks the validator's listeners, and `destroy()` removes them (bundle restart and re-bake)
+
+`gina.validator.$forms[id].reBind()` detached nothing before binding the form
+again, so every call added one more copy of each listener on the form, its
+fields and its submit button. On Safari, a re-bound `autocomplete="off"` field
+inserted one character per re-bind on each keystroke; after a re-bind, a
+`.on('submit')` handler was bypassed (the validator sent the form itself) and
+registering `.on()` again added a second handler. `.reBind()` now detaches
+exactly what the previous bind attached, then binds again; the handlers
+registered with `.on()` and the declarative `data-gina-form-event-on-*`
+callbacks survive it. `.destroy()` removes them too, so a form destroyed and
+bound again starts clean and its submit button works; a form destroyed after
+it left the document (a popin replacing its content) keeps them until the
+element is gone, so an answer still on its way reaches its callback. See
+[Forms and validation](/guides/forms-and-validation#programmatic-api-and-events).
+
+**What to check:** code that restored a form's `gina.events` keys around
+`.reBind()` to avoid the stacking can be removed. A `.on()` handler registered
+before a `.reBind()` keeps running after it: register it once.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — an exception while the request data is parsed is answered, and the bundle keeps running (bundle restart)
+
+The framework parses the data of a request before it routes it: the query of a
+`GET`, `HEAD` or `DELETE`, the body of a `POST`, `PUT` or `PATCH`. The `POST`,
+`PUT` and `PATCH` body branches answered an exception raised there with a `500`.
+The others ran with no guard, so an exception reached the process as an
+`uncaughtException` and **the bundle exited** (code 143). That is the path the
+request-parsing defects fixed in 0.6.31, in 0.6.33 and in this release each took.
+
+The whole parse is now guarded. An exception raised while the request data is
+parsed is answered with a `500` through the same surface as
+[`self.throwError()`](/guides/controller#incident-ref): JSON carrying a `ref`
+for an XHR or API request, your [custom error page](/guides/error-pages) for an
+HTML one, and one error-level log line that pairs the `ref` with the stack. No
+input is known to raise such an exception today. The guard is a net under the
+parse, and what it catches is logged so that its cause gets fixed. Both engines.
+
+A `multipart/form-data` body is parsed by a separate, streaming path with its own
+listeners — for a text field, for a file part and for the end of the body; those are
+guarded too. An exception raised in one of them is answered with the same `500` on
+every supported Node version. Before, it exited the bundle on Node.js 22. On Node.js 24
+and later the outcome depended on the listener: an exception in the text-field listener
+was reported as a `400` "Malformed multipart/form-data request"; one in the file
+listener was answered that `400` and the bundle then exited; one in the end-of-body
+listener got no answer and the bundle exited. A genuinely malformed multipart body is
+still answered `400`.
+
+The callbacks nested inside a file part are guarded as well: the `error` and `finish`
+handlers of the temporary file's write stream, its close callback, the `end` handler of
+the file stream, and the callback of the
+[`autoTmpCleanupTimeout`](/guides/file-uploads#configuring-uploads) timer. A request
+that carries a file is handed to your action from the close callback, so before this
+release the same exception was answered `500` for a body without a file and ended the
+bundle for a body with one. An exception raised in one of these callbacks is now
+answered with the same `500`. When the request is already answered, it is logged with
+its stack instead: a write *error* (a full disk, a revoked permission) answers its own
+`500` — see
+[Probing the write-error crash-guard](/guides/file-uploads#probing-the-write-error-crash-guard)
+— and the cleanup timer runs after the answer.
+
+**What to check:** nothing to change. A log line holding `Could not evaluate GET
+request data.` (or another method) under a `[ ref … ]` marks a request the guard
+answered: it names a defect in the parser, worth reporting. So does a line holding
+`[ onListenerThrow ] not answered:`, which the multipart guard writes, with the stack,
+when it catches an exception after the request was answered.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — an error page whose dispatch fails is answered with the built-in page (bundle restart)
+
+On an HTML request, an error that reaches
+[`self.throwError()`](/guides/controller#selfthrowerrorres-code-err) is answered with
+your [custom error page](/guides/error-pages) when the bundle has one for its status:
+the framework dispatches that page through the router. When building the error page's
+controller raised, the router called `throwError()` again for the same request, and that
+call dispatched the page again. The cycle ran until the call stack overflowed: the
+request got no answer and **the bundle exited** (code 143), on Node.js 22, 24, 25 and 26.
+
+The error page is now dispatched at most once per request. An error raised during that
+dispatch is answered with the built-in error page, which shows the status and the
+[incident ref](/guides/controller#incident-ref) of that second error; its error-level
+log line pairs the ref with the cause, and the line of the first error carries the same
+request id. A request whose error page dispatches normally gets your page as before. No
+input is known to make the dispatch raise today. Both engines.
+
+**What to check:** nothing to change. A built-in error page served by a bundle that has
+a custom page for that status means the dispatch of your page failed: the log line
+paired with its ref names the cause.
+
+Server-side only: **restart the bundle** — no re-bake.
+
+### Fixed — a request field named `hasOwnProperty` reaches your action (bundle restart and re-bake)
+
+Up to 0.7.3, a field named `hasOwnProperty` in a request's query or body emptied what
+your action received, with no error:
+
+- on a `GET` or `HEAD`, `req.get` was empty, and on a `DELETE`, `req.delete` was empty:
+  every field of the query was dropped, not only that one;
+- on a `POST` or `PATCH`, `req.body` stayed the raw body string (the form text, or the
+  JSON text), while `req.post` and `req.patch` were complete.
+
+The cause was the [`count()`](/globals/prototypes#count) helper Gina installs on
+`Object.prototype`. It tested each key with `this.hasOwnProperty(key)`, an ordinary
+property lookup, so on an object holding its own `hasOwnProperty` field the call failed
+and the helper returned 0; the framework decides from that count whether to hand the
+parsed data over. The helper now tests each key with the built-in
+`Object.prototype.hasOwnProperty`. Every other count is unchanged.
+
+Two places that made the same lookup are fixed too: `functionCount()`, which threw on
+such an object, and the `is` rule of the [validator](/guides/forms-and-validation),
+which answered « could not evaluate » when the data it validated held a field named
+`hasOwnProperty`.
+
+**What to check:**
+
+- A `req.post.count()` or `req.get.count()` in your own code now counts that field. If
+  you relied on a count of 0 to skip such a request, that request is handled now.
+- `Object.prototype.count.call(obj)` now counts an object with no prototype, such as the
+  result of `querystring.parse()`, which it read as 0 before.
+
+**Restart the bundle and re-bake each bundle:** the browser bundle carries its own copy
+of the helper and of the validator.
+
+### Fixed — a worker child no longer takes over its bundle's pid file (no bundle restart)
+
+A *worker* is a child process your bundle spawns from an entry named `child.js` or
+`child-*.js`, passing `--argv-filename=<context file>`: Gina loads it with the bundle's
+context and registers it under the bundle's name. Up to 0.7.3 it registered with a pid
+file, so it wrote its own pid into `~/.gina/run/<bundle>@<project>.pid` and removed that
+file when it exited. While a worker was running:
+
+- `bundle:stop` signalled the worker instead of the bundle;
+- `bundle:restart` exited `0` while the old bundle kept serving: the new start failed on
+  the port the old process still held, and `bundle:start` reported that as a success
+  (fixed in this release: see
+  [`bundle:start` exits non-zero](#fixed--bundlestart-exits-non-zero-when-the-bundle-does-not-start-next-gina-frameworkrestart)).
+
+Once the worker had exited, the bundle had no pid file, so
+[`bundle:status`](/cli/cli-bundle#bundlestatus) reported it as stopped.
+
+A worker now registers without a pid file. Its `gina: <bundle>@<project>` title and its
+signal handlers are unchanged, and Gina sets `process.isMinion` to `true` in it, so its
+exit never removes the bundle's mount link.
+
+**What to check:**
+
+- A worker that sets `process.isMinion = true` itself keeps working: the value is the same.
+- A worker started before the update keeps the old registration until it exits. While it
+  runs, the first `bundle:restart` of its bundle ends only that worker and exits `1`, with
+  the old bundle still serving: run `bundle:restart` a second time to restart the bundle.
+
+No bundle restart is needed: a worker spawned after the update registers the new way. A
+bundle whose pid file an older worker already removed gets it back the next time the
+bundle starts.
+
+### Fixed — `req.delete` keeps its methods with Express 4 and the `simple` query parser (bundle restart)
+
+A bundle running `engine: "express"` on Express 4 with `app.set('query parser',
+'simple')`, or with any query parser that returns an object without a prototype,
+received `req.delete` with no prototype on every `DELETE` to a path after the first:
+the documented `req.delete.count()` and `req.delete.hasOwnProperty()` were not
+functions. `req.delete` is now a plain object holding the query's own fields. Express
+4's default parser and Express 5 were not affected.
+
+**What to check:** nothing to change. Code that reached the helper through
+`Object.prototype.count.call(req.delete)` keeps working.
+
+Server-side only: **restart the bundle**, no re-bake.
+
+---
+
 ## 0.7.2 → 0.7.3
 
 ### Fixed — a `GINA_VERSION` that names no installed framework is refused (next `gina` command)
@@ -3867,7 +5022,9 @@ engine handed to `setup.js` is the same instance that renders that bundle, and a
 registration made through it also reaches the swig module. So an application that
 compiles a template through the module it imported itself — an entity rendering a
 message outside any request, say — keeps seeing that bundle's filters, as it did
-before.
+before. A bundle whose templates come from a custom async loader is the exception: it
+renders on an engine of its own, which receives the bundle's `setup.js` registrations
+from [0.7.4](#073--074).
 
 The reverse is not true, and that is the part to check. Registrations made
 directly on the swig module never reach bundle template rendering: each bundle's
@@ -12303,7 +13460,7 @@ A controller action can now choose its template at request time — useful for a
 
 ```js
 this.dispatch = function(req, res, next) {
-    self.setTemplate('errors/' + req.params.code);   // resolved verbatim under the templates root
+    self.setTemplate('errors/' + req.params.code);   // resolved under the templates root (confined to it since 0.7.4)
     self.render({ title: 'Error' });
 };
 ```

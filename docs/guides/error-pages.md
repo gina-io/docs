@@ -106,9 +106,10 @@ All fields live under `page.data`:
 | `session` | A snapshot of the session user (or of the session itself when no user is set). |
 | `stack` | The stack trace, when an `Error` object carried one. Present in **every** scope — see the caution below. |
 
-The `error` / `message` split matches the JSON error surface: `error` holds
-the status text, and the text you passed to `throwError` lands in `message`
-(see [Controllers → Incident ref](/guides/controller#incident-ref)).
+The `error` / `message` split matches the JSON error surface: in the
+`(code, err)` and `(res, code, err)` forms `error` holds the status text, and the
+text you passed to `throwError` lands in `message` (for the one-argument form, see
+[Controllers → Incident ref](/guides/controller#incident-ref)).
 
 Outside the local scope, an `error` or `message` that carries a stack trace —
 for example from `self.throwError(res, 500, err.stack)` — arrives cut to its
@@ -134,6 +135,13 @@ development.
   extension (`.json`, `.png`, …) gets the built-in fallback page instead.
 - **Errors while rendering the error page fall back to the built-in page** —
   the framework never loops through your template a second time.
+- **So does an error raised while the framework dispatches your page**, before
+  your template runs (for example while it builds the page's controller): the
+  page is dispatched at most once per request, and the request is answered with
+  the built-in page under the incident ref of that second error (since 0.7.4).
+- **An error raised before your action runs is served the same way** — a
+  request whose data the framework fails to parse is answered with your
+  `500.html` (since 0.7.4).
 - The built-in fallback page also shows the status and the incident ref, so
   even an unconfigured error stays relayable.
 

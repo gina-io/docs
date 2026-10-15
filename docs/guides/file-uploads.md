@@ -531,13 +531,35 @@ names the file the user chose rather than the server-generated variant. If no
 original name is available the `alt` is empty, which marks the image decorative
 rather than announcing a placeholder.
 
-Each preview gets a **Reset** control. Activating it sends a removal request to
-the reset (staged) or delete (saved) action URL, then removes the preview image,
-the control itself, and the generated hidden fields, and restores the file
+Each staged file gets a **Reset** control in the preview container, whether or
+not it has a preview image. Activating it sends a removal request to the reset
+(staged) or delete (saved) action URL, then removes the preview image, the
+control itself, and the file's hidden fields — the generated ones and any you
+declared under its index, which come back with the next selection (see
+[Persisting the preview](#persisting-the-preview)) — and restores the file
 input's add-affordance. If your markup hides the input (or its wrapper) with a
 CSS class rather than an inline style, name that class in
 `data-gina-form-upload-hidden-class` — the restore removes it from the input
 and its parent; without the attribute, the inline `display` restore applies.
+
+A reset or a delete removes **every** file of its input, whichever of the
+input's controls is activated, in one request naming them all. A file input that
+holds several files cannot drop just one of them.
+
+By default the reset request is a `POST` of `{ "files": [ … ] }` to the reset
+action. It names each staged file by the `originalFilename` your staging answer
+returned, followed by its preview's `originalFilename` when the answer described
+a preview. A staging action that stores files with `self.store()` finds them
+under those names, since `store()` publishes each file under its original name.
+One that stores them under other names, a generated one for instance, has to map
+each `originalFilename` back to the file it stored.
+
+*Changed in 0.7.4.* The reset and the delete act on the input's files. They used
+to act only on the `<img>` elements of the preview container, so a file shown
+without an image kept its hidden fields and was submitted after its reset, an
+image inside the `<li>` of a `<ul>` container was not reached, and a reset on a
+multi-file input threw. A file chosen after a reset is now submitted like the
+first one: its hidden fields used to be missing.
 
 *Changed in 0.6.4.* Gina generates that control as an `<a>`, so it now carries
 `role="button"` and answers **Space** as well as Enter — an anchor natively
@@ -581,6 +603,40 @@ window.onAvatarReset = function (payload) {
 An exception thrown inside your callback is logged and contained — it never
 interrupts the removal. *The removal callbacks and
 `data-gina-form-upload-hidden-class` are new in 0.5.15.*
+
+### Saved files in an edit form
+
+An edit form can show the files already saved, each with a delete link. When the
+form is bound, gina reads them from the container `<input id>-preview`:
+
+- an `<img>` child of the container, or of one of its `<li>`, is a saved file
+  named by the last segment of its `src`;
+- any element carrying `data-upload-original-filename` is a saved file named by
+  that attribute — the way to show a file without an image (*new in 0.7.4*:
+  before, such a file could not be deleted).
+
+Give each file a delete link `<input id>-<index>-delete-trigger`, `<index>`
+counting those files from `0`, and keep its hidden fields under the same index so
+the form submits them unchanged until the file is deleted:
+
+```html
+<input type="file" id="contract" name="contract"
+       data-gina-form-upload-action="/media/stage"
+       data-gina-form-upload-delete-action="/media/contract">
+<input type="hidden" name="contract[0][name]" value="contract.pdf">
+<input type="hidden" name="contract[0][location]" value="/media/contract.pdf">
+
+<div id="contract-preview">
+  <a href="/media/contract.pdf" data-upload-original-filename="contract.pdf">contract.pdf</a>
+</div>
+<a href="#" id="contract-0-delete-trigger">Delete</a>
+```
+
+Activating a delete link sends the removal request to
+`data-gina-form-upload-delete-action`, then removes the files' nodes, their
+delete links and their `contract[<index>][…]` fields. With one file to delete and
+no `data-gina-form-upload-delete-method`, the request is a `DELETE` with no body,
+so its URL must name the file; otherwise it is a `POST` of `{ "files": [ … ] }`.
 
 ### Persisting the preview
 
@@ -626,6 +682,11 @@ nested structure:
 
 Declare only the keys your route returns; a declared sub-field the response does
 not carry is left empty.
+
+A reset or a delete takes the declared sub-fields out of the form with their
+file, and the next selection puts them back, empty, before its staging answer
+fills them. *Changed in 0.7.4:* they used to stay out of the form, so the next
+file's preview was not submitted.
 
 *Changed in 0.6.29.* A form that declared no `[preview][...]` sub-fields used to
 receive a flat `<prefix>[0][preview]` field holding the literal text

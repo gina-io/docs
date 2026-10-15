@@ -452,6 +452,27 @@ self.throwError(404, 'Not found');
 self.throwError(new Error('Forbidden'));  // reads err.status for the HTTP code
 ```
 
+#### Redirecting instead of answering with an error {#throwerror-fallback}
+
+When the error carries `fallback`, `throwError()` answers with a redirect to it
+instead of an error response, on an XHR request or on a route that renders no
+template. `fallback` is a URL, used as written (the webroot is not prepended), or
+a route object from [`lib.routing.getRoute()`](/guides/routing#reverse-routing--libroutinggetroute):
+
+```js
+var err = new Error('Session expired');
+err.fallback = '/account/login';                           // a URL, used as written
+// or a route object:
+// err.fallback = lib.routing.getRoute('login@account');
+return self.throwError(err);
+```
+
+The redirect answers as [`self.redirect()`](#selfredirecturl-ignorewebroot) does:
+with a `301` by default, with a `303` when the request method is unsafe (see
+[Redirects and the request method](/guides/routing#redirects-and-the-request-method)),
+and with the `isXhrRedirect` JSON for an XHR request that carries params or comes
+from a popin. On any other request the error is answered as usual.
+
 #### Incident ref
 
 Every JSON error body carries a top-level **`ref`** — a short, voice-relayable
@@ -462,9 +483,12 @@ scopes**, production included:
 { "status": 404, "error": "Not Found", "message": "Invoice not found", "ref": "A1B2C3" }
 ```
 
-Note that `error` holds the **status text** for the code, and the text you passed lands
-in `message` — so a client that wants to display your sentence should read `message`,
-not `error`.
+In the `(code, err)` and `(res, code, err)` forms, `error` holds the **status text** for
+the code, and the text you passed lands in `message`. In the one-argument form
+`self.throwError(err)`, `error` holds the error's own `error` — or, when it has none, its
+`message` (an `Error`'s message included), else the status text — and since 0.7.4 its
+`message` lands in `message` as well. Either way, a client that wants to display your
+sentence should read `message`, not `error`.
 
 (The `stack` field is included only in local/development scope; outside it the
 stack is stripped from the wire — see below. A stack passed *as* the message, as in
@@ -487,13 +511,15 @@ So support can grep a user-relayed `ref` and land on the exact failure — even
 in production, where the wire response never carried the stack. The `ref`
 composes with the always-on request id (it does not replace it).
 
-**Supplying your own ref.** Pass a `ref` on the error object to correlate a
-throw with your own tracking id. It is honoured when relay-safe (word
+**Supplying your own ref.** Pass a `ref` on the error object — a plain object or an
+`Error` — to correlate a throw with your own tracking id. It is honoured in every call
+form (in the one-argument form `self.throwError(err)` since 0.7.4) when relay-safe (word
 characters, dots or dashes, up to 32 chars); anything else is replaced with a
 fresh minted ref (so it can never be used to forge a log line):
 
 ```js
 self.throwError(res, 500, { ref: 'ORDER-42', message: 'payment capture failed' });
+self.throwError({ status: 502, message: 'payment capture failed', ref: 'ORDER-42' });
 ```
 
 **Custom error pages** receive the same value as `data.ref`, so you can surface
@@ -578,6 +604,14 @@ strings (`active=true` gives `'true'`), while in a query string `true`, `false`
 and `on` become booleans and `null` becomes `null`. A JSON value inside a form
 field keeps its own types, and an `application/json` body is parsed verbatim.
 The full contract is on the [data helper](/globals/data) page.
+:::
+
+:::note When the parse itself fails
+The request data is parsed before your action runs. If the framework raises an
+exception while it parses it, the request is answered with a `500` through the
+same surface as [`self.throwError()`](#incident-ref): JSON carrying a `ref`, or
+your [custom error page](/guides/error-pages) for an HTML request. The server
+log pairs that `ref` with the stack, and the bundle keeps running (since 0.7.4).
 :::
 
 **`req.body`** is the method-agnostic shortcut. Use it when the action doesn't
@@ -1074,6 +1108,7 @@ not an `Error` instance:
     status  : 502           // HTTP status code from the upstream response
   , error   : "Bad Gateway" // human-readable label for the status
   , message : "..."         // upstream response body or reason phrase
+  , ref     : "A1B2C3"      // the upstream's incident ref, when it sent one
 }
 ```
 
@@ -1093,10 +1128,17 @@ self.query(opt, function(err, data) {
 
     // Option C — explicit error page with a specific code
     // return self.throwError(err.status || 500, err.message);
+
+    // Option D — relay the upstream's error as it came
+    // return self.throwError(err);
   }
   self.render(data);
 });
 ```
+
+Relaying with `self.throwError(err)` (Option D) keeps the upstream's status, its
+`message` and its incident `ref` (since 0.7.4), so the ref your client sees is the one in
+the upstream bundle's log line.
 
 **Async callbacks are owned too.** If the function you pass — to the callback
 form or to `.onComplete()` — is `async` and its promise rejects, the framework
@@ -1584,7 +1626,7 @@ documented. Methods without a link are described here in one line.
 - [`redirect`](#selfredirecturl-ignorewebroot) · [`throwError`](#selfthrowerrorres-code-err) · [`forward404Unless`](#selfforward404unlesscondition-req-res-next) — above.
 - [`downloadFromLocal`](#selfdownloadfromlocalfilename) · [`downloadFromURL`](#selfdownloadfromurlurl-options-cb) — above.
 - [`setEarlyHints`](#103-early-hints) · [`setPriority`](#response-priority) — above. `sendTrailers(fields)` — records opt-in HTTP/2 response trailers, best-effort, sent after the body by every response method.
-- `setTemplate(file, ext)` — override the route's template path or extension at action time — [Templating](/templating).
+- `setTemplate(file, ext)` — override the route's template path or extension at action time; the path must resolve inside the section's template root — [Templating](/templating).
 
 **Request state**
 

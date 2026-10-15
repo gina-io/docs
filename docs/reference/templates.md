@@ -63,7 +63,7 @@ values always win.
 |---|---|---|---|
 | `layout` | string | framework default | Path to the main HTML layout file. Supports [path template variables](./index.md#path-template-variables) |
 | `noLayout` | string | framework default | Layout used when `layout` is `""` or `false` |
-| `html` | string | `${templatesPath}/html` | Directory containing template HTML files |
+| `html` | string | `${templatesPath}/html` | Directory containing template HTML files. A page template must resolve inside it: since 0.7.4, a page path that resolves outside answers 500 |
 | `handlers` | string | `${templatesPath}/handlers` | Directory containing client-side JS handler files |
 | `routeNameAsFilenameEnabled` | boolean | `true` | When `true`, the route name is used as the default template filename if `param.file` is not set |
 | `javascriptsDeferEnabled` | boolean | `true` | Place `<script>` tags in `<head defer>` when `true`, or in the `<body>` footer when `false` |

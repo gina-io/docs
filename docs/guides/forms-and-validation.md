@@ -1283,8 +1283,8 @@ exposing:
 |---|---|
 | `.submit()` | trigger validation + submit programmatically |
 | `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
-| `.reBind()` | re-scan the form after you have changed its DOM |
-| `.destroy()` | unbind the form and remove its listeners |
+| `.reBind()` | re-scan the form after you have changed its DOM: what the previous bind attached is detached, then attached again — your `.on()` handlers and the declarative `data-gina-form-event-on-*` callbacks stay |
+| `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle |
 | `.resetFields()` | restore fields to their initial values |
 | `.resetErrorsDisplay()` | clear rendered error/warning state |
 
@@ -1304,6 +1304,20 @@ gina.validator.$forms['signup'].on('submit', function (event, result) {
 A `ready.<formId>` event fires once a form is wired, in case you need to run
 setup after binding. Binding `submit` replaces Gina's default auto-send for
 that form — only do it when you mean to take control of submission.
+
+*Changed in 0.7.4:* `.reBind()` detaches exactly what the previous bind attached
+before binding the form again, so calling it repeatedly no longer stacks
+listeners (on Safari, a re-bound `autocomplete="off"` field used to insert one
+character per re-bind on each keystroke), and the handlers you registered with
+`.on()` — the declarative `data-gina-form-event-on-*` callbacks included —
+survive it: a `submit` handler is still consulted after a re-bind, and
+registering the same event again is ignored rather than added twice.
+`.destroy()` removes those handlers too, so a form you destroy and bind again
+(`gina.validator.validateFormById(id)`) starts clean and its submit button
+works; a form destroyed after it left the document — a popin replacing its
+content — keeps them until the element is gone, so an answer still on its way
+reaches your callback. Code that restored the form's `gina.events` keys around
+`.reBind()` to work around the stacking is no longer needed.
 
 :::note You don't construct the validator to make it run
 The validator **boots itself at page load**, so a rule-bound form

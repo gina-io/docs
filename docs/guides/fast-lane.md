@@ -173,9 +173,11 @@ ctx.json({ status: 409, error: 'Already exists' });  // 409, the body as given
 
 `ctx.error()` answers with the JSON envelope of
 [`self.throwError()`](/guides/controller#selfthrowerrorres-code-err): `status`, `error`
-(the status text), `message` (your sentence), `fields` or `errors` when the error object
-carries them, a `stack` in local scope only, and the incident `ref`. It also logs the one
-error line that pairs that `ref` with the full detail and the request id.
+(the status text — in the one-argument form `ctx.error(err)`, the error's own `error`, as
+for [`self.throwError(err)`](/guides/controller#incident-ref)), `message` (your sentence),
+`fields` or `errors` when the error object carries them, a `stack` in local scope only, and
+the incident `ref`. It also logs the one error line that pairs that `ref` with the full
+detail and the request id.
 
 ```js
 ctx.error(404, 'No such invoice');
@@ -184,6 +186,7 @@ ctx.error(404, 'No such invoice');
 ctx.error(500, err);    // the error's message; its stack in local scope only
 ctx.error({ status: 422, error: 'Validation failed', fields: { email: { isEmail: 'Invalid email' } } });
 ctx.error(500, { ref: 'ORDER-42', message: 'payment capture failed' });   // a relay-safe ref is kept
+ctx.error(err);         // one error object: its status, its message and a relay-safe ref (since 0.7.4)
 ```
 
 The log line names the lane:

@@ -18,6 +18,11 @@ A *minion* is a live, detached Node.js process that runs one bundle: the process
 `bundle:start` spawns. Each one registers a `<bundle>@<project>.pid` file under
 the run directory (`~/.gina/run`).
 
+A *worker* child that a bundle spawns itself (an entry named `child.js` or
+`child-*.js`, loaded with `--argv-filename`) runs under the bundle's name and title, but
+it writes no pid file, so it is not a minion in the sense of these commands. Up to 0.7.3
+it wrote its own pid into the bundle's pid file, and removed that file when it exited.
+
 ---
 
 ## `minion:list`

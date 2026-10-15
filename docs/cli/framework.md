@@ -96,6 +96,14 @@ Stop the framework socket server only. Running bundles are detached child proces
 gina framework:stop
 ```
 
+To stop another installed framework version, name it:
+
+```bash
+gina stop @<version>
+```
+
+The stop reads that version's pid file, `gina-v<version>.pid` in the run directory (`~/.gina/run`), and the framework's record in `~/.gina/procs.json`. It sends `SIGTERM` to the pid they both name only while `ps` shows that pid running as the framework, so a pid that another process has taken since is left alone. Where `ps` cannot identify a process (Windows, an image without `ps`), that pid is signalled. With no pid file, the stop looks for the framework in its record, then by its `gina-v<version>` process title. The pid files of other framework versions are left in place.
+
 ---
 
 ## `framework:restart`
@@ -105,6 +113,10 @@ Restart the framework socket server.
 ```bash
 gina framework:restart
 ```
+
+The command stops the framework, then starts it again with `gina start`. When the
+framework does not start again, it prints what the start printed and one line naming
+the failure, then exits with the start's [exit code](#start-exit-codes).
 
 ---
 

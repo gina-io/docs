@@ -61,6 +61,33 @@ Any unrecognised `--key=value` flag is forwarded to the Node.js process
 gina bundle:start api @myproject --inspect-brk=5858 --max-old-space-size=2048
 ```
 
+When another program already holds the debugger port, node starts the bundle without
+the inspector: the command prints a hint and still reports the start.
+
+### Exit codes {#bundle-start-exit-codes}
+
+`gina bundle:start` returns once the bundle listens, or once it is known that it will
+not.
+
+| Exit | When |
+|------|------|
+| `0` | The bundle listens, or it was already running: its pid file (`~/.gina/run/<bundle>@<project>.pid`) names a running process titled `gina: <bundle>@<project>`. A running bundle is not started again: the command prints `[ <bundle>@<project> ] is already running with PID [ <pid> ]`. |
+| `1` | Another program holds the bundle's port. The command names the port and, outside Windows, a command that finds the holder. |
+| `1` | The bundle could not listen on its port for another reason, such as `EACCES`. |
+| The bundle's own code | The bundle stopped before it was ready: an error while it boots, a [`scopes`](/concepts/scopes#restrict-a-bundle-to-certain-scopes) refusal. `1` when that code was `0`. |
+| `128` + the signal number | A signal stopped the bundle before it was ready (`137` for `SIGKILL`). |
+| `1` | The bundle was not ready after about 64 seconds (much longer with `--inspect-brk`, which waits for a debugger). |
+| `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name. |
+| `1` | `bundle:start @<project>`: one of the project's bundles did not start. Every bundle is still attempted. |
+
+The codes come from the framework: a framework started by an older Gina keeps
+returning `0` until `gina framework:restart`.
+
+```text
+  [ api@myproject ] could not start: port 3100 is held by another program, not a running gina bundle api@myproject.
+  Find the holder: lsof -nP -iTCP:3100 -sTCP:LISTEN
+```
+
 ### Per-bundle framework version
 
 Pin a bundle to a specific installed gina version without touching the running
@@ -117,6 +144,11 @@ gina bundle:restart <bundle> @<project>
 ```bash
 gina bundle:restart api @myproject
 ```
+
+It exits `1` when the bundle did not restart: when the stop or the start fails (the
+start returns its [exit codes](#bundle-start-exit-codes)), and when the start exits `0`
+while the process that ran before the stop is still the one running, or while no bundle
+runs. `bundle:restart @<project>` exits `1` when any of its bundles did not restart.
 
 ---
 
