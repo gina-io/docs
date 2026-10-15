@@ -251,6 +251,21 @@ Docker container.
 Nothing changes on macOS or Linux, inside WSL2 or in a container, so there is nothing to
 restart.
 
+### Fixed — the "not started" hint no longer asks for `sudo` (no restart)
+
+When the framework is not running, a command that needs it, such as `gina bundle:start`, prints
+a hint. On macOS and Linux it said `$ sudo gina start`, but gina needs no elevated privileges:
+the framework runs as the current user, and its pid files go under the npm prefix, or to
+`~/.gina/run` when the prefix is not writable (see [Installation](/getting-started/installation)).
+The hint now reads, before the line naming the address it tried:
+
+```text
+[ gina ] not started, try to start framework with :
+$ gina start
+```
+
+The change is in the CLI's own output, so there is nothing to restart.
+
 ---
 
 ## 0.7.3 → 0.7.4
