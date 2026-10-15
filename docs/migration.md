@@ -356,7 +356,7 @@ requirement. The router now rejects a request value that would escape as a path 
 
 Both renderers now resolve the path they are about to read and answer **500** when it lies outside
 the section's template root, the `html` directory of templates.json (`templates/html` by default).
-Affected: every release through 0.7.3. A security advisory accompanies this fix.
+Affected: every release through 0.7.3. Two security advisories accompany this fix.
 
 **What to check:**
 
