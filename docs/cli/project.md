@@ -41,6 +41,8 @@ Gina creates the directory if it does not exist, writes `manifest.json`, `packag
 
 Since `0.6.9` it also writes a `.gitignore` — but **only when the project does not already have one**. Yours is never replaced or appended to, so re-running `project:add` over an existing project leaves it untouched. The scaffolded file covers the usual build output (`node_modules`, `releases`, `logs`, `tmp`) and the secret-file globs `.env`, `.env.*` and `*.env`, with `!.env.example` negations so a sample can still be committed.
 
+Since `0.7.5` the same holds for `package.json`: `project:add` writes one **only when the project does not already have one**, and leaves an existing one exactly as it is. Up to `0.7.4` an existing `package.json` was rewritten: its `name`, `description` and `engines.node` were replaced by the project name, a template description and the Node version of the machine that ran the command, and the file was re-indented and made executable. A new `package.json` carries Gina's own Node floor in `engines.node` (`>=22`, the lower bound of Gina's own `engines.node`), ends with a newline, and is written at mode `0644`.
+
 ### Project names
 
 Since `0.7.1`, a new project name is made of letters, digits, `_`, `.` and `-`, and
@@ -358,7 +360,7 @@ gina project:restore @<name> <archive.zip> --to=<path> [--force]
 gina project:restore @myproject ./myproject-20260619-120000.zip --to=~/Sites/myproject
 ```
 
-The archive is extracted to `--to`, then the project is registered under `@<name>` (allocating ports for each bundle in its `manifest.json`). The name may differ from the original, so the same command also handles rename-on-restore. Pass `--force` to overwrite an already-registered name or a non-empty destination. After restoring you can [`gina project:start`](#projectstart) `@<name>` directly.
+The archive is extracted to `--to`, then the project is registered under `@<name>` (allocating ports for each bundle in its `manifest.json`). The name may differ from the original, so the same command also handles rename-on-restore. Since `0.7.5` the restored `package.json` is left as it is, its `name` included; up to `0.7.4` the registration step stamped `<name>` into it. Pass `--force` to overwrite an already-registered name or a non-empty destination. After restoring you can [`gina project:start`](#projectstart) `@<name>` directly.
 
 Since `0.7.1` a name that is not registered yet must follow the
 [project naming rule](#project-names): `project:restore` checks it before it extracts

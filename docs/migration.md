@@ -266,6 +266,25 @@ $ gina start
 
 The change is in the CLI's own output, so there is nothing to restart.
 
+### Fixed — `project:add` leaves an existing `package.json` as it is (no restart)
+
+`gina project:add` on a directory that already held a `package.json` rewrote it. The project
+name, a template description (`<project> is a nice project !`) and the Node version of the
+machine that ran the command (for example `>=25.3.0`) replaced your `name`, `description` and
+`engines.node`; the keys were reordered, the indent became 4 spaces, the final newline was
+dropped, and the file was made executable (mode `0755`). Your other keys were kept. It now
+writes `package.json` only when the project has none, as it already did for `.gitignore`, and
+leaves an existing one exactly as it is. [`project:restore`](/cli/cli-project#projectrestore)
+registers a restored tree through `project:add`, so the restored `package.json` keeps its
+archived `name` too.
+
+A new `package.json` changes in three ways: `engines.node` carries Gina's own Node floor,
+`>=22`, instead of the version of the Node that ran the command; the file ends with a newline;
+and it is written at mode `0644`.
+
+If an earlier `project:add` rewrote your `package.json`, restore your own values from version
+control. The command is a CLI one, so there is nothing to restart.
+
 ---
 
 ## 0.7.3 → 0.7.4
