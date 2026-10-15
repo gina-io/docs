@@ -164,6 +164,8 @@ Gina does not run natively on Windows; if you try, it stops with a message that 
 
 With [Docker Desktop](https://docs.docker.com/desktop/) and its WSL 2 backend, run each bundle in a Linux container. [K8s and Docker](/guides/k8s-docker) covers `gina-init` and `gina-container`, the two commands a container needs. Keep any source you bind-mount into a container in the WSL file system as well: Docker [documents](https://docs.docker.com/desktop/features/wsl/best-practices/) that containers receive file-change events only for files stored there.
 
+To develop in a container, open the [gina-starter](https://github.com/gina-io/gina-starter#dev-container) repository in its dev container, with VS Code's Dev Containers extension or in GitHub Codespaces: the container installs Gina, registers the project, then starts the framework and the demo bundle on port 3100. Clone the repository inside WSL, or into a container volume (**Dev Containers: Clone Repository in Container Volume**), not on the Windows drive, for the same reason.
+
 ### Why not native Windows
 
 Gina's CLI manages bundles as Unix processes (signals, `ps`, symbolic links), and its first-run setup has not been ported to Windows. Native support is on the [roadmap](/roadmap#windows) for after 1.0, if there is demand.
