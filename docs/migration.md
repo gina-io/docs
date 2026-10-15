@@ -158,8 +158,8 @@ where it threw decided the damage:
 - **A form-encoded POST, PUT or PATCH body** answered `500`.
 
 The helper now replaces a `null` slot with a fresh container and nests through it:
-`a=[null]&a[0][b]=1` gives `{ a: [ { b: '1' } ] }`. A slot holding any other
-primitive still ignores the nested field, as before: `a=[true]&a[0][b]=1` gives
+`a=[null]&a[0][b]=1` gives `{ a: [ { b: '1' } ] }`. A slot holding a number or a
+boolean still ignores the nested field, as before: `a=[true]&a[0][b]=1` gives
 `{ a: [ true ] }`. Affected: every release from at least 0.6.0 through 0.7.3. A
 security advisory accompanies this fix.
 
