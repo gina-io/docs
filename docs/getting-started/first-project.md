@@ -40,7 +40,7 @@ gina project:add @myproject --path=~/Sites/myproject
 
 This registers the project with Gina and creates the project directory at `~/Sites/myproject`.
 
-> On Windows, run your terminal with Administrator privileges.
+> On Windows, run these commands in WSL2. See [Installation › Windows](/getting-started/installation#windows).
 
 ### Remove a project
 

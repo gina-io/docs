@@ -57,17 +57,17 @@ Gina distinguishes between **framework environments** (`dev`, `prod`) and **proj
 
 In the development environment, changes to controllers, templates, and public assets are picked up **without restarting the bundle**.
 
-## Alpha status
+## Release status
 
-> Gina is currently in preview/alpha. Some commands or features may not work as expected while the framework is still under active development and testing.
+Gina publishes stable releases on npm's `latest` tag, and previews of the next release on the `alpha` tag. Gina is not yet 1.0, so a release can still change behaviour: the [migration guide](/migration) says what to change for each one. Security fixes ship in the latest release only (see the [security policy](https://github.com/gina-io/gina/blob/master/SECURITY.md)). Version 1.0.0 is planned for Q3 2027; see the [roadmap](/roadmap).
 
-Windows support is in alpha — Windows users can use Docker or WSL in the meantime.
+On Windows, run Gina inside WSL2 or a Docker container. See [Installation › Windows](/getting-started/installation#windows).
 
 ## Requirements
 
 - Node.js **>= 22, < 27** (CI-tested on Node 22, 24, and 26), or the **[Bun](https://bun.sh)** runtime (**>= 1.2**)
 - npm (or Bun)
-- Unix-like OS (macOS, Linux) for full feature support
+- macOS or Linux. On Windows, use WSL2 or Docker ([details](/getting-started/installation#windows)).
 
 ## Next steps
 

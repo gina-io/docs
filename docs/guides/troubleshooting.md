@@ -34,7 +34,7 @@ On npm ≤ 11 you can also reset as part of a reinstall with `npm install -g gin
 
 ### First start
 
-**Windows:** Make sure you are running your terminal with Administrator privileges.
+**Windows:** Gina runs inside WSL2 or a Docker container, not natively. See [Installation › Windows](/getting-started/installation#windows).
 
 **Cloned from GitHub:** Run the install scripts manually:
 
@@ -146,7 +146,7 @@ ps aux | grep gina
 kill <pid>
 ```
 
-**Windows:** Look for `node.exe` or `Event I/O Handler` in Task Manager and end the process.
+**Windows:** run the commands above in your WSL2 terminal; with Docker, restart the container.
 
 Then try starting the bundle again.
 

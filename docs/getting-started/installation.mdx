@@ -16,6 +16,10 @@ import TabItem from '@theme/TabItem';
 
 Gina is distributed on npm and installs on either **Node.js** (with `npm`) or the **[Bun](https://bun.sh)** runtime (with `bun`). Because it acts as both a framework and a deployment environment, it is recommended to install it **globally**. A global install gives you the `gina` CLI, which manages projects, bundles, ports, and the framework socket server from any directory on your machine.
 
+:::note Windows
+Gina runs on Windows inside WSL2 or a Docker container, not natively. See [Windows](#windows).
+:::
+
 ## Method 1 — Custom prefix (recommended)
 
 This installs Gina in your home directory, avoiding the need for `sudo` or root access.
@@ -134,6 +138,35 @@ bun add gina
 </Tabs>
 
 With this method, run the CLI using `./gina` from your project root instead of `gina`.
+
+---
+
+## Windows
+
+Gina does not run natively on Windows; if you try, it stops with a message that points here. Run it on Linux inside your Windows machine instead. Both options below run Gina on Linux, the platform its CI tests.
+
+### WSL2 (recommended)
+
+[WSL](https://learn.microsoft.com/windows/wsl/install) runs a Linux distribution on Windows. It needs Windows 10 version 2004 (build 19041) or later, or Windows 11.
+
+1. Open PowerShell as an administrator, run this command, then restart your machine. It installs WSL 2 with Ubuntu:
+
+   ```powershell
+   wsl --install
+   ```
+
+2. Open **Ubuntu** from the Start menu and create your Linux user.
+3. In the Ubuntu terminal, install [Node.js](https://nodejs.org/en/download) 22 or later, then install Gina with [Method 1](#method-1--custom-prefix-recommended). Use the Linux `node` and `npm`, not a Windows installation of Node.js.
+4. Keep your projects in the Linux file system, for example `~/Sites/myproject`, not under `/mnt/c`. Microsoft [recommends it](https://learn.microsoft.com/windows/wsl/filesystems) for speed, and it matters to Gina too: in development, Gina reloads a changed controller when its file watcher reports the change, and Linux tools may not receive change events for files edited on the Windows drive.
+5. Open your bundles from a Windows browser at `http://localhost:<port>`. WSL forwards `localhost` to Linux by default.
+
+### Docker
+
+With [Docker Desktop](https://docs.docker.com/desktop/) and its WSL 2 backend, run each bundle in a Linux container. [K8s and Docker](/guides/k8s-docker) covers `gina-init` and `gina-container`, the two commands a container needs. Keep any source you bind-mount into a container in the WSL file system as well: Docker [documents](https://docs.docker.com/desktop/features/wsl/best-practices/) that containers receive file-change events only for files stored there.
+
+### Why not native Windows
+
+Gina's CLI manages bundles as Unix processes (signals, `ps`, symbolic links), and its first-run setup has not been ported to Windows. Native support is on the [roadmap](/roadmap#windows) for after 1.0, if there is demand.
 
 ---
 
