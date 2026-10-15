@@ -21,6 +21,35 @@ upward to the target version.
 
 ## 0.7.4 → 0.7.5
 
+### Security — a query value no longer replaces a URL segment in a route's template path (bundle restart)
+
+A route can put a `:placeholder` of its URL in `param.file`
+(`"url": "/page/:name"`, `"param": { "name": ":name", "file": "content/:name" }`). The
+router filled that placeholder from the request's query and body first, and took the URL
+segment only when the request sent no value of the same name. So `/page/home?name=other`
+rendered `content/other.html`, even on a route whose `requirements` allow `home` only: a request
+could render any template under the bundle's template root this way. The template root itself
+held (see the 0.7.3 → 0.7.4 entry on template paths below). This is the residual that advisory
+[GHSA-3vmh-634f-vwm3](https://github.com/gina-io/gina/security/advisories/GHSA-3vmh-634f-vwm3)
+states.
+
+A placeholder that is a URL segment of the route now takes the URL value. The query or body
+value of the same name stays readable in `req.get` or `req.post`, and no longer reaches
+`param.file`. A value that would leave the template root is now ignored the same way, so the
+URL's template renders instead of a `500`.
+
+**What to check:**
+
+- A placeholder the URL does not carry is still filled from the query or body
+  (`"url": "/page"`, `"param": { "tpl": ":tpl", "file": "content/:tpl" }`, `?tpl=home`), and so is a query key the route
+  declares in `requirements` on a GET or DELETE request.
+- A client that chose a template by sending a query value named like a URL segment
+  (`/page/home?name=other`) now gets the URL's template: put the choice in the URL, or in a
+  placeholder the URL does not carry.
+
+Server-side only: **restart the bundle**. The browser bundle's copy of the router changes too,
+but nothing it does in the browser changes.
+
 ### Fixed — `reBind()` keeps the rule set a form names with `data-gina-form-rule` (bundle restart and re-bake)
 
 `gina.validator.$forms[id].reBind()` re-bound a form with an empty rule set when
