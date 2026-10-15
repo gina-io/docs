@@ -91,6 +91,80 @@ first, when it names a known rule set, then the id. See
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a field made required by a `_case_` rule is live-checked (bundle restart and re-bake)
+
+A `_case_<field>` block gives a field rules only once another field takes a
+given value. Here `company` has no rule of its own and is required only when
+`kind` is `pro`:
+
+```json
+{
+  "name": { "isRequired": true },
+  "_case_kind": {
+    "conditions": [
+      { "case": "pro", "rules": { "company": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+The validator wired a live listener only on a field with rules of its own, so
+`company` got none. Once `kind` was `pro`, typing into `company` never
+re-checked the form: the submit control kept its gated mark and the click on it
+was refused. A field that a `_case_` condition names is now wired when the form
+is bound. Until its condition applies, its own check finds no rule and only the
+whole-form check runs. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:** nothing has to change. A field with rules of its own was not
+affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `tel`, `url`, `search`, `time`, `datetime-local`, `month` and `week` fields are live-checked (bundle restart and re-bake)
+
+The live check was wired only on `radio`, `checkbox`, `text`, `hidden`,
+`password`, `number`, `date` and `email` inputs. An input of any other type got
+no live listener, even with rules of its own, so typing into a required
+`<input type="tel">` never re-checked the form: the submit control kept its
+gated mark and the click on it was refused. `tel`, `url`, `search`, `time`,
+`datetime-local`, `month` and `week` inputs are now live-checked like `text`
+inputs. `range` and `color` inputs are not.
+
+**What to check:** nothing has to change.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `reBind(formId, rules)` uses the rules you pass, and validation no longer writes `window.rule` (bundle restart and re-bake)
+
+`gina.validator.$forms[id].reBind(formId, rules)` used its `rules` argument (a
+rule-set name or a rule object) only after a validation on the page had found an
+error, and re-bound the form with its usual rule set until then. The check read
+a global `rule` variable instead of the argument, and that global existed only
+because the validator leaked it: its error loop assigned an undeclared `rule`,
+so the first validation that found an error set `window.rule`, overwriting any
+page variable of that name. The loop variable is declared now, and `.reBind()`
+checks its own argument. See
+[Forms and validation](/guides/forms-and-validation#programmatic-api-and-events).
+
+**What to check:** a page script that read `window.rule` after a failed
+validation (it held the name of a failing rule) now reads `undefined`. A
+`.reBind()` call with no arguments is not affected.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `$forms[id].unbind()` with no argument unbinds the form (bundle restart and re-bake)
+
+Called on a form's handle with no argument, `gina.validator.$forms[id].unbind()`
+threw « could not unbind form `undefined` » and left the form bound: unlike
+`.bind()` and `.reBind()`, it did not fall back to the handle's own form. It now
+unbinds that form, as `.unbind(formElement)` already did.
+
+**What to check:** code that wrapped `.unbind()` in a `try` to ignore the error
+can drop the wrapper.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or

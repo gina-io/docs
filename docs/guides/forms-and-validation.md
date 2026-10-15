@@ -209,6 +209,21 @@ A few behaviours worth knowing:
   control `data-gina-form-autofill-withheld="true"` while it is in that state
   — a hook for your own styling. The key localizes like any other built-in
   label (see [Localizing built-in error labels](#localizing-built-in-error-labels)).
+- **A field made required by a conditional rule is live-checked (since
+  0.7.5).** A `_case_<field>` block gives a field rules only once another field
+  takes a given value, for example `company` required only when `kind` is
+  `pro`. Before 0.7.5 only a field with rules of its own got a live listener,
+  so once its condition applied, typing into such a field never re-checked the
+  form: the submit control kept its gated mark and a click on it was refused.
+  A field that a `_case_` condition names is now wired when the form is bound;
+  until its condition applies, only the whole-form check runs for it.
+- **`tel`, `url`, `search` and the date and time inputs are live-checked
+  (since 0.7.5).** `tel`, `url`, `search`, `time`, `datetime-local`, `month`
+  and `week` fields now get the same live check as `text`, `email`,
+  `password`, `number` and `date` fields. Before 0.7.5 typing into one never
+  re-checked the form, so the submit control kept the gated mark it had at
+  bind time and a click on it was refused. `range` and `color` inputs are still
+  not live-checked.
 
 ### Accessibility
 
@@ -1323,6 +1338,15 @@ reaches your callback. Code that restored the form's `gina.events` keys around
 names with `data-gina-form-rule` across `.reBind()` (and `.bind()`). In 0.7.4
 such a form was re-bound with no rules, so its submit control stayed gated while
 the user typed and the first click on a valid form was refused.
+
+*Fixed in 0.7.5:* `.reBind(formId, rules)` binds the form with the `rules` you
+pass, a rule-set name such as `'account/signin'` or a rule object, every time.
+Called on a handle it ignores `formId`, so `.reBind(null, rules)` is enough.
+Before 0.7.5 the `rules` argument was used only after a validation on the page
+had found an error, and ignored until then: the check read a global `rule`
+variable that the validator leaked, and the first validation that found an
+error set `window.rule`, overwriting any page variable of that name. The
+validator no longer writes to `window.rule`.
 
 :::note You don't construct the validator to make it run
 The validator **boots itself at page load**, so a rule-bound form
