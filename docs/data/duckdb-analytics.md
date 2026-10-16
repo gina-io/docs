@@ -126,7 +126,7 @@ Connection options:
 | Option | Default | Notes |
 |---|---|---|
 | `database` | (required) | Logical name — names the model directory (`models/<database>/`) and the default file name |
-| `file` | `~/.gina/{version}/{database}.duckdb` | Path to the DuckDB file, or `":memory:"` for an ephemeral in-process database |
+| `file` | `~/.gina/{database}.duckdb` | Path to the DuckDB file, or `":memory:"` for an ephemeral in-process database |
 | `readOnly` | `false` | Open read-only (driver `access_mode: 'READ_ONLY'`). The engine refuses writes, and any number of read-only processes can share one file |
 | `scope` | `process.env.NODE_SCOPE` | Stamped on every entity as `_scope` |
 
@@ -366,14 +366,14 @@ DuckDB's file locking is stricter than SQLite's. The measured matrix:
 
 | Scenario | Result |
 |---|---|
-| Same process re-opens the same file | ✅ OK — merged-process bundles share cleanly |
+| Same process re-opens the same file | ✅ OK |
 | A second **process** opens while a read-write holder is up | ❌ Refused — even read-only |
 | Read-write holder released, then open with `readOnly` | ✅ OK — the engine refuses writes |
 | N processes, **all** `readOnly` | ✅ All share the file concurrently |
 
 Practical patterns:
 
-- **Single bundle (or merged-process bundles)** — open read-write, no
+- **Single bundle** — open read-write, no
   restrictions.
 - **Produce, then publish** — a writer job builds the `.duckdb` file and exits;
   any number of reporting bundles then open it with `"readOnly": true` and
