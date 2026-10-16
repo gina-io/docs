@@ -463,6 +463,24 @@ are unchanged.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — a DuckDB entry with neither `file` nor `database` stops the boot (bundle restart)
+
+A DuckDB entry that sets neither `file` nor `database` made the connector open a database file
+`undefined.duckdb` in the gina home (`~/.gina` by default), or `.duckdb` for an entry with both
+keys set to empty strings, and the boot went on.
+
+Such an entry now stops the boot: the bundle exits with code 1, and its log names the two keys
+the entry is missing. An empty string counts as absent.
+
+**What to check:**
+
+- Nothing to change for an entry that sets `database` or `file`, as every example in the
+  [DuckDB guide](/data/duckdb-analytics) does.
+- If you stored data through such an entry, it is in `undefined.duckdb` (or `.duckdb`) in the
+  gina home: set the entry's `file` to that path before you upgrade.
+
+Server-side only: **restart the bundle**.
+
 ### Fixed — `gina-init` no longer dials `127.0.0.1:8125` (no restart)
 
 `gina-init` runs at container start, where no MQ listener exists. Unlike `gina-container`,

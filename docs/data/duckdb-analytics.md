@@ -130,6 +130,9 @@ Connection options:
 | `readOnly` | `false` | Open read-only (driver `access_mode: 'READ_ONLY'`). The engine refuses writes, and any number of read-only processes can share one file |
 | `scope` | `process.env.NODE_SCOPE` | Stamped on every entity as `_scope` |
 
+An entry must set `database` or `file`. One that sets neither, or sets both to empty strings,
+stops the boot: the bundle exits with code 1, and its log names the two keys.
+
 You can also use `connector:add` to write the entry:
 
 ```bash
