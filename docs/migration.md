@@ -300,8 +300,8 @@ now stops at once with exit code 1, and names the file and the two commands that
     gina bundle:add api @myproject --import
 ```
 
-A `manifest.json` that is not plain JSON, or that does not list the bundle, stops it with
-`[ gina-container ] manifest.json cannot be used: <reason>`. The bundle could not boot in any of
+A `manifest.json` that is not valid JSON once its comments are ignored, or that does not list the
+bundle, stops it with `[ gina-container ] manifest.json cannot be used: <reason>`. The bundle could not boot in any of
 these cases before either, so an image that boots today is not affected. If your image is built
 from a checkout that does not commit `manifest.json`, create it in the image: see
 [K8s and Docker › The image must contain `manifest.json`](/guides/k8s-docker#the-image-must-contain-manifestjson).
