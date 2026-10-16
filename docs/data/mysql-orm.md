@@ -101,7 +101,7 @@ flowchart TD
     "port"           : 3306,
     "database"       : "mydb",
     "username"       : "appuser",
-    "password"       : "${MYSQL_PASSWORD}",
+    "password"       : "${secret:MYSQL_PASSWORD}",
     "connectionLimit": 10
   }
 }

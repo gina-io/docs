@@ -155,7 +155,7 @@ connection strings; provide decomposed fields for simple single-host setups.
     "port":       27017,
     "database":   "myapp",
     "username":   "appuser",
-    "password":   "${MONGO_PASSWORD}",
+    "password":   "${secret:MONGO_PASSWORD}",
     "authSource": "admin"
   }
 }

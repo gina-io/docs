@@ -174,7 +174,7 @@ ollama pull gemma3        # Google Gemma 3
   "deepseek": {
     "connector" : "ai",
     "protocol"  : "deepseek://",
-    "apiKey"    : "${DEEPSEEK_API_KEY}",
+    "apiKey"    : "${secret:DEEPSEEK_API_KEY}",
     "model"     : "deepseek-chat"
   }
 }
@@ -193,7 +193,7 @@ The `deepseek://` protocol pre-fills `https://api.deepseek.com/v1` as the base U
   "qwen": {
     "connector" : "ai",
     "protocol"  : "qwen://",
-    "apiKey"    : "${DASHSCOPE_API_KEY}",
+    "apiKey"    : "${secret:DASHSCOPE_API_KEY}",
     "model"     : "qwen-plus"
   }
 }
@@ -213,7 +213,7 @@ Get your API key from [Alibaba Cloud DashScope](https://dashscope.console.aliyun
   "groq": {
     "connector" : "ai",
     "protocol"  : "groq://",
-    "apiKey"    : "${GROQ_API_KEY}",
+    "apiKey"    : "${secret:GROQ_API_KEY}",
     "model"     : "llama-3.3-70b-versatile"
   }
 }
@@ -232,7 +232,7 @@ Groq runs open-source models on custom LPU hardware — very low latency.
   "gemini": {
     "connector" : "ai",
     "protocol"  : "gemini://",
-    "apiKey"    : "${GEMINI_API_KEY}",
+    "apiKey"    : "${secret:GEMINI_API_KEY}",
     "model"     : "gemini-2.0-flash"
   }
 }
@@ -251,7 +251,7 @@ The `gemini://` protocol pre-fills Google's OpenAI-compatible endpoint:
   "mistral": {
     "connector" : "ai",
     "protocol"  : "mistral://",
-    "apiKey"    : "${MISTRAL_API_KEY}",
+    "apiKey"    : "${secret:MISTRAL_API_KEY}",
     "model"     : "mistral-large-latest"
   }
 }
@@ -268,7 +268,7 @@ Available models: `mistral-large-latest`, `mistral-small-latest`,
   "claude": {
     "connector" : "ai",
     "protocol"  : "anthropic://",
-    "apiKey"    : "${ANTHROPIC_API_KEY}",
+    "apiKey"    : "${secret:ANTHROPIC_API_KEY}",
     "model"     : "claude-opus-4-6"
   }
 }
@@ -284,7 +284,7 @@ Available models: `claude-opus-4-6`, `claude-sonnet-4-6`, `claude-haiku-4-5-2025
   "gpt": {
     "connector" : "ai",
     "protocol"  : "openai://",
-    "apiKey"    : "${OPENAI_API_KEY}",
+    "apiKey"    : "${secret:OPENAI_API_KEY}",
     "model"     : "gpt-4o"
   }
 }
@@ -300,7 +300,7 @@ Available models: `gpt-4o`, `gpt-4o-mini`, `o3`, `o4-mini`
   "grok": {
     "connector" : "ai",
     "protocol"  : "xai://",
-    "apiKey"    : "${XAI_API_KEY}",
+    "apiKey"    : "${secret:XAI_API_KEY}",
     "model"     : "grok-3"
   }
 }
@@ -325,11 +325,11 @@ independently available in any controller:
   },
   "deepseek": {
     "connector": "ai", "protocol": "deepseek://",
-    "apiKey": "${DEEPSEEK_API_KEY}", "model": "deepseek-chat"
+    "apiKey": "${secret:DEEPSEEK_API_KEY}", "model": "deepseek-chat"
   },
   "claude": {
     "connector": "ai", "protocol": "anthropic://",
-    "apiKey": "${ANTHROPIC_API_KEY}", "model": "claude-opus-4-6"
+    "apiKey": "${secret:ANTHROPIC_API_KEY}", "model": "claude-opus-4-6"
   }
 }
 ```

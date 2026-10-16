@@ -17,8 +17,13 @@ import TabItem from '@theme/TabItem';
 
 `connectors.json` declares the database connections available to a bundle's model layer.
 Each key in the file is a **connector name** — the model layer uses that name to acquire
-a live connection at runtime. The connector type is determined by the `protocol` field
-(Couchbase, MongoDB) or the `connector` field (Redis, SQLite, MySQL, PostgreSQL, AI).
+a live connection at runtime. The entry's `connector` field selects the connector type:
+`couchbase`, `mongodb`, `mysql`, `postgresql`, `sqlite`, `redis`, `scylladb`, `duckdb` or
+`ai`. Since 0.7.5 an entry without that field takes its type from its key when the key is
+one of those names, so `"sqlite": { … }` is a SQLite entry. Earlier versions need
+`connector` on every entry: without it the bundle stops at boot with `No connector found`.
+The `protocol` field never selects the type; it chooses TLS for Couchbase and the provider
+for an AI entry.
 
 ```
 src/<bundle>/config/connectors.json
@@ -131,8 +136,10 @@ no cost) and switch to a cloud provider by updating `connectors.json`.
 
 Data connectors back the model layer directly — entities read and write through them
 using Gina's ORM. Declare them under any key name; the framework resolves the connector
-type from the entry's `connector` field, falling back to the key name when
-it names a built-in connector type.
+type from the entry's `connector` field, falling back to the key name when it names a
+built-in connector type. The fallback needs gina 0.7.5 or later; the examples below set
+`connector` so that they work on every version (see
+[Migration 0.7.4 → 0.7.5](../migration)).
 
 ### Couchbase
 
@@ -149,6 +156,7 @@ isolation across environments, or multi-node cluster failover.
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector": "couchbase",
     "protocol" : "couchbase://",
     "host"     : "db1.example.com",
     "database" : "myapp",
@@ -169,6 +177,7 @@ balancing and automatic failover.
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector": "couchbase",
     "protocol" : "couchbase://",
     "host"     : "db1.example.com,db2.example.com,db3.example.com",
     "database" : "myapp",
@@ -188,11 +197,12 @@ for Couchbase Cloud and Capella deployments.
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector": "couchbase",
     "protocol" : "couchbases://",
     "host"     : "cb.xxxxx.cloud.couchbase.com",
     "database" : "myapp",
     "username" : "appuser",
-    "password"  : "${COUCHBASE_PASSWORD}",
+    "password"  : "${secret:COUCHBASE_PASSWORD}",
     "pingInterval" : "2m"
   }
 }
@@ -205,6 +215,7 @@ for Couchbase Cloud and Capella deployments.
 
 | Field | Type | Description |
 |---|---|---|
+| `connector` | `"couchbase"` | Selects the Couchbase connector. Since 0.7.5 it can be left out when the entry's key is `couchbase` |
 | `protocol` | `"couchbase://"` \| `"couchbases://"` | `couchbase://` for unencrypted, `couchbases://` for TLS |
 | `host` | string | Cluster node address(es). Comma-separated for multi-node clusters |
 | `database` | string | Couchbase bucket name |
@@ -255,7 +266,7 @@ connection strings; use decomposed fields for simple single-host setups.
     "port":       27017,
     "database":   "myapp",
     "username":   "appuser",
-    "password":   "${MONGO_PASSWORD}",
+    "password":   "${secret:MONGO_PASSWORD}",
     "authSource": "admin"
   }
 }
@@ -312,7 +323,7 @@ npm install mysql2
     "port"           : 3306,
     "database"       : "mydb",
     "username"       : "root",
-    "password"       : "${MYSQL_PASSWORD}",
+    "password"       : "${secret:MYSQL_PASSWORD}",
     "connectionLimit": 10
   }
 }
@@ -329,7 +340,7 @@ npm install mysql2
     "port"           : 3306,
     "database"       : "mydb",
     "username"       : "appuser",
-    "password"       : "${MYSQL_PASSWORD}",
+    "password"       : "${secret:MYSQL_PASSWORD}",
     "connectionLimit": 20,
     "ssl"            : { "rejectUnauthorized": true }
   }
@@ -377,7 +388,7 @@ npm install pg
     "port"             : 5432,
     "database"         : "mydb",
     "username"         : "postgres",
-    "password"         : "${PGPASSWORD}",
+    "password"         : "${secret:PGPASSWORD}",
     "connectionLimit"  : 10
   }
 }
@@ -394,7 +405,7 @@ npm install pg
     "port"             : 5432,
     "database"         : "mydb",
     "username"         : "appuser",
-    "password"         : "${PGPASSWORD}",
+    "password"         : "${secret:PGPASSWORD}",
     "connectionLimit"  : 20,
     "idleTimeout"      : 30000,
     "connectionTimeout": 2000,
@@ -499,13 +510,13 @@ controller examples. Field reference below.
   "claude": {
     "connector" : "ai",
     "protocol"  : "anthropic://",
-    "apiKey"    : "${ANTHROPIC_API_KEY}",
+    "apiKey"    : "${secret:ANTHROPIC_API_KEY}",
     "model"     : "claude-opus-4-6"
   },
   "deepseek": {
     "connector" : "ai",
     "protocol"  : "deepseek://",
-    "apiKey"    : "${DEEPSEEK_API_KEY}",
+    "apiKey"    : "${secret:DEEPSEEK_API_KEY}",
     "model"     : "deepseek-chat"
   },
   "local": {
@@ -610,7 +621,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
       { "host": "node1.redis.internal", "port": 6379 },
       { "host": "node2.redis.internal", "port": 6379 }
     ],
-    "password" : "${REDIS_PASSWORD}",
+    "password" : "${secret:REDIS_PASSWORD}",
     "tls"      : true,
     "ttl"      : 86400
   }
@@ -732,7 +743,7 @@ store reads nothing from that file.
     "host"     : "127.0.0.1",
     "database" : "sessions",
     "username" : "appuser",
-    "password" : "${COUCHBASE_PASSWORD}"
+    "password" : "${secret:COUCHBASE_PASSWORD}"
   }
 }
 ```
@@ -784,7 +795,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
 {
   "session": {
     "connector" : "mongodb",
-    "uri"       : "${MONGODB_URI}",
+    "uri"       : "${secret:MONGODB_URI}",
     "database"  : "app",
     "collection": "sessions",
     "ttl"       : 86400
@@ -805,7 +816,7 @@ A `mongodb+srv://` URI works as-is — use it for Atlas and any SRV-discovered r
     "port"      : 27017,
     "database"  : "app",
     "username"  : "appuser",
-    "password"  : "${MONGODB_PASSWORD}",
+    "password"  : "${secret:MONGODB_PASSWORD}",
     "authSource": "admin",
     "collection": "sessions",
     "ttl"       : 86400
@@ -863,7 +874,7 @@ See the [Sessions guide](../guides/sessions#configuring-the-store) for wiring in
     "localDataCenter": "datacenter1",
     "keyspace"       : "app",
     "username"       : "appuser",
-    "password"       : "${SCYLLA_PASSWORD}",
+    "password"       : "${secret:SCYLLA_PASSWORD}",
     "table"          : "sessions",
     "ttl"            : 86400
   }
@@ -920,6 +931,7 @@ every model in the bundle.
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector": "couchbase",
     "protocol" : "couchbase://",
     "host"     : "db1.example.com",
     "database" : "primary",
@@ -927,8 +939,9 @@ every model in the bundle.
     "password"  : "secret"
   },
   "mongodb": {
-    "protocol" : "mongodb://",
-    "host"     : "127.0.0.1:27017",
+    "connector": "mongodb",
+    "host"     : "127.0.0.1",
+    "port"     : 27017,
     "database" : "analytics"
   }
 }

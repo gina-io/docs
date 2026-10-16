@@ -731,7 +731,7 @@ the session lifecycle from primary data). The factory resolves the entry named
     "host":      "127.0.0.1",
     "database":  "sessions",
     "username":  "appuser",
-    "password":  "${COUCHBASE_PASSWORD}"
+    "password":  "${secret:COUCHBASE_PASSWORD}"
   }
 }
 ```

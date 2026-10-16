@@ -99,7 +99,7 @@ flowchart TD
     "port"             : 5432,
     "database"         : "mydb",
     "username"         : "appuser",
-    "password"         : "${PGPASSWORD}",
+    "password"         : "${secret:PGPASSWORD}",
     "connectionLimit"  : 10,
     "idleTimeout"      : 30000,
     "connectionTimeout": 2000

@@ -818,7 +818,7 @@ Add a Redis connector to your bundle's `connectors.json`:
     "connector": "redis",
     "host"     : "redis.internal",
     "port"     : 6379,
-    "password" : "${REDIS_PASSWORD}",
+    "password" : "${secret:REDIS_PASSWORD}",
     "tls"      : true,
     "ttl"      : 86400,
     "prefix"   : "sess:"
@@ -911,7 +911,7 @@ For Redis Cluster mode (ElastiCache with cluster enabled):
       { "host": "node1.cache.amazonaws.com", "port": 6379 },
       { "host": "node2.cache.amazonaws.com", "port": 6379 }
     ],
-    "password" : "${REDIS_PASSWORD}",
+    "password" : "${secret:REDIS_PASSWORD}",
     "tls"      : true,
     "ttl"      : 86400
   }

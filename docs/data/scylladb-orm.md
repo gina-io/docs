@@ -106,7 +106,7 @@ flowchart TD
     "contactPoints": ["127.0.0.1:9042"],
     "localDataCenter": "datacenter1",
     "keyspace": "mykeyspace",
-    "credentials": { "username": "cassandra", "password": "${SCYLLA_PASSWORD}" }
+    "credentials": { "username": "cassandra", "password": "${secret:SCYLLA_PASSWORD}" }
   }
 }
 ```

@@ -251,7 +251,7 @@ npm install ioredis
     "connector": "redis",
     "host"     : "my-instance.upstash.io",
     "port"     : 6379,
-    "password" : "${REDIS_PASSWORD}",
+    "password" : "${secret:REDIS_PASSWORD}",
     "tls"      : true,
     "ttl"      : 86400
   }
@@ -338,7 +338,7 @@ npm install couchbase
     "host":      "127.0.0.1",
     "database":  "sessions",
     "username":  "appuser",
-    "password":  "${COUCHBASE_PASSWORD}"
+    "password":  "${secret:COUCHBASE_PASSWORD}"
   }
 }
 ```

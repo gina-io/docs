@@ -242,7 +242,7 @@ gina connector:add session @myproject --connector=redis --host=127.0.0.1 --conne
 gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
 
 # AI connector with env-var secret
-gina connector:add ai-bot @myproject --connector=ai --protocol=anthropic:// --api-key='${ANTHROPIC_API_KEY}'
+gina connector:add ai-bot @myproject --connector=ai --protocol=anthropic:// --api-key='${secret:ANTHROPIC_API_KEY}'
 
 # Pin driver version, overwrite existing
 gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
@@ -350,7 +350,7 @@ Any comment header above the first `{` is preserved byte-for-byte. Mid-body `//`
 | `--scope=` names a listed scope that is not one of `local`, `beta`, `production`, `testing` | "Scope \`<value>\` is not valid. Allowed: ..." (exit 1) |
 
 :::tip Inferred type
-If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type.
+If `<name>` is one of the built-in connector types (`couchbase`, `mysql`, `postgresql`, `sqlite`, `redis`, `ai`, `scylladb`, `mongodb`, `duckdb`), you can omit `--connector=`. In that case, the generated entry also omits the `connector` field — the runtime uses the logical key name as the type. That needs gina 0.7.5 or later: an earlier version stops the bundle at boot with `No connector found` on such an entry, so there add `"connector": "<type>"` to it (see [Migration 0.7.4 → 0.7.5](/migration)).
 
 Example: `gina connector:add redis @myproject --host=127.0.0.1 --connector-port=6379` writes:
 ```json

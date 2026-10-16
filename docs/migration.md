@@ -342,6 +342,32 @@ logs its data scope, and where it came from, when it loads:
 
 Server-side only: **restart the bundle**.
 
+### Fixed — an entry keyed by its connector type loads without `connector` (bundle restart)
+
+Since 0.3.7, `gina connector:add` leaves the `connector` field out of an entry whose name is its
+type: `gina connector:add sqlite api @myproject --database=mydb` writes
+`"sqlite": { "database": "mydb" }`. The [connectors reference](/reference/connectors), the
+connectors schema and `connector:list` read the type from the key in that case. The runtime did
+not: it read only `connector`, so such an entry stopped the bundle at boot:
+
+```text
+[MODEL][sqlite] No connector found
+```
+
+An entry without `connector` now takes its type from its key when the key is a built-in connector
+type: `couchbase`, `mongodb`, `mysql`, `postgresql`, `sqlite`, `redis`, `scylladb`, `duckdb` or
+`ai`. A `connector` you set always wins, and an entry whose key names no type still needs the field.
+
+**What to check:**
+
+- Nothing for an entry that sets `connector`: a bundle that boots today has it on every entry.
+- To keep a `connectors.json` that gina 0.7.4 or earlier can load, set `connector` on every entry.
+- The connectors reference and the connector guides showed some secrets as a bare `${NAME}`. That
+  form reaches the connector as the literal text `${NAME}`; they now read `${secret:NAME}`. If you
+  copied one, change it the same way.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.3 → 0.7.4
@@ -5102,11 +5128,12 @@ longer:
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector"    : "couchbase",
     "protocol"     : "couchbase://",
     "host"         : "db1.example.com",
     "database"     : "myapp",
     "username"     : "appuser",
-    "password"     : "${COUCHBASE_PASSWORD}",
+    "password"     : "${secret:COUCHBASE_PASSWORD}",
     "readyTimeout" : 10000
   }
 }

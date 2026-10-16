@@ -215,6 +215,7 @@ is not added for you: leave out `_scope = $scope` and the query reads every scop
 ```json title="src/api/config/connectors.json"
 {
   "couchbase": {
+    "connector": "couchbase",
     "protocol": "couchbase://",
     "host":     "127.0.0.1",
     "database": "myapp",
