@@ -99,9 +99,13 @@ try {
 
 Use it where a failure must stay in your own error handling: a command-line
 tool, a long-running process, a launcher. Since 0.7.5 gina reads a project's
-`manifest.json` with it in `bundle:list`, `bundle:status`, `bundle:restart`,
-`project:status`, `project:rename`, `project:restore`, `gina-container` and at
-boot.
+`manifest.json` and `env.json` with it when a CLI command that names a project
+loads its configuration, the `manifest.json` also in `bundle:list`,
+`bundle:status`, `bundle:restart`, `project:status`, `project:rename`,
+`project:restore`, `gina-container` and at boot, and the project's
+`package.json` in `bundle:start`. A file a command cannot use stops that command
+with `<file> cannot be used: <reason>`, and the framework that runs
+`bundle:start` keeps running.
 
 ---
 

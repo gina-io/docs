@@ -77,7 +77,7 @@ not.
 | The bundle's own code | The bundle stopped before it was ready: an error while it boots, a [`scopes`](/concepts/scopes#restrict-a-bundle-to-certain-scopes) refusal. `1` when that code was `0`. |
 | `128` + the signal number | A signal stopped the bundle before it was ready (`137` for `SIGKILL`). |
 | `1` | The bundle was not ready after about 64 seconds (much longer with `--inspect-brk`, which waits for a debugger). |
-| `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name. |
+| `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name, or a project file the framework cannot use, named with the reason: `<file> cannot be used: <reason>` for a `manifest.json` that cannot be read or parsed, or an `env.json` or `package.json` that cannot be parsed. The framework keeps running. |
 | `1` | `bundle:start @<project>`: one of the project's bundles did not start. Every bundle is still attempted. |
 
 The codes come from the framework: a framework started by an older Gina keeps

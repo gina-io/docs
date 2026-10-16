@@ -470,13 +470,46 @@ project, `project:status` printed nothing, `gina-container` refused the project,
 started another way died at boot reading `project.bundles` of `undefined`. They now parse the
 file as `requireJSON()` does, through the new global
 [`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename), which throws an
-error naming the file instead of exiting the process. A file that is still not valid JSON is
-reported as before by each command, and by `gina-container` as
-`manifest.json cannot be used: could not parse <file>: <reason>`.
+error naming the file instead of exiting the process. A file that is still not valid JSON stops
+each of these commands, as it stops `gina-container`, with
+`manifest.json cannot be used: could not parse <file>: <reason>` (see the next entry).
 
 The CLI does not keep comments when it rewrites the file: `gina bundle:add`, for example, writes
 it back without them. The CLI commands and `gina-container` read the file at each run, and a
 bundle reads it when it starts, so there is nothing to restart.
+
+### Fixed — a project file that cannot be used no longer stops the framework (framework restart)
+
+`gina bundle:start` runs inside the framework that `gina start` starts. On its way to the bundle,
+the framework read the project's `manifest.json` and `env.json`, every registered project's
+`manifest.json`, and the project's `package.json` with [`requireJSON()`](/globals/json), which
+exits the process on a file it cannot read or parse. So a malformed or unreadable
+`manifest.json`, or a malformed `env.json` or `package.json`, stopped the framework itself. The
+command printed only
+
+```text
+gina: the framework ended this command before it reported the outcome.
+```
+
+and every later command found no framework until `gina start`. A malformed `manifest.json` in
+another registered project made `bundle:start` exit 0 without starting anything, and a missing
+`manifest.json` made it fail with `TypeError: Cannot read properties of undefined (reading 'def_env')`.
+
+These files are now read with
+[`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename). A file of the
+project that cannot be used refuses the command, which exits 1, and the framework keeps running:
+
+```text
+manifest.json cannot be used: could not parse `/path/to/myproject/manifest.json`: Expected ',' or '}' after property value in JSON at position 797 (line 29 column 1)
+```
+
+Another project's unusable `manifest.json` is skipped with an error line, as a missing one
+already was. A missing `manifest.json` is still recreated from the template, with no bundle in
+it, and `bundle:start` then refuses the bundle as not registered: restore the file. The other
+commands that read the project's configuration, such as `bundle:status` and `project:status`,
+report these files with the same one-line message.
+
+A framework already running keeps its old code until you run `gina framework:restart`.
 
 ---
 
