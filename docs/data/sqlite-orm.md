@@ -120,8 +120,8 @@ control. Add a `file` key to place it explicitly:
 | `file` | `~/.gina/<database>.sqlite` | Path to the SQLite database file. Use `":memory:"` for an ephemeral in-process database |
 
 The entry key (`"mydb"` above) is the model name you pass to `getModel()` in
-controllers, and it names the `models/` subdirectory the entities and SQL live
-in.
+controllers. The `models/` subdirectory the entities and SQL live in is named
+by `database` (here also `mydb`), not by the key.
 
 Don't put a file path in `database` — it is a logical name, and a path there is
 silently expanded to `~/.gina/<that path>.sqlite` instead of the file you
@@ -131,10 +131,11 @@ At open, the connector applies three PRAGMAs: `journal_mode=WAL` (concurrent
 readers never block the writer), `synchronous=NORMAL` (safe in WAL mode), and
 `foreign_keys=ON`.
 
-:::note `database` means different things in the two SQLite roles
+:::note A path always goes in `file`
 In a **data** entry, `database` is the model/database *name* and the optional
-`file` key carries the path. In a [`session` entry](/reference/connectors#sqlite),
-`database` is the SQLite file *path* itself (or `":memory:"`).
+`file` key carries the path. A [`session` entry](/reference/connectors#sqlite)
+takes its path, or `":memory:"`, in `file` too (read by the store since 0.7.2)
+and needs no `database`.
 :::
 
 ---

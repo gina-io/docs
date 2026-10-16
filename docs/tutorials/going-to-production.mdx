@@ -317,7 +317,7 @@ The SQLite session store uses the built-in `node:sqlite` — zero extra dependen
 ```
 
 :::warning The entry must be named `session`
-The `SessionStore` factory resolves its connector entry from `express-session`'s own function name — which is `session` and cannot be changed. Any other key throws `[SessionStore] Could not be loaded` at boot. With no `database` key, the store file defaults to `~/.gina/0.6/sessions-api.db`, and the record TTL follows the session cookie's `maxAge`.
+The `SessionStore` factory resolves its connector entry from `express-session`'s own function name — which is `session` and cannot be changed. Any other key throws `[SessionStore] Could not be loaded` at boot. With neither `file` nor `database`, the store file defaults to `~/.gina/sessions-api.db`, and the record TTL follows the session cookie's `maxAge`.
 :::
 
 ### Wire the middleware

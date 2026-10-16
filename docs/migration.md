@@ -400,8 +400,9 @@ Server-side only: **restart the bundle**.
 At boot, the model layer created `models/<entry key>/entities/` for every entry in
 `connectors.json`. Nothing reads that directory: entities are read from
 `models/<database>/entities/`, the directory named by the entry's `database`, which each ORM
-connector creates when it is missing. So an entry named differently from its database, a redis or
-AI entry, and an entry with no `database` (such as the in-memory SQLite entry of the
+connector creates when it is missing (none for an entry that names no `database` or `keyspace`).
+So an entry named differently from its database, a redis or AI entry, and an entry with no
+`database` (such as the in-memory SQLite entry of the
 [session store connectors](/reference/connectors#session-store-connectors)) each left an empty
 directory in the bundle, and a debug line named that path as the one scanned for entities.
 
@@ -436,6 +437,29 @@ when it sets none.
   instead of `models/undefined/entities/`. When an ORM entry uses the same keyspace, the session
   entry's model also carries its entity classes, each bound to its own connection.
 - An empty `models/undefined/entities/` directory left by such an entry can be deleted.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — no `models/undefined/` directory or `undefined.sqlite` file for an entry with no database (bundle restart)
+
+An entry that names neither `database` nor `keyspace`, such as the SQLite session, job and kv
+store entries the guides show, which keep their path in `file`, made each ORM connector create an
+empty `models/undefined/entities/` directory: the connector named its model directory after the
+entry's `database`. A SQLite entry that sets neither `file` nor `database`, such as the session
+entry of the [going-to-production tutorial](/tutorials/going-to-production), also made the model
+layer open a database file `undefined.sqlite` in the gina home (`~/.gina` by default).
+
+Such an entry now gets no model directory, and a SQLite entry with neither `file` nor `database`
+gets an in-process (`:memory:`) database. The session, job and kv stores open their own file and
+are unchanged.
+
+**What to check:**
+
+- Nothing to change for an entry that sets `database`.
+- A `models/undefined/entities/` directory and an `undefined.sqlite` file in the gina home left
+  by an earlier version can be deleted.
+- If you stored data through the connection of an entry with neither `file` nor `database`, it is
+  in that `undefined.sqlite` file: set the entry's `file` to that path before you upgrade.
 
 Server-side only: **restart the bundle**.
 

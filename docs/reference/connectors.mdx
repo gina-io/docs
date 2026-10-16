@@ -489,10 +489,10 @@ For the full ORM workflow, see the [SQLite ORM guide](/data/sqlite-orm); the
 including a schema-migration script.
 
 The same connector also backs the **SQLite session store** — see the
-[session store section below](#sqlite). Note the two roles read the config
-differently: in a `session` entry, `database` is the SQLite file path itself
-(or `":memory:"`), while in a data entry `database` is the model/database name
-and the optional `file` key carries the path.
+[session store section below](#sqlite). Both roles take a path in `file`: in a
+data entry `database` is the model/database name and the optional `file` key
+carries the path, while a `session` entry takes its path, or `":memory:"`, in
+`file` (read by the store since 0.7.2) and needs no `database`.
 
 ---
 
