@@ -444,6 +444,22 @@ The words read `wihtout suficient` before, so the
 log search or alert written for the old spelling no longer matches. The message appears only
 when a boot fails, so a running bundle has nothing to pick up.
 
+### Fixed — the `onInitialize` sample that `bundle:add` writes works in a bundle named `event`, `app` or `express` (no restart)
+
+The `index.js` that `gina bundle:add` writes carries a commented `onInitialize` sample that reads
+the configuration through `self`. It took `self` inside the callback, whose parameters are
+`event`, `app` and `express`, so in a bundle with one of those names `self` was the parameter,
+and uncommenting the sample aborted the boot:
+
+```text
+[ FRAMEWORK ] onInitialize threw before emitting 'complete' — aborting boot: TypeError: self.getConfig is not a function
+```
+
+New bundles take `self` before the callback. A bundle created before keeps its `index.js`: if it
+is named `event`, `app` or `express` and runs that sample, move `var self = <bundle>;` above
+`<bundle>.onInitialize(`. The sample is written when a bundle is created, so there is nothing to
+restart.
+
 ---
 
 ## 0.7.3 → 0.7.4
