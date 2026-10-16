@@ -285,6 +285,28 @@ and it is written at mode `0644`.
 If an earlier `project:add` rewrote your `package.json`, restore your own values from version
 control. The command is a CLI one, so there is nothing to restart.
 
+### Fixed — `gina-container` names a missing `manifest.json` (no restart)
+
+A bundle reads its project's `manifest.json` when it boots. When the project root had none,
+`gina-container` started `bundles/<bundle>/index.js` instead: a checkout has no such file, so the
+launcher reported `bundle entry point not found: /app/bundles/<bundle>/index.js`, a path you never
+created; where the file existed, the bundle started and then failed on the manifest. The launcher
+now stops at once with exit code 1, and names the file and the two commands that create it:
+
+```text
+[ gina-container ] manifest.json not found in /app
+  The bundle reads it at boot. Commit it with the project, or create it in the image:
+    gina project:add @myproject --path=/app
+    gina bundle:add api @myproject --import
+```
+
+A `manifest.json` that is not plain JSON, or that does not list the bundle, stops it with
+`[ gina-container ] manifest.json cannot be used: <reason>`. The bundle could not boot in any of
+these cases before either, so an image that boots today is not affected. If your image is built
+from a checkout that does not commit `manifest.json`, create it in the image: see
+[K8s and Docker › The image must contain `manifest.json`](/guides/k8s-docker#the-image-must-contain-manifestjson).
+The launcher is read when the container starts, so there is nothing to restart.
+
 ---
 
 ## 0.7.3 → 0.7.4

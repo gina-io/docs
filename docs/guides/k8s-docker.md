@@ -152,6 +152,38 @@ process** and owns the full shutdown lifecycle:
 gina-container <bundle> @<project>
 ```
 
+### The image must contain `manifest.json`
+
+The bundle reads the project's `manifest.json` when it boots, so the launcher
+cannot start a bundle without it. Commit it with the project, or create it in
+the image with the two commands below. Run them before `gina-init`, with the
+project name `gina-init` uses:
+
+```dockerfile
+# No committed manifest.json: create it, and register the bundle's source
+RUN gina project:add @myproject --path=/app \
+ && gina bundle:add api @myproject --import
+```
+
+`gina bundle:add --import` registers a bundle whose source is already in
+`src/<bundle>`, and leaves that source as it is.
+
+Since 0.7.5, a project root with no `manifest.json` stops the launcher with exit
+code `1` and this message:
+
+```text
+[ gina-container ] manifest.json not found in /app
+  The bundle reads it at boot. Commit it with the project, or create it in the image:
+    gina project:add @myproject --path=/app
+    gina bundle:add api @myproject --import
+```
+
+A `manifest.json` that is not plain JSON (a comment is enough), or that does not
+list the bundle, stops it with `[ gina-container ] manifest.json cannot be used: <reason>`.
+Before 0.7.5 the launcher fell back to `bundles/<bundle>/index.js`, a path a
+checkout does not have, and reported that path as missing; where the path
+existed, the bundle started and then failed on the manifest.
+
 Since 0.7.4 a bundle that cannot bind its port (another program holds it, or `EACCES`)
 ends its boot with exit code `1` and the line
 `[ FRAMEWORK ] abort: could not listen on port <port>: <code> (…)` on stderr, so the
@@ -246,9 +278,14 @@ FROM node:22-slim
 # Install gina globally
 RUN npm install -g gina
 
-# Copy project sources
+# Copy project sources, manifest.json included
 COPY . /app
 WORKDIR /app
+
+# No committed manifest.json? Create it here, before gina-init
+# (see "The image must contain manifest.json" above):
+# RUN gina project:add @myproject --path=/app \
+#  && gina bundle:add api @myproject --import
 
 # Bootstrap ~/.gina/ — runs once at build time, no socket server required.
 # Port 3100 maps to api@myproject/dev (GINA_DEF_ENV=dev).
