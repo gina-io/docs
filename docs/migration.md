@@ -307,6 +307,41 @@ from a checkout that does not commit `manifest.json`, create it in the image: se
 [K8s and Docker › The image must contain `manifest.json`](/guides/k8s-docker#the-image-must-contain-manifestjson).
 The launcher is read when the container starts, so there is nothing to restart.
 
+### Fixed — a Couchbase entry without `scope` uses `NODE_SCOPE`, as documented (bundle restart)
+
+A Couchbase entry in `connectors.json` that has no `scope` falls back to the bundle's
+`NODE_SCOPE` ([Connectors reference](/reference/connectors)). It did not: the connector wrote its
+own SDK default, `_default`, into the entry, and that value became the entities' data scope. Every
+query filtered on `_scope = $scope` ran against `_default`, so documents stamped with the bundle's
+scope were not found, and every environment sharing the bucket read and wrote the same `_default`
+scope. An entry without `scope` now gives its entities `NODE_SCOPE`, and each Couchbase connector
+logs its data scope, and where it came from, when it loads:
+
+```text
+[ CONNECTOR ][ couchbase ] connector [ myapp ] of bundle [ api ] data scope: `local` (from NODE_SCOPE)
+```
+
+**What to check:**
+
+- An entry that sets `scope` is not affected.
+- An entry without `scope`: its entities now read and write with `NODE_SCOPE`. Documents they
+  inserted before carry `_scope: "_default"`, and queries filtered on `_scope = $scope` stop finding
+  them. Choose one:
+  - Stamp them with the environment's scope, once per environment, in the Couchbase query service.
+    In a bucket several environments share, all of them wrote `_default`: add a condition that
+    selects the documents each environment owns.
+
+    ```sql
+    UPDATE `<bucket>` AS d
+    SET d._scope = '<scope>'
+    WHERE d._scope = '_default'
+    ```
+
+  - Or keep the old behaviour: set `"scope": "_default"` on the entry. The environments that share
+    the bucket then keep sharing one scope.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.3 → 0.7.4

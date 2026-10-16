@@ -226,7 +226,9 @@ is not added for you: leave out `_scope = $scope` and the query reads every scop
 ```
 
 When `scope` is omitted the connector falls back to `process.env.NODE_SCOPE`, so
-development environments usually work without setting it explicitly.
+development environments usually work without setting it explicitly. Before 0.7.5 an entry
+without `scope` used `_default` instead: the [Migration Guide](/migration) shows how to bring
+documents written that way under the environment's scope.
 
 ### Scope values
 
