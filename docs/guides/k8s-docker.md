@@ -178,8 +178,9 @@ code `1` and this message:
     gina bundle:add api @myproject --import
 ```
 
-A `manifest.json` that is not plain JSON (a comment is enough), or that does not
-list the bundle, stops it with `[ gina-container ] manifest.json cannot be used: <reason>`.
+A `manifest.json` that is not valid JSON once its comments are ignored (`//` lines
+and a `/** … */` docblock are accepted since 0.7.5), or that does not list the
+bundle, stops it with `[ gina-container ] manifest.json cannot be used: <reason>`.
 Before 0.7.5 the launcher fell back to `bundles/<bundle>/index.js`, a path a
 checkout does not have, and reported that path as missing; where the path
 existed, the bundle started and then failed on the manifest.

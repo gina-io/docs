@@ -460,6 +460,24 @@ is named `event`, `app` or `express` and runs that sample, move `var self = <bun
 `<bundle>.onInitialize(`. The sample is written when a bundle is created, so there is nothing to
 restart.
 
+### Fixed — every reader of `manifest.json` accepts comments (no restart)
+
+The [connector CLI page](/cli/cli-connector#comment-tolerance) documents that a project's
+`manifest.json` may carry `//` lines and a `/** … */` docblock, as `routing.json` does, and most
+readers parsed it with [`requireJSON()`](/globals/json). Nine did not. With one comment line,
+`bundle:list` crashed with a `SyntaxError`, `bundle:status` reported the bundle missing from its
+project, `project:status` printed nothing, `gina-container` refused the project, and a bundle
+started another way died at boot reading `project.bundles` of `undefined`. They now parse the
+file as `requireJSON()` does, through the new global
+[`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename), which throws an
+error naming the file instead of exiting the process. A file that is still not valid JSON is
+reported as before by each command, and by `gina-container` as
+`manifest.json cannot be used: could not parse <file>: <reason>`.
+
+The CLI does not keep comments when it rewrites the file: `gina bundle:add`, for example, writes
+it back without them. The CLI commands and `gina-container` read the file at each run, and a
+bundle reads it when it starts, so there is nothing to restart.
+
 ---
 
 ## 0.7.3 → 0.7.4

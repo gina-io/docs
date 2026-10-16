@@ -74,6 +74,37 @@ be returned as an HTTP response.
 
 ---
 
+## `parseJSONWithComments(text, filename)`
+
+Parses JSON-with-comments **text** the way `requireJSON()` parses a file — the
+same comment stripping, and a trailing comma before `}` or `]` accepted with a
+warning — but never exits the process. Text that is still not JSON throws an
+`Error` whose message names `filename`, with the `SyntaxError` from
+`JSON.parse` as its `cause`. Since 0.7.5.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `string` | The JSON-with-comments source |
+| `filename` | `string` | Optional. The file the text came from, named in the error |
+
+```js
+var file = getPath('project') + '/manifest.json';
+try {
+    var manifest = parseJSONWithComments(fs.readFileSync(file, 'utf8'), file);
+} catch (err) {
+    // err.message: could not parse `/path/to/manifest.json`: Expected ',' or '}' …
+    console.error(err.message);
+}
+```
+
+Use it where a failure must stay in your own error handling: a command-line
+tool, a long-running process, a launcher. Since 0.7.5 gina reads a project's
+`manifest.json` with it in `bundle:list`, `bundle:status`, `bundle:restart`,
+`project:status`, `project:rename`, `project:restore`, `gina-container` and at
+boot.
+
+---
+
 ## See also
 
 - [Context helper](./context.md) — `getPath` for resolving file paths
