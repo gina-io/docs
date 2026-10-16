@@ -430,6 +430,20 @@ default certificate paths included, so an https bundle reads its certificates fr
 is not affected. The launcher is read when the container starts, so there is nothing to
 restart.
 
+### Fixed — the https credentials boot error is spelled correctly (no restart)
+
+An https bundle that cannot read its certificates stops at boot with this error, followed by
+the `ENOENT` naming the file it could not open:
+
+```text
+You are trying to start a secured server (https) without sufficient credentials: check your `server settings`
+```
+
+The words read `wihtout suficient` before, so the
+[troubleshooting guide](/guides/troubleshooting)'s quote of the error matched no log line. A
+log search or alert written for the old spelling no longer matches. The message appears only
+when a boot fails, so a running bundle has nothing to pick up.
+
 ---
 
 ## 0.7.3 → 0.7.4

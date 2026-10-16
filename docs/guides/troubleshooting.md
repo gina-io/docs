@@ -104,7 +104,7 @@ ENOENT: no such file or directory, open
 '/home/you/.gina/certificates/scopes/local/${host}/private.key'
 ```
 
-An https or HTTP/2 bundle stops with a "secured server without sufficient
+An https or HTTP/2 bundle stops with a "secured server (https) without sufficient
 credentials" error, and the path it names still contains `${host}` verbatim. The
 unsubstituted token is the tell: the bundle's block in the project `env.json`
 does not declare `host`, and that block is the only place a project supplies it.
