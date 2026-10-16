@@ -196,11 +196,13 @@ it to `true` before its own logger and the bundle's initialise — JSON lines on
 MQ transport. There is no MQ listener in this topology; without the preset both the
 launcher and the bundle kept dialling `127.0.0.1:8125`. Set `GINA_LOG_STDOUT=false` to
 keep the transport, or `GINA_LOG_FORMAT=text` to keep the coloured text while the dial
-stays skipped.
+stays skipped. Since 0.7.5 `gina-init` applies the same preset to its own process: it
+used to dial `127.0.0.1:8125` once at every container start.
 
 | Variable | Default | Description |
 |---|---|---|
-| `GINA_LOG_STDOUT` | `true` (applied by the launcher when unset) | Container logging preset — JSON lines, MQ transport skipped. Set `false` to keep the transport. |
+| `GINA_LOG_STDOUT` | `true` (applied by `gina-init` and the launcher when unset) | Container logging preset — JSON lines, MQ transport skipped. Set `false` to keep the transport. |
+| `GINA_HOMEDIR` | `HOME/.gina` | The `~/.gina/` root, as `gina-init` writes it. Read since 0.7.5; before, the launcher always read `HOME/.gina`. |
 | `GINA_LOG_FORMAT` | — | `json` or `text` — the explicit output-format override; wins over the preset for the format only. |
 | `GINA_SHUTDOWN_TIMEOUT` | `10000` | Graceful drain window in ms. Keep below `terminationGracePeriodSeconds`. |
 | `GINA_MAINTENANCE` | — | `1` or `true` boots the bundle with [maintenance mode](/guides/maintenance-mode#turning-it-on) ON, exactly as `server.maintenance.enabled: true` would; close-only — `0`, `false` or unset leave the configured state. Since 0.6.32. |
@@ -620,7 +622,7 @@ JSON output:
 - **`GINA_LOG_STDOUT=true`** — the container preset: emits JSON **and** skips the
   MQ transport (there is no MQ listener inside a container). Kept for back-compat;
   it implies JSON output. **`gina-container` applies this preset itself when the
-  variable is unset (0.6.30)**, so under that launcher — and in every image built by
+  variable is unset (0.6.30), and so does `gina-init` (0.7.5)**, so under that launcher — and in every image built by
   `gina image:build` — JSON is the default; `GINA_LOG_STDOUT=false` opts out.
 
 ```yaml

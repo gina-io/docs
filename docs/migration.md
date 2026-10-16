@@ -395,6 +395,37 @@ PostgreSQL, SQLite, ScyllaDB and DuckDB connectors already did.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — `gina-init` no longer dials `127.0.0.1:8125` (no restart)
+
+`gina-init` runs at container start, where no MQ listener exists. Unlike `gina-container`,
+it did not apply the [container logging preset](/guides/k8s-docker#stdout-logging), so
+every start printed
+
+```text
+[MQSpeaker] Error: connect ECONNREFUSED 127.0.0.1:8125
+```
+
+and in a Kubernetes pod, whose containers share `localhost`, a sidecar listening on that
+port would have received `gina-init`'s log frames. `gina-init` now sets
+`GINA_LOG_STDOUT=true` for its own process when the variable is unset, as the launcher
+does. Its own `[gina-init]` lines do not change; set `GINA_LOG_STDOUT=false` to keep the
+dial. `gina-init` is read when the container starts, so there is nothing to restart.
+
+### Fixed — `gina-container` reads `GINA_HOMEDIR` (no restart)
+
+`gina-init` writes the `~/.gina/` state to `GINA_HOMEDIR` when it is set, as the
+[K8s and Docker guide](/guides/k8s-docker) documents, but `gina-container` ignored the
+variable and read `HOME/.gina`, so a container that set it stopped at start:
+
+```text
+[ gina-container ] /home/node/.gina/projects.json not found.
+  Run: gina project:import @myproject
+```
+
+The launcher now takes its home from `GINA_HOMEDIR` when it is set, and the bundle it
+starts gets the same value. A container that does not set it is not affected. The launcher
+is read when the container starts, so there is nothing to restart.
+
 ---
 
 ## 0.7.3 → 0.7.4
