@@ -78,7 +78,7 @@ not.
 | `128` + the signal number | A signal stopped the bundle before it was ready (`137` for `SIGKILL`). |
 | `1` | The bundle was not ready after about 64 seconds (much longer with `--inspect-brk`, which waits for a debugger). |
 | `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name, or a project file the framework cannot use, named with the reason: `<file> cannot be used: <reason>` for a `manifest.json` that cannot be read or parsed, or an `env.json` or `package.json` that cannot be parsed. The framework keeps running. |
-| `1` | The project's `node_modules` could not be linked: with Gina installed globally, the start first runs [`gina framework:link-node-modules`](/cli/framework#frameworklink-node-modules) and [`gina framework:link`](/cli/framework#frameworklink), and the message names the one that failed, with its exit code and its output. |
+| `1` | The project's `node_modules` could not be linked: with Gina installed globally, the start first runs [`gina framework:link-node-modules`](/cli/cli-framework#frameworklink-node-modules) and [`gina framework:link`](/cli/cli-framework#frameworklink), and the message names the one that failed, with its exit code and its output. |
 | `1` | `bundle:start @<project>`: one of the project's bundles did not start. Every bundle is still attempted. |
 
 The codes come from the framework: a framework started by an older Gina keeps

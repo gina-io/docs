@@ -515,8 +515,8 @@ A framework already running keeps its old code until you run `gina framework:res
 
 With Gina installed globally, `bundle:start`, `bundle:stop`, `bundle:restart`, `project:start`,
 `project:stop` and `project:restart` first run
-[`gina framework:link-node-modules`](/cli/framework#frameworklink-node-modules) and
-[`gina framework:link`](/cli/framework#frameworklink) for the project. Those commands write their
+[`gina framework:link-node-modules`](/cli/cli-framework#frameworklink-node-modules) and
+[`gina framework:link`](/cli/cli-framework#frameworklink) for the project. Those commands write their
 errors on their standard output, and only the error output was read, so a failure produced an
 empty message, which ends a command with exit code 0: `bundle:start` reported success with
 nothing started. For example, when the project's homedir could not hold `lib/node_modules`,
