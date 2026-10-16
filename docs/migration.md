@@ -395,6 +395,26 @@ PostgreSQL, SQLite, ScyllaDB and DuckDB connectors already did.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — no empty directory named after each `connectors.json` entry (bundle restart)
+
+At boot, the model layer created `models/<entry key>/entities/` for every entry in
+`connectors.json`. Nothing reads that directory: entities are read from
+`models/<database>/entities/`, the directory named by the entry's `database`, which each ORM
+connector creates when it is missing. So an entry named differently from its database, a redis or
+AI entry, and an entry with no `database` (such as the in-memory SQLite entry of the
+[session store connectors](/reference/connectors#session-store-connectors)) each left an empty
+directory in the bundle, and a debug line named that path as the one scanned for entities.
+
+The model layer now creates only the bundle's `models/` directory.
+
+**What to check:**
+
+- Nothing to change. A `models/<entry key>/entities/` directory an earlier version left empty can
+  be deleted.
+- Keep a connector's entities in `models/<database>/entities/`.
+
+Server-side only: **restart the bundle**.
+
 ### Fixed — `gina-init` no longer dials `127.0.0.1:8125` (no restart)
 
 `gina-init` runs at container start, where no MQ listener exists. Unlike `gina-container`,
