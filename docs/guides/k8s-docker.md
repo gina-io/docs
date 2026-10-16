@@ -658,8 +658,9 @@ that reads container stdout.
 
 ## SSL certificates
 
-SSL certificates are project-level state, not `~/.gina/` state. They are
-referenced in each bundle's `settings.server.json` via `${GINA_HOMEDIR}` paths:
+`gina-init` does not create SSL certificates: you provide them, one set per scope
+and host. Each bundle's `settings.server.json` points at them through
+`${GINA_HOMEDIR}` paths, which are also the framework's defaults:
 
 ```json
 {
@@ -671,19 +672,24 @@ referenced in each bundle's `settings.server.json` via `${GINA_HOMEDIR}` paths:
 }
 ```
 
-`GINA_HOMEDIR` expands from `HOME` at runtime. Mount your certificates as a
-K8s Secret into the container at the expected path:
+In a container, `${GINA_HOMEDIR}` is the `GINA_HOMEDIR` environment variable when
+it is set (since 0.7.5) and `HOME/.gina` otherwise. For a container that runs as a
+`node` user whose home is `/home/node`, mount your certificates as a K8s Secret at
+`/home/node/.gina/certificates/scopes/<scope>/<host>/`:
 
 ```yaml
 volumeMounts:
   - name: tls
-    mountPath: /home/node/.myproject/certificates/scopes/production/api.myproject.app
+    mountPath: /home/node/.gina/certificates/scopes/production/api.myproject.app
     readOnly: true
 volumes:
   - name: tls
     secret:
       secretName: myproject-api-tls
 ```
+
+An https bundle whose certificates are not at that path stops at boot with an
+`ENOENT` error naming the file it could not open.
 
 ---
 

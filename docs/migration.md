@@ -423,8 +423,12 @@ variable and read `HOME/.gina`, so a container that set it stopped at start:
 ```
 
 The launcher now takes its home from `GINA_HOMEDIR` when it is set, and the bundle it
-starts gets the same value. A container that does not set it is not affected. The launcher
-is read when the container starts, so there is nothing to restart.
+starts gets the same value: `${GINA_HOMEDIR}` in its settings names that directory, the
+default certificate paths included, so an https bundle reads its certificates from
+`$GINA_HOMEDIR/certificates/scopes/<scope>/<host>/`
+([SSL certificates](/guides/k8s-docker#ssl-certificates)). A container that does not set it
+is not affected. The launcher is read when the container starts, so there is nothing to
+restart.
 
 ---
 
