@@ -218,7 +218,7 @@ for Couchbase Cloud and Capella deployments.
 | `connector` | `"couchbase"` | Selects the Couchbase connector. Since 0.7.5 it can be left out when the entry's key is `couchbase` |
 | `protocol` | `"couchbase://"` \| `"couchbases://"` | `couchbase://` for unencrypted, `couchbases://` for TLS |
 | `host` | string | Cluster node address(es). Comma-separated for multi-node clusters |
-| `database` | string | Couchbase bucket name |
+| `database` | string | Couchbase bucket name. Also names the model directory (`models/<database>/`) |
 | `username` | string | Couchbase RBAC username |
 | `password` | string | RBAC password. Supports `${secret:KEY}` substitution |
 | `keepAlive` | boolean | Verify cluster connectivity every `pingInterval`. Defaults to `true`; `false` turns the check off |

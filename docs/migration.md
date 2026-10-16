@@ -368,6 +368,28 @@ type: `couchbase`, `mongodb`, `mysql`, `postgresql`, `sqlite`, `redis`, `scyllad
 
 Server-side only: **restart the bundle**.
 
+### Fixed — a Couchbase entry named differently from its bucket no longer stops the boot (bundle restart)
+
+A Couchbase connector reads its entities from `models/<database>/entities/`, the directory named
+after the entry's bucket. When the entry's key differed from its bucket, as in the
+[connectors reference](/reference/connectors) example (`"couchbase": { "database": "myapp", … }`),
+and the bundle had no such directory, the bundle stopped at boot:
+
+```text
+[ FRAMEWORK ] Model loading failed — aborting boot: Error: ENOENT: no such file or directory, scandir '…/models/myapp/entities'
+```
+
+The Couchbase connector now creates the directory when it is missing, as the MongoDB, MySQL,
+PostgreSQL, SQLite, ScyllaDB and DuckDB connectors already did.
+
+**What to check:**
+
+- Nothing for a bundle that boots today: its `models/<bucket>/entities/` directory exists.
+- Put a Couchbase entry's entities in `models/<bucket>/entities/`, the directory named by
+  `database`, whatever the entry's key.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.3 → 0.7.4
