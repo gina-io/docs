@@ -133,8 +133,10 @@ gina connector:add primary @myproject \
 
 ## Defining an entity
 
-Entities live under `bundle/models/<keyspace>/entities/`. The class extends the
-gina `Entity` super-class via `inherits`:
+Entities live under `bundle/models/<keyspace>/entities/`. An entry that also sets
+`database` reads its whole model tree, entities and CQL, from `bundle/models/<database>/`
+instead, and still connects to `keyspace`. The class extends the gina `Entity`
+super-class via `inherits`:
 
 ```javascript
 // bundle/models/mykeyspace/entities/user.js

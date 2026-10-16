@@ -411,7 +411,31 @@ The model layer now creates only the bundle's `models/` directory.
 
 - Nothing to change. A `models/<entry key>/entities/` directory an earlier version left empty can
   be deleted.
-- Keep a connector's entities in `models/<database>/entities/`.
+- Keep a connector's entities in `models/<database>/entities/` (`models/<keyspace>/entities/` for
+  a ScyllaDB entry that sets only `keyspace`).
+
+Server-side only: **restart the bundle**.
+
+### Fixed — a ScyllaDB entry that sets only `keyspace` loads its entities (bundle restart)
+
+The [ScyllaDB guide](/data/scylladb-orm) configures an entry with `keyspace` and keeps its
+entities in `models/<keyspace>/entities/`. The connector connected to that keyspace, but the
+model layer told it to read `models/<database>/`, and such an entry sets no `database`: the
+bundle booted with none of the entry's entities or CQL methods, and the connector created an
+empty `models/undefined/entities/` directory.
+
+The model layer now names that directory with the entry's `database`, or with its `keyspace`
+when it sets none.
+
+**What to check:**
+
+- Nothing for an entry that sets `database`, as `gina connector:add --database` writes it: its
+  directory is unchanged, also when the entry sets `keyspace` too.
+- If you set `database` to the keyspace to work around this, it can stay.
+- A ScyllaDB session entry that sets only `keyspace` now gets `models/<keyspace>/entities/`
+  instead of `models/undefined/entities/`. When an ORM entry uses the same keyspace, the session
+  entry's model also carries its entity classes, each bound to its own connection.
+- An empty `models/undefined/entities/` directory left by such an entry can be deleted.
 
 Server-side only: **restart the bundle**.
 
