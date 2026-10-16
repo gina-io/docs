@@ -443,7 +443,7 @@ The client receives a standard Server-Sent Events stream. Native support in Reac
 ## Checklist before shipping
 
 - [ ] `env.json` `hostname` set to your production domain, not `localhost`
-- [ ] Session secret loaded from an environment variable (`${SESSION_SECRET}`), not hardcoded
+- [ ] Session secret loaded from an environment variable (`${secret:SESSION_SECRET}`), not hardcoded
 - [ ] `NODE_ENV` set to `prod` in production — disables hot-reload, enables ETag caching, strips dev toolbar
 - [ ] CORS `Allow-Origin` restricted to known client origins in production
 - [ ] Error responses never include `err.stack` or internal paths (Gina strips this automatically)
