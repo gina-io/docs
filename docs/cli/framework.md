@@ -394,6 +394,13 @@ allowing node_modules to be shared across scopes (e.g. Docker and localhost).
 gina framework:link-node-modules @<project>
 ```
 
+With Gina installed globally, `bundle:start`, `bundle:stop`, `bundle:restart`,
+`project:start`, `project:stop` and `project:restart` run this command, then
+[`framework:link`](#frameworklink), before they act. When one of them fails, the
+command stops with exit code 1, names it with its exit code, for example
+`` `gina framework:link-node-modules @<project>` failed (exit code 1): ``,
+and prints its output, which holds the reason.
+
 ---
 
 ## `gina .` — open a directory in Terminal (macOS)

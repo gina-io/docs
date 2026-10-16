@@ -511,6 +511,29 @@ report these files with the same one-line message.
 
 A framework already running keeps its old code until you run `gina framework:restart`.
 
+### Fixed — a failed `node_modules` link no longer reads as a successful start (framework restart)
+
+With Gina installed globally, `bundle:start`, `bundle:stop`, `bundle:restart`, `project:start`,
+`project:stop` and `project:restart` first run
+[`gina framework:link-node-modules`](/cli/framework#frameworklink-node-modules) and
+[`gina framework:link`](/cli/framework#frameworklink) for the project. Those commands write their
+errors on their standard output, and only the error output was read, so a failure produced an
+empty message, which ends a command with exit code 0: `bundle:start` reported success with
+nothing started. For example, when the project's homedir could not hold `lib/node_modules`,
+`bundle:start` printed nothing and exited 0.
+
+The command now exits 1 and names the step that failed, with its output:
+
+```text
+`gina framework:link-node-modules @myproject` failed (exit code 1):
+…
+Error: Cannot complete symlinkSync from `/home/me/.myproject/lib/node_modules`: the path does not exist.
+```
+
+`gina framework:link`, which runs `framework:link-node-modules` itself, now reports that reason
+too instead of a bare `Error`. A framework already running keeps its old code until you run
+`gina framework:restart`.
+
 ---
 
 ## 0.7.3 → 0.7.4
