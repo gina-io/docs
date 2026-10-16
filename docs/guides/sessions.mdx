@@ -54,7 +54,7 @@ var session      = require('express-session');
 
 myapp.onInitialize(function(event, app) {
     app.use(session({
-        secret           : process.env.SESSION_SECRET || 'changeme'
+        secret           : process.env.SESSION_SECRET
       , resave           : false
       , saveUninitialized: false
       , cookie           : { secure: false, maxAge: 86400000 }  // 1 day
@@ -66,6 +66,12 @@ myapp.onInitialize(function(event, app) {
 myapp.onError(function(err, req, res, next) { next(err); });
 myapp.start();
 ```
+
+Set `SESSION_SECRET` before starting the bundle. Without it, express-session logs
+`express-session deprecated req.secret; provide secret option` at startup and answers
+every request with a 500 (`secret option required for sessions`). To stop the bundle
+at boot instead, read the secret from a bundle config file that holds
+`${secret:SESSION_SECRET}`: [Mobile backend](/guides/mobile-backend) shows the wiring.
 
 This uses the **in-memory store** (default). It is fine for development but
 loses all sessions on restart and does not scale across multiple processes.
@@ -173,7 +179,7 @@ myapp.onInitialize(function(event, app) {
     var SqliteStore = new SessionStore(session); // resolves the "session" entry → SqliteStore class
 
     app.use(session({
-        secret           : process.env.SESSION_SECRET || 'changeme'
+        secret           : process.env.SESSION_SECRET
       , resave           : false
       , saveUninitialized: false
       , store            : new SqliteStore()

@@ -339,6 +339,11 @@ logs its data scope, and where it came from, when it loads:
 
   - Or keep the old behaviour: set `"scope": "_default"` on the entry. The environments that share
     the bucket then keep sharing one scope.
+- An entry without `scope` now has `NODE_SCOPE` checked when the bundle starts, as an entry's own
+  `scope` already was: a scope name outside `^[A-Za-z0-9_./-]+$` (a space, a quote, a `$`) stops the
+  bundle with `GINA_COUCHBASE_INVALID_SCOPE`, exit code 1. 0.7.4 gave such an entry `_default` and
+  did not run this check on `NODE_SCOPE`. Names `gina scope:add` accepts pass; a name written into
+  `projects.json` by hand, or registered before 0.6.33, may not.
 
 Server-side only: **restart the bundle**.
 
