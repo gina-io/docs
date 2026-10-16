@@ -65,8 +65,11 @@ string field. The connectors registry is a typical adoption surface:
 Per-environment overrides go in sibling files alongside the base
 `connectors.json` — `connectors.dev.json`, `connectors.production.json`,
 etc. — and need only contain the keys that differ from the base.
-Placeholders are resolved in every variant before they merge into
-`self.envConf`:
+The variant is merged over the base first, and placeholders are then
+resolved once, in the merged result: a placeholder in the base that the
+variant replaces is never looked up, so its key does not need to be set
+in that environment. With the variant below, a bundle started in the
+`production` environment needs `COUCHBASE_PASSWORD_PROD` only:
 
 ```json title="<bundle>/config/connectors.production.json"
 {

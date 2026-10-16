@@ -189,16 +189,51 @@ Client call: `GET /users?limit=20&offset=40`
 
 ### Session-based (recommended for same-origin web + mobile hybrid)
 
-Sessions are enabled per bundle in `app.json`:
+Gina does not enable sessions from `app.json`: the bundle registers
+[express-session](https://www.npmjs.com/package/express-session) itself, in its
+`onInitialize` hook ([Sessions](/guides/sessions) covers the stores and cookie
+options). Install it in your project:
+
+```bash
+npm install express-session
+```
+
+Keep its options in `app.json`, with the secret as a `${secret:KEY}` placeholder:
 
 ```json
 {
   "session": {
-    "secret": "${SESSION_SECRET}",
+    "secret": "${secret:SESSION_SECRET}",
     "resave": false,
     "saveUninitialized": false
   }
 }
+```
+
+Gina replaces the placeholder with the `SESSION_SECRET` environment variable when
+the bundle starts, and stops the bundle at boot when that variable is unset or
+empty. A bare `${SESSION_SECRET}` is not replaced: it stays that literal text, so a
+session middleware given it would sign every cookie with a value that is not secret.
+
+Register the middleware with those options:
+
+```js
+// src/api/index.js
+var myapp   = require('gina');
+var session = require('express-session');
+
+myapp.onInitialize(function(event, app) {
+    var conf = myapp.getConfig('app').session;
+    app.use(session({
+        secret           : conf.secret,
+        resave           : conf.resave,
+        saveUninitialized: conf.saveUninitialized
+    }));
+    event.emit('complete', app);
+});
+
+myapp.onError(function(err, req, res, next) { next(err); });
+myapp.start();
 ```
 
 Login / logout controller:
