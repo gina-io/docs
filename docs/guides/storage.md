@@ -608,7 +608,7 @@ That default is **single-process per driver root**. SQLite's locking is unreliab
 }
 ```
 
-**If you already have a connector entry for that cluster, name it here and you are done.** The store reuses that entry's credential, so reuse costs you nothing beyond the `store` line — no new secret, no new delivery mechanism. That is the recommended path, and it is worth taking deliberately rather than by default: giving storage its *own* credential means delivering a **database** credential to a running process, and not every deployment has a wire for that. Application-secret pipelines frequently do not carry DB credentials, which instead ride as literals in shipped config — so a storage-specific credential can mean new orchestration and provisioning work, not just a new config key.
+**If you already have a connector entry for that cluster, name it here and you are done.** The store reuses that entry's credential, so reuse costs you nothing beyond the `store` line — no new secret, no new delivery mechanism. That is the recommended path, and it is worth taking deliberately rather than by default: giving storage its *own* credential means delivering a **database** credential to a running process, and not every deployment has a wire for that. Application-secret pipelines frequently do not carry DB credentials, which instead ride as literals in shipped config — so a storage-specific credential can mean new orchestration and provisioning work, not just a new config key. If that entry sets `scope` for your models, read [The couchbase store](#the-couchbase-store) first: the store takes that `scope` as a native Couchbase scope.
 
 Only when storage gets its own entry do you write one:
 
@@ -638,6 +638,19 @@ Requires the `couchbase` SDK (major 3 or 4) in **your** project — the framewor
 declares no dependency on it — and reads the connector's usual keys, where
 `database` is the **bucket** name. Optional: `scope` and `collection` (both
 `_default`), `prefix` (`stor:`), and `durability`.
+
+:::caution `scope` names a native Couchbase scope here
+The store reads `scope` and `collection` as the native scope and collection of
+its keyspace, `<database>.<scope>.<collection>`. On an entry your models use,
+the same `scope` key is the
+[data-isolation label](/concepts/scopes#scopes-and-data-isolation) stamped on
+every document, often an environment name such as `"local"`. An entry shared by
+models and storage therefore hands that label to the store as a native scope.
+If the bucket has no scope of that name, the bundle still starts: the store logs
+that it could not create its indexes, and storage calls then fail. Give storage
+its own entry instead. It can name the same host and credentials (the same
+literals or the same `${secret:…}` reference), so no new secret is delivered.
+:::
 
 **A dedicated bucket — or at least a dedicated collection — is the right
 default, but it is not free.** Nothing breaks if you share one with application
