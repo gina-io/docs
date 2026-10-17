@@ -123,13 +123,17 @@ var result   = whisper({ name: 'Alice', app: 'MyApp' }, template);
 // → 'Hello Alice, welcome to MyApp!'
 ```
 
-`whisper` also resolves OS environment variables using `$VAR` or `~/` syntax
-within string values:
+`whisper` also expands `~/` to the user's home directory within string values:
 
 ```js
 whisper({}, '~/config/app.json');
 // → '/Users/alice/config/app.json'
 ```
+
+`$VAR` tokens are left as written: `whisper` does not resolve OS environment
+variables, so `whisper({}, '$HOME/app')` returns `'$HOME/app'`. To bring an
+environment value into bundle config, use a `${secret:KEY}` placeholder — see
+[Secrets in bundle config](/guides/secrets).
 
 When `replaceable` is an object, all string values in the object are resolved
 recursively.
