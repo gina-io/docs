@@ -195,6 +195,23 @@ only while the pid is written.
 Server-side only: **restart the bundle**, and the framework (`gina framework:restart`) for its
 own pid file.
 
+### Fixed — `gina-init`, `gina-container` and the install step write `~/.gina` files whole (no restart)
+
+`gina-init` rewrote `projects.json`, `ports.json`, `ports.reverse.json` and its `settings.json`
+in place, `gina-container` rewrote `main.json` in place when it updated `def_framework`, and the
+install step (`npm install gina`) did the same when it updated `def_framework`, the frameworks
+list or `def_global_mode`. A `gina` command or a bundle reading one of these files at that
+moment, such as another container sharing the same `~/.gina`, could find it empty or cut short
+and stop. Each file is now written to a temporary file in the same directory and renamed into
+place, as the other `~/.gina` writes already were, so a reader finds the whole old file or the
+whole new one. An existing file keeps its permissions.
+
+**What to check:** nothing has to change. The temporary files (`<file>.<pid>.tmp`, and
+`<file>.<pid>.<n>.tmp` for `gina-init`) exist only while a file is written.
+
+No restart: the change applies the next time `gina-init` or `gina-container` runs, and at the
+next install of gina.
+
 ### Fixed — a Collection filter on one field of an array of objects finds its rows (bundle restart and re-bake)
 
 A [Collection](/api/collection) filter key `'<array>[*].<field>'` reads `<field>` from each
