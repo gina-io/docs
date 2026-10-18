@@ -234,6 +234,27 @@ member is picked. See
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — an unticked boolean checkbox whose rule says `"isRequired": false` posts `false` (bundle restart and re-bake)
+
+A boolean checkbox posts its live state: `true` when ticked, `false` when not.
+One rule shape broke that: a checkbox whose rule declares `isBoolean` together
+with `"isRequired": false` was left out of the posted data when unticked.
+
+```json
+{ "newsletter": { "isBoolean": true, "isRequired": false } }
+```
+
+It now posts `false`, like every other unticked boolean checkbox. A disabled
+checkbox is still left out, as in a plain HTML form, and so is an unticked
+value-carrying checkbox (a `value` other than `true` or `false`, and no
+`isBoolean` rule). See [Checkboxes](/guides/forms-and-validation#checkboxes).
+
+**What to check:** a handler that receives such a checkbox now receives `false`
+when it is unticked, where the field used to be missing. Read the boolean rather
+than testing for the field's presence.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
