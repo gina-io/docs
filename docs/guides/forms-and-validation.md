@@ -217,6 +217,14 @@ A few behaviours worth knowing:
   form: the submit control kept its gated mark and a click on it was refused.
   A field that a `_case_` condition names is now wired when the form is bound;
   until its condition applies, only the whole-form check runs for it.
+- **A conditional rule stops applying when its condition no longer holds
+  (since 0.7.5).** Before 0.7.5, once a `_case_<field>` condition had applied,
+  its rules stayed applied after the driving field changed back: the submit
+  control kept its gated mark and the click on it was refused, although the
+  form was valid. Two forms bound to the same rule set could gate each other
+  the same way. Each check now starts from the rules you declared and applies
+  only the conditions that hold for the current values. A rule set with a `$`
+  reference was not affected.
 - **`tel`, `url`, `search` and the date and time inputs are live-checked
   (since 0.7.5).** `tel`, `url`, `search`, `time`, `datetime-local`, `month`
   and `week` fields now get the same live check as `text`, `email`,
@@ -357,6 +365,10 @@ build yourself and hand to `.send()` is posted with native multipart semantics
 (entries verbatim, unchecked boxes omitted) — the classification above applies
 to the fields gina collects from the form.
 
+Before 0.7.5, a checkbox whose rule says `"isRequired": false` and that was
+unticked when a check ran was left out of the posted data, even after the user
+ticked it. Since 0.7.5 a ticked checkbox is posted whatever ran before.
+
 ```json
 { "remember": { "isBoolean": true } }
 ```
@@ -434,6 +446,12 @@ an **empty value**, and the standard required check adjudicates it:
   label;
 - picking a member clears the error state, re-enables the submit control, and
   the submit posts the picked value.
+
+A group that only a `_case_` condition makes required (no rule of its own,
+`"isRequired": true` in the matching condition) is checked the same way once
+the condition applies, from the first submit on (since 0.7.5). Before 0.7.5 the
+first submit after the condition applied could go out without the group. See
+[Live checking](#live-checking) for conditional rules.
 
 Groups with **no rule**, **`isRequired: false`**, or an **`isBoolean`**
 declaration are untouched by the 0.6.3 change — they keep their previous

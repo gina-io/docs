@@ -165,6 +165,61 @@ can drop the wrapper.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a `_case_` rule stops applying when its condition no longer holds, and a checkbox ticked after a check is posted (bundle restart and re-bake)
+
+On a rule set with no `$` reference, each validation check wrote what it
+decided into the form's stored rules, and nothing put them back:
+
+- Once a `_case_<field>` condition had applied, its rules stayed applied after
+  the driving field changed back. The submit control kept its gated mark and the
+  click on it was refused, although the form was valid. Forms bound to the same
+  rule set share those stored rules, so one form's condition could gate another
+  form.
+- A checkbox whose rule says `"isRequired": false` and that was unticked when a
+  check ran stayed out of the posted data, even after the user ticked it.
+
+Each check now works on its own copy of the rules, as a rule set with a `$`
+reference already did, so the stored rules keep what you declared. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:** a handler that receives such a checkbox now receives it when
+the user ticked it after a check, where it used to be missing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a radio or checkbox group required only through a `_case_` rule is checked on the first submit (bundle restart and re-bake)
+
+A `_case_<field>` condition can be the only thing that makes a group required.
+Here `plan` has no rule of its own and is required only when `kind` is `pro`:
+
+```json
+{
+  "name": { "isRequired": true },
+  "_case_kind": {
+    "conditions": [
+      { "case": "pro", "rules": { "plan": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+The validator collects an unchecked group only when the group's own rule says
+`isRequired`, so the first check after `kind` became `pro` did not see `plan`.
+A later check refused the group only because the check before it had written
+the condition's rule into the form's stored rules (the defect in the previous
+entry). So with live checking off, or with a radio button as the driving field,
+the first submit went out without the group, and with a `$` reference in the
+rule set every submit did. The matching condition now enters an unchecked group
+as an empty value, and the required check refuses the submit until a member is
+picked. See
+[Required groups gate the submit](/guides/forms-and-validation#required-groups-gate-the-submit).
+
+**What to check:** a form whose radio or checkbox group is required only through
+a `_case_` condition now refuses the submit until a member is picked, where the
+first submit could go out without it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
