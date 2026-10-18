@@ -220,6 +220,20 @@ first submit could go out without it.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a `<select>` change no longer opens the submit control while a required radio group is unpicked (bundle restart and re-bake)
+
+After a change on a `<select>`, the validator re-checks the whole form. That
+check used a rule set in which no field had a rule, so a radio group whose rule
+says `"isRequired": true` and that nobody had picked was not seen: the submit
+control lost its gated mark, although a click on it still sent nothing. The
+check now uses the form's own rules, and the submit control stays gated until a
+member is picked. See
+[Required groups gate the submit](/guides/forms-and-validation#required-groups-gate-the-submit).
+
+**What to check:** nothing has to change.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
