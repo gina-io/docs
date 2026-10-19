@@ -259,6 +259,38 @@ stored `true` stayed `true`. It now posts `false`, and the stored value becomes
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — each condition of a `_case_` block is matched against its driving field (bundle restart and re-bake)
+
+A `_case_<field>` block lists conditions, and each applies when its `case` matches
+the value of the driving field. Once a condition had matched, the validator
+compared the next conditions of the same block with the value of a field that
+condition names. Here the first condition matches `kind` at `pro` and names
+`company`:
+
+```json
+{
+  "_case_kind": {
+    "conditions": [
+      { "case": "pro", "rules": { "company": { "isString": true } } },
+      { "case": "acme", "rules": { "plan": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+With `kind` at `pro` and `company` holding `acme`, the second condition applied
+too, and the submit was refused while `plan` was empty. When the named field's
+own rule says `isBoolean`, its value was compared as a boolean, so a later
+`"case": true` matched a ticked checkbox the same way. Every condition is now
+matched against the value of `kind`.
+
+**What to check:** a later condition that applied only through that comparison
+no longer applies: a field it required is no longer refused, and a field it
+excluded is posted again. A later condition that matches the driving field still
+applies.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
