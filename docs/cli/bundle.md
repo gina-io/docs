@@ -77,7 +77,7 @@ not.
 | The bundle's own code | The bundle stopped before it was ready: an error while it boots, a [`scopes`](/concepts/scopes#restrict-a-bundle-to-certain-scopes) refusal. `1` when that code was `0`. |
 | `128` + the signal number | A signal stopped the bundle before it was ready (`137` for `SIGKILL`). |
 | `1` | The bundle was not ready after about 64 seconds (much longer with `--inspect-brk`, which waits for a debugger). |
-| `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name, or a project file the framework cannot use, named with the reason: `<file> cannot be used: <reason>` for a `manifest.json` that cannot be read or parsed, or an `env.json` or `package.json` that cannot be parsed. The framework keeps running. |
+| `1` | The start was refused before anything ran: a bundle the project does not declare, an unregistered `@<project>`, an invalid bundle name, or a file the framework cannot use, named with the reason: `<file> cannot be used: <reason>` for a `manifest.json` that cannot be read or parsed, an `env.json` or `package.json` that cannot be parsed, or one of Gina's own files in `~/.gina` (`main.json`, `projects.json`, `ports.json`, `ports.reverse.json`) that cannot be read or parsed. The framework keeps running. |
 | `1` | The project's `node_modules` could not be linked: with Gina installed globally, the start first runs [`gina framework:link-node-modules`](/cli/cli-framework#frameworklink-node-modules) and [`gina framework:link`](/cli/cli-framework#frameworklink), and the message names the one that failed, with its exit code and its output. |
 | `1` | `bundle:start @<project>`: one of the project's bundles did not start. Every bundle is still attempted. |
 
@@ -207,7 +207,7 @@ With `--format=json`, the command emits a single object:
 
 `framework` is the framework version the project resolves to — its `projects.json` pin, or the global default when the project is unpinned. `gina_version` is the per-bundle `manifest.json` override (`null` unless the bundle pins a version via `--gina-version`); the effective version is `gina_version || framework`.
 
-When the bundle is not declared in the project's `manifest.json`, the command exits non-zero; with `--format=json` it emits `{"bundle":"api","project":"myproject","status":"not-found"}`. A missing or malformed `ports.reverse.json` is tolerated — the bundle renders as `(no port)` with `env` / `scheme` / `protocol` / `port` null and `ports: null`.
+When the bundle is not declared in the project's `manifest.json`, the command exits non-zero; with `--format=json` it emits `{"bundle":"api","project":"myproject","status":"not-found"}`. A missing `ports.reverse.json` is tolerated — the bundle renders as `(no port)` with `env` / `scheme` / `protocol` / `port` null and `ports: null`. One that cannot be read or parsed stops the command with `ports.reverse.json cannot be used: <reason>` and exit code 1, and so does a `ports.json` that cannot be read or parsed.
 
 :::caution Docker bundles
 A bundle running inside a Docker container writes its pidfile inside the container, not on the host `~/.gina/run/` directory. Running `bundle:status` from a host shell reports it as `[ stopped ]` even when the container is up — use `docker ps` or `docker exec <container> gina bundle:status <bundle> @<project>` for the container-side view.
@@ -532,7 +532,7 @@ With `--format=json`, each bundle object carries:
 }
 ```
 
-A missing or malformed `ports.reverse.json` is tolerated — the command still renders with every bundle showing `(no port)` / `ports: null`.
+A missing `ports.reverse.json` is tolerated — the command still renders with every bundle showing `(no port)` / `ports: null`. One that cannot be read or parsed stops the command with `ports.reverse.json cannot be used: <reason>` and exit code 1, and so does a `ports.json` that cannot be read or parsed.
 
 :::caution Docker bundles
 Bundles running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `bundle:list` from a host shell will report them as `(stopped)` even when the container is up — use `docker ps` or `docker exec <container> gina bundle:list` for the container-side view.

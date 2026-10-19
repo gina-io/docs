@@ -295,7 +295,7 @@ The no-argument form (every project) wraps each project's array in a `{ project,
 ]
 ```
 
-A missing or malformed `ports.reverse.json` is tolerated — each bundle renders as `(no port)` with null port fields.
+A missing `ports.reverse.json` is tolerated — each bundle renders as `(no port)` with null port fields. One that cannot be read or parsed stops the command with `ports.reverse.json cannot be used: <reason>` and exit code 1, and so does a `ports.json` that cannot be read or parsed.
 
 :::caution Docker bundles
 Bundles running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `project:status` from a host shell reports them as `[ stopped ]` even when the container is up — use `docker ps` or `docker exec <container> gina project:status @<project>` for the container-side view.

@@ -72,7 +72,7 @@ With `--format=json`, each service object carries:
 }
 ```
 
-A missing or malformed `ports.reverse.json` is tolerated — the command still renders with every service showing `(no port)` / `ports: null`. A stale pidfile (process exited) reports `(stopped)` without being deleted; pidfile clean-up stays with [`bundle:stop`](/cli/cli-bundle#bundlestop).
+A missing `ports.reverse.json` is tolerated — the command still renders with every service showing `(no port)` / `ports: null`. One that cannot be read or parsed stops the command with `ports.reverse.json cannot be used: <reason>` and exit code 1, and so does a `ports.json` that cannot be read or parsed. A stale pidfile (process exited) reports `(stopped)` without being deleted; pidfile clean-up stays with [`bundle:stop`](/cli/cli-bundle#bundlestop).
 
 :::caution Docker bundles
 Services running inside a Docker container write their pidfile inside the container, not on the host `~/.gina/run/` directory. Running `service:list` from a host shell will report them as `(stopped)` even when the container is up — use `docker ps` or `docker exec <container> gina service:list` for the container-side view.

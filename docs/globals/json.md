@@ -103,9 +103,11 @@ tool, a long-running process, a launcher. Since 0.7.5 gina reads a project's
 loads its configuration, the `manifest.json` also in `bundle:list`,
 `bundle:status`, `bundle:restart`, `project:status`, `project:rename`,
 `project:restore`, `gina-container` and at boot, and the project's
-`package.json` in `bundle:start`. A file a command cannot use stops that command
-with `<file> cannot be used: <reason>`, and the framework that runs
-`bundle:start` keeps running.
+`package.json` in `bundle:start`. Gina also parses its own `ports.json` and
+`ports.reverse.json` in `~/.gina` this way when a CLI command loads its
+configuration, and `main.json` and `projects.json` in `bundle:start`. A file a
+command cannot use stops that command with `<file> cannot be used: <reason>`,
+and the framework that runs `bundle:start` keeps running.
 
 ---
 

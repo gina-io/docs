@@ -704,6 +704,32 @@ report these files with the same one-line message.
 
 A framework already running keeps its old code until you run `gina framework:restart`.
 
+### Fixed — a file in `~/.gina` that cannot be used no longer stops the framework (framework restart)
+
+`gina bundle:start` also reads Gina's own files in `~/.gina` on its way to the bundle: `main.json`,
+`projects.json`, `ports.json` and `ports.reverse.json`. They were read with
+[`requireJSON()`](/globals/json) too, so a `projects.json`, `ports.json` or `ports.reverse.json` that
+could not be read or parsed stopped the framework the same way, with the same one-line message. A
+`main.json` that could not be read or parsed stopped `bundle:start` before it reached the framework,
+with a long message.
+
+They are now read with
+[`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename). A file that cannot be
+used refuses the command, which exits 1, and the framework keeps running:
+
+```text
+projects.json cannot be used: could not parse `/home/me/.gina/projects.json`: Expected ',' or '}' after property value in JSON at position 2956 (line 91 column 1)
+```
+
+For `main.json`, the command first warns that `def_framework` could not be synced. `bundle:status`,
+`bundle:list`, `project:status` and `service:list` now report a `ports.json` or `ports.reverse.json`
+that cannot be read or parsed in the same one line. They exited 1 on it before too, with a long
+message, although their pages said a malformed `ports.reverse.json` was tolerated. A missing
+`ports.reverse.json` is still recreated empty and shown as `(no port)`. Fix the file, or restore it
+from a backup.
+
+A framework already running keeps its old code until you run `gina framework:restart`.
+
 ### Fixed — a failed `node_modules` link no longer reads as a successful start (framework restart)
 
 With Gina installed globally, `bundle:start`, `bundle:stop`, `bundle:restart`, `project:start`,
