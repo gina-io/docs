@@ -291,6 +291,40 @@ applies.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a `_case_` condition whose `case` is a regular expression applies (bundle restart and re-bake)
+
+A `case` written `/pattern/flags`, the form the 0.3.15 notes show with
+`"case": "/^individual$/"`, was compared as a string with the value of the
+driving field, so it did not match. When its `_case_` block was the only one, or
+the last one, of the rule set, such a condition applied nothing. When another
+`_case_` block followed it, a later check applied its rules to the fields the
+form collects, but a radio or checkbox group it requires was not refused.
+
+```json
+{
+  "_case_kind": {
+    "conditions": [
+      { "case": "/^(individual|student)$/i", "rules": { "company": { "exclude": true }, "school": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+The `case` is now read as a regular expression and tested against the value of
+the driving field. See
+[Conditional rules](/guides/forms-and-validation#conditional-rules).
+
+**What to check:** every condition of yours written this way now applies in full:
+a field it requires is refused while empty, a radio or checkbox group it requires
+is refused until a member is picked, and a field it excludes is left out of the
+posted data. Read each one before you upgrade, starting with the blocks that are
+the only or the last `_case_` key of their rule set. A value that starts and ends
+with a slash and is meant literally is now a regular expression: put it in an
+Array (`["/fr/"]`) to keep comparing it as a value. A pattern the browser does not
+accept is still compared as a value, with a console warning.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or

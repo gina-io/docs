@@ -110,6 +110,37 @@ Sub-directories become dotted paths: `forms/rules/account/signin.json` is the
 rule set `account/signin`. The full catalog of rules lives in the
 [Validation rules reference](/reference/validation-rules).
 
+### Conditional rules
+
+A `_case_<field>` key gives other fields rules only while `<field>`, the
+driving field, has a given value. It holds a list of `conditions`, and each
+condition names a `case` and the `rules` it applies:
+
+```json title="src/myapp/forms/rules/account.json"
+{
+  "kind": { "isRequired": true },
+  "_case_kind": {
+    "conditions": [
+      { "case": "pro", "rules": { "company": { "isRequired": true } } },
+      { "case": ["pro", "association"], "rules": { "registration": { "isRequired": true } } },
+      { "case": "/^(individual|student)$/i", "rules": { "company": { "exclude": true } } }
+    ]
+  }
+}
+```
+
+A `case` takes one of three forms:
+
+| `case` | The condition applies when the driving field's value |
+|---|---|
+| a value: `"pro"`, `true` | equals it |
+| an Array: `["pro", "association"]` | equals one of its items |
+| a string written `/pattern/flags`: `"/^(individual\|student)$/i"` | matches that regular expression (*since 0.7.5*) |
+
+Every condition whose `case` matches applies. A regular expression is read as
+written, so `[ab]` is a character class. To compare with a value that itself
+starts and ends with a slash, put it in an Array (`["/fr/"]`).
+
 ---
 
 ## Step 2 — Bind a form to its rules
