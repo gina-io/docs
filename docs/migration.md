@@ -251,7 +251,11 @@ value-carrying checkbox (a `value` other than `true` or `false`, and no
 
 **What to check:** a handler that receives such a checkbox now receives `false`
 when it is unticked, where the field used to be missing. Read the boolean rather
-than testing for the field's presence.
+than testing for the field's presence. On an edit form, this also changes what is
+saved when the server keeps the stored value of a field the request leaves out:
+unticking the box used to change nothing, since the untick was never posted, so a
+stored `true` stayed `true`. It now posts `false`, and the stored value becomes
+`false`.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
