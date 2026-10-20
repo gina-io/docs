@@ -499,6 +499,57 @@ its own members.
 
 ---
 
+## Fields that depend on a radio or checkbox
+
+A field carrying `data-gina-form-element-group` follows the radio or checkbox
+whose `id` it names, its **master**. While the master is checked, the field is
+enabled and sent with the form; otherwise it is disabled, and left out of the
+posted data as a disabled control is in a plain HTML form. Name the master's
+`id`, not its `name`: the `name` is what groups the radios.
+
+```html
+<form id="subscribe" data-gina-form-rule="subscribe">
+  <label><input type="radio" id="plan-monthly" name="plan" value="monthly" checked> Monthly</label>
+  <label><input type="radio" id="plan-annual" name="plan" value="annual"> Annual</label>
+
+  <!-- sent only while "Annual" is chosen -->
+  <input type="text" name="discountCode" data-gina-form-element-group="plan-annual">
+</form>
+```
+
+```mermaid
+flowchart LR
+    A["A radio or checkbox changes"] --> B{"Does the field name its id?"}
+    B -- yes --> C{"Is it checked?"}
+    C -- yes --> D["Field enabled and sent"]
+    C -- no --> E["Field disabled and left out"]
+    B -- no --> F["Field unchanged"]
+```
+
+- **At page load** each master's fields follow its `checked` attribute, wherever
+  the master sits in the form.
+- **A radio changes only the fields that name it.** Choosing a member of a group
+  unchecks the others, so their fields are disabled; a radio of another group
+  leaves them alone.
+- **A checkbox can be a master** too: its fields follow its ticked state.
+- **A checkbox under a master.** A checkbox can itself name a master, and a field
+  can name both, separated by a space. The field is sent only while the master
+  is checked and the checkbox ticked: a checkbox disabled because its own master
+  is off counts as unticked.
+
+  ```html
+  <input type="checkbox" id="coupon-opt-in" name="couponOptIn" value="yes" data-gina-form-element-group="plan-annual">
+  <input type="text" name="couponCode" data-gina-form-element-group="plan-annual coupon-opt-in">
+  ```
+
+- **A field whose group names no element** of its form is left as the HTML
+  renders it.
+- **Give masters ids of which none contains another.** A field's group is matched
+  against a master's `id` as a substring, so with masters `plan` and
+  `plan-annual`, the radio `plan` also drives the fields of `plan-annual`.
+
+---
+
 ## The submit control
 
 Gina deliberately does **not** disable the submit control while the form is
@@ -1721,7 +1772,7 @@ anything that must be true before you act on the data.
 | Attribute | Effect |
 |---|---|
 | `data-gina-form-field-label` | Human label for the field, used by the `%l` message placeholder. |
-| `data-gina-form-element-group` | Groups related radios/checkboxes for collective validation. |
+| `data-gina-form-element-group` | Ties the field to the radio or checkbox whose `id` it names: the field is enabled and sent only while that control is checked. See [Fields that depend on a radio or checkbox](#fields-that-depend-on-a-radio-or-checkbox). |
 
 ### Submit control
 

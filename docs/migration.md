@@ -325,6 +325,39 @@ accept is still compared as a value, with a console warning.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a field tied to a radio or checkbox follows only the control it names (bundle restart and re-bake)
+
+A field carrying `data-gina-form-element-group="<id>"` is enabled, and sent, while
+the radio or checkbox with that `id` is checked. Every radio, when the page bound
+it and on every click, disabled every such field of the form and enabled again
+only its own. So:
+
+- a click on another radio, of the same group or not, left the fields of a
+  checked master out of the posted data, a checkbox master's fields included;
+- at page load, the fields of a master checked in the HTML were left out unless
+  that master was the last radio of the form;
+- a field whose group names no element of its form was left out as soon as the
+  form held a radio, and sent otherwise.
+
+A field now changes only with a master it names, and a field whose group names no
+element is left as the HTML renders it. One more case needed its own change: a
+checkbox grouped under a master, with a field naming both
+(`data-gina-form-element-group="plan-annual coupon-opt-in"`). That field followed
+the checkbox's ticked state alone, so it would have been sent after the master
+was switched off while the checkbox stayed ticked; the old behaviour hid this. A
+checkbox that is disabled now counts as unticked for the fields that name it. See
+[Fields that depend on a radio or checkbox](/guides/forms-and-validation#fields-that-depend-on-a-radio-or-checkbox).
+
+**What to check:** these fields are now sent where they were missing: a master's
+fields after a click on an unrelated radio, the fields of a master checked in the
+HTML from the first submit, a checkbox master's fields in a form with radios, and
+a field whose group names no element. A handler that relied on their absence, and
+a page script that enabled them again after a click, should be read again. One
+field is no longer sent: one that names a checkbox grouped under another
+checkbox, while the outer one is unticked and the inner one still ticked.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
