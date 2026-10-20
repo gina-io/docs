@@ -871,6 +871,19 @@ Error: Cannot complete symlinkSync from `/home/me/.myproject/lib/node_modules`: 
 too instead of a bare `Error`. A framework already running keeps its old code until you run
 `gina framework:restart`.
 
+### Fixed — the helpers load in a fixed order under Bun (framework and bundle restart)
+
+The framework's `helpers/` directory is loaded in the order the file system lists it. Node
+lists a directory sorted; Bun lists it as the file system does. Four helpers load the logger,
+and the logger loads three of them back while it loads, so when `path.js` or `json` came first
+a process that loaded the helpers before the logger failed with
+`TypeError: require(...) is not a function`. The entries are now sorted before they load, the
+order node has always used.
+
+**What to check:** nothing has to change. A process that failed this way under Bun now starts.
+
+Server-side: **restart** the framework and your bundles.
+
 ### Fixed — a `requireJSON()` parse error quotes the file around the error (bundle restart)
 
 When [`requireJSON()`](/globals/json#error-handling) cannot parse a file, its message quotes the
