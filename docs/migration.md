@@ -660,6 +660,46 @@ from a checkout that does not commit `manifest.json`, create it in the image: se
 [K8s and Docker › The image must contain `manifest.json`](/guides/k8s-docker#the-image-must-contain-manifestjson).
 The launcher is read when the container starts, so there is nothing to restart.
 
+### Fixed — `gina-container`, `gina-init` and a bundle accept a comment or a trailing comma in the `~/.gina` files (bundle restart)
+
+`gina-container` read `~/.gina/<version>/settings.json`, `projects.json` and `ports.reverse.json`
+with a plain JSON parser, so a `//` comment or a trailing comma left by a hand edit stopped it
+with a `SyntaxError` that named no file:
+
+```text
+SyntaxError: Expected double-quoted property name in JSON at position 1330 (line 34 column 1)
+    at Object.<anonymous> (/usr/local/lib/node_modules/gina/bin/gina-container:122:21)
+```
+
+It now reads them as the CLI does: comments are ignored and a trailing comma is accepted with a
+warning. A file that is still not JSON, or that cannot be read, stops the launcher with exit code 1
+and names it:
+
+```text
+[ gina-container ] settings.json cannot be used: could not parse `/home/node/.gina/0.7/settings.json`: Expected ',' or '}' after property value in JSON at position 1329 (line 34 column 1)
+```
+
+`main.json` is read the same way and still only warns, now naming the file. Past the launcher, a
+bundle read `projects.json`, `ports.reverse.json` and `ports.json` with `require()` when it booted,
+so the same comma stopped the bundle there; it now reads them with [`requireJSON()`](/globals/json).
+Outside dev mode (`NODE_ENV_IS_DEV` not `true`), that boot now reads `projects.json` and
+`ports.reverse.json` from disk twice: `require()`'s cache used to serve the second read.
+A trailing comma in `manifest.json`, which
+[`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename) accepts, was refused
+by `gina-container`: it is accepted there too.
+
+`gina-init` parses its configuration file (`GINA_INIT_CONFIG` or `--config`) the same way, and the
+error for a malformed one names it (`failed to parse config file: could not parse <file>: <reason>`).
+A trailing comma in the previous `settings.json` no longer resets a `bind_host` you set to the
+loopback default.
+
+In every gina process, a trailing comma in `~/.gina/<version>/settings.json` no longer loses its
+`log_level` while the logger starts, and one in `~/.gina/user/extensions/logger/default/config.json`
+no longer keeps the logger from loading.
+
+The launchers are read when the container starts. A running bundle picks up its boot change at its
+next restart.
+
 ### Fixed — a Couchbase entry without `scope` uses `NODE_SCOPE`, as documented (bundle restart)
 
 A Couchbase entry in `connectors.json` that has no `scope` falls back to the bundle's

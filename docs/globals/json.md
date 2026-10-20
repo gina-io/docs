@@ -108,7 +108,13 @@ loads its configuration, the `manifest.json` also in `bundle:list`,
 `ports.reverse.json` in `~/.gina` this way when a CLI command loads its
 configuration, and `main.json` and `projects.json` in `bundle:start`. A file a
 command cannot use stops that command with `<file> cannot be used: <reason>`,
-and the framework that runs `bundle:start` keeps running.
+and the framework that runs `bundle:start` keeps running. `gina-container`
+reads `~/.gina/<version>/settings.json`, `projects.json` and
+`ports.reverse.json` the same way and stops with
+`[ gina-container ] <file> cannot be used: <reason>` on one it cannot use; it
+parses `main.json` this way too and only warns. `gina-init` parses its
+configuration file (`GINA_INIT_CONFIG` or `--config`) and the previous
+`settings.json` with it.
 
 ---
 

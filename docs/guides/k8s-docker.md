@@ -126,6 +126,14 @@ gina-init --config=/etc/gina/init.json
 GINA_INIT_CONFIG=/etc/gina/init.json gina-init
 ```
 
+Since 0.7.5 the file may carry `//` comment lines and a trailing comma (with a
+warning), as gina's other JSON files may. A file that is still not JSON stops
+`gina-init` with exit code 1 and names it:
+
+```text
+[gina-init] failed to parse config file: could not parse `/etc/gina/init.json`: Expected ',' or '}' after property value in JSON at position 52 (line 4 column 1)
+```
+
 ### Port allocation
 
 `gina-init` allocates one port per `(bundle, env)` pair for each active
