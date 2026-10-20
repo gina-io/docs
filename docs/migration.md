@@ -994,6 +994,36 @@ characters before the error to 300 after it.
 **What to check:** nothing has to change. A bundle or a framework already running keeps the
 helper it loaded until it restarts; a CLI command loads it at each run.
 
+### Fixed — `swig.useProject` and `swig.package` take effect in a running bundle (bundle restart)
+
+[`swig.useProject`](/reference/settings#swig) loads a project-pinned `@rhinostone/swig`, and
+[`swig.package`](/templating#picking-an-engine) selects the Twig, Jinja2 or Django frontend.
+A running bundle applied neither: the controller asked for the template engine as it loaded,
+before the bundle read its swig settings, so every bundle rendered with the framework's
+`@rhinostone/swig`. A Twig, Jinja2 or Django template went through the native swig parser,
+which renders some of their syntax differently without an error (`{{ 'a' ~ 'b' }}` gave `a`),
+the log said « second bundle requested … ignoring » with no second bundle, and a pinned
+`@rhinostone/swig` in the project was never loaded, with no log line.
+
+A bundle now loads the package its settings select when it starts, and logs
+`[swig-resolver] using project <package>@<version>`. A frontend it cannot load
+(`swig.useProject` not `true`, the package not installed in the project, or the project's copy
+failing the version or manifest checks) stops the bundle at startup with an error that names
+the package and the `npm install` line (`err.code` is `SWIG_PACKAGE_UNAVAILABLE`). Before, the
+same bundle started and rendered through the native parser.
+
+**What to check:**
+
+- A bundle that sets `swig.useProject: true` now renders with the project's own
+  `@rhinostone/swig`: check that its version is the one you want (2.x, at least 2.0.0).
+- A bundle that sets `swig.package` to a frontend: install the package in the project and set
+  `swig.useProject: true`, or remove `swig.package` if the bundle's templates are written in
+  native swig syntax.
+- Pages written for a frontend now render through it: check the pages that rendered through
+  the native parser until now.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.3 → 0.7.4

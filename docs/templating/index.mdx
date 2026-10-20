@@ -165,7 +165,7 @@ Swap the package via `config/settings.json`:
 }
 ```
 
-The framework picks up your project's `@rhinostone/swig-twig` from `node_modules/` at bundle start. Templates must be written in Twig syntax — see the [Twig section](./twig) for the migration notes and parity table.
+The framework picks up your project's `@rhinostone/swig-twig` from `node_modules/` at bundle start. If the project has no usable copy, the bundle stops at startup with an error that names the `npm install` line. Templates must be written in Twig syntax — see the [Twig section](./twig) for the migration notes and parity table.
 
 ### Nunjucks
 
@@ -201,7 +201,7 @@ Swap the package via `config/settings.json`, exactly like Twig:
 }
 ```
 
-The framework loads your project's `@rhinostone/swig-jinja2` from `node_modules/` at bundle start. Templates use Python Jinja2 syntax — see the [Jinja2 section](./jinja2) for the parity table and migration notes.
+The framework loads your project's `@rhinostone/swig-jinja2` from `node_modules/` at bundle start. If the project has no usable copy, the bundle stops at startup with an error that names the `npm install` line. Templates use Python Jinja2 syntax — see the [Jinja2 section](./jinja2) for the parity table and migration notes.
 
 ### Django
 
@@ -216,7 +216,7 @@ Swap the package via `config/settings.json`, exactly like Twig:
 }
 ```
 
-The framework loads your project's `@rhinostone/swig-django` from `node_modules/` at bundle start. Templates use Django Template Language syntax — see the [Django section](./django) for the parity table and migration notes.
+The framework loads your project's `@rhinostone/swig-django` from `node_modules/` at bundle start. If the project has no usable copy, the bundle stops at startup with an error that names the `npm install` line. Templates use Django Template Language syntax — see the [Django section](./django) for the parity table and migration notes.
 
 ## Where the dispatch happens
 

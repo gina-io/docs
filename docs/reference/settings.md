@@ -509,8 +509,9 @@ configuration.
 ### `swig`
 
 Configures the Swig template engine. `settings.swig.package` selects the
-swig-core frontend (see the note above); `settings.swig.autoescape` controls
-HTML output escaping.
+swig-core frontend (see the note above) and `settings.swig.useProject` loads it
+from the project's `node_modules/`; `settings.swig.autoescape` controls HTML
+output escaping.
 
 ```json
 {
@@ -522,6 +523,8 @@ HTML output escaping.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
+| `useProject` | boolean | `false` | Load the swig package from the project's `node_modules/` instead of the framework's bundled copy, provided the project's version has the framework floor's major and is at or above it (`2.0.0`). A rejected `@rhinostone/swig` pin falls back to the framework copy with a warning at startup; see [Project-side version override](/templating/swig#project-side-version-override). A running bundle applies it since 0.7.5. |
+| `package` | string | `"@rhinostone/swig"` | The swig-core frontend: `@rhinostone/swig`, `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` or `@rhinostone/swig-django` (see the note above). A value other than the default needs `useProject: true` and a 2.x copy of that package in the project; without one the bundle stops at startup (`SWIG_PACKAGE_UNAVAILABLE`). |
 | `autoescape` | boolean | `false` (`true` from 0.8.0) | HTML-escape Swig variable output (`{{ x }}`) as an XSS defense. **Off by default** in gina until 0.8.0, which makes `true` the default — `{{ userInput }}` renders raw unless you set this to `true`. A non-boolean value fails the bundle at startup. Since 0.7.0 a bundle that renders Swig and leaves it unset logs one warning at boot; setting it explicitly, `true` or `false`, silences it. New bundles created with `gina bundle:add` set it to `true`. Applied on npm installs since 0.7.1: from 0.5.25 to 0.7.0, gina installed with npm silently rendered with it off (see the [migration guide](/migration#070--071)). |
 
 :::warning Swig output is not auto-escaped by default in gina

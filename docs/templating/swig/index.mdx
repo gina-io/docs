@@ -84,9 +84,13 @@ npm install @rhinostone/swig
 
 On bundle startup, the framework walks `${projectPath}/node_modules/` for the configured package, validates it against two safety gates, and swaps the template engine reference once per process. The defaults preserve today's behaviour — nothing happens unless `useProject` is `true`.
 
+:::note Before 0.7.5
+A running bundle never applied this override: it rendered with the framework's `@rhinostone/swig` whatever `swig.useProject` and `swig.package` said, so a project pin was never loaded and a Twig, Jinja2 or Django template went through the native swig parser. Since 0.7.5 the bundle loads the package its settings select when it starts. See the [0.7.4 → 0.7.5 migration notes](/migration#074--075).
+:::
+
 ### Safety gates
 
-Two constraints reject a project pin and fall back to the framework's copy. The bundle never crashes; it logs one `[swig-resolver]` warning at startup and proceeds with the bundled engine:
+For `@rhinostone/swig`, a project pin that fails one of these checks falls back to the framework's copy: the bundle logs one `[swig-resolver]` warning at startup and proceeds with the bundled engine:
 
 | Gate | Example | Warning code |
 | --- | --- | --- |
@@ -96,14 +100,14 @@ Two constraints reject a project pin and fall back to the framework's copy. The 
 | Major does not match framework floor | Project pinned `1.6.0` or `3.0.0`, framework floor is `2.0.0` | `version-mismatch` |
 | Version below framework floor | A version older than the floor (today `2.0.0`) | `version-mismatch` |
 
-Valid `swig.package` values are `@rhinostone/swig` (the default), `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django`. A value other than the default needs `useProject: true` and a 2.x install of that package in the project: the framework bundles only `@rhinostone/swig`, so the fallback above applies to that package alone. The abandoned upstream `swig` package never loads, because its last release, 1.4.2, fails the major-version gate; this keeps [CVE-2023-25345](./security) from re-entering the render pipeline through a stale `swig@^1.4.2` project dependency.
+Valid `swig.package` values are `@rhinostone/swig` (the default), `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django`. A value other than the default needs `useProject: true` and a 2.x install of that package in the project: the framework bundles only `@rhinostone/swig`, so the fallback above applies to that package alone. Without a usable copy in the project (`useProject` not `true`, the package not installed, or a check above failing), the bundle stops at startup with an error that names the package and the `npm install` line (`err.code` is `SWIG_PACKAGE_UNAVAILABLE`), as a Nunjucks bundle does without nunjucks. The abandoned upstream `swig` package never loads, because its last release, 1.4.2, fails the major-version gate; this keeps [CVE-2023-25345](./security) from re-entering the render pipeline through a stale `swig@^1.4.2` project dependency.
 
 ### Startup logs
 
 Successful override:
 
 ```text
-[swig-resolver] using project @rhinostone/swig@1.6.2 from /srv/app/node_modules/@rhinostone/swig/lib/index.js
+[swig-resolver] using project @rhinostone/swig@2.8.1 from /srv/app/node_modules/@rhinostone/swig/index.js
 ```
 
 Rejected override (any reason):
@@ -112,9 +116,15 @@ Rejected override (any reason):
 [swig-resolver] project override ignored (version-mismatch) — project pinned 1.5.0; using framework copy of @rhinostone/swig
 ```
 
+A frontend with no usable copy in the project (the bundle stops at startup):
+
+```text
+[swig-resolver] settings.swig.package is @rhinostone/swig-twig, but the project has no usable copy (not-installed; expected at /srv/app/node_modules/@rhinostone/swig-twig). The framework ships only @rhinostone/swig, so this package needs swig.useProject: true and a copy in the project: cd /srv/app && npm install @rhinostone/swig-twig@^2.0.0
+```
+
 ### Twig frontend
 
-Set `swig.package: "@rhinostone/swig-twig"` to use the [Twig-syntax frontend](../twig) instead. The API is drop-in — `self.render(data)` still works — but templates must be written in Twig syntax, not swig. See the [Twig Frontend](../twig) section for install details.
+Set `swig.useProject: true` and `swig.package: "@rhinostone/swig-twig"`, with the package installed in the project, to use the [Twig-syntax frontend](../twig) instead. The API is drop-in — `self.render(data)` still works — but templates must be written in Twig syntax, not swig. See the [Twig Frontend](../twig) section for install details.
 
 ### Multi-bundle processes
 
