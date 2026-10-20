@@ -15668,13 +15668,15 @@ has a stale `dir` field, instead of wedging with a misleading "No branch selecte
 
 ## 0.3.4 → 0.3.5
 
-### Security: extended CVE-2023-25345 path-traversal guards _(no action required)_
+### Security: extended prototype-chain guards _(no action required)_
 
 :::note Security — upgrade recommended
-`@rhinostone/swig` bumped to `1.5.0`. Extends the CVE-2023-25345 path-traversal
-blocklist to bracket-notation access (`obj['__proto__']`), `set` bracket
+`@rhinostone/swig` bumped to `1.5.0`. Extends the parse-time prototype-chain
+blocklist (`__proto__`, `constructor`, `prototype`) to bracket-notation access (`obj['__proto__']`), `set` bracket
 assignments, `for` loop variable names, macro names, and import aliases —
-closing the remaining bypass surface in the parse-time guard.
+closing the remaining bypass surface in the parse-time guard. These notes first
+called them the CVE-2023-25345 guards; that CVE is the template loader's
+directory traversal, fixed in `@rhinostone/swig` 2.7.1.
 
 No breaking changes. No config update needed. `npm install gina@latest` picks
 up the new swig version automatically.
@@ -15688,7 +15690,7 @@ npm install gina@latest
 
 :::note Security — upgrade recommended
 The vendored client-side swig build (`core/deps/swig-client/`) was rebuilt from
-`@rhinostone/swig@1.5.0`. Browser-side templating now has the same CVE-2023-25345
+`@rhinostone/swig@1.5.0`. Browser-side templating now has the same prototype-chain
 protections as the server. If you render templates in the browser (gina's
 client-side swig runtime), the extended `__proto__` / `constructor` / `prototype`
 blocklist now applies to bracket notation, `for` variables, macro names, and
