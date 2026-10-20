@@ -106,6 +106,13 @@ already recorded an error. See
 the reference.
 :::
 
+A key can also be a regular expression written `/pattern/flags`: its rules
+apply, in the browser, to every field whose `name` it matches. `[` and `]`
+match themselves, so `"/^items[/"` covers `items[0][qty]` and `items[1][qty]`.
+A field that has a key of its own keeps that key's rules, and the first
+regular expression that matches a field wins. A `$` is part of the pattern; it
+is never replaced by a field's value.
+
 Sub-directories become dotted paths: `forms/rules/account/signin.json` is the
 rule set `account/signin`. The full catalog of rules lives in the
 [Validation rules reference](/reference/validation-rules).
@@ -140,6 +147,20 @@ A `case` takes one of three forms:
 Every condition whose `case` matches applies. A regular expression is read as
 written, so `[ab]` is a character class. To compare with a value that itself
 starts and ends with a slash, put it in an Array (`["/fr/"]`).
+
+A key of a condition's `rules` can be a regular expression too, read as a
+top-level one is — unlike a `case`, it reads `[` and `]` literally — and the
+condition gives its rules to every field the key matches, the driving field
+aside (*since 0.7.5*; before, such a key applied only when its `_case_` block
+was not the last one of the rule set, and only to fields already collected):
+
+```json
+{ "case": true, "rules": { "/^items[/": { "isRequired": true } } }
+```
+
+A field the condition also names by its own key keeps that key's rules.
+Checkboxes required this way must be ticked: at least one of several that share
+a name, each one of several with distinct names.
 
 ---
 

@@ -259,6 +259,45 @@ stored `true` stayed `true`. It now posts `false`, and the stored value becomes
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a regular-expression key inside a `_case_` condition applies wherever its block sits (bundle restart and re-bake)
+
+A key of a condition's `rules` can be a regular expression that names several
+fields at once:
+
+```json
+{
+  "ref": { "isRequired": true },
+  "_case_mode": {
+    "conditions": [
+      { "case": "detailed", "rules": { "/^items[/": { "isRequired": true } } }
+    ]
+  }
+}
+```
+
+Until now such a key applied only when its `_case_` block was not the last
+`_case_` key of the rule set, and then only to the fields the form had already
+collected. In a rule set with a single `_case_` block, or in its last block, the
+key had no effect: the fields it names were neither required nor excluded. In
+an earlier block, a checkbox it required was never refused when unticked.
+
+Since 0.7.5 the key gives its rules to every field it matches, the driving field
+aside, wherever its block sits and whatever the shape of the `case`. It is read
+as a top-level regular-expression key is: `[` and `]` match themselves and the
+flags are kept. A field the condition also names by its own key keeps that key's
+rules, and a field such a key can make required is live-checked. A `$` inside a
+key is part of the pattern, so a key that carries one matches no field, as
+before. See [Conditional rules](/guides/forms-and-validation#conditional-rules).
+
+**What to check:** a rule set whose regular-expression keys sat in its only or
+last `_case_` block now applies them for the first time — read what they require
+or exclude. Checkboxes a key requires must now be ticked: at least one of
+several that share a name, each one of several with distinct names. If a key
+was meant to require at least one box among boxes with distinct names, give the
+boxes one name, or check the selection in your controller.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — an unticked checkbox that carries a value and whose rule says `isRequired` is refused (bundle restart and re-bake)
 
 A checkbox that carries a value (an id, an email, any payload) posts that value
