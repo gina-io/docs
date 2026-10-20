@@ -497,7 +497,7 @@ forms the browser validator submits or `send()`s. See
 `.forEach`, `.map`) now receives an object: iterate its keys
 (`Object.keys(items)`), or give the named key a parent of its own
 (`selected=a1` beside `items[0][id]`). A rule that excluded the named key only
-to avoid the loss is no longer needed.
+to avoid the loss can stay; without it, the parent arrives as an object.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
