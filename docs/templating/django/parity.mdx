@@ -191,6 +191,7 @@ These behaviours are **supported** but diverge from Django because the JavaScrip
 
 | Area | Django | `@rhinostone/swig-django` |
 | --- | --- | --- |
+| `{% for k, v in pairs %}` over a list of pairs | Unpacks each pair into `k` and `v`. | Binds `k` to the index and `v` to the pair. Index the pair instead: `{% for p in pairs %}{{ p.0 }}={{ p.1 }}{% endfor %}`. |
 | `{% for x in mapping %}` (single var) | Iterates the dict's **keys**. | Iterates the dict's **values** (swig object iteration). Use `{% for k in d.keys %}` for keys, `{% for k, v in d.items %}` for pairs. |
 | `forloop.length` | No such field. | Present (swig exposes it) — harmless extra acceptance. |
 | `default` on `""` | Substitutes (the value is falsy). | Same — substitutes. A missing variable also arrives as `""` after engine coercion, so `default` fires on it too. |
