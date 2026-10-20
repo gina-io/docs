@@ -291,6 +291,31 @@ drop `isRequired` from its rule (or set it to `false`).
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a form's rule set is its own copy (bundle restart and re-bake)
+
+Every form bound to one rule set shared one rule object, and the submit and
+click checks looked the rules up by name again. What a binding derives from the
+form's own markup and writes into its rules — the exclusion of a
+`data-gina-form-element-group` member, the `isBoolean` classification of a
+boolean checkbox — therefore reached every other form bound to the same rule
+set, whatever the forms' ids:
+
+- a form posted without its ticked value-carrying checkbox when another form
+  had bound a hidden field of that name first — a popin whose content was
+  swapped by an in-dialog link, or two forms on one page, in either order;
+- a form posted `true` in place of the checkbox's value when the other form's
+  same-name checkbox was boolean.
+
+Each form now holds its own copy of the rule set, and its checks validate with
+that copy. A required valueless checkbox unticked still posts `false` and
+passes. See [Group scoping](/guides/forms-and-validation#group-scoping).
+
+**What to check:** a handler that receives such a form's data now receives the
+ticked checkbox's value where the field used to be missing, or the value where
+it used to receive `true`.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — each condition of a `_case_` block is matched against its driving field (bundle restart and re-bake)
 
 A `_case_<field>` block lists conditions, and each applies when its `case` matches

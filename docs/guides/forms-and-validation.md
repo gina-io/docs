@@ -512,6 +512,18 @@ control tied to it with the HTML `form` attribute. Two forms can each carry a
 group of the same name without interfering; each form validates and posts only
 its own members.
 
+Each form also holds its **own copy of the rule set** it is bound to (*since
+0.7.5*). What a binding derives from the form's own markup and writes into its
+rules — the exclusion of its grouped fields, the boolean classification of its
+checkboxes — and what its checks write never reach another form bound to the
+same rule set, whether the two forms share a page, a popin, or a form id across
+an in-dialog swap. Before 0.7.5 every such form shared one object, and the
+submit and click checks read that object: a form could post without its ticked
+value-carrying checkbox because another form had bound a hidden field of that
+name first, or post `true` in place of a value because the other form's
+same-name checkbox was boolean. To keep two forms' rules apart on an older
+release, bind them to two rule sets.
+
 ---
 
 ## Fields that depend on a radio or checkbox
