@@ -547,7 +547,8 @@ flowchart LR
 - **Each id is matched whole** (*since 0.7.5*). A field's group is a list of ids
   separated by spaces, and a master drives the field only when its `id` is one of
   them: with masters `plan` and `plan-annual`, the radio `plan` drives the fields
-  whose group names `plan`, never those naming `plan-annual`.
+  whose group names `plan`, never those naming `plan-annual`. The id is read as
+  written, whatever characters it holds (`plan+1`, `opt*2`).
 
 ---
 

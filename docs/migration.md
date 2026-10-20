@@ -364,7 +364,10 @@ A field carrying `data-gina-form-element-group` lists the ids of the radios and 
 depends on. Each id was looked for anywhere in that list, so an id found inside a longer one
 matched too: with masters `opt` and `opt-2`, the radio `opt` drove the fields of `opt-2`, a
 checkbox `item-1` those of `item-10`, and a master checked in the HTML could find its fields
-disabled at page load by another master's. Each id is now matched as a whole entry of the list.
+disabled at page load by another master's. Each id is now matched as a whole entry of the list,
+and read as written: an id holding a regular-expression character (`plan+1`, `opt*2`, `fl(ow`)
+was read as a pattern, so `plan+1` found `plan1`, `opt*2` found `op2`, and `fl(ow` stopped the
+form from binding.
 See [Fields that depend on a radio or checkbox](/guides/forms-and-validation#fields-that-depend-on-a-radio-or-checkbox).
 
 **What to check:** a group must list each master's id itself, separated from the other ids by
