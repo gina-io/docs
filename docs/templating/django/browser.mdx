@@ -143,7 +143,7 @@ The loader contract is identical across frontends — see [Loaders](../swig/load
 
 ## AOT pre-compilation
 
-If bundle size or cold-render latency matters, pre-compile Django templates to plain JavaScript at build time, ship only the runtime (the compiled `_output += …` functions) to the browser, and skip the parser entirely. The flow is identical to native swig's — see [Swig Browser Usage → Pre-compile + register + render](../swig/browser#pre-compile--register--render). The compiled output is the same shape regardless of which frontend produced it, because both lower to `swig-core` IR before codegen.
+Native swig can ship pre-compiled templates with a runtime-only bundle and no parser — see [Swig Browser Usage → Pre-compile + register + render](../swig/browser#pre-compile--register--render). That flow does not carry over to Django yet: `swig compile --register` compiles with the native parser only, and the runtime-only bundle carries native swig's filter catalog, which differs from Django's. Bundle `@rhinostone/swig-django` itself, as shown above. A Django runtime-only bundle and a flavor-aware compile step are on the [swig roadmap](https://github.com/gina-io/swig/blob/develop/ROADMAP.md), to be built when a consumer needs them.
 
 ## Bundle size
 

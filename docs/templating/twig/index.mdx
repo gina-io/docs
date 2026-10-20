@@ -16,9 +16,9 @@ prereqs:
 
 `@rhinostone/swig-twig` is a **Twig-flavored frontend** on top of the shared `@rhinostone/swig-core` engine. It lets you render templates written in [upstream PHP Twig syntax](https://twig.symfony.com/doc/3.x/) from Node.js — with the same security model, IR backend, and compilation pipeline that powers `@rhinostone/swig`.
 
-The package is **stable** since `2.0.0` and releases in lockstep with `@rhinostone/swig` and `@rhinostone/swig-core` — all three packages share the same version number on every cut.
+The package is **stable** since `2.0.0` and releases in lockstep with `@rhinostone/swig`, `@rhinostone/swig-core`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` — all five packages share the same version number on every cut.
 
-It is a **strict subset** of upstream Twig: everything it accepts compiles to the same IR as the native `swig` frontend and runs under the same `new Function(...)` sandbox boundary. Syntax that it does not yet support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. See [Non-Goals](./non-goals).
+It is a **strict subset** of upstream Twig: everything it accepts compiles to the same IR as the native `swig` frontend and runs through the same `new Function(...)` compilation step, which is not a sandbox (see [Security](../swig/security)). Syntax that it does not yet support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. See [Non-Goals](./non-goals).
 
 ## Architecture
 
@@ -33,7 +33,7 @@ flowchart LR
   NATIVE["@rhinostone/swig (native frontend)"] -->|lexer + parser| IR
 ```
 
-Every frontend (native swig, swig-twig, future Jinja2, future Django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Twig template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
+Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Twig template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
 
 ## Install
 
@@ -41,7 +41,7 @@ Every frontend (native swig, swig-twig, future Jinja2, future Django) lowers its
 npm install @rhinostone/swig-twig
 ```
 
-`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin matching the installed `@rhinostone/swig-twig`. The lockstep release cadence keeps the three packages on matching versions — npm installs the right core automatically; do not override it.
+`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin matching the installed `@rhinostone/swig-twig`. The lockstep release cadence keeps all five packages on matching versions — npm installs the right core automatically; do not override it.
 
 ## Your first template
 
@@ -114,12 +114,12 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
 | CVE-2023-25345 guards | Yes | Yes |
 | Autoescape defaults[^gina-autoescape] | `true` (HTML) | `true` (HTML) |
-| `new Function(...)` sandbox | Yes | Yes |
+| `new Function(...)` compilation | Yes | Yes |
 | Loader contract | Shared | Shared |
 | Cache contract | Shared | Shared |
 | `setFilter` / `setTag` / `setExtension` | Yes | Yes |
 | Tag set | 15 built-ins | 12 built-ins (see [Parity](./parity)) |
-| Filter set | 26 built-ins | 24 built-ins (see [Parity](./parity)) |
+| Filter set | 25 built-ins | 24 built-ins (see [Parity](./parity)) |
 | Is-tests | — | 7 (`defined`, `null`, `empty`, `iterable`, `odd`, `even`, `divisibleby`) |
 
 [^gina-autoescape]: In a gina bundle both run with [`settings.swig.autoescape`](/reference/settings#swig), which is `false` until 0.8.0.

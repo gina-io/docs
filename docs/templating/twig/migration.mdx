@@ -125,7 +125,7 @@ Practical consequences:
 
 ### Shared backend guarantees
 
-Everything below is inherited from `@rhinostone/swig-core` and behaves identically across all frontends (native swig, swig-twig, future Jinja2/Django):
+Everything below is inherited from `@rhinostone/swig-core` and behaves identically across all frontends (native swig, swig-twig, swig-jinja2, swig-django):
 
 - **CVE-2023-25345 guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in variable output, dot access, bracket access (string literals), and all context-writing tags (`set`, `for`, `macro`, `import`, `from`). See [Security — known advisories](../swig/security#known-advisories).
 - **Autoescape injection.** The final `e` filter is appended automatically to every variable output unless the filter chain ends in a `.safe = true` filter.

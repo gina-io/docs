@@ -16,9 +16,9 @@ prereqs:
 
 `@rhinostone/swig-jinja2` is a **Jinja2-flavored frontend** on top of the shared `@rhinostone/swig-core` engine. It lets you render templates written in [Python Jinja2 syntax](https://jinja.palletsprojects.com/en/stable/templates/) from Node.js — with the same security model, IR backend, and compilation pipeline that powers `@rhinostone/swig` and `@rhinostone/swig-twig`.
 
-It releases in lockstep with `@rhinostone/swig`, `@rhinostone/swig-twig`, and `@rhinostone/swig-core` — all four packages share the same version number on every cut.
+It releases in lockstep with `@rhinostone/swig`, `@rhinostone/swig-twig`, `@rhinostone/swig-django`, and `@rhinostone/swig-core` — all five packages share the same version number on every cut.
 
-It is a **near-subset** of Python Jinja2: everything it accepts compiles to the same IR as the native `swig` frontend and runs under the same `new Function(...)` sandbox boundary. Syntax that it does not support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. A handful of behaviours diverge intentionally where the JavaScript runtime differs from CPython — see [Parity](./parity) and [Migrating from Python Jinja2](./migration). Features that throw are catalogued in [Non-Goals](./non-goals).
+It is a **near-subset** of Python Jinja2: everything it accepts compiles to the same IR as the native `swig` frontend and runs through the same `new Function(...)` compilation step, which is not a sandbox (see [Security](../swig/security)). Syntax that it does not support (or that is explicitly out of scope) throws at parse time rather than silently misbehaving. A handful of behaviours diverge intentionally where the JavaScript runtime differs from CPython — see [Parity](./parity) and [Migrating from Python Jinja2](./migration). Features that throw are catalogued in [Non-Goals](./non-goals).
 
 ## Architecture
 
@@ -33,7 +33,7 @@ flowchart LR
   NATIVE["@rhinostone/swig (native frontend)"] -->|lexer + parser| IR
 ```
 
-Every frontend (native swig, swig-twig, swig-jinja2, future Django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Jinja2 template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
+Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Jinja2 template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
 
 ## Install
 
@@ -41,7 +41,7 @@ Every frontend (native swig, swig-twig, swig-jinja2, future Django) lowers its s
 npm install @rhinostone/swig-jinja2
 ```
 
-`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin matching the installed `@rhinostone/swig-jinja2`. The lockstep release cadence keeps the four packages on matching versions — npm installs the right core automatically; do not override it.
+`@rhinostone/swig-core` is declared as a peer dependency with an exact version pin matching the installed `@rhinostone/swig-jinja2`. The lockstep release cadence keeps all five packages on matching versions — npm installs the right core automatically; do not override it.
 
 ## Your first template
 
@@ -114,12 +114,12 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
 | CVE-2023-25345 guards | Yes | Yes |
 | Autoescape defaults[^gina-autoescape] | `true` (HTML) | `true` (HTML) |
-| `new Function(...)` sandbox | Yes | Yes |
+| `new Function(...)` compilation | Yes | Yes |
 | Loader contract | Shared | Shared |
 | Cache contract | Shared | Shared |
 | `setFilter` / `setTag` / `setExtension` | Yes | Yes |
 | Tag set | 15 built-ins | 13 built-ins (see [Parity](./parity)) |
-| Filter set | 26 built-ins | 39 built-ins (see [Parity](./parity)) |
+| Filter set | 25 built-ins | 39 built-ins (see [Parity](./parity)) |
 | Is-tests | — | 16 (`defined`, `undefined`, `none`, `even`, `odd`, `divisibleby`, `iterable`, `mapping`, `sequence`, `string`, `number`, `boolean`, `callable`, `lower`, `upper`, `sameas`) |
 
 [^gina-autoescape]: In a gina bundle both run with [`settings.swig.autoescape`](/reference/settings#swig), which is `false` until 0.8.0.

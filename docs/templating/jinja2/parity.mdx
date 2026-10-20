@@ -166,7 +166,7 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 
 ### Safe filters
 
-These bypass autoescape (the autoescape `e` tail is not appended): **`safe`**, **`tojson`**, and **`escape`** / **`e`** itself (it carries `.safe = true`, so `{{ x|e }}` is escaped once, not twice). Everything else is escaped on output — note that `urlencode` is **not** safe (unlike native swig's `url_encode`), so a mapping rendered to a query string has its `&` escaped to `&amp;` on output. Filters that emit already-safe HTML you register yourself must set `.safe = true` on the function.
+These bypass autoescape (the autoescape `e` tail is not appended): **`safe`** and **`tojson`**. **`escape`** / **`e`** is not marked safe, but `{{ x|e }}` is still escaped once, not twice, because the HTML escape is idempotent. Everything else is escaped on output — note that `urlencode` is **not** safe (unlike native swig's `url_encode`), so a mapping rendered to a query string has its `&` escaped to `&amp;` on output. Filters that emit already-safe HTML you register yourself must set `.safe = true` on the function.
 
 ### Registering your own
 
