@@ -544,9 +544,10 @@ flowchart LR
 
 - **A field whose group names no element** of its form is left as the HTML
   renders it.
-- **Give masters ids of which none contains another.** A field's group is matched
-  against a master's `id` as a substring, so with masters `plan` and
-  `plan-annual`, the radio `plan` also drives the fields of `plan-annual`.
+- **Each id is matched whole** (*since 0.7.5*). A field's group is a list of ids
+  separated by spaces, and a master drives the field only when its `id` is one of
+  them: with masters `plan` and `plan-annual`, the radio `plan` drives the fields
+  whose group names `plan`, never those naming `plan-annual`.
 
 ---
 

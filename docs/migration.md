@@ -358,6 +358,21 @@ checkbox, while the outer one is unticked and the inner one still ticked.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a field tied to a master follows only the ids its group names (bundle restart and re-bake)
+
+A field carrying `data-gina-form-element-group` lists the ids of the radios and checkboxes it
+depends on. Each id was looked for anywhere in that list, so an id found inside a longer one
+matched too: with masters `opt` and `opt-2`, the radio `opt` drove the fields of `opt-2`, a
+checkbox `item-1` those of `item-10`, and a master checked in the HTML could find its fields
+disabled at page load by another master's. Each id is now matched as a whole entry of the list.
+See [Fields that depend on a radio or checkbox](/guides/forms-and-validation#fields-that-depend-on-a-radio-or-checkbox).
+
+**What to check:** a group must list each master's id itself, separated from the other ids by
+spaces. An entry that only contains a master's id, such as `opt-2` written to follow `opt`, or
+ids joined by a comma (`opt,other`), no longer follows that master.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
