@@ -472,6 +472,35 @@ ids joined by a comma (`opt,other`), no longer follows that master.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a parent whose bracket keys mix indexes and names keeps every value (bundle restart and re-bake)
+
+A form, a query string or a request body can give one parent both indexed keys
+and named keys:
+
+```
+items[0][id]=a0&items[1][id]=a1&items[selected]=a1
+```
+
+When the indexes came first, the name was read as index 0: the first element
+was replaced by `{}`, and the name itself was lost when the data was
+serialized, so the server received `{ items: [ {}, { id: 'a1' } ] }`. The same
+keys with the name first already gave an object.
+
+Since 0.7.5 such a parent is an object keyed by both, whatever the order:
+`{ items: { 0: { id: 'a0' }, 1: { id: 'a1' }, selected: 'a1' } }`. A parent whose
+keys are all indexes is still an array. This applies to urlencoded and
+multipart request bodies, query strings, `formatDataFromString()`, and the
+forms the browser validator submits or `send()`s. See
+[Nested keys](/globals/data#nested-keys).
+
+**What to check:** code that reads such a parent as an array (`.length`,
+`.forEach`, `.map`) now receives an object: iterate its keys
+(`Object.keys(items)`), or give the named key a parent of its own
+(`selected=a1` beside `items[0][id]`). A rule that excluded the named key only
+to avoid the loss is no longer needed.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or

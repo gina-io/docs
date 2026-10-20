@@ -91,6 +91,29 @@ filters[date][from]=2025-01-01&filters[date][to]=2025-12-31
 Empty brackets are **not** array notation: `b[]=x&b[]=y` gives `{ b: { '': 'y' } }`.
 Use explicit indexes (`b[0]=x&b[1]=y`) to build an array.
 
+A parent whose keys mix indexes and names is an object keyed by both,
+whatever the order:
+
+```
+items[0][id]=a0&items[1][id]=a1&items[selected]=a1
+```
+
+```js
+{
+    items: {
+        0        : { id: 'a0' }
+      , 1        : { id: 'a1' }
+      , selected : 'a1'
+    }
+}
+```
+
+The same keys with `items[selected]` first give the same object. A parent whose
+keys are all indexes stays an array. These rules apply to request bodies, query
+strings, multipart text fields and the forms the browser validator sends.
+*Since 0.7.5; before, a name that came after the indexes replaced the first
+element with `{}` and was itself lost when the data was serialized.*
+
 ### Examples
 
 ```js
