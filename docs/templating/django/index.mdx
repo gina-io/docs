@@ -33,7 +33,7 @@ flowchart LR
   NATIVE["@rhinostone/swig (native frontend)"] -->|lexer + parser| IR
 ```
 
-Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. A Django template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
+Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, prototype-chain (`__proto__`) guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. A Django template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
 
 Two small, opt-in-flag-gated additions to `swig-core` back the Django-specific bits, both inert for the other frontends: a configurable loop-context name + field aliases (so `for` exposes `forloop.counter` instead of `loop.index`), and a runtime variable resolver (so `{{ obj.method }}` auto-calls a callable leaf and `{{ list.0 }}` resolves a numeric index). Both are absent unless the Django parser sets the flag, which is why native/swig-twig/swig-jinja2 stay byte-identical.
 
@@ -127,7 +127,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 
 ## Browser usage
 
-`@rhinostone/swig-django` runs in the browser through your own bundler (esbuild, Vite, Webpack, Rollup) — see [Django in the Browser](./browser) for the recipe and bundle-size measurements. Memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
+`@rhinostone/swig-django` runs in the browser through your own bundler (esbuild, Vite, Webpack, Rollup) — see [Django in the Browser](./browser) for the recipe and bundle-size measurements. Memory loader only, no `fs` access, autoescape + prototype-chain guards inherited from `@rhinostone/swig-core`.
 
 ## Relationship to `@rhinostone/swig`
 
@@ -135,7 +135,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | --- | --- | --- |
 | Syntax dialect | Native swig (Jinja2/Django-ish) | Django Template Language (lenient superset) |
 | Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
-| CVE-2023-25345 guards | Yes | Yes |
+| Prototype-chain guards | Yes | Yes |
 | Autoescape defaults[^gina-autoescape] | `true` (HTML) | `true` (HTML) |
 | `new Function(...)` compilation | Yes | Yes |
 | Loader contract | Shared | Shared |

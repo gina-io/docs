@@ -33,7 +33,7 @@ flowchart LR
   NATIVE["@rhinostone/swig (native frontend)"] -->|lexer + parser| IR
 ```
 
-Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, CVE-2023-25345 `__proto__` guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Twig template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
+Every frontend (native swig, swig-twig, swig-jinja2, swig-django) lowers its surface syntax into the same IR shape. The backend — code generation, autoescape injection, prototype-chain (`__proto__`) guards, `new Function(...)` wrapping — lives in `swig-core` and is shared across all frontends. This means a Twig template and a native swig template with equivalent semantics produce byte-identical compiled JavaScript.
 
 ## Install
 
@@ -104,7 +104,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 
 ## Browser usage
 
-`@rhinostone/swig-twig` runs in the browser through your own bundler (esbuild, Vite, Webpack, Rollup) — see [Twig in the Browser](./browser) for the recipe and bundle-size measurements. Memory loader only, no `fs` access, autoescape + CVE-2023-25345 guards inherited from `@rhinostone/swig-core`.
+`@rhinostone/swig-twig` runs in the browser through your own bundler (esbuild, Vite, Webpack, Rollup) — see [Twig in the Browser](./browser) for the recipe and bundle-size measurements. Memory loader only, no `fs` access, autoescape + prototype-chain guards inherited from `@rhinostone/swig-core`.
 
 ## Relationship to `@rhinostone/swig`
 
@@ -112,7 +112,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | --- | --- | --- |
 | Syntax dialect | Native swig (Jinja2-ish) | Upstream PHP Twig (strict subset) |
 | Engine backend | `@rhinostone/swig-core` | `@rhinostone/swig-core` |
-| CVE-2023-25345 guards | Yes | Yes |
+| Prototype-chain guards | Yes | Yes |
 | Autoescape defaults[^gina-autoescape] | `true` (HTML) | `true` (HTML) |
 | `new Function(...)` compilation | Yes | Yes |
 | Loader contract | Shared | Shared |

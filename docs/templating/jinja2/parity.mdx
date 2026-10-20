@@ -93,7 +93,7 @@ jinja2.render('{{ "yes" if n is positive else "no" }}', { locals: { n: 3 } });
 | --- | --- | --- |
 | `set` | No¹ | `{% set x = 5 %}`, expression RHS, and body form `{% set x %}…{% endset %}`. Dotted LHS (`set obj.k`) is supported; bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
 | `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains. |
-| `for` / `else` / `endfor` | Yes | `loop.index`/`index0`/`first`/`last`/`length`, empty-fallback `{% else %}`, and `{% for k, v in mapping %}` (no `.items()` needed — see [Behavioural differences](#behavioural-differences)). Loop variables containing `.` are rejected (CVE-2023-25345 guard). |
+| `for` / `else` / `endfor` | Yes | `loop.index`/`index0`/`first`/`last`/`length`, empty-fallback `{% else %}`, and `{% for k, v in mapping %}` (no `.items()` needed — see [Behavioural differences](#behavioural-differences)). Loop variables containing `.` are rejected (prototype-chain guard). |
 | `block` / `endblock` | Yes | Named block for template inheritance. |
 | `extends` | No | Dynamic parent (`{% extends var %}`, `{% extends full if cond else partial %}`) resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | Supports `with context` (default), `without context`, and `ignore missing`. |
@@ -205,4 +205,4 @@ See [Migrating from Python Jinja2](./migration) for the porting view of these.
 
 Autoescape behaves as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. The built-in safe filters (`safe`, `tojson`) are excluded.
 
-See [Security](../swig/security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.
+See [Security](../swig/security#what-the-guards-protect-against) for the full prototype-chain guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.

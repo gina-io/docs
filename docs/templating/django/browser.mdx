@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Django in the Browser
 sidebar_label: In the Browser
 sidebar_position: 5
-description: Bundle @rhinostone/swig-django for the browser — memory loader only, bring your own bundler (esbuild/Vite/Webpack), shared autoescape and CVE-2023-25345 guards inherited from @rhinostone/swig-core.
+description: Bundle @rhinostone/swig-django for the browser — memory loader only, bring your own bundler (esbuild/Vite/Webpack), shared autoescape and prototype-chain guards inherited from @rhinostone/swig-core.
 level: intermediate
 prereqs:
   - '[Overview](./)'
@@ -14,7 +14,7 @@ prereqs:
 
 # Django in the Browser
 
-`@rhinostone/swig-django` runs in the browser the same way `@rhinostone/swig` does — memory loader only, no `fs` access, identical autoescape and CVE-2023-25345 guard perimeter inherited from `@rhinostone/swig-core`. The package does not ship a pre-built browser bundle; consumers bundle through their own toolchain (esbuild, Vite, Webpack, Rollup).
+`@rhinostone/swig-django` runs in the browser the same way `@rhinostone/swig` does — memory loader only, no `fs` access, identical autoescape and prototype-chain guard perimeter inherited from `@rhinostone/swig-core`. The package does not ship a pre-built browser bundle; consumers bundle through their own toolchain (esbuild, Vite, Webpack, Rollup).
 
 This page covers the Django-specific bits: how to bundle, how to install the peer-dependency pair, and a minimal first-template example using Django syntax. For the shared-engine flow — AOT pre-compile + prime + render, memory-loader idiom, cache semantics, `swig run` warnings — see [Swig Browser Usage](../swig/browser). It applies verbatim because both frontends lower to the same `swig-core` backend.
 
@@ -156,7 +156,7 @@ For perf-critical paths, prefer AOT pre-compilation (previous section) — the r
 `@rhinostone/swig-django` inherits every security guarantee of `@rhinostone/swig-core`:
 
 - **Autoescape is on by default.** HTML entities are escaped on every `{{ … }}` output unless the expression is explicitly marked `safe` (built-in filter) or produced by a user filter declaring `.safe = true`.
-- **CVE-2023-25345 `_dangerousProps` guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in every context that writes to `_ctx`: dotted access, bracket-notation with string literals, `{% for %}` loop variables, `{% with %}` assignments, and `{% include %}` context. The variable resolver re-checks at runtime as defence in depth. The guards are frontend-agnostic — native swig, Twig, Jinja2, and Django all run them.
+- **Prototype-chain (`_dangerousProps`) guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in every context that writes to `_ctx`: dotted access, bracket-notation with string literals, `{% for %}` loop variables, `{% with %}` assignments, and `{% include %}` context. The variable resolver re-checks at runtime as defence in depth. The guards are frontend-agnostic — native swig, Twig, Jinja2, and Django all run them.
 - **Template source is trusted.** Same model as Django itself, Python Jinja2, and Twig. Never pass user-controlled strings directly to `django.render(source, locals)`; keep locals data-only. There is no sandboxed-rendering mode — see [Non-Goals](./non-goals#wont-support-security).
 
 See [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary) for the full story.

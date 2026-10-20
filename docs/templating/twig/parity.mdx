@@ -80,7 +80,7 @@ twig.render('{{ n is positive ? "yes" : "no" }}', { locals: { n: 3 } });
 | --- | --- | --- | --- | --- |
 | `set` | No¹ | Yes | Yes | Supports `{% set foo = 1 %}`, `{% set foo = [1,2] %}`, and body-form `{% set foo %}…{% endset %}`. Bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
 | `if` / `endif` | Yes | Yes | Yes | `{% else %}` and `{% elseif %}` branches deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
-| `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (CVE-2023-25345 guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
+| `for` / `endfor` | Yes | Yes | Yes | Loop variable rejected if it contains `.` (prototype-chain guard). `{% for %}{% else %}{% endfor %}` empty-fallback deferred — see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred). |
 | `block` / `endblock` | Yes | Yes | Yes | Named block for template inheritance. |
 | `extends` | No | Yes | Yes | Dynamic parent (`{% extends var %}`, `{% extends cond ? "a.twig" : "b.twig" %}`) resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | Yes | Yes | Supports `with { … }` and `only`. |
@@ -185,4 +185,4 @@ See [Extending Swig](../swig/extending) for the full filter/tag extension contra
 
 Autoescape behaves exactly as in native swig — `true` by default, applies the `e` filter last, honours `.safe = true` on filter exports. Only `raw` is marked safe, so only `raw` is excluded from autoescape. `escape` / `e` output is not escaped twice either, because the HTML escape is idempotent; `json_encode` and `url_encode` output is autoescaped.
 
-See [Security](../swig/security#what-the-guards-protect-against) for the full CVE-2023-25345 guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.
+See [Security](../swig/security#what-the-guards-protect-against) for the full prototype-chain guard matrix — it applies uniformly across frontends because the guards live in `swig-core`'s shared backend.
