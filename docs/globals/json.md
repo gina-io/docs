@@ -65,7 +65,8 @@ eviction touches a cache it never fills and has no effect.
 
 When the file cannot be parsed, `requireJSON` logs a detailed error message that
 includes the file path, the line and column of the offending character, and a
-context excerpt. It then calls `console.emerg()` and exits the process with
+context excerpt running from 200 characters before the error to 300 after it, with
+`--(ERROR !)--` marking the error. It then calls `console.emerg()` and exits the process with
 `process.exit(1)`.
 
 If the error occurs within the controller stack (i.e. during a request), the

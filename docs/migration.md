@@ -856,6 +856,17 @@ Error: Cannot complete symlinkSync from `/home/me/.myproject/lib/node_modules`: 
 too instead of a bare `Error`. A framework already running keeps its old code until you run
 `gina framework:restart`.
 
+### Fixed — a `requireJSON()` parse error quotes the file around the error (bundle restart)
+
+When [`requireJSON()`](/globals/json#error-handling) cannot parse a file, its message quotes the
+file around the error and marks the error with `--(ERROR !)--`. The quote ended at a fixed
+character, so for an error past the first 500 characters it stopped short of the error: the
+marker never showed, and a long file was printed almost whole. The quote now runs from 200
+characters before the error to 300 after it.
+
+**What to check:** nothing has to change. A bundle or a framework already running keeps the
+helper it loaded until it restarts; a CLI command loads it at each run.
+
 ---
 
 ## 0.7.3 → 0.7.4
