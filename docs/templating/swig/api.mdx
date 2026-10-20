@@ -156,12 +156,12 @@ swig.renderFile('/views/page.html', { title: 'Home' }, function (err, html) {
 
 _Available since `v2.2.0`._
 
-When the active loader sets `loader.async === true`, the cb form of `renderFile` routes through the async-codegen path automatically — pre-walking the dependency graph through `loader.load(id, cb)`, then rendering against an in-memory wrapper. No call-site change is required; opt-in is via the loader flag.
+When the active loader sets `loader.async === true`, the cb form of `renderFile` routes through the async-codegen path automatically, loading each template through `loader.load(id, cb)` as the render reaches it. No call-site change is required; opt-in is via the loader flag.
 
 ```js
 var asyncLoader = {
   async: true,                                       // ← opt-in flag
-  resolve: function (to, from) { return '/' + to; },
+  resolve: function (to, from) { return to.charAt(0) === '/' ? to : '/' + to; },
   load:    function (id, cb)   { fetchAsync(id, cb); }
 };
 
