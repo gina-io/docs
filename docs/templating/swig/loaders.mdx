@@ -220,9 +220,9 @@ The compiled function's return shape (`Promise<{output, exports}>`) differs from
 
 ### Caveat — don't reassign `loader` mid-flight
 
-The async dispatch isolates itself by transactionally swapping `instance.options.loader` to a memory wrapper for the duration of each sync render, then restoring the original. Safe under JS event-loop semantics because the sync render never yields, so concurrent calls don't interleave their render phases.
+Do **not** reassign `instance.options.loader` while a render is pending. The `renderFile` cb dispatch reads the loader each time it fetches a template, so the rest of that render would load through the new loader.
 
-Do **not** reassign `instance.options.loader` from outside while an async render is pending — the value at the time the async call started is what will be restored when the call completes, overwriting any intervening assignment. (Same caveat applies whether you're on the `v2.2.0` dispatch path or the legacy `v2.1.0` entry-points below.)
+The legacy `renderFileAsync` / `compileFileAsync` entry-points (below) pre-walk through the loader they started with and render from that snapshot. During the synchronous render step (each call of the compiled function, for `compileFileAsync`) they set `instance.options.loader` to a memory wrapper and then put back the loader they found, so code running inside the render, such as a filter, sees the wrapper. This is safe under JS event-loop semantics: the sync render never yields, so concurrent calls don't interleave their render phases.
 
 ### Twig flavor
 
