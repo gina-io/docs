@@ -3,7 +3,7 @@ displayed_sidebar: templatingSidebar
 title: Filters
 sidebar_label: Filters
 sidebar_position: 5
-description: Reference for Swig's built-in filters — addslashes, capitalize, date, escape, first, groupBy, join, json, last, length, lower, raw, replace, reverse, safe, sort, striptags, title, uniq, upper, url_encode, url_decode.
+description: Reference for Swig's built-in filters — addslashes, capitalize, date, default, escape, first, groupBy, join, json, last, length, lower, raw, replace, reverse, safe, sort, striptags, title, uniq, upper, url_encode, url_decode.
 level: intermediate
 prereqs:
   - '[Template Syntax](./syntax)'
@@ -26,6 +26,7 @@ Filters marked ✅ are not re-escaped by the autoescape pass — either flagged 
 | [`addslashes`](#addslashes) | — | Backslash-escape `\`, `'`, `"`. |
 | [`capitalize`](#capitalize) | — | First letter upper, rest lower. |
 | [`date`](#date) | — | PHP-style date formatting. |
+| [`default`](#default) | — | Fallback when the value is undefined, `null`, `false`, or an empty string. |
 | [`e`](#e--escape) / [`escape`](#e--escape) | ✅ | HTML-escape. |
 | [`first`](#first) | — | First element of an array or string. |
 | [`groupBy`](#groupby) | — | Group an array of objects by key. |
@@ -88,6 +89,18 @@ PHP-style date format. Accepts a `Date`, ISO string, or timestamp.
 | `abbr` | string | Optional timezone abbreviation |
 
 Set a process-wide default offset with [`swig.setDefaultTZOffset(minutes)`](./api#setdefaulttzoffset).
+
+## default
+
+Return a fallback when the value is undefined, `null`, `false`, or an empty string. `0` passes through.
+
+```swig
+{{ null_value|default('Tacos') }}
+{# => Tacos #}
+
+{{ "Burritos"|default("Tacos") }}
+{# => Burritos #}
+```
 
 ## e / escape
 
@@ -287,10 +300,10 @@ See [Extending Swig — Custom Filters](./extending#custom-filters).
 
 ## Recursion into arrays and objects
 
-Most built-in filters call `iterateFilter` internally, so passing an array or object applies the filter to each element/value. A custom filter can opt in:
+Most built-in filters call `iterateFilter` internally, so passing an array or object applies the filter to each element/value. A custom filter can opt in; `iterateFilter` lives in `@rhinostone/swig-core`, which `@rhinostone/swig` installs:
 
 ```js
-var iterateFilter = require('@rhinostone/swig/lib/filters').iterateFilter;
+var iterateFilter = require('@rhinostone/swig-core/lib/filters').iterateFilter;
 
 function exclamate(input) {
   var out = iterateFilter.apply(exclamate, arguments);

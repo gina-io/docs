@@ -142,11 +142,11 @@ Full dynamic-code-execution surface:
 
 | Location | Usage | Risk |
 | --- | --- | --- |
-| `lib/swig.js` | `new Function('_swig','_ctx','_filters','_utils','_fn', body)` | By design. `body` is built by the parser from the parsed token tree. |
+| `@rhinostone/swig-core` `lib/engine.js` | `new Function('_swig','_ctx','_filters','_utils','_fn', body)`; on the async-codegen path, `new AsyncFunction('_swig','_ctx','_filters','_utils','_fn','_blocks', body)` | By design. `body` is built by the parser from the parsed token tree. |
 | `bin/swig.js` (`swig run`) | `eval(str)` | Developer tool. `str` is the pre-compiled template file. |
 | `bin/swig.js` (`swig run`) | `eval(argv['method-name'])` | Evaluates the method name from `--method-name`. If an attacker controls CLI args, they already have shell access. |
 
-No other `eval` or `new Function` usage exists in the codebase.
+No other `eval`, `new Function` or `AsyncFunction` construction exists in the published packages.
 
 ## Reporting
 

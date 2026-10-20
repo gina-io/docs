@@ -24,7 +24,7 @@ Tags control flow, define reusable structures, and orchestrate template inherita
 | [`if`](#if) | ✅ | — | Conditional. |
 | [`import`](#import) | — | ✅ | Import macros from another template. |
 | [`include`](#include) | — | — | Inline another template. |
-| [`macro`](#macro) | ✅ | — | Define a reusable mini-template. |
+| [`macro`](#macro) | ✅ | ✅ | Define a reusable mini-template. |
 | [`parent`](#parent) | — | — | Emit the parent block's content. |
 | [`raw`](#raw) | ✅ | — | Verbatim content — parser does not tokenize inside. |
 | [`set`](#set) | — | ✅ | Declare or assign a context variable. |
@@ -105,7 +105,7 @@ Declares a parent template. Must be the first statement in the child template.
 
 The parent path may be **dynamic** — `{% extends layout_var %}` or any expression — but a dynamic parent resolves only on the [async render path](./loaders#async-loaders) (`renderFile(path, locals, cb)` against a loader with `loader.async === true`). On the synchronous render path the parent is resolved at compile time, so it must be a string literal.
 
-The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
+The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `macro`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
 
 ## filter
 
@@ -150,7 +150,7 @@ Inside the loop, `loop` exposes:
 | `loop.first` | `true` on the first iteration |
 | `loop.last` | `true` on the last iteration |
 | `loop.key` | Key for object iteration; same as `index0` for arrays |
-| `loop.cycle(a, b, …)` | Rotate through arguments by iteration |
+| `loop.length` | Total number of iterations |
 
 Use [`else`](#else) for the empty case.
 
@@ -204,10 +204,16 @@ Inline another template. By default the current context is shared:
 {% include "header.html" %}
 ```
 
-Pass a fresh context with `with`:
+Add variables with `with` — the included template sees them on top of the current context:
 
 ```swig
 {% include "item.html" with data %}
+```
+
+Add `only` to hide the rest of the current context — the included template then sees just the `with` object:
+
+```swig
+{% include "item.html" with data only %}
 ```
 
 Suppress errors for missing files with `ignore missing`:

@@ -86,10 +86,10 @@ The trade-off: this escaper re-escapes `&amp;` to `&amp;amp;`, so it is only saf
 
 ### Recursing into arrays and objects
 
-Most built-ins use `iterateFilter` so that `{{ names|upper }}` works for an array of strings. Your filter can opt in:
+Most built-ins use `iterateFilter` so that `{{ names|upper }}` works for an array of strings. Your filter can opt in; `iterateFilter` lives in `@rhinostone/swig-core`, which `@rhinostone/swig` installs:
 
 ```js
-var iterateFilter = require('@rhinostone/swig/lib/filters').iterateFilter;
+var iterateFilter = require('@rhinostone/swig-core/lib/filters').iterateFilter;
 
 function exclamate(input) {
   var out = iterateFilter.apply(exclamate, arguments);
@@ -216,7 +216,7 @@ Like filters and tags, extensions are **per-instance**. Register them on every i
 
 ## Token types
 
-When writing tag parse handlers, `types` is the enum from `lib/lexer.js`:
+When writing tag parse handlers, `types` is the enum from `@rhinostone/swig-core/lib/tokentypes`:
 
 | Value | Name | Purpose |
 | --- | --- | --- |
@@ -241,6 +241,8 @@ When writing tag parse handlers, `types` is the enum from `lib/lexer.js`:
 | `22` | `NOT` | `! not`. |
 | `23` | `BOOL` | `true false`. |
 | `24` | `ASSIGNMENT` | `= += -= …`. |
+| `25` | `METHODOPEN` | Internal: method-call open. |
+| `27` | `QMARK` | `?` in a ternary or Elvis (`?:`) expression. |
 | `100` | `UNKNOWN` | Fallthrough. |
 
 `parser.on(types.VAR, fn)` subscribes to VAR tokens in the tag's argument stream. `parser.on('*', fn)` matches every token; `'start'` / `'end'` fire at stream boundaries.

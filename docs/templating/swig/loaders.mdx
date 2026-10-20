@@ -81,7 +81,7 @@ In-memory loader. Serves templates from a pre-built `{ name: source }` map.
 | Arg | Type | Default | Description |
 | --- | --- | --- | --- |
 | `mapping` | object | — | Template name → source string. |
-| `basepath` | string | `'/'` | Used by `resolve` when no `from` is passed. |
+| `basepath` | string | none | When set, `resolve` ignores `from`, resolves every path against `basepath`, and rejects a path that climbs out of it (`../`, since 2.8.0). When unset, a relative path resolves against the including template's directory, or `/`. |
 
 ```js
 swig.setDefaults({ loader: swig.loaders.memory({
@@ -123,7 +123,7 @@ swig.setDefaults({ loader: myLoader('https://…') });
 
 Swig's core compile pipeline is synchronous. `render`, `compile`, and `precompile` invoke `loader.load(id)` without a callback and expect a string return. The cb form of `renderFile` / `compileFile` accepts a caller-side callback, but against a dual-mode or sync loader it still resolves nested `{% extends %}`, `{% include %}`, and `{% import %}` through the sync `load(id)` path during compilation — so a loader whose `load` arm cannot return synchronously needs a different entry point.
 
-For async-only loaders (S3, Redis, CDN, `fetch`-backed), set `loader.async === true` on the loader object and use the cb form of [`renderFile`](./api#renderfile) or [`compileFile`](./api#compilefile) — the dispatch routes through the async-codegen path automatically, pre-walking the dependency graph through the loader's `load(id, cb)` arm before rendering. Available since `v2.2.0`; see [Async loaders](#async-loaders) below.
+For async-only loaders (S3, Redis, CDN, `fetch`-backed), set `loader.async === true` on the loader object and use the cb form of [`renderFile`](./api#renderfile): it routes through the async-codegen path automatically, loading each template through the loader's `load(id, cb)` arm as the render reaches it. [`compileFile`](./api#compilefile) does not switch on `loader.async`; pass `{ codegenMode: 'async' }` to it explicitly. Available since `v2.2.0`; see [Async loaders](#async-loaders) below.
 
 The `v2.1.0` entry points [`renderFileAsync`](./api#renderfileasync) and [`compileFileAsync`](./api#compilefileasync) remain available for users still on `2.1.0` but are soft-deprecated in `2.2.0` in favor of the unified dispatch. New code should target the `renderFile` / `compileFile` cb path.
 
@@ -132,7 +132,7 @@ The `v2.1.0` entry points [`renderFileAsync`](./api#renderfileasync) and [`compi
 The circular-extends guard compares resolved filenames against a set:
 
 ```js
-// From getParents() in lib/swig.js
+// From getParents() in @rhinostone/swig-core (lib/engine.js)
 if (parentFiles.indexOf(parentFile) !== -1) {
   throw new Error('Illegal circular extends of "' + parentFile + '".');
 }

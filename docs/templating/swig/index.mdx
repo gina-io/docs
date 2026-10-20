@@ -23,7 +23,7 @@ The upstream project ([`paularmstrong/swig`](https://github.com/paularmstrong/sw
 
 - **Package:** `@rhinostone/swig` on npm
 - **License:** MIT
-- **Version:** `2.8.0` — the current recommended version for production use.
+- **Version:** the latest `2.x` release — `npm view @rhinostone/swig version` prints it.
 - **Source:** [github.com/gina-io/swig](https://github.com/gina-io/swig)
 - **Engine:** Node.js ≥ 12, all major browsers
 
@@ -46,7 +46,7 @@ Swig is a single-pass engine: source text is tokenized, parsed into a tree, comp
 - **[Getting Started](./getting-started)** — install the package, render your first template, wire it up to Express.
 - **[Template Syntax](./syntax)** — variables, filters, tags, comments, whitespace control, template inheritance.
 - **[Tags](./tags)** — reference for the 15 built-in tags (`if`, `for`, `block`, `extends`, `include`, `macro`, `set`, …).
-- **[Filters](./filters)** — reference for the 26 built-in filters (`date`, `escape`, `join`, `title`, `upper`, …).
+- **[Filters](./filters)** — reference for the 25 built-in filters (`date`, `default`, `escape`, `join`, `title`, `upper`, …).
 - **[API](./api)** — programmatic API: `render`, `compile`, `renderFile`, `setFilter`, `setTag`, `setExtension`, `setDefaults`, etc.
 - **[Template Loaders](./loaders)** — filesystem loader, in-memory loader, and the contract for writing a custom loader.
 - **[Extending Swig](./extending)** — how to add your own tags, filters, and extensions.
@@ -79,7 +79,7 @@ New in `0.3.7` (opt-in). By default every Gina bundle uses the framework's bundl
 Then install the package in your project:
 
 ```bash
-npm install @rhinostone/swig@^1.6.0
+npm install @rhinostone/swig
 ```
 
 On bundle startup, the framework walks `${projectPath}/node_modules/` for the configured package, validates it against two safety gates, and swaps the template engine reference once per process. The defaults preserve today's behaviour — nothing happens unless `useProject` is `true`.
@@ -93,10 +93,10 @@ Two constraints reject a project pin and fall back to the framework's copy. The 
 | Package not installed | `useProject: true` but no `@rhinostone/swig` in `node_modules/` | `not-installed` |
 | `package.json` malformed | Invalid JSON in the project copy | `malformed-package-json` |
 | `package.json` missing `version` | Hand-edited manifest | `missing-version` |
-| Major does not match framework floor | Project pinned `2.0.0`, framework floor is `^1.6.0` | `version-mismatch` |
-| Version below framework floor | Project pinned `1.5.0`, framework floor is `1.6.0` | `version-mismatch` |
+| Major does not match framework floor | Project pinned `1.6.0` or `3.0.0`, framework floor is `2.0.0` | `version-mismatch` |
+| Version below framework floor | A version older than the floor (today `2.0.0`) | `version-mismatch` |
 
-The abandoned upstream `swig` package name is **never** accepted — only `@rhinostone/swig` and `@rhinostone/swig-twig` are valid values for `swig.package`. This prevents [CVE-2023-25345](./security) from re-entering the render pipeline through a stale `swig@^1.4.2` project dependency.
+Valid `swig.package` values are `@rhinostone/swig` (the default), `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django`. A value other than the default needs `useProject: true` and a 2.x install of that package in the project: the framework bundles only `@rhinostone/swig`, so the fallback above applies to that package alone. The abandoned upstream `swig` package never loads, because its last release, 1.4.2, fails the major-version gate; this keeps [CVE-2023-25345](./security) from re-entering the render pipeline through a stale `swig@^1.4.2` project dependency.
 
 ### Startup logs
 

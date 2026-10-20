@@ -46,7 +46,7 @@ The `SwigOpts` object is accepted by `setDefaults`, the constructor, and most pe
 ## version
 
 ```js
-swig.version  // → "2.2.0"
+swig.version  // → the installed version, e.g. "2.8.1"
 ```
 
 The current package version.
@@ -450,7 +450,7 @@ Clear the in-memory cache. Only meaningful when `cache === 'memory'`. Call after
 
 `swig.loaders` exposes the built-in loader factories:
 
-- `swig.loaders.fs([basepath, encoding])`
+- `swig.loaders.fs([basepath, encoding, allowOutsideRoot])`
 - `swig.loaders.memory(mapping[, basepath])`
 
 See the full [Loaders reference](./loaders).

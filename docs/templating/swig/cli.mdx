@@ -23,7 +23,7 @@ Verify:
 
 ```bash
 swig --version
-# => 2.2.0
+# => the installed version, e.g. 2.8.1
 ```
 
 ## Subcommands
@@ -51,7 +51,7 @@ flowchart LR
 | `--help` | `-h` | — | Show the help screen. |
 | `--json <file>` | `-j` | — | Locals context as a JSON file. |
 | `--context <file>` | `-c` | — | Locals context as a CommonJS module. Only used when `--json` is absent. |
-| `--minify` | `-m` | — | Minify compiled output with `terser`. |
+| `--minify` | `-m` | — | Minify compiled output with `terser`. Swig does not install terser: run `npm install terser` first, or the CLI exits 1 with that hint. |
 | `--recursive <dir>` | `-r` | — | Compile every template under `<dir>` into a single CommonJS bundle. Added in v1.6.0. Conflicts with positional file arguments, `--method-name`, `--wrap-start`, `--wrap-end`. |
 | `--ext <list>` | — | — | Comma-separated file extensions to include when using `--recursive` (e.g. `.html,.swig`). Added in v1.6.0. Defaults to no filter. |
 | `--register` | — | — | With `--recursive`: emit a self-registering bundle — it calls `swig.registerBundle(map)` when a global `swig` is present, and still exports the plain map. Added in v2.8.0. |
@@ -164,4 +164,4 @@ Run the command from the template root (`-r .`) so the include paths baked into 
 | Code | Meaning |
 | --- | --- |
 | `0` | Success. |
-| non-zero | Parse error, missing file, or unknown option. |
+| non-zero | Parse error, missing file, unknown subcommand, an invalid flag combination, or `--minify` without terser. An unknown flag is ignored. |
