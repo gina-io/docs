@@ -140,6 +140,8 @@ if (parentFiles.indexOf(parentFile) !== -1) {
 
 `resolve(to, from)` must return the same string on every call for the same arguments. Timestamp-suffixes, case rewrites, or stateful rewrites break the guard — templates either infinite-loop or "flicker" false positives depending on cache mode.
 
+`resolve` must also return an already-resolved identifier unchanged, because the engine resolves some names twice: an `{% extends %}` parent, and the entry template of the deprecated `renderFileAsync` / `compileFileAsync`. A resolver that adds a prefix on every call (`'v/' + to`) makes a sync `{% extends %}` look for `v/v/parent.html` and fail, while `{% include %}` still renders. The built-in `fs` and `memory` loaders already return a resolved path unchanged.
+
 ### Cache keys
 
 Compiled templates are cached under the string returned by `resolve`. Two implications:
@@ -245,9 +247,10 @@ See the API reference for the full per-method documentation: [`renderFileAsync`]
 
 ## Testing a loader
 
-Two quick checks catch most regressions:
+Three quick checks catch most regressions:
 
 1. **`resolve` is pure** — `expect(loader.resolve(a, b)).to.eql(loader.resolve(a, b))`.
-2. **Missing-template path** — `load` should throw (sync) or `cb(err)` (async) with a descriptive message. "Unable to find template X" is the idiomatic wording.
+2. **`resolve` keeps a resolved name** — `expect(loader.resolve(loader.resolve(a, b), b)).to.eql(loader.resolve(a, b))`.
+3. **Missing-template path** — `load` should throw (sync) or `cb(err)` (async) with a descriptive message. "Unable to find template X" is the idiomatic wording.
 
 The built-in suites (`tests/loaders.test.js` in the repo) cover both loaders and serve as reference implementations.
