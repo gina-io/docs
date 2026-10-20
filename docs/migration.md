@@ -259,6 +259,38 @@ stored `true` stayed `true`. It now posts `false`, and the stored value becomes
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — an unticked checkbox that carries a value and whose rule says `isRequired` is refused (bundle restart and re-bake)
+
+A checkbox that carries a value (an id, an email, any payload) posts that value
+when ticked and is absent from the payload when not. Until now, no rule judged
+it when it was unticked: with `"isRequired": true` on it the form posted
+without the box, and the required check never fired — in the browser or on the
+server, where the engine never fires `isRequired` on a key that is absent from
+the data.
+
+```json
+{
+  "ref": { "isRequired": true },
+  "recipients[0][email]": { "isRequired": true, "isEmail": true }
+}
+```
+
+Since 0.7.5, `isRequired` on such a checkbox means it must be **ticked**, as it
+does for a radio group: unticked, it is collected as an empty value and the
+required check refuses the submit. Several boxes under one name need at least
+one ticked; boxes with distinct names are each judged on their own. A boolean
+checkbox (no `value`, a `true`/`false` value, or an `isBoolean` rule) still
+posts its live state and a required `false` still passes; a disabled box is
+still left out; an unticked box with no rule or with `"isRequired": false` is
+still absent from the posted data. See
+[Checkboxes](/guides/forms-and-validation#checkboxes).
+
+**What to check:** a form that let its users submit with such a box unticked
+now refuses the submit until it is ticked. If the box was meant to be optional,
+drop `isRequired` from its rule (or set it to `false`).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — each condition of a `_case_` block is matched against its driving field (bundle restart and re-bake)
 
 A `_case_<field>` block lists conditions, and each applies when its `case` matches

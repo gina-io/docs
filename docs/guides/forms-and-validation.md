@@ -388,6 +388,15 @@ A boolean checkbox always posts a real JSON boolean — `true` when checked,
 string when checked and is absent from the payload when not, exactly like a
 plain HTML form.
 
+A value-carrying checkbox whose rule says `"isRequired": true` must be
+**ticked**: unticked, it is collected as an empty value and the required check
+refuses the submit — several boxes under one name: at least one ticked; boxes
+with distinct names: each one (*since 0.7.5* — before, no rule judged an
+unticked one and the form posted without it). A disabled box is left out as
+before, and a box with no rule or with `"isRequired": false` stays absent when
+unticked. On a boolean checkbox, `isRequired` accepts `false`: the box posts
+its state either way.
+
 Two consequences worth naming when migrating a server: a value-less checkbox
 used to post the string `"on"` when checked and nothing when unchecked — it
 now posts `true`/`false` in both states, so read the boolean rather than
@@ -483,6 +492,12 @@ A group that only a `_case_` condition makes required (no rule of its own,
 the condition applies, from the first submit on (since 0.7.5). Before 0.7.5 the
 first submit after the condition applied could go out without the group. See
 [Live checking](#live-checking) for conditional rules.
+
+A value-carrying [checkbox](#checkboxes) whose own rule says
+`"isRequired": true` follows the same rule since 0.7.5: unticked, it is
+collected as an empty value and refused until it is ticked (several boxes under
+one name: at least one). Before 0.7.5 no rule judged an unticked one, so the
+form posted without it.
 
 Groups with **no rule**, **`isRequired: false`**, or an **`isBoolean`**
 declaration are untouched by the 0.6.3 change — they keep their previous
