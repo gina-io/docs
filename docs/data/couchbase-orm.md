@@ -255,6 +255,19 @@ a caller is allowed to set. Pick the key from a fixed list in your own code rath
 than passing request input through.
 :::
 
+:::caution A nested SET writes nothing when the parent object is missing
+Couchbase does not create a missing parent object. On a document that has no
+`flags` object, `SET d.flags.newsletter = $3` leaves the document unchanged,
+while the statement still returns the row and counts one mutation
+(`mutationCount: 1`; measured on Couchbase Server 8.0.2). When a document may
+lack the parent, write the parent itself: the name then travels as an ordinary
+bound value, so no field-path placeholder is needed.
+
+```sql
+UPDATE `myBucket` AS d SET d.flags = OBJECT_PUT(IFMISSINGORNULL(d.flags, {}), $2, $3) WHERE d.id = $1
+```
+:::
+
 ### Placeholders inside `SEARCH()`
 
 A placeholder inside `SEARCH()` is sent as a query parameter like any other --
