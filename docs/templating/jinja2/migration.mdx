@@ -64,6 +64,8 @@ For sorted iteration, use the `dictsort` filter and index each pair:
 {% for pair in mapping|dictsort %}{{ pair[0] }}={{ pair[1] }}{% endfor %}
 ```
 
+Do not unpack the pairs (`{% for k, v in mapping|dictsort %}`): swig binds `k` to the index and `v` to the pair, so the loop renders `0=a,1` where Jinja2 renders `a=1`. A loop with one variable over a mapping (`{% for x in mapping %}`) yields the values, where Jinja2 yields the keys; use `mapping|list` for the keys. See [Behavioural differences](./parity#behavioural-differences).
+
 ## What ports cleanly
 
 Straight copy-paste — no changes needed:
