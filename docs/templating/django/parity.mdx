@@ -201,6 +201,7 @@ These behaviours are **supported** but diverge from Django because the JavaScrip
 | `floatformat` | `mark_safe`s the success path only. | Not marked safe (the error path returns raw input); numeric output carries no HTML, so output is identical. |
 | Object stringification | Python `str()` / `repr()`. | JavaScript `String(x)` — objects without a custom `toString` render `"[object Object]"`; `null` / `undefined` render `""`. |
 | `date` / `time` | `strftime`-style format codes, locale-aware. | PHP-style codes via the shared `swig-core` formatter; no locale plumbing. Pass an explicit format string. |
+| Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `make_list`, `slice` and `truncatechars` can split one into invalid halves. |
 
 See [Migrating from Django](./migration) for the porting view of these.
 

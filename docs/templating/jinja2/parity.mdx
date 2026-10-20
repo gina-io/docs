@@ -202,6 +202,8 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | `round` | Float-repr rounding (`42.55\|round(1)` → `42.5`). | Naive decimal rounding (`42.55\|round(1)` → `42.6`). |
 | String filters on an array (`upper`, `lower`, `capitalize`, `title`, `striptags`) | Work on the list's string form: `['hELLO']\|capitalize` gives the string `['hello']`. | Apply to each element and return an array: `['hELLO']\|capitalize` gives the array `['Hello']`, which renders as `Hello`. |
 | Rendering `true`, `false` and `null` | `True`, `False`, `None` — so `true\|urlencode` gives `True`, and a mapping with those values gives `a=True&b=None`. | `true`, `false`, and an empty string for `null` / `undefined`; `urlencode` gives `true` and `a=true&b=null`. |
+| `none`, `None`, `True`, `False` | Constants. | Looked up as variables, so they render as an empty string, and `x == none` is also true when `x` is `0` or `""`. Test with `x is none`, which is also true for an undefined variable, and write booleans as `true` / `false`. |
+| Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `list`, `reverse`, `truncate` and slicing can split one into invalid halves. |
 
 See [Migrating from Python Jinja2](./migration) for the porting view of these.
 
