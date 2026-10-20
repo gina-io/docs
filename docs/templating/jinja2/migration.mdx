@@ -80,7 +80,7 @@ Straight copy-paste — no changes needed:
 - `{% include "partial.jinja2" %}` including `with context` / `without context` / `ignore missing`
 - `{% macro name(a, b="x") %}`, `{% import "macros.jinja2" as forms %}`, `{% from "macros.jinja2" import one, two as alias %}`
 - `{% filter upper %}…{% endfilter %}`, `{% with x = 1 %}…{% endwith %}`, `{% autoescape false %}…{% endautoescape %}`, `{% raw %}…{% endraw %}`
-- `is defined`, `is undefined`, `is none`, `is even`, `is odd`, `is divisibleby(n)`, `is iterable`, `is mapping`, `is sequence`, `is string`, `is number`, `is boolean`, `is callable`, `is lower`, `is upper`
+- `is defined`, `is undefined`, `is none`, `is even`, `is odd`, `is divisibleby(n)`, `is iterable`, `is mapping`, `is sequence`, `is string`, `is number`, `is boolean`, `is callable`, `is lower`, `is upper` — on integers and on strings with a cased letter; on `null`, an undefined variable, a string without a cased letter (such as `""` or `"123"`), a float, a boolean, or a value a test does not take (a string given to `even`), and with `divisibleby(0)`, several answer differently (see [Behavioural differences](./parity#behavioural-differences))
 - The filter catalog — all 39 built-ins were cross-checked against Jinja2 3.x (see [Parity → Filters](./parity#filters))
 
 ## Semantic differences
@@ -162,7 +162,7 @@ If you need any of the following, Python Jinja2 is still the right tool:
 - A `SandboxedEnvironment` for partially-trusted template source.
 - i18n via `{% trans %}` / gettext integration.
 - The `map` / `select` / `selectattr` filter pipeline, or macro keyword arguments / `{% call %}` blocks.
-- Async rendering with async filters (`enable_async`) — swig-jinja2 has async *loaders* via `renderFileAsync`, but not async filters.
+- Async rendering with async filters (`enable_async`) — swig-jinja2 has async *loaders* (the `renderFile` cb with `loader.async`, see [Loaders — Async loaders](../swig/loaders#async-loaders)), but not async filters.
 - Python-specific filters and globals (`pprint`, `xmlattr`, `range`, `namespace`, …).
 
 swig-jinja2 is designed for teams rendering Jinja2-syntax templates from Node.js — typically as part of a migration off Python, or for a mixed Python/Node stack that wants a single template dialect.
