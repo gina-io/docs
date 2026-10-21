@@ -1138,9 +1138,9 @@ and a group that JavaScript reads the same way (`(a and b) or c`).
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.8.3, because the range no longer admits 2.8.1 or
-  2.8.2. A page that groups an expression in one of the shapes above now renders the value of the
-  group.
+- Upgrading gina installs `@rhinostone/swig` 2.8.3 or later, because the range no longer admits
+  2.8.1 or 2.8.2. A page that groups an expression in one of the shapes above now renders the value
+  of the group.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig) renders with the
   project's own copy, at the version the project pins: update it to 2.8.3, which carries this fix
   and the next one. The framework still loads any 2.x copy from 2.0.0.
@@ -1178,7 +1178,7 @@ and swig's [2.8.3 release notes](https://github.com/gina-io/swig/blob/v2.8.3/HIS
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.8.3.
+- Upgrading gina installs `@rhinostone/swig` 2.8.3 or later.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a frontend
   through [`swig.package`](/reference/settings#swig), renders with the project's own copy:
   update it to 2.8.3.
