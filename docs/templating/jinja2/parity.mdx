@@ -34,6 +34,8 @@ The matrices below are ground truth: each row maps to a symbol actually exported
 | `seq[start:stop:step]` | slicing | Python slice semantics — negative indices count from the end, `step` walks, `[::-1]` reverses. | Strings slice to strings, arrays to arrays. |
 | `is` / `is not` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [is-tests](#is-tests). |
 
+Operators bind as in Jinja2, loosest first: the inline `if`/`else`; `or`; `and`; `not`; the comparisons and `in`; `+` and `-`; `~`; `*`, `/`, `//` and `%`; `**`, read from the left; filters and `is` tests; the unary `-` and `+`; then attribute access, subscripts and calls. So `not x == y` is `not (x == y)`, `{{ 1 + 2 is number }}` tests `2`, `{{ -x|abs }}` is the absolute value of `-x`, `-2 ** 2` is `4` and `2 ** 3 ** 2` is `64`. These levels hold since 2.8.2. Unlike Jinja2, comparisons do not chain: `==` and `!=` bind more loosely than `<`, `>`, `<=`, `>=` and `in`, and each level groups from the left, so `3 > 2 > 1` is `(3 > 2) > 1`, which is false, where Jinja2 reads it as `3 > 2 and 2 > 1`.
+
 Jinja2's global functions — `range()`, `dict()`, `cycler()`, `joiner()`, `lipsum()`, `namespace()` — are **not** exposed (see [Non-Goals](./non-goals#other-known-gaps)). To iterate a count, pass an array in locals or write a literal `{% for i in [1, 2, 3] %}`.
 
 ## Whitespace control
@@ -56,23 +58,25 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 | Test | Shape | Semantics |
 | --- | --- | --- |
 | `defined` | `x is defined` | `true` if `x` is defined and not `null`. |
-| `undefined` | `x is undefined` | `true` if `x` is `undefined`. |
+| `undefined` | `x is undefined` | `true` if `x` is undefined or `null`. |
 | `none` | `x is none` | `true` if `x` is `null` or `undefined`. |
 | `even` | `x is even` | `true` if `x` is an even integer. |
-| `odd` | `x is odd` | `true` if `x` is an odd integer. |
-| `divisibleby` | `x is divisibleby(n)` | `true` if `x % n === 0`. |
-| `iterable` | `x is iterable` | `true` if `x` is an array or a plain object. |
+| `odd` | `x is odd` | `true` if `x` is an odd integer, a negative one included (Python's `x % 2 == 1`). |
+| `divisibleby` | `x is divisibleby(n)` or `x is divisibleby n` | `true` if `x` is a number, `n` a non-zero number and `x % n === 0`. |
+| `iterable` | `x is iterable` | `true` if `x` is an array, a string or an object. |
 | `mapping` | `x is mapping` | `true` if `x` is a plain object. |
 | `sequence` | `x is sequence` | `true` if `x` is an array or a string. |
 | `string` | `x is string` | `typeof x === 'string'`. |
-| `number` | `x is number` | `typeof x === 'number'`. |
+| `number` | `x is number` | `typeof x === 'number'`, so `NaN` and the infinities count. |
 | `boolean` | `x is boolean` | `typeof x === 'boolean'`. |
 | `callable` | `x is callable` | `typeof x === 'function'`. |
-| `lower` | `x is lower` | `true` if the string is all lowercase. |
-| `upper` | `x is upper` | `true` if the string is all uppercase. |
-| `sameas` | `x is sameas(other)` | Strict identity (`===`). Use the **parenthesized** form. |
+| `lower` | `x is lower` | `true` if `x` is a string with at least one cased letter and no uppercase or titlecase letter, as Python's `str.islower`. |
+| `upper` | `x is upper` | `true` if `x` is a string with at least one cased letter and no lowercase or titlecase letter, as Python's `str.isupper`. |
+| `sameas` | `x is sameas(other)` or `x is sameas other` | Strict identity (`===`). |
 
 `defined`, `undefined`, and `none` on a bare variable are compiled through the `IRVarRefExists` IR node so the defined/undefined signal survives (the default variable lookup coerces missing context slots to empty strings, which would wash out the test).
+
+A test takes its one argument with or without parentheses, as in Jinja2 (since 2.8.2): `x is divisibleby 3`, `x is sameas false`. On `null`, an undefined variable, a boolean, or a value a test is not meant for, some tests answer differently from Jinja2 — see [Behavioural differences](#behavioural-differences).
 
 Jinja2's `integer` and `float` tests are **not** registered — JavaScript has a single `number` type, so `5` and `5.0` are indistinguishable. `x is integer` / `x is float` evaluate to `false`; use `x is number` instead.
 
@@ -204,7 +208,7 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | Rendering `true`, `false` and `null` | `True`, `False`, `None` — so `true\|urlencode` gives `True`, and a mapping with those values gives `a=True&b=None`. | `true`, `false`, and an empty string for `null` / `undefined`; `urlencode` gives `true` and `a=true&b=null`. |
 | `none`, `None`, `True`, `False` | Constants. | Looked up as variables, so they render as an empty string, and `x == none` is also true when `x` is `0` or `""`. Test with `x is none`, which is also true for an undefined variable, and write booleans as `true` / `false`. |
 | Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `list`, `reverse`, `truncate` and slicing can split one into invalid halves. |
-| `is` tests on `null`, an undefined variable, a string without a cased letter, a float, a boolean or a value the test does not take, and `divisibleby(0)` | For example: `x is defined` is true for `None`; `even`, `odd` and `divisibleby` raise on anything but a number, and `divisibleby(0)` raises; `1.5 is odd` is false; `True is number` and `True is odd` are true; a string without a cased letter, such as `''` or `'123'`, is neither `lower` nor `upper`. | For example: `x is defined` is false and `x is undefined` true for `null`; for the other tests except `none`, a `null` or undefined variable tests like `""`, so `is string`, `is lower` and `is upper` are true for it, and `is iterable` and `is sequence` for `null`; `even`, `odd` and `divisibleby` return false on anything but a number, and `divisibleby(0)` returns false; `1.5 is odd` is true; `true is number` and `true is odd` are false; a string without a cased letter, such as `''` or `'123'`, is both `lower` and `upper`. |
+| `is` tests on `null`, an undefined variable, a boolean or a value the test does not take, and `divisibleby(0)` | For example: `x is defined` is true for `None`; `even`, `odd` and `divisibleby` raise on anything but a number, and `divisibleby(0)` raises; `True is number` and `True is odd` are true; `lower` and `upper` test the string form of any value, so `{'a': 1}` or `1e300` is `lower`. | For example: `x is defined` is false and `x is undefined` true for `null`; for the other tests except `none`, a `null` or undefined variable tests like `""`, so `is string` is true for it, and `is iterable` and `is sequence` for `null`; `even`, `odd` and `divisibleby` return false on anything but a number, and `divisibleby(0)` returns false; `true is number` and `true is odd` are false; `lower` and `upper` are false for anything but a string. |
 
 See [Migrating from Python Jinja2](./migration) for the porting view of these.
 
