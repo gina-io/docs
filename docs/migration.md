@@ -1149,8 +1149,10 @@ and a group that JavaScript reads the same way (`(a and b) or c`).
   update it to 2.8.3 as well. 2.8.2 also makes several Jinja2 and Django filters and
   tests, and the binding of Jinja2's tests and operators, follow those engines, and it closes two
   hangs on request data (Jinja2's `wordwrap` with a width below 1, a Twig range with an infinite
-  bound): read the [2.8.2 release notes](https://github.com/gina-io/swig/blob/v2.8.2/HISTORY.md)
-  before you update a frontend.
+  bound; advisory
+  [GHSA-48rg-vg49-r5vm](https://github.com/gina-io/swig/security/advisories/GHSA-48rg-vg49-r5vm)):
+  read the [2.8.2 release notes](https://github.com/gina-io/swig/blob/v2.8.2/HISTORY.md) before
+  you update a frontend.
 - The prototype-chain guard errors now end with « (prototype-chain guard) » instead of
   « (CVE-2023-25345) »: a log filter or a test that matches the old text needs the new one. The
   template loader's path-confinement error keeps its CVE label.
@@ -1170,8 +1172,9 @@ escaping it:
 - an async `import`, `from` or `extends` wrote a backslash in the path as it was, which corrupted
   it.
 
-2.8.3 escapes the filename wherever it is written: see swig's
-[2.8.3 release notes](https://github.com/gina-io/swig/blob/v2.8.3/HISTORY.md).
+2.8.3 escapes the filename wherever it is written: see the advisory
+[GHSA-q89c-947c-m7xr](https://github.com/gina-io/swig/security/advisories/GHSA-q89c-947c-m7xr)
+and swig's [2.8.3 release notes](https://github.com/gina-io/swig/blob/v2.8.3/HISTORY.md).
 
 **What to check:**
 
