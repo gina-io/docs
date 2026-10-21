@@ -1293,6 +1293,62 @@ value is kept whole: `/o/a,b`.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `self.query()` and `forward` send the data of a `GET` or `DELETE` once, in the query string (bundle restart)
+
+[`self.query()`](/guides/controller#outgoing-requests) sends the data of a `GET`, `HEAD` or
+`DELETE` in the query string. Two defects on that path:
+
+- When the path already held a query string, the data was appended after a second `?`. A
+  standard query parser reads that as part of the previous value: `/echo?k=v?x=1` gives
+  `k = 'v?x=1'`. A [forward route](/guides/controller#forwarding) whose static `param` value is
+  not in its target's URL sent that shape, and so did a validator
+  [`query` rule](/reference/validation-rules#query) on `GET`: `getRoute()` had already put the
+  rule's data in the URL, and the data was then appended a second time.
+- The same `?key=value` string also went out as the request body, labelled
+  `application/json`, which no receiver reads.
+
+Since 0.7.5 the data joins the path's query string with `&`, each key travels once, and a
+`GET`, `HEAD` or `DELETE` carries no body.
+
+**What to check:** nothing on a gina receiver, which read the second `?` as `&`: `req.get`
+and `req.delete` hold the same values, the URL placeholders of a `DELETE` route included. Only
+a key that is both in the path and in the data changes (see the Changed entry below). A
+receiver of another kind, an Express 5 app for instance, now reads whole values where it read
+`'v?x=1'`.
+
+### Fixed — `self.query()` sends the data of a `PATCH` as a JSON body (bundle restart)
+
+A `PATCH` with data put the data in the query string and sent the string `?key=value` as its
+body, labelled `application/json`. A gina receiver refuses that body with a `500`
+(« Could not parse application/json PATCH body ») before the action runs, so a forward route
+with `"method": "PATCH"` in its `param`, and a validator `query` rule with
+`method: "PATCH"`, failed every time. Since 0.7.5 a `PATCH` sends its data as a JSON body, as
+a `PUT` or a `POST` does, with no query string.
+
+**What to check:** a receiver that read the data of a `PATCH` from its query string now finds
+it in the body (`req.patch` on a gina receiver).
+
+### Changed — a forward route's static `param` reaches the target as written (bundle restart)
+
+When a key is both in the query string of the path given to `self.query()` and in its data,
+the value in the path now travels and the data's copy is not sent. For a
+[forward route](/guides/controller#forwarding), a static `param` value that its target's URL
+does not carry is such a key:
+
+```json
+"items-relay": {
+  "url": "/items",
+  "param": { "control": "forward", "url": "items-list@api", "sort": "date" }
+}
+```
+
+A request to `/items?sort=price` forwarded both values; a gina target read `price`, the last
+copy, and a standard parser read `date?sort=price`. Since 0.7.5 the target reads `date`.
+
+**What to check:** a forward route that relied on the incoming request replacing a static
+`param` value. Leave that key out of `param`, and the incoming query string is forwarded as it
+is.
+
 ---
 
 ## 0.7.3 → 0.7.4

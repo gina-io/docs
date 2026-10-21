@@ -1062,6 +1062,27 @@ Key options:
 | `body` | — | Since 0.6.28: a `Buffer` or `string` sent **verbatim**, under your own `headers['content-type']` (`application/octet-stream` when you set none). `data` must then be empty, or the call is refused with `BODY_AND_DATA` before any upstream contact; any other type is refused with `BODY_TYPE`. Use it for a body the framework should not encode — this is how `control: "forward"` relays multipart |
 | `priority` | the inbound `req.priority`, when present | Since 0.6.31: the RFC 9218 `Priority` header of the outbound call — `{ urgency, incremental }`, a wire string such as `'u=5, i'`, or `false` to send none. Omitted, a present inbound header propagates as is (RFC 9218 is end to end); a `headers.priority` you set yourself always wins — [Request priorities](/guides/http2-native#request-priorities-rfc-9218) |
 
+**How `data` travels.** The second argument of `self.query()` is sent according to the method.
+A `POST`, `PUT` or `PATCH` sends it as a JSON body. Any other method (`GET`, `HEAD`, `DELETE`, …)
+sends it in the query string only, with no body, which is where a gina bundle reads it
+(`req.get`, `req.delete`). Each key is sent once, and an object value as its JSON text. When
+`path` already holds a query string, the data joins it with `&`, and a key that query string
+already holds is not sent again: the value written in `path` travels.
+
+```js
+// GET /items?page=2&tag=new: the page written in path wins
+self.query({ hostname: 'api-internal', path: '/items?page=2' }, { page: 5, tag: 'new' }, cb);
+
+// PATCH /items/42 with the JSON body {"title":"Renamed"}
+self.query({ hostname: 'api-internal', path: '/items/42', method: 'PATCH' }, { title: 'Renamed' }, cb);
+```
+
+Before 0.7.5 a `PATCH` sent its data as a `?key=value` string under the `application/json`
+label, which a gina bundle refuses with a `500`; a `GET` or `DELETE` also sent that string as
+a body; and a `path` that already held a query string received a second `?`, which a
+standard query parser reads as part of the previous value. To send a body the framework
+should not encode, use the `body` option.
+
 When the callback is omitted, `self.query()` returns a small handle with an
 `.onComplete(cb)` method — it is **not** a Promise, so it cannot be `await`ed
 directly. Since 0.6.27 that handle is a **per-call channel**: concurrent fluent
@@ -1219,8 +1240,13 @@ How it relays:
 - The upstream call goes through [`self.query()`](#outgoing-requests). A sibling
   bundle's host, port, protocol and scheme come from the environment
   configuration; the resolved route url, webroot included, is the forwarded path.
-- The incoming request's data (`req.get`, `req.post`, …) travels as the query
-  string or the body. `param.method` overrides the forwarded HTTP method.
+- The incoming request's data (`req.get`, `req.post`, …) travels the way
+  [`self.query()` sends data](#outgoing-requests): in the query string for a `GET`, `HEAD` or
+  `DELETE`, as a JSON body for a `POST`, `PUT` or `PATCH`. `param.method` overrides the
+  forwarded HTTP method.
+- A static `param` value that the target's URL does not carry travels in the query string, and
+  since 0.7.5 an incoming value of the same name does not replace it. To let the caller choose
+  that value, leave the key out of `param`: the incoming query string is forwarded as it is.
 - An object answer is relayed with `renderJSON()`; a string answer is relayed
   verbatim with `renderTEXT()`. `query()` delivers the parsed body only, so a
   non-JSON answer keeps its bytes but not its content type — forward JSON-answering
