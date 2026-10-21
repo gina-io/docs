@@ -865,8 +865,9 @@ route.url;  // "/search?q=gina&page=2"
 
 A value written into the path is not repeated in the query string, and none is
 appended twice. A key the rule declares in `requirements` stays out of the query
-string, unless `param` binds it to a placeholder that the URL composed does not
-carry.
+string, unless `param` also declares it and the URL composed does not carry it:
+neither its placeholder nor, for a fixed value, the value itself appears in that
+URL.
 
 For a rule with [several URLs](#multiple-urls), the URL composed depends on the
 values you pass, unless you name one with the third argument, `urlIndex`:
