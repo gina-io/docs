@@ -1093,6 +1093,43 @@ same bundle started and rendered through the native parser.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — a template that groups an expression renders the value of the group (bundle restart)
+
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.8.2` in both of its manifests. Up
+to 2.8.1, swig compiled a group whose operator binds more loosely than the operator outside it
+without its parentheses, so a page rendered a different value with no error:
+
+- `{{ (1 + 2) * 3 }}` rendered `7`, and `{{ 10 - (2 + 3) }}` rendered `11`;
+- `{% if (a or b) and c %}` took its branch with `a` true and `c` false;
+- a comparison grouped inside a comparison (`{% if f == (one == two) %}`) and a subscript on a
+  `+` group (`{{ (s + t)[1] }}`) read wrong too, and `{{ -(-x) }}` did not compile.
+
+These rendered right before as well: a group followed by a filter (`{{ (x * 3)|default(0) }}`),
+a member read on a filtered group, `not (…)` and `!(…)`, parentheses around a whole condition,
+and a group that JavaScript reads the same way (`(a and b) or c`).
+
+**What to check:**
+
+- Upgrading gina installs `@rhinostone/swig` 2.8.2, because the range no longer admits 2.8.1.
+  A page that groups an expression in one of the shapes above now renders the value of the group.
+- A bundle that sets [`swig.useProject: true`](/reference/settings#swig) renders with the
+  project's own copy, at the version the project pins: update it to 2.8.2 for this fix. The
+  framework still loads any 2.x copy from 2.0.0.
+- A bundle that selects a Twig, Jinja2 or Django frontend through
+  [`swig.package`](/reference/settings#swig) renders with the project's copy of that package:
+  update it to 2.8.2 for this fix as well. 2.8.2 also makes several Jinja2 and Django filters and
+  tests, and the binding of Jinja2's tests and operators, follow those engines, and it closes two
+  hangs on request data (Jinja2's `wordwrap` with a width below 1, a Twig range with an infinite
+  bound): read the [2.8.2 release notes](https://github.com/gina-io/swig/blob/v2.8.2/HISTORY.md)
+  before you update a frontend.
+- The prototype-chain guard errors now end with « (prototype-chain guard) » instead of
+  « (CVE-2023-25345) »: a log filter or a test that matches the old text needs the new one. The
+  template loader's path-confinement error keeps its CVE label.
+- swig's `varControls`, `tagControls` and `cmtControls` options now refuse a control that is not
+  a string.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.3 → 0.7.4
