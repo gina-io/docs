@@ -1016,6 +1016,33 @@ from a backup.
 
 A framework already running keeps its old code until you run `gina framework:restart`.
 
+### Fixed — a comment or a trailing comma in `~/.gina/main.json` no longer stops every CLI command (no restart)
+
+Every [offline command](/cli#online-vs-offline-commands) and `gina start` read `~/.gina/main.json`
+with `require()` as they started, so a `//` comment or a trailing comma left by a hand edit stopped
+all of them with exit code 1:
+
+```text
+SyntaxError: /home/me/.gina/main.json: Expected double-quoted property name in JSON at position 2247 (line 119 column 1)
+```
+
+They now read it with
+[`parseJSONWithComments()`](/globals/json#parsejsonwithcommentstext-filename): a comment is ignored
+and a trailing comma is accepted with a warning that names the file. That step rewrites `main.json`
+as plain JSON, so neither stays in it. A `main.json` that is still not JSON, or that cannot be read,
+stops the command with exit code 1 and is left as it was:
+
+```text
+Error: main.json cannot be used: could not parse `/home/me/.gina/main.json`: Expected ',' or '}' after property value in JSON at position 2246 (line 119 column 1)
+```
+
+`gina env:add <env> @<project>` stopped the same way on a comment or a trailing comma in
+`~/.gina/ports.json` or `ports.reverse.json`, right after warning about it; it now adds the
+environment.
+
+Each command picks this up the next time it runs; a framework that is already running needs no
+restart.
+
 ### Fixed — a failed `node_modules` link no longer reads as a successful start (framework restart)
 
 With Gina installed globally, `bundle:start`, `bundle:stop`, `bundle:restart`, `project:start`,

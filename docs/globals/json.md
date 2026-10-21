@@ -106,7 +106,10 @@ loads its configuration, the `manifest.json` also in `bundle:list`,
 `project:restore`, `gina-container` and at boot, and the project's
 `package.json` in `bundle:start`. Gina also parses its own `ports.json` and
 `ports.reverse.json` in `~/.gina` this way when a CLI command loads its
-configuration, and `main.json` and `projects.json` in `bundle:start`. A file a
+configuration, and again in `env:add`, and `main.json` and `projects.json` in
+`bundle:start`. Every [offline command](/cli#online-vs-offline-commands) and
+`gina start` also read `main.json` this way as they start, then rewrite it as
+plain JSON, so a comment or a trailing comma does not stay in the file. A file a
 command cannot use stops that command with `<file> cannot be used: <reason>`,
 and the framework that runs `bundle:start` keeps running. `gina-container`
 reads `~/.gina/<version>/settings.json`, `projects.json` and
