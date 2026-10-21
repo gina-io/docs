@@ -55,9 +55,25 @@ flowchart LR
 
 **Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
 
+### GHSA-q89c-947c-m7xr — code execution through the template filename {#ghsa-q89c-947c-m7xr}
+
+**Affected:** all five packages before `2.8.3`, including the 1.x line. Critical, CWE-94, CVSS 9.8 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`).
+
+**Root cause:** the code generator wrote the template filename into a double-quoted string literal in the compiled function body without escaping it: the `filename` option of `render`, `compile` and `precompile`, or the resolved path that `renderFile` and `compileFile` use. A double quote in that value ended the literal, and the rest ran as JavaScript whenever the template rendered. Reaching it takes an application that passes request data as the `filename` option.
+
+**Fixed in `2.8.3`:** the code generator escapes the filename wherever it writes it. `2.8.4` also compiles a filename that is not a string, such as a number, which `2.8.3` rejected. If you cannot upgrade, pass only a server-controlled string as `filename`. See the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-q89c-947c-m7xr).
+
+### GHSA-48rg-vg49-r5vm — unbounded loops in `wordwrap` and ranges {#ghsa-48rg-vg49-r5vm}
+
+**Affected:** `@rhinostone/swig-jinja2` before `2.8.2`, and `@rhinostone/swig-twig` and `@rhinostone/swig-core` from `2.0.0-alpha.5` before `2.8.2`. High, CWE-835, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
+
+**Root cause:** swig-jinja2 `wordwrap` with a width below 1, and a swig-twig range `a..b` with an infinite bound (plain JSON yields `Infinity` for a number such as `1e999`), looped for seconds and took more than 2 GB of memory before failing. Reaching either takes an application that passes request data into the width or the bound. Native swig has neither the filter nor the operator.
+
+**Fixed in `2.8.2`:** a width of 0 or less returns the text unchanged and a width between 0 and 1 breaks one character at a time; a range with an infinite bound is empty. See the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-48rg-vg49-r5vm).
+
 ## Prototype-chain hardening (`__proto__` / `constructor` / `prototype`) {#prototype-chain-hardening}
 
-Independently of the CVE above, Swig blocks template expressions from reaching the prototype chain through `_ctx` access. *(Earlier releases of this fork tracked this hardening under the CVE-2023-25345 label; that was a mislabel — the authoritative CVE-2023-25345 is the file-read traversal documented above. The guards below are real defense-in-depth, not that CVE.)*
+Independently of the CVE above, Swig blocks template expressions from reaching the prototype chain through `_ctx` access. *(Earlier releases of this fork tracked this hardening under the CVE-2023-25345 label; that was a mislabel — the authoritative CVE-2023-25345 is the file-read traversal documented above. The guards below are real defense-in-depth, not that CVE. Until `2.8.2` their error messages also ended with `(CVE-2023-25345)`; they now end with `(prototype-chain guard)`.)*
 
 **Root cause it addresses:** template source that reaches the prototype chain through `_ctx` access (`__proto__`, `constructor`, `prototype`) can escape into the surrounding JavaScript runtime. The canonical exploit is `{{ constructor.constructor("return process")() }}` — the lexer emits a single VAR token, the parser generates `_ctx.constructor.constructor` (which is `Function`), and the template then calls it with arbitrary code.
 
@@ -150,5 +166,5 @@ No other `eval`, `new Function` or `AsyncFunction` construction exists in the pu
 
 ## Reporting
 
-Security issues for `@rhinostone/swig` go to the [gina-io/swig issue tracker](https://github.com/gina-io/swig/issues) — private disclosure first if the bug is live. Upstream (`paularmstrong/swig`) is unmaintained and should not be treated as a reporting channel.
+Report security issues privately, as [SECURITY.md](https://github.com/gina-io/swig/blob/develop/SECURITY.md) describes: through GitHub's [private vulnerability reporting](https://github.com/gina-io/swig/security/advisories/new), not a public issue or pull request. Upstream (`paularmstrong/swig`) is unmaintained and should not be treated as a reporting channel.
 
