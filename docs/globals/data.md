@@ -24,7 +24,7 @@ Parses a URL-encoded string, a JSON document or an object into a plain JavaScrip
 |-----------|------|-------------|
 | `bodyStr` | `string` \| `object` | A URL-encoded string (`key=value&...`), a JSON document (`{...}` or `[...]`), or an object, which is stringified first |
 
-It returns the parsed object — or `undefined` when a `{`- or `[`-leading input is not valid JSON.
+It returns the parsed object (an array for a `[`-leading document) — or `undefined` when a `{`- or `[`-leading input is not valid JSON.
 
 ### URL-encoded input
 
@@ -64,6 +64,19 @@ browser validator and DTO routes hand their fields over.
 
 A top-level `__proto__`, `constructor` or `prototype` name is dropped on every
 path.
+
+A `[`-leading document gives an array. An element that is an object is parsed
+like a document of its own: its bracket keys nest and the three names above are
+dropped. Any other element (a number, a string, `null`, a nested array) is kept
+as it is:
+
+| Input | Result |
+|-------|--------|
+| `[{"a[b]":"1"},2,null]` | `[ { a: { b: '1' } }, 2, null ]` |
+| `["x","true"]` | `[ 'x', true ]` — the quoted `"true"` is cast, as above |
+
+*Since 0.7.5; before, every element was replaced by the array itself, a circular
+value that `JSON.stringify` cannot serialize.*
 
 ### Nested keys
 

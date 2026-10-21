@@ -501,6 +501,37 @@ to avoid the loss can stay; without it, the parent arrives as an object.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a JSON array document is parsed into its elements (bundle restart and re-bake)
+
+`formatDataFromString()` accepts a `[`-leading JSON document, but it returned a
+circular value for one: every element was replaced by the array itself. A route
+that rendered the parsed data then answered `500` (« Converting circular
+structure to JSON »), while the bundle kept running. Two request shapes reached
+it:
+
+- a GET or HEAD request whose only query parameter is `inheritedData=[…]`. With
+  another parameter beside it, isaac parsed the value itself and the request
+  answered; on Express it reached the helper either way;
+- a `[`-leading POST body not labelled `application/json`, such as a `fetch()`
+  that posts `JSON.stringify([…])` without a content type, which sends
+  `text/plain`.
+
+Since 0.7.5 a `[`-leading document gives an array: an element that is an object
+is parsed like a document of its own (its bracket keys nest, and a `__proto__`,
+`constructor` or `prototype` name is dropped), and any other element is kept as
+it is. `formatDataFromString('[{"a[b]":"1"},2]')` gives
+`[ { a: { b: '1' } }, 2 ]`. See
+[JSON documents and objects](/globals/data#json-documents-and-objects).
+
+**What to check:** nothing. Such a request failed before, and an object
+document, an array inside a value and an `application/json` body are parsed as
+they were. A POST body like the one above now reaches `req.body` as the array,
+and `req.post` carries its elements under their indexes; an `inheritedData`
+array gives `req.get` its elements under their indexes (`{ "0": … }`), as it
+already did with another parameter beside it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a process that creates the run directory is registered like any other (bundle restart)
 
 A bundle or service that had to create the run directory while it started (`~/.gina/run`, or
