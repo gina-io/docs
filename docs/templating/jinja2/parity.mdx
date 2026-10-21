@@ -128,9 +128,9 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 | `truncate` | 1–4 | Truncate to a length with an ellipsis; word-boundary aware unless `killwords`. |
 | `replace` | 2/3 | Literal substring replace with optional count — **matches Python Jinja2** (`replace(old, new, count)`), not the Twig object-map form. |
 | `striptags` | 0 | Strip tags/comments, collapse whitespace to single spaces, trim. Recurses into arrays / objects. |
-| `format` | N | `printf`-style — `%s %d %i %u %f %e %g %x %X %o %c %%`, with flags (`-` `+` space `0`), width, and `.precision`. |
+| `format` | N | `printf`-style — `%s %d %i %u %f %F %e %E %g %G %x %X %o %c %%`, with flags (`-` `+` space `0`), width, and `.precision`. The exponent and `%g` forms print as Python's do. |
 | `wordcount` | 0 | Count `\w+` runs. |
-| `wordwrap` | 1–3 | Greedy word-wrap to a width; breaks over-long words by default. |
+| `wordwrap` | 1–3 | Greedy word-wrap to a width; breaks over-long words by default. A width of 0 or less returns the text unchanged, where Jinja2 raises. |
 | `indent` | 1–3 | Indent each line; first line and blank lines skipped unless `first`/`blank`. |
 | `center` | 1 | Center within a field width (extra space on the right). |
 | `urlencode` | 0 | Percent-encode a string (preserves `/`), or encode a mapping/pair-list as a query string. |
@@ -155,6 +155,8 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 | `min` / `max` | 0/1 | Smallest / largest item; case-insensitive string compare by default. |
 | `sum` | 0–2 | Sum a sequence, with optional dotted `attribute` and `start`. |
 | `random` | 0 | A random item (non-deterministic). |
+
+On a mapping, `first`, `last`, `min`, `max`, `reverse`, `unique`, `sort`, `list`, `join`, `slice` and `batch` use its keys, as Jinja2 iterates a mapping. `sum` adds a mapping's values and `random` returns the mapping unchanged, where Jinja2 raises. `sort` and `batch` take a string by its characters.
 
 ### Numbers & values
 
@@ -207,7 +209,7 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | String filters on an array (`upper`, `lower`, `capitalize`, `title`, `striptags`) | Work on the list's string form: `['hELLO']\|capitalize` gives the string `['hello']`. | Apply to each element and return an array: `['hELLO']\|capitalize` gives the array `['Hello']`, which renders as `Hello`. |
 | Rendering `true`, `false` and `null` | `True`, `False`, `None` — so `true\|urlencode` gives `True`, and a mapping with those values gives `a=True&b=None`. | `true`, `false`, and an empty string for `null` / `undefined`; `urlencode` gives `true` and `a=true&b=null`. |
 | `none`, `None`, `True`, `False` | Constants. | Looked up as variables, so they render as an empty string, and `x == none` is also true when `x` is `0` or `""`. Test with `x is none`, which is also true for an undefined variable, and write booleans as `true` / `false`. |
-| Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `list`, `reverse`, `truncate` and slicing can split one into invalid halves. |
+| Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `list`, `reverse`, `sort`, `unique`, `truncate` and slicing can split one into invalid halves. |
 | `is` tests on `null`, an undefined variable, a boolean or a value the test does not take, and `divisibleby(0)` | For example: `x is defined` is true for `None`; `even`, `odd` and `divisibleby` raise on anything but a number, and `divisibleby(0)` raises; `True is number` and `True is odd` are true; `lower` and `upper` test the string form of any value, so `{'a': 1}` or `1e300` is `lower`. | For example: `x is defined` is false and `x is undefined` true for `null`; for the other tests except `none`, a `null` or undefined variable tests like `""`, so `is string` is true for it, and `is iterable` and `is sequence` for `null`; `even`, `odd` and `divisibleby` return false on anything but a number, and `divisibleby(0)` returns false; `true is number` and `true is odd` are false; `lower` and `upper` are false for anything but a string. |
 
 See [Migrating from Python Jinja2](./migration) for the porting view of these.
