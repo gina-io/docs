@@ -531,7 +531,7 @@ internals never reach the form.
 | Key | Type | Meaning |
 |---|---|---|
 | `url` | string | Endpoint to call. A gina route name (`name@bundle`) is resolved through the router; anything starting with `http` is used as-is. |
-| `data` | object | Request payload. Sent as JSON. A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). The token follows the same rule as in [`is`](#is): the longest field name wins, whatever its spelling (`$passwordConfirm`, `$Email`), a token ends at the first character outside `A-Z a-z 0-9 _ -`, and a `$` naming no field is sent as typed (before 0.6.33 it was sent as the string `null`, and a camelCase name resolved only its lowercase prefix). |
+| `data` | object | Request payload. A `POST`, `PUT` or `PATCH` rule sends it as a JSON body; a `GET`, `HEAD` or `DELETE` rule sends it in the query string, each key once and an object value as its JSON text (since 0.7.5; before, a rule run in the browser sent its data only as a body, which a `GET` drops and a gina bundle does not read on a `DELETE`). A `$fieldName` token anywhere in a value is replaced with that sibling field's current value before the call — exactly as typed, quotes and backslashes included (since 0.6.33). The token follows the same rule as in [`is`](#is): the longest field name wins, whatever its spelling (`$passwordConfirm`, `$Email`), a token ends at the first character outside `A-Z a-z 0-9 _ -`, and a `$` naming no field is sent as typed (before 0.6.33 it was sent as the string `null`, and a camelCase name resolved only its lowercase prefix). |
 | `validIf` | boolean | The response `isValid` the rule treats as a **pass**. Defaults to `true`; set `false` for a "must NOT exist" check such as a uniqueness probe. |
 | `method` | string | HTTP method. Defaults to `GET`. |
 | `headers` | object | Request headers, merged over the defaults. See the caution below. |
@@ -543,7 +543,7 @@ A rule's own options win over the defaults, so anything you declare here
 overrides the built-in value rather than being merged under it.
 
 :::caution Values containing `+` — declare `Content-Type` explicitly
-The request body is JSON, but on **0.6.17 and earlier** it is labelled
+The request body of a `POST`, `PUT` or `PATCH` rule is JSON, but on **0.6.17 and earlier** it is labelled
 `application/x-www-form-urlencoded`. The server honours that label and reads
 every `+` in the body as a space, as the form encoding prescribes, before parsing
 it — so a check on an email plus-address such as `alias+tag@example.com` is
@@ -558,6 +558,7 @@ Declare the header explicitly to opt out:
   "username": {
     "query": {
       "url": "checkUsername@myBundle",
+      "method": "POST",
       "data": { "account": { "username": "$username" } },
       "headers": { "Content-Type": "application/json" }
     }

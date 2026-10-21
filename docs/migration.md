@@ -1349,6 +1349,38 @@ copy, and a standard parser read `date?sort=price`. Since 0.7.5 the target reads
 `param` value. Leave that key out of `param`, and the incoming query string is forwarded as it
 is.
 
+### Fixed — a validator `query` rule on `GET`, `HEAD` or `DELETE` sends its data from the browser (bundle restart and re-bake)
+
+A [`query` rule](/reference/validation-rules#query) run in the browser sent its `data` only as
+the request body. A browser drops the body of a `GET` or `HEAD`, and a gina receiver reads the
+data of a `DELETE` from its query string only, so a rule on `GET`, the default method, or on
+`DELETE` sent none of its data to a gina endpoint, which answered about an empty request. Since
+0.7.5 such a rule sends its data in the URL's query string, as the server side does: each key
+once, an object value as its JSON text, joined with `&` when the rule's URL already holds a
+query string, and a key that URL already holds keeps the URL's value. A `POST`, `PUT` or
+`PATCH` rule still sends a JSON body.
+
+**What to check:** the endpoint of a `GET` or `DELETE` rule now receives the rule's data, in
+`req.get` or `req.delete` on a gina bundle. A `DELETE` rule no longer sends a body: an endpoint
+of another kind (a `url` starting with `http`) that read the rule's JSON body now reads the
+query string. A rule you set to `"method": "POST"` only so that its data would travel can stay
+as it is.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `query` rule aimed at its own bundle works without a `proxy` entry for it (bundle restart)
+
+In a bundle started by `gina-container`, a validator `query` rule whose `url` names a route of
+the same bundle answered `500` (« Could not retrieve `proxy` configuration for bundle
+`<bundle>` ») unless `app.json` gave the bundle a `proxy` entry for itself. Since 0.7.5 the
+bundle recognises its own name and the rule calls it on its own host and port, without that
+entry; a bundle serving HTTP/1.1 reaches itself that way too, where the call failed with
+« getaddrinfo ENOTFOUND ».
+
+**What to check:** a `proxy` entry for the bundle itself is no longer read for such a rule, so
+its `ca`, `path` or `requestTimeout` no longer apply to it: the rule uses the bundle's own
+certificate settings and the route's query timeout.
+
 ---
 
 ## 0.7.3 → 0.7.4
