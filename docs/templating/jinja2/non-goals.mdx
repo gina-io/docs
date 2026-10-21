@@ -134,7 +134,7 @@ Rationale: bracket-notation writes at runtime can reach through the prototype ch
 Tracked, not yet implemented:
 
 - **Global functions.** Jinja2's `range()`, `dict()`, `cycler()`, `joiner()`, `lipsum()`, and `namespace()` are not exposed. To iterate a count, pass an array in locals or write a literal `{% for i in [1, 2, 3] %}`.
-- **`not in` operator.** The compound `x not in seq` does not parse. Use `not (x in seq)`.
+- **`not in` operator.** The compound `x not in seq` does not parse. Use `seq.indexOf(x) == -1` for a list or a string, and `not (x in d)` for a mapping, since `in` tests keys (see [Behavioural differences](./parity#behavioural-differences)).
 - **`is integer` / `is float`.** Not registered — JavaScript has a single `number` type. Use `is number` (both evaluate to `false`).
 - **Locale-aware `date`.** The shared PHP-style formatter from `@rhinostone/swig-core` does not plumb locale rules (weekday/month names in non-English locales). Pre-format on the controller side.
 - **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).

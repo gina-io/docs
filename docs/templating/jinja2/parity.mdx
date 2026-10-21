@@ -28,7 +28,7 @@ The matrices below are ground truth: each row maps to a symbol actually exported
 | `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
 | `+` `-` `*` `/` `%` | `a + b` | Arithmetic. `+` also concatenates when either side is a string (JavaScript coercion). | See [Behavioural differences](#behavioural-differences) for `+` on mixed types. |
 | `a if c else b` | inline conditional | Returns `a` when `c` is truthy, else `b`. The `else` arm is optional (`a if c` yields `""` when `c` is falsy). | |
-| `in` | `x in seq` | Membership test. | `not in` does **not** parse — use `not (x in seq)`. |
+| `in` | `x in seq` | Key test: `"a" in d` is true when the mapping `d` has the key `a`, as in Jinja2. On a list it tests the indices, not the items, and on a string it throws; test an item with `seq.indexOf(x) != -1` — see [Behavioural differences](#behavioural-differences). | `not in` does **not** parse — use `seq.indexOf(x) == -1` for a list or a string, `not (x in d)` for a mapping. |
 | `and` `or` `not` | logic | Short-circuit boolean logic. | |
 | `==` `!=` `<` `>` `<=` `>=` | comparison | Standard comparisons. | |
 | `seq[start:stop:step]` | slicing | Python slice semantics — negative indices count from the end, `step` walks, `[::-1]` reverses. | Strings slice to strings, arrays to arrays. |
@@ -202,6 +202,7 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | `{% for x in mapping %}` (single variable) | Iterates the mapping's **keys**. | Iterates its **values** (swig object iteration). Use `{% for k, v in mapping %}` for pairs, or `mapping\|list` for the keys. |
 | `{% for k, v in pairs %}` over a list of pairs, such as `mapping\|dictsort` | Unpacks each pair into `k` and `v`. | Binds `k` to the index and `v` to the pair. Index the pair instead: `{% for p in mapping\|dictsort %}{{ p[0] }}={{ p[1] }}{% endfor %}`. |
 | `+` on mixed types | `1 + "x"` raises `TypeError`. | Coerces (`"1x"`), JavaScript-style. Use `~` for explicit, intentional string concatenation. |
+| `in` on a list or a string | Tests membership: `3 in [1, 2, 3]` and `"b" in "abc"` are true. | Tests a list's indices: `3 in [1, 2, 3]` is false and `0 in [5]` is true; on a string it throws. On a mapping both test the keys. Test an item with `seq.indexOf(x) != -1`. |
 | `is sequence` | A mapping is also a sequence. | An array or string only; a mapping is `is mapping`. |
 | `with x = …` values | Evaluate against the enclosing scope. | Same — evaluated against the outer scope (object-literal merge, not sequential). |
 | Imported macros | `{% import %}` is `without context` by default. | Imported/`from`-imported macros see the caller context (swig macro model — matches swig-twig). |
