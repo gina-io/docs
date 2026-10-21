@@ -31,7 +31,7 @@ The `SwigOpts` object is accepted by `setDefaults`, the constructor, and most pe
 
 | Key | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `autoescape` | `boolean \| string` | `true` | Auto-apply the `e` filter to variable output. Passing a string (`'js'`, `'html'`) forwards as the escape type. |
+| `autoescape` | `boolean \| string` | `true` | Auto-apply the `e` filter to variable output. Passing a string (`'js'`, `'html'`) selects that escape strategy; a string holding a double quote or a line break is rejected. Fixed in `2.8.4`: earlier releases wrote the string into the compiled template as code, so `'js'` failed with `ReferenceError: js is not defined`. |
 | `varControls` | `[string, string]` | `['{{', '}}']` | Open/close for variable expressions. |
 | `tagControls` | `[string, string]` | `['{%', '%}']` | Open/close for tag statements. |
 | `cmtControls` | `[string, string]` | `['{#', '#}']` | Open/close for comments. |
@@ -193,7 +193,7 @@ New code should use [`renderFile(path, locals, cb)`](#renderfile) on a loader th
 The deprecation is JSDoc-only — no runtime warning is emitted (avoids Express log spam). Existing `renderFileAsync` calls keep working through the `v2.x` line.
 :::
 
-Load + compile + render a file via an async-only loader (S3, Redis, CDN, `fetch`-backed). Pre-walks the template's `{% extends %}` / `{% include %}` / `{% import %}` chain asynchronously through the loader's `load(id, cb)` arm, then runs the existing sync render pipeline against an in-memory wrapper. Use this when your loader has no sync `load()` arm — `renderFile` (sync-cb form against a dual-mode loader) cannot resolve nested templates against an async-only loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+Load + compile + render a file via an async-only loader (S3, Redis, CDN, `fetch`-backed). Pre-walks the template's `{% extends %}` / `{% include %}` / `{% import %}` chain asynchronously through the loader's `load(id, cb)` arm, then runs the existing sync render pipeline against an in-memory wrapper. It predates the `loader.async` dispatch of `renderFile`, which new code uses instead (see the box above). See [Async loaders](./loaders#async-loaders) for the full mechanism.
 
 | Arg | Type | Description |
 | --- | --- | --- |
@@ -280,7 +280,7 @@ New code should use [`compileFile(path, { codegenMode: 'async' }, cb)`](#async-c
 The deprecation is JSDoc-only — no runtime warning is emitted. Existing `compileFileAsync` calls keep working through the `v2.x` line.
 :::
 
-Load + compile a file via an async-only loader. Returns (via `cb`) a renderable closure that captures the pre-walked memory map, so subsequent calls render synchronously without re-running the dependency walk. Use this when your loader has no sync `load()` arm — `compileFile` (sync-cb form against a dual-mode loader) cannot resolve nested templates against an async-only loader. See [Async loaders](./loaders#async-loaders) for the full mechanism.
+Load + compile a file via an async-only loader. Returns (via `cb`) a renderable closure that captures the pre-walked memory map, so subsequent calls render synchronously without re-running the dependency walk. It predates `compileFile` with `codegenMode: 'async'`, which new code uses instead (see the box above). See [Async loaders](./loaders#async-loaders) for the full mechanism.
 
 | Arg | Type | Description |
 | --- | --- | --- |
@@ -476,7 +476,7 @@ When writing a custom tag's `compile`, emit JS that reads from `_ctx`, writes to
 
 - **`cache: 'memory'`** — templates are stored by the loader's resolved filename. The default.
 - **`cache: false`** — templates are recompiled on every call. Useful during development; **do not** ship to production.
-- **Custom cache** — pass an object with `get(key)` and `set(key, value)`. Keys are resolved filenames from the loader.
+- **Custom cache** — pass an object with `get(key)` and `set(key, value)`. Keys are resolved filenames from the loader; a template compiled with `codegenMode: 'async'` is kept under its name followed by `#async` (since `2.8.2`), apart from its sync compile.
 
 ```js
 swig.setDefaults({
@@ -487,4 +487,4 @@ swig.setDefaults({
 });
 ```
 
-The cache key is the loader's `resolve()` output. If your loader's `resolve` is not deterministic, circular-extends detection fails — see [Loaders — Determinism](./loaders#determinism).
+The cache key is the loader's `resolve()` output (followed by `#async` for an async-mode compile). If your loader's `resolve` is not deterministic, circular-extends detection fails — see [Loaders — Determinism](./loaders#determinism).

@@ -148,6 +148,7 @@ Compiled templates are cached under the string returned by `resolve`. Two implic
 
 - Calls to `resolve` that return the same string share the same compiled function. This is what makes `{% extends %}` cheap.
 - Changing a loader's `basepath` does not invalidate existing cache entries. Call [`swig.invalidateCache()`](./api#invalidatecache) immediately after swapping in a new loader.
+- A template compiled with `codegenMode: 'async'` is cached under the same string followed by `#async` (since `2.8.2`), so the sync and async compiles of a file never share an entry.
 
 ### Browser loaders
 
