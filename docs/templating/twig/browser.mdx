@@ -47,8 +47,8 @@ npm install @rhinostone/swig-twig
 // package.json — example consumer
 {
   "dependencies": {
-    "@rhinostone/swig-core": "2.8.1",
-    "@rhinostone/swig-twig": "2.8.1"
+    "@rhinostone/swig-core": "2.8.4",
+    "@rhinostone/swig-twig": "2.8.4"
   }
 }
 ```
@@ -149,7 +149,7 @@ Native swig can ship pre-compiled templates with a runtime-only bundle and no pa
 
 As of `2.2.0`, a minified browser bundle of `@rhinostone/swig-twig` plus its transitive `@rhinostone/swig-core` dependency weighs approximately **82 KB minified** (~27 KB gzipped) via esbuild `--minify --format=iife` — measured against an entry point that imports the default Twig instance, wires up a memory loader, and exposes it on `window.twig`.
 
-For perf-critical paths, prefer AOT pre-compilation (previous section) — the runtime footprint drops substantially because the lexer and parser are not shipped.
+Leaving the lexer and parser out of the browser takes AOT pre-compilation, which only native swig offers for now (previous section).
 
 ## Security model
 

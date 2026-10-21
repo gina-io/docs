@@ -95,7 +95,7 @@ A dynamic parent — `{% extends parent_template %}` or `{% extends full if cond
 | `{% extends parent_template %}` | No — resolved at compile time | Yes |
 | `{% extends full if cond else partial %}` | No — resolved at compile time | Yes |
 
-On the **synchronous** render path the parent link is resolved at compile time, before any runtime value exists, so a dynamic parent surfaces a template-not-found / "no filename" error.
+On the **synchronous** render path the parent link is resolved at compile time, before any runtime value exists, so a dynamic parent throws `Dynamic {% extends %} requires the async render path`, which names the async route.
 
 Sync-path workaround: **dispatch in the caller** and render the selected template directly.
 

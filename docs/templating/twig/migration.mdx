@@ -46,7 +46,7 @@ Straight copy-paste — no changes needed:
 - `{{ var }}`, `{{ var.path.to.field }}`, `{{ array[0] }}`
 - `{{ a + b }}`, `{{ a * b }}`, `{{ a ~ b }}` (string concat)
 - `{{ a ?? b }}` (null-coalesce), `{{ a ?: b }}` (Elvis), `{{ cond ? a : b }}`
-- `{% if %}` / `{% elseif %}` / `{% else %}` / `{% endif %}`
+- `{% if %}` / `{% endif %}` with one branch — `{% elseif %}` and `{% else %}` are not implemented yet; see [Non-Goals → Conditional branches](./non-goals#conditional-branches-deferred) for the rewrites
 - `{% for item in items %}` with the magic `loop.*` variables (`loop.index`, `loop.first`, `loop.last`, `loop.length`)
 - `{% set foo = 1 %}` including body form `{% set foo %}…{% endset %}`
 - `{% extends "layout.twig" %}` with `{% block content %}` overrides

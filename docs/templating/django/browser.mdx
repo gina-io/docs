@@ -149,7 +149,7 @@ Native swig can ship pre-compiled templates with a runtime-only bundle and no pa
 
 A minified browser bundle of `@rhinostone/swig-django` plus its transitive `@rhinostone/swig-core` dependency weighs approximately **94 KB minified** (~30 KB gzipped) via esbuild `--minify --format=iife` — measured against an entry point that imports the default Django instance, wires up a memory loader, and exposes it on `window.django`. It is a touch smaller than the Jinja2 flavor (Django has no `is`-test catalog and no macro/import/from tags).
 
-For perf-critical paths, prefer AOT pre-compilation (previous section) — the runtime footprint drops substantially because the lexer and parser are not shipped.
+Leaving the lexer and parser out of the browser takes AOT pre-compilation, which only native swig offers for now (previous section).
 
 ## Security model
 
