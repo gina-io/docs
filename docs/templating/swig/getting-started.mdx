@@ -21,7 +21,7 @@ npm install @rhinostone/swig --save
 Node.js ≥ 12 is required. Browsers can load the bundled build from `dist/swig.js` — see [Browser Usage](./browser).
 
 :::tip Coming from Jinja2 or Django?
-Swig's syntax will feel familiar but is not drop-in compatible — a few constructs (`is defined`, `not in`, `forloop.*`, block-form `{% set %}`, many filters) fail at parse time. See the [Migration Guide](./migration) before porting existing templates.
+Swig's syntax will feel familiar but is not drop-in compatible — some constructs fail at parse time (`not in`, block-form `{% set %}`, many filters) and some compile but do something else (`{% if x is defined %}` checks `x` itself, `forloop.*` renders empty). See the [Migration Guide](./migration) before porting existing templates.
 :::
 
 

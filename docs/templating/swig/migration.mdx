@@ -60,14 +60,14 @@ Pick your source engine. The shared reference (filter parity, operators, autoesc
 
 ### Parse-time blockers
 
-These fail with `Unexpected tag` or `Unable to parse …` at compile time.
+These fail at compile time, except the `is` rows: inside `{% if %}` an `is` test is dropped without an error, so `{% if x is defined %}` checks `x` itself and `{% if x is none %}` is false when `x` is `null`.
 
 | Jinja2 | Swig equivalent | Notes |
 | --- | --- | --- |
 | `{% if x is defined %}` | `{% if x !== undefined %}` or `{% if x %}` | Swig has **no `is` operator** and no tests. |
 | `{% if x is none %}` | `{% if x === null %}` | Same — no `is`. |
 | `{% if x is iterable %}` | Custom filter or pre-compute in locals | Register a filter: `swig.setFilter('isIterable', fn)`. |
-| `{% if x not in xs %}` | `{% if not (x in xs) %}` | Swig's comparator is `in` only — `not in` is not a single token. |
+| `{% if x not in xs %}` | `{% if xs.indexOf(x) === -1 %}` for a list or a string, `{% if not (x in xs) %}` for a mapping | `not in` is not a single token, and `in` tests keys: on a list it tests the indices, not the items. |
 | `{{ a // b }}` | `{{ (a / b)\|int }}` (define `int` filter) or `{{ Math.floor(a / b) }}` | Integer division is not lexed. Math object is reachable as a global. |
 | `{{ a ** b }}` | `{{ Math.pow(a, b) }}` | Power operator is not lexed. |
 | `{% set x %}body{% endset %}` | `{% set x = "body" %}` | Swig only supports the one-liner form. |
