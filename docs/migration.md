@@ -1185,6 +1185,83 @@ and swig's [2.8.3 release notes](https://github.com/gina-io/swig/blob/v2.8.3/HIS
 
 Server-side only: **restart the bundle**.
 
+### Changed — `getRoute()` composes the URL your values complete, on a rule with several URLs (bundle restart and re-bake)
+
+A rule can declare [several URLs](/guides/routing#multiple-urls). When you build a URL
+for such a rule with [`lib.routing.getRoute()`](/guides/routing#reverse-routing--libroutinggetroute)
+or the `getUrl` template filter without naming one, gina composed the first URL, whatever
+values you passed:
+
+```json
+"logout": {
+  "url": "/logout/:timestamp, /logout",
+  "param": { "control": "logout", "timestamp": ":timestamp" }
+}
+```
+
+`getRoute('logout')` gave `/logout/:timestamp`, the placeholder left in the URL, and a value
+whose placeholder was only in another URL was lost.
+
+Since 0.7.5, without `urlIndex`, gina composes the first URL whose placeholders all receive a
+value, preferring among those the URL that uses the most values; when no URL is complete, the
+URL that receives the most values. Ties go to the first URL. `getRoute('logout')` now gives
+`/logout`, and `getRoute('logout', { timestamp: '9' })` still gives `/logout/9`. A rule whose
+URLs carry the same placeholders, one URL per language for instance, still composes its first
+URL.
+
+**What to check:** a call on a rule with several URLs that passes values for a later URL now
+composes that URL instead of the first one: the value moves from the query string, or from
+nowhere, into the path. Both URLs reach the same action. To keep the first URL, name it:
+`getRoute('logout', {}, 0)`.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `getRoute()` composes the URL `urlIndex` names, and refuses an index that names none (bundle restart and re-bake)
+
+On a rule with several URLs, `getRoute(rule, params, urlIndex)` composes the URL that
+`urlIndex` names (0-based), and a [forward route](/guides/controller#forwarding) passes its
+`param.urlIndex` the same way. When a value filled a placeholder, the first URL was used
+whatever `urlIndex` said. Since 0.7.5 the URL named is composed.
+
+A `urlIndex` that names no URL of the rule (`5` on a rule with two URLs, `-1`, `1.5`) now
+throws an error naming the rule and its number of URLs, where it composed `undefined`. A
+forward route answers it through `throwError()`. A numeric string such as `"1"` is accepted,
+and a rule with a single URL ignores `urlIndex`, as before. The `getUrl` filter takes no
+`urlIndex`.
+
+**What to check:** a `urlIndex` beyond the rule's URLs now raises an error at the call.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `getRoute()` keeps every value and repeats none (bundle restart and re-bake)
+
+Three fixes to the URL `getRoute()` and the `getUrl` filter compose:
+
+- A value whose placeholder is only in another URL of the rule is appended as a query
+  parameter, or written into the path when that URL is the one composed. It was skipped, and
+  lost when the rule's `requirements` declared the key. `:key` is no longer found inside
+  `:keyXyz`.
+- A value written into the path is not repeated in the query string:
+  `getRoute('invoice', { id: 'abc-123' })` on `"url": "/invoice/:id"` with no `requirements`
+  gave `/invoice/abc-123?id=abc-123` and now gives `/invoice/abc-123`. A placeholder the rule
+  does not bind in `param` keeps its value travelling as a query parameter.
+- A key declared in `param` but absent from the URL is appended once: `?mode=beta&mode=beta`
+  is now `?mode=beta`.
+
+**What to check:** nothing to change. A query string you read no longer carries these
+duplicates.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a value that contains a comma no longer truncates the URL `getRoute()` composes (bundle restart and re-bake)
+
+`getRoute()` split the URL on its commas after filling in the values, so a value containing a
+comma, an array for instance (it stringifies with commas), cut the URL at its first comma, on
+any rule: `getRoute('one', { x: 'a,b' })` on `"url": "/o/:x"` gave `/o/a`. Since 0.7.5 the
+value is kept whole: `/o/a,b`.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.3 → 0.7.4

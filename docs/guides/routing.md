@@ -180,6 +180,28 @@ Comma-separate URLs to map several paths to the same controller method:
 Both `/help` and `/aide` resolve to the same action. `req.routing.url` reflects
 the URL that actually matched.
 
+When you build a URL for such a rule with
+[`lib.routing.getRoute()`](#reverse-routing--libroutinggetroute), pass
+`urlIndex` as its third argument to name the URL to compose (0-based); the
+`getUrl` template filter takes no `urlIndex`. Without it, gina composes the
+first URL whose placeholders all receive a value,
+preferring among those the URL that uses the most values; when no URL is
+complete, the URL that receives the most values. Ties go to the first URL, so
+`getRoute('help')` composes `/help`. A value whose placeholder is only in
+another URL goes to the query string.
+
+```mermaid
+flowchart LR
+  A["getRoute(rule, params, urlIndex)"] --> B{"urlIndex given?"}
+  B -- yes --> C["the URL it names<br/>(an index that names no URL throws)"]
+  B -- no --> D{"a URL whose placeholders<br/>all receive a value?"}
+  D -- yes --> E["among them, the one that uses<br/>the most values (ties: the first)"]
+  D -- no --> F["the URL that receives the<br/>most values (ties: the first)"]
+```
+
+Before 0.7.5, `getRoute()` composed the first URL unless `urlIndex` was given and
+no placeholder was filled.
+
 ### Inline parameters
 
 Parameters can be embedded within a segment rather than forming a full segment:
@@ -839,6 +861,22 @@ Extra params not present in the URL pattern are appended as a query string:
 ```js
 var route = routing.getRoute('search@frontend', { q: 'gina', page: 2 });
 route.url;  // "/search?q=gina&page=2"
+```
+
+A value written into the path is not repeated in the query string, and none is
+appended twice. A key the rule declares in `requirements` stays out of the query
+string, unless `param` binds it to a placeholder that the URL composed does not
+carry.
+
+For a rule with [several URLs](#multiple-urls), the URL composed depends on the
+values you pass, unless you name one with the third argument, `urlIndex`:
+
+```js
+// "logout": { "url": "/logout/:timestamp, /logout",
+//             "param": { "control": "logout", "timestamp": ":timestamp" } }
+routing.getRoute('logout').url;                         // "/logout"
+routing.getRoute('logout', { timestamp: '9' }).url;     // "/logout/9"
+routing.getRoute('logout', { timestamp: '9' }, 1).url;  // "/logout?timestamp=9"
 ```
 
 When called from within the same bundle, the `@bundle` suffix can be omitted —

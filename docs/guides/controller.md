@@ -1228,6 +1228,10 @@ How it relays:
 - A non-2xx status, a transport failure or an unknown target route is answered
   through `throwError()`.
 - `hostname`, `port` and `path` in `param` address a raw host instead of a bundle.
+- When the target route has [several URLs](/guides/routing#multiple-urls),
+  `param.urlIndex` names the one forwarded to (0-based); without it, the URL is
+  chosen as `getRoute()` chooses it. An index that names no URL of the target is
+  answered through `throwError()`.
 
 Reserved `param` keys, never forwarded as placeholders: `url`, `urlIndex`, `control`,
 `file`, `title`, `bundle`, `project`, `hostname`, `port`, `path`, `method`.
