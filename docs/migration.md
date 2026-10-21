@@ -1151,6 +1151,19 @@ same bundle started and rendered through the native parser.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — the settings schema lists every swig frontend (no restart)
+
+The `swig.package` setting in the settings JSON Schema (`https://gina.io/schema/settings.json`)
+listed only `@rhinostone/swig` and `@rhinostone/swig-twig`, so an editor that validates
+`settings.json` against it marked `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` as
+invalid, although [`swig.package`](/templating#picking-an-engine) loads both. The schema now
+lists the four packages, and says that a value other than the default needs
+`swig.useProject: true` and a 2.x version of that package installed in the project, because only
+`@rhinostone/swig` has a framework copy to fall back to.
+
+**What to check:** nothing; an editor stops marking those two values once it reads the new
+schema.
+
 ### Fixed — a template that groups an expression renders the value of the group (bundle restart)
 
 Gina now requires [`@rhinostone/swig`](/templating/swig) 2.8.2 or later in both of its manifests
