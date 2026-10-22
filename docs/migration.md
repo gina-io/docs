@@ -52,9 +52,8 @@ held (see the 0.7.3 → 0.7.4 entry on template paths below). This is the residu
 states.
 
 A placeholder that is a URL segment of the route now takes the URL value. The query or body
-value of the same name stays readable in `req.get` or `req.post`, and no longer reaches
-`param.file`. A value that would leave the template root is now ignored the same way, so the
-URL's template renders instead of a `500`.
+value of the same name no longer reaches `param.file`. A value that would leave the template
+root is now ignored the same way, so the URL's template renders instead of a `500`.
 
 **What to check:**
 
