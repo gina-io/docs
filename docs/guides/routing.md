@@ -344,6 +344,10 @@ slashes, flags after the last slash):
 
 `/docs/intro` matches. `/docs/pricing` does not — the router tries the next route.
 
+A route may put a requirement on some of its placeholders only: a placeholder without one
+accepts any non-empty segment. (On a `DELETE` route that was not so before 0.7.6 — a `DELETE`
+route whose requirements covered only some of its placeholders never matched.)
+
 :::warning A regex requirement is a partial match — anchor it
 The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the
 value only *contains* a match: `"/[0-9]+/"` accepts `123abc`. Anchor the pattern at both ends —

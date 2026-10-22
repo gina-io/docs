@@ -35,6 +35,20 @@ binds in `param`, so an action reads the URL values from `req.params` on every r
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a `DELETE` route whose requirements cover only some of its placeholders matches (bundle restart and re-bake)
+
+A `DELETE` route with a regex requirement on some of its URL placeholders but not all
+(`"url": "/items/:grp/:id"`, `"requirements": { "id": "/^[0-9]+$/" }`) answered `404` on
+every request: the router matches a `DELETE` route that declares `requirements` in a branch
+of its own, which skipped the placeholder without a requirement instead of scoring it. The
+same route on `GET` matched. Since 0.7.6 that branch accepts any non-empty segment for such a
+placeholder, as the `GET` path does, and sets `req.delete` and `req.params` from it.
+
+**What to check:** a `DELETE` route of that shape now answers. If you had declared a
+requirement on every placeholder to work around the `404`, nothing changes for you.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.4 → 0.7.5
