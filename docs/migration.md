@@ -21,6 +21,32 @@ upward to the target version.
 
 ## 0.7.5 → 0.7.6
 
+### Changed — a URL placeholder's value wins over a query or body key of the same name (bundle restart)
+
+When the query string or the body carries a key named like one of the route's URL
+placeholders (`"url": "/items/:grp/:id"` with `?id=99`, or a `PUT` body `{ "id": "99" }`),
+the method's object (`req.get`, `req.head`, `req.put`, `req.patch`, `req.post`,
+`req.delete`) now holds the URL value on every request, as `req.params` does. Before 0.7.6
+the answer depended on the request: the first request to a method and path took the URL
+value on `GET`, `HEAD`, `PUT` and `PATCH`, and every later request the client's value; a
+`POST` always took the client's value, and so did a `DELETE` unless a regex requirement
+covered the placeholder.
+
+**What to check:**
+
+- An action that reads a query or body key named like one of its route's URL placeholders
+  and expects the client's value: read it from `req.originalUrl` (`GET`), `req.query`
+  (`DELETE`) or `req.rawBody` (`POST`, `PUT`, `PATCH`), or rename the key.
+- A URL segment `true`, `false` or `on` now reaches the method's object and `req.params` as
+  a boolean on every request; some requests gave the string before. A segment `null` stays
+  the string `"null"` on every request; from the second request to a route on, a
+  placeholder covered by a requirement gave `null` in the method's object.
+- `req.body` is now the same object as `req.post`, `req.put` or `req.patch` on the first
+  request to a route too, and holds the URL values there; on that first request it held
+  the client's keys only.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
 ### Fixed — `req.params` is set on a `DELETE` route whose regex requirements cover its placeholders (bundle restart and re-bake)
 
 On a `DELETE` route whose `requirements` put a regex on every URL placeholder

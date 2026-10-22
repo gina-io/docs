@@ -574,6 +574,27 @@ unset on one route shape: a `DELETE` route whose `requirements` put a regex on e
 its URL placeholders (the router matches such a route in a branch of its own, which wrote
 the matched values to `req.delete` only). Since 0.7.6 that branch sets `req.params` too.
 
+When the query string or the body carries a key named like one of the route's URL
+placeholders, the method's object holds the URL value, as `req.params` does: the value the
+route matched, and checked when a requirement covers the placeholder. The client's value
+stays readable in `req.originalUrl` on a `GET`, in `req.query` on a `DELETE`, and in
+`req.rawBody` on a `POST`, `PUT` or `PATCH`:
+
+```js
+// "url": "/items/:id", "param": { "control": "remove", "id": ":id" }
+// DELETE /items/42?id=99
+this.remove = function(req, res, next) {
+  req.delete.id;  // "42" — the URL value
+  req.params.id;  // "42"
+  req.query.id;   // "99" — the client's value
+};
+```
+
+Before 0.7.6 the client's value won on a `POST`, on a `DELETE` whose placeholder had no regex
+requirement, and on every request to a route after the first one (a `DELETE` placeholder with
+a regex requirement always took the URL value). A URL segment `true`, `false` or `on` reaches
+the method's object and `req.params` as a boolean; a segment `null` stays the string `"null"`.
+
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` — the actual URL segment value captured at request time.
 
@@ -596,7 +617,7 @@ action written for `GET` reads its parameters the same way when it answers a
 | `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update — and the route's URL placeholders |
 | `req.delete` | `DELETE` | Query-string parameters and the route's URL placeholders |
 | `req.head` | `HEAD` | Query-string parameters and the route's URL placeholders — body is suppressed in the response; `req.get` is this same object |
-| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
+| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` when the request carries a body (since 0.7.6 also on the first request to a route, where it held only the client's keys) |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
 :::note How request values are decoded
@@ -837,7 +858,8 @@ curl -I https://api.example.com/documents/42
 # content-length: 847
 ```
 
-Query-string parameters and URI params are merged in automatically for all methods:
+Query-string parameters and URI params are merged in automatically for all methods; when
+both carry the same name, the URI param wins (since 0.7.6, see [URL parameters](#url-parameters)):
 
 ```js
 // GET /search?q=gina&page=2
@@ -858,8 +880,9 @@ if (req.post.count() > 0) {
 
 A few string values are coerced on the way in. `"true"`, `"false"` and `"on"` become
 booleans (`"on"` is what a checked checkbox submits, so it arrives as `true`), and
-`"null"` becomes `null` in request bodies. Nothing else is cast: a numeric value such
-as `"2"` stays a string, so convert it before comparing.
+`"null"` becomes `null` in request bodies. A URL placeholder's segment follows the
+same rule, except `null`, which stays the string `"null"`. Nothing else is cast: a numeric
+value such as `"2"` stays a string, so convert it before comparing.
 
 :::note OPTIONS
 `OPTIONS` is reserved for CORS preflight and is handled internally — it never
