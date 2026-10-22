@@ -640,6 +640,12 @@ delete links and their `contract[<index>][…]` fields. With one file to delete 
 no `data-gina-form-upload-delete-method`, the request is a `DELETE` with no body,
 so its URL must name the file; otherwise it is a `POST` of `{ "files": [ … ] }`.
 
+Choosing a new file in such a form replaces the saved file: the staged file takes
+its index, its fields and its preview container. Since `0.7.6` the saved file's
+delete link goes away too, once the staging succeeds, wherever the link sits.
+Before, a link placed after the preview container stayed on the page and did
+nothing when activated (a console warning named the mismatch).
+
 ### Persisting the preview
 
 Your staging route may describe a separate preview variant — a thumbnail it

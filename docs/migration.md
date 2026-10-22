@@ -122,6 +122,24 @@ no `package.json` or no `version` in it, so guard it with `{% if %}`. It is not 
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
+### Fixed — a saved file's delete link goes away when a new selection replaces it (bundle restart and re-bake)
+
+In an edit form showing a saved file with a delete link (`<input id>-<index>-delete-trigger`),
+choosing a new file replaces the saved one: its index, its fields and its preview. The link
+stayed when it sat after the preview container (the shape the
+[uploads guide](/guides/file-uploads#saved-files-in-an-edit-form) shows): the staging
+success empties the container, which took a link placed inside it but not one placed after
+it, so the link stayed on the page, bound to a file the input no longer held — activating it
+sent no request, removed nothing, and logged a console warning. Since 0.7.6 the replaced
+file's delete link is removed when the staging succeeds, wherever it sits; after a failed
+staging the link stays, and the next successful selection removes it.
+
+**What to check:** a page script that keeps a reference to a saved file's delete link after
+a new selection now finds it detached. A link placed inside the preview container is
+unchanged (the container reset removed it already).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.4 → 0.7.5
