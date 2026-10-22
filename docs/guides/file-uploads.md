@@ -556,6 +556,12 @@ under those names, since `store()` publishes each file under its original name.
 One that stores them under other names, a generated one for instance, has to map
 each `originalFilename` back to the file it stored.
 
+*Changed in 0.7.6.* A `change` on the input that carries no file (an emptied
+selection) leaves the input's files as they were, so their reset or delete control
+still removes them. Before, it emptied the input's record of its files while their
+previews and hidden fields stayed, and the controls then sent nothing and removed
+nothing (a console warning named the mismatch).
+
 *Changed in 0.7.4.* The reset and the delete act on the input's files. They used
 to act only on the `<img>` elements of the preview container, so a file shown
 without an image kept its hidden fields and was submitted after its reset, an

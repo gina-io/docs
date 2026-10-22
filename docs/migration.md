@@ -140,6 +140,19 @@ unchanged (the container reset removed it already).
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — reset and delete links keep working after an emptied selection (bundle restart and re-bake)
+
+A `change` on a staged file input that carries no file (an emptied selection) emptied the
+input's record of the files it shows, while their previews and hidden fields stayed in the
+form. Their reset or delete link then sent no request and removed nothing, and a console
+warning named the mismatch. Since 0.7.6 such a change leaves that record as it was, so the
+links still reset the staged files and delete the saved ones.
+
+**What to check:** nothing in most pages. The files stay in the form after an emptied
+selection, as before, until their reset or delete link is used.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.4 → 0.7.5
