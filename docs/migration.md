@@ -19,6 +19,24 @@ upward to the target version.
 
 ---
 
+## 0.7.5 → 0.7.6
+
+### Fixed — `req.params` is set on a `DELETE` route whose regex requirements cover its placeholders (bundle restart and re-bake)
+
+On a `DELETE` route whose `requirements` put a regex on every URL placeholder
+(`"url": "/items/:grp/:id"`, `"requirements": { "grp": "/^[a-z0-9]+$/", "id": "/^[0-9]+$/" }`),
+`req.params.grp` and `req.params.id` stayed unset: the router matches such a route in a
+branch of its own, which wrote the matched values to `req.delete` only. Every other route
+set them. Since 0.7.6 that branch sets `req.params` too, for each placeholder the route
+binds in `param`, so an action reads the URL values from `req.params` on every route.
+
+**What to check:** nothing — `req.delete` is unchanged. An action that read
+`req.params.<key>` on such a route and found `undefined` now finds the URL value.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+---
+
 ## 0.7.4 → 0.7.5
 
 ### Security — a query value no longer replaces a URL segment in a route's template path (bundle restart)

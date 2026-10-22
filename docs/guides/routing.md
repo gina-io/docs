@@ -140,7 +140,7 @@ unique across the project.
 
 ### Parameterized URL
 
-Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` (and `req.get.<key>` for GET requests).
+Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` and into the method's own object (`req.get.<key>` on a GET, `req.delete.<key>` on a DELETE, `req.put.<key>` on a PUT, and so on). `req.params` is set for every method; on a `DELETE` route whose `requirements` put a regex on each placeholder it was left unset before 0.7.6.
 
 ```json
 "invoice": {

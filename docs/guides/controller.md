@@ -569,6 +569,11 @@ this.get = function(req, res, next) {
 };
 ```
 
+`req.params.<key>` is set on every route and for every method. Before 0.7.6 it stayed
+unset on one route shape: a `DELETE` route whose `requirements` put a regex on each of
+its URL placeholders (the router matches such a route in a branch of its own, which wrote
+the matched values to `req.delete` only). Since 0.7.6 that branch sets `req.params` too.
+
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` — the actual URL segment value captured at request time.
 
@@ -585,12 +590,12 @@ action written for `GET` reads its parameters the same way when it answers a
 
 | Property | Set for | Contains |
 |---|---|---|
-| `req.get` | `GET`, `HEAD` | Query-string parameters (`?key=value`); on a `HEAD`, the same object as `req.head` |
-| `req.post` | `POST` | Parsed request body (JSON or form-encoded) |
-| `req.put` | `PUT` | Parsed request body, merged with URI params |
-| `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update |
-| `req.delete` | `DELETE` | Query-string parameters |
-| `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response; `req.get` is this same object |
+| `req.get` | `GET`, `HEAD` | Query-string parameters (`?key=value`) and the route's URL placeholders (`:id` → `req.get.id`); on a `HEAD`, the same object as `req.head` |
+| `req.post` | `POST` | Parsed request body (JSON or form-encoded) and the route's URL placeholders |
+| `req.put` | `PUT` | Parsed request body and the route's URL placeholders |
+| `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update — and the route's URL placeholders |
+| `req.delete` | `DELETE` | Query-string parameters and the route's URL placeholders |
+| `req.head` | `HEAD` | Query-string parameters and the route's URL placeholders — body is suppressed in the response; `req.get` is this same object |
 | `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
