@@ -116,8 +116,10 @@ The deletion timer is per-upload and in-process, so a restart strands every
 part it was holding. When `autoTmpCleanupTimeout` is **armed**, server boot
 also sweeps each configured landing directory (the global default plus every
 group `path`) for staged-shaped `.part` files older than the configured
-timeout, floored at one hour — the same reclaim policy, applied across process
-lifetimes. The sweep is deliberately conservative: exact server-generated name
+timeout plus one hour — the same reclaim policy, applied across process
+lifetimes, with an hour's margin for a staging directory that several nodes
+share (a clock running ahead, or a cached modification time). Before `0.7.6`
+the threshold was the timeout floored at one hour. The sweep is deliberately conservative: exact server-generated name
 shape only, regular files only, symlinks never followed, non-recursive; a
 client-named file is never touched. A boot that finds nothing to reclaim logs
 only at `debug`; at the default `info` level a silent boot means no staged part

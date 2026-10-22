@@ -92,6 +92,23 @@ Data passed to `self.render({ key: value })` is exposed as `page.data` in the te
 {% endblock %}
 ```
 
+### The project's version in a template
+
+Since `0.7.6`, `page.environment.packageVersion` holds the `version` field of your project's
+`package.json`, read once per process. Every render gets it, an action's or a route
+middleware's. It is not set when the project has no `package.json` or no `version` in it, so
+guard it:
+
+```html
+{% if page.environment.packageVersion %}
+  <span class="build">Build {{ page.environment.packageVersion }}</span>
+{% endif %}
+```
+
+`page.environment.gina` is the framework's version. `packageVersion` is not the
+`${projectVersion}` you can write in a configuration file: that one is the `version` of the
+project's gina `manifest.json`, and the two can differ.
+
 ### Layout inheritance
 
 Swig supports [layout inheritance](/templating/swig/syntax#template-inheritance) with `{% extends %}` and `{% block %}`:

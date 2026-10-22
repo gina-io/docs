@@ -254,7 +254,10 @@ Since Gina `v0.7.4`, the filters, tags and extensions your bundle registers thro
 available to the templates the swig loader (`template.swig.loader`) serves, as they are
 to templates on disk. The loader renders through an engine of its own, and Gina passes
 your registrations to it at render time, including those a later request's `setup.js`
-makes.
+makes. Since `v0.7.6` this also holds for a template a route middleware renders, from the
+first request after a boot: the render runs `setup.js` on the bundle's engine when that
+engine has not run it yet (see
+[Rendering a template from a middleware](/guides/middleware#rendering-a-template-from-a-middleware)).
 
 A bundle filter that has the name of one of Gina's own filters (`getUrl`, `getWebroot`,
 `nl2br`, …) does not replace Gina's in a rendered template, on either render path.

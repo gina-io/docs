@@ -48,6 +48,21 @@ covered the placeholder.
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
+### Changed — the boot-time sweep of staged uploads waits for the timeout plus one hour (bundle restart)
+
+With `upload.autoTmpCleanupTimeout` armed, a bundle's boot sweeps its landing directories for
+staged `.part` files a previous process stranded. It now removes a part once its modification
+time is older than the timeout plus one hour; before `0.7.6` the threshold was the timeout
+floored at one hour, which for a timeout of an hour or more is the moment the owning
+process's own timer fires, read on the sweeping node's clock. On a staging directory that
+several nodes share, a clock running ahead or a cached modification time could then remove a
+part its owner still held.
+
+**What to check:** nothing. A part a restart stranded waits one hour longer before the sweep
+removes it.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
 ### Fixed — `req.params` is set on a `DELETE` route whose regex requirements cover its placeholders (bundle restart and re-bake)
 
 On a `DELETE` route whose `requirements` put a regex on every URL placeholder
@@ -75,6 +90,37 @@ placeholder, as the `GET` path does, and sets `req.delete` and `req.params` from
 requirement on every placeholder to work around the `404`, nothing changes for you.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a template a route middleware renders sees the filters `setup.js` registers (bundle restart)
+
+A route middleware that answers with `self.render()` rendered a template that saw none of the
+filters, tags and extensions the bundle registers in `controllers/setup.js` until a request
+had reached a controller action in the same process: the router runs `setup.js` for an
+action request only, after the middlewares. The template answered a `500` `Invalid filter`
+from boot until then, and on every request for a route whose middleware renders them all. A
+swig render now runs `setup.js` on its engine when that engine has not run it yet; an action
+request still runs it once. See
+[Rendering a template from a middleware](/guides/middleware#rendering-a-template-from-a-middleware).
+
+**What to check:** a `setup.js` that does more than register filters, tags and extensions
+(one that reads the request, or answers it) now also runs for the first middleware render
+after a boot — including a request a middleware refuses with a render, such as a login
+wall's, with that request's `req`. A throw there is logged and the render goes on. A filter
+named like one of gina's own still loses to gina's.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Added — `page.environment.packageVersion`, the project's own version (bundle restart)
+
+Templates can read the `version` of the project's `package.json` as
+`page.environment.packageVersion`, read once per process. It is not set when the project has
+no `package.json` or no `version` in it, so guard it with `{% if %}`. It is not the
+`${projectVersion}` of configuration files, which is the version in the gina manifest. See
+[The project's version in a template](/guides/views#the-projects-version-in-a-template).
+
+**What to check:** nothing — the field is new.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
 
 ---
 
