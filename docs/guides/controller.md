@@ -617,7 +617,7 @@ action written for `GET` reads its parameters the same way when it answers a
 | `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update — and the route's URL placeholders |
 | `req.delete` | `DELETE` | Query-string parameters and the route's URL placeholders |
 | `req.head` | `HEAD` | Query-string parameters and the route's URL placeholders — body is suppressed in the response; `req.get` is this same object |
-| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` when the request carries a body (since 0.7.6 also on the first request to a route, where it held only the client's keys) |
+| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` when the request carries an object body (since 0.7.6 also on the first request to a route, where it held only the client's keys); a top-level JSON array body stays the array in `req.body` |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
 :::note How request values are decoded

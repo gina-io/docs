@@ -43,7 +43,8 @@ covered the placeholder.
   placeholder covered by a requirement gave `null` in the method's object.
 - `req.body` is now the same object as `req.post`, `req.put` or `req.patch` on the first
   request to a route too, and holds the URL values there; on that first request it held
-  the client's keys only.
+  the client's keys only. A top-level JSON array body is unchanged: `req.body` keeps the
+  array.
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
