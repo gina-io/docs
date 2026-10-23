@@ -160,9 +160,12 @@ Conditional. Supports `and`, `or`, `not`, comparison operators, `in`, and the `?
 
 ```swig
 {% if user and user.active %}…{% endif %}
-{% if "admin" in user.roles %}…{% endif %}
+{% if "admin" in user.permissions %}…{% endif %}
+{% if user.roles.indexOf("admin") !== -1 %}…{% endif %}
 {% if not items %}Empty.{% endif %}
 ```
+
+`in` tests a key: a property name of an object or an index of an array. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
 
 Branch with [`elseif`](#elseif) / [`else`](#else).
 
