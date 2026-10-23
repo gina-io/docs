@@ -153,6 +153,34 @@ selection, as before, until their reset or delete link is used.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a failed staging, or one still uploading, leaves the files shown working (bundle restart and re-bake)
+
+A new selection on a staged file input now takes the input over when its staging
+succeeds: the preview container is emptied, the replaced files' delete links go, the
+input's reset and delete links act on the new files, and the form's hidden
+`<prefix>[<index>][…]` fields are written, all with the staging answer. Before 0.7.6
+the selection did most of that when the file was chosen:
+
+- a failed staging emptied the preview container, taking the previews of the files
+  still in the form, and any reset or delete link inside it, off the page; a saved
+  file's delete link placed after the container sent no request; and the hidden fields
+  the failed selection had added were submitted empty, beside a saved file's own or as
+  an entry of their own when the saved file had been deleted;
+- while a staging was on the wire, a saved file's delete link sent no request (a console
+  warning named the mismatch), and a staged file's reset also took the new file's
+  hidden fields out of the form, so the form submitted no file while the page showed one.
+
+Since 0.7.6 a failed staging changes nothing but the error it shows, and while a file
+uploads the files shown keep working. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** a page script that reads the new file's hidden fields right after the
+selection, before the staging answers: they are written when the staging succeeds. The
+fields already in the form (a saved file's, or ones you declared) are not touched until
+then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.4 → 0.7.5

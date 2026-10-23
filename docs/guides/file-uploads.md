@@ -537,7 +537,7 @@ Each staged file gets a **Reset** control in the preview container, whether or
 not it has a preview image. Activating it sends a removal request to the reset
 (staged) or delete (saved) action URL, then removes the preview image, the
 control itself, and the file's hidden fields — the generated ones and any you
-declared under its index, which come back with the next selection (see
+declared under its index, which come back with the next file staged (see
 [Persisting the preview](#persisting-the-preview)) — and restores the file
 input's add-affordance. If your markup hides the input (or its wrapper) with a
 CSS class rather than an inline style, name that class in
@@ -652,6 +652,15 @@ delete link goes away too, once the staging succeeds, wherever the link sits.
 Before, a link placed after the preview container stayed on the page and did
 nothing when activated (a console warning named the mismatch).
 
+*Changed in 0.7.6.* The saved file is replaced when the staging succeeds, not when
+the new file is chosen. If the staging fails, the saved file keeps its preview, its
+delete link and its fields, and the form submits it unchanged. While the new file
+is uploading, the saved file's delete link still deletes it. Before, a failed
+staging took the saved file's preview off the page, and its delete link with it
+when the link sat inside the preview container; a link after the container stayed
+but did nothing. The form then submitted empty fields beside the saved file's own,
+and during the upload the delete link did nothing either.
+
 ### Persisting the preview
 
 Your staging route may describe a separate preview variant — a thumbnail it
@@ -698,9 +707,10 @@ Declare only the keys your route returns; a declared sub-field the response does
 not carry is left empty.
 
 A reset or a delete takes the declared sub-fields out of the form with their
-file, and the next selection puts them back, empty, before its staging answer
-fills them. *Changed in 0.7.4:* they used to stay out of the form, so the next
-file's preview was not submitted.
+file, and the next successful staging puts them back and fills them. *Changed in
+0.7.6:* the next selection put them back, empty, before its staging answered, so
+a failed staging left them in the form, empty. *Changed in 0.7.4:* they used to
+stay out of the form, so the next file's preview was not submitted.
 
 *Changed in 0.6.29.* A form that declared no `[preview][...]` sub-fields used to
 receive a flat `<prefix>[0][preview]` field holding the literal text
@@ -829,6 +839,13 @@ and a `reason`: `'unload'` when the page was being navigated away from,
 "did not reach the server", which is false for the proxy and navigation cases,
 and could not be translated.
 
+*Changed in 0.7.6.* A failed staging changes nothing else. The files the input
+held keep their previews, their reset or delete links and their hidden fields,
+and the form submits them as before; the file that failed is not submitted.
+Before, the failure emptied the preview container, taking its previews and any
+link inside it off the page; the links outside it then did nothing, and the
+hidden fields the failed file had added were submitted empty.
+
 ### Choosing another file while one is uploading
 
 *Changed in 0.7.2.* Choosing another file while the input's previous file is
@@ -847,6 +864,15 @@ request may have reached your staging action, which can see a request that ends
 early, or store the file just before the cancel. No submitted form ever claims
 that file — like one staged by a user who then left the page — so clean it up
 the same way.
+
+*Changed in 0.7.6.* While a file is uploading, the files shown keep working: their
+reset or delete link removes them, as it did before the new file was chosen. The
+new file takes the input over when its staging succeeds, and its preview, its
+reset link and its hidden fields appear then. Before, the input already held the
+new file during the upload: a saved file's delete link did nothing (a console
+warning named the mismatch), and a staged file's reset also took the new file's
+hidden fields out of the form, so the form submitted no file while the page
+showed one.
 
 ### Submitting while an upload is in flight
 
