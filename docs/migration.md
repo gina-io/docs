@@ -201,6 +201,24 @@ name your staging answer does not return (`<prefix>[<index>][id]`, say), or leav
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Security — swig's `striptags` filter runs in linear time (bundle restart)
+
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.1` in both of its manifests.
+Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
+text with many `<` and no `>` after them, 100,000 characters took about four seconds, so a
+template that applied `striptags` to request data could be made to block the event loop.
+2.9.1 runs it in linear time with the same output: see swig's
+[2.9.1 release notes](https://github.com/gina-io/swig/blob/v2.9.1/HISTORY.md). Gina's own
+code and templates never call `striptags`.
+
+**What to check:**
+
+- Upgrading gina installs `@rhinostone/swig` 2.9.1 or later.
+- A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
+  frontend through [`swig.package`](/reference/settings#swig), renders with the project's
+  own copy: update it to 2.9.1 or later, which also fixes filters of the Twig, Jinja2 and
+  Django frontends.
+
 ---
 
 ## 0.7.4 → 0.7.5
