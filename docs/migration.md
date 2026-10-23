@@ -181,6 +181,26 @@ then.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a new file's own `name` is submitted when its staging answer carries one (bundle restart and re-bake)
+
+The staging success fills the form's hidden `<prefix>[<index>][…]` fields from the
+staging answer, one key at a time, and filled `name` only while its field was empty. So
+in an edit form that declares `<prefix>[<index>][name]` with the saved file's name,
+choosing a new file submitted the saved file's `name` beside the new file's `location`
+and `originalFilename`, and a second file chosen on the same input submitted the first
+file's `name`. Since 0.7.6 the answer's `name` fills the field like every other key. An
+answer without `name` (the staging answer the
+[uploads guide](/guides/file-uploads#you-provide-the-staging-routes) shows has none)
+leaves the field as it is.
+
+**What to check:** a page or a server that relied on a declared `name` surviving a
+replacement, as a stable key for the saved record for instance, now receives the
+staging answer's `name` when the answer carries one. Keep such a key in a field whose
+name your staging answer does not return (`<prefix>[<index>][id]`, say), or leave
+`name` out of the answer.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.4 → 0.7.5

@@ -661,6 +661,14 @@ when the link sat inside the preview container; a link after the container staye
 but did nothing. The form then submitted empty fields beside the saved file's own,
 and during the upload the delete link did nothing either.
 
+*Changed in 0.7.6.* The staged file's `name` replaces the saved file's when your
+staging answer carries a `name`, as the answer's other keys replace theirs. Before,
+the field kept the saved file's name, so the form submitted it beside the new
+file's location and original filename; a second file chosen on the same input
+likewise submitted the first file's `name`. A key your answer leaves out, `name`
+included, leaves its field as it is: keep a value that a replacement must not
+change, a record id for instance, in a field whose name the answer does not return.
+
 ### Persisting the preview
 
 Your staging route may describe a separate preview variant — a thumbnail it
