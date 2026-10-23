@@ -21,7 +21,7 @@ The matrices below are ground truth: each row maps to a symbol actually exported
 
 ## Operators
 
-Twig-specific operators that `@rhinostone/swig-twig` accepts and the native swig frontend does not:
+Twig operators that `@rhinostone/swig-twig` accepts and the native swig frontend does not, or reads differently:
 
 | Operator | Shape | Semantics | Lowering |
 | --- | --- | --- | --- |
@@ -30,6 +30,8 @@ Twig-specific operators that `@rhinostone/swig-twig` accepts and the native swig
 | `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
 | `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
 | `is not` | `x is not <test>` | Negated predicate. | `!(_ext._test_<name>(...))` |
+| `in` | `x in seq` | Membership, as in Twig (since 2.9.0): a list or a mapping holds a value, compared loosely, and a string holds a string or a number as a substring; any other container gives false. Native swig's `in` tests keys. Unlike PHP Twig, `"" in [0]` is true (JavaScript's `"" == 0`), a list or a mapping inside a list matches only the same object, and a `null` or undefined variable tests like `""`. | `_utils.isIn(x, seq, "twig")` |
+| `not in` | `x not in seq` | The negation of `in`, at the same level (since 2.9.0). | `_utils.isIn(x, seq, "twig", true)` |
 | `#{…}` | `"hello #{name}"` | String interpolation inside double-quoted strings. | Expression replacement during tokenization. |
 
 The `~` operator is Twig's dedicated string-concat operator (`+` in Twig is strictly numeric). `#{…}` works only inside double-quoted strings.

@@ -124,14 +124,6 @@ These forms aren't Django to begin with — they're rejected so a template autho
 
 Django Template Language has **no** whitespace-control markers. `{{- … -}}` / `{%- … -%}` are **not** DTL — they throw at parse time (`Unexpected end of expression` / `Unexpected tag "-"`), rather than silently mis-rendering. Django controls whitespace with `{% spaceless %}` and explicit template structure. (The native swig, Twig, and Jinja2 frontends *do* support `{{- -}}` — Django does not, and neither does this frontend.)
 
-### `not in` operator {#not-in-operator}
-
-The compound `x not in seq` does not parse. Use `not (x in seq)`:
-
-```django
-{% if not (user in blocked) %}…{% endif %}
-```
-
 ### Jinja2-style `is` tests
 
 Django's `is` is an **identity comparison**, not Jinja2's predicate-test mechanism. There is no `is defined` / `is odd` / `is iterable` / `is mapping`. `{% if x is defined %}` compiles to `x === defined` (identity against a variable named `defined`) — almost never what you want. Use:

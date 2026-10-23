@@ -30,7 +30,7 @@ The expression grammar is a **lenient superset** of Django's. It keeps the inher
 | `\|name:arg` | colon-filter | Apply a filter with one positional argument — Django's filter-argument syntax. | The backend emits positional filter args; `\|date:"Y-m-d"` and `\|truncatewords:2` lower the same way. |
 | `==` `!=` `<` `>` `<=` `>=` | comparison | Standard comparisons. | |
 | `and` `or` `not` | logic | Short-circuit boolean logic. | |
-| `in` | `x in seq` | Membership test. | `not in` does **not** parse — use `not (x in seq)`. See [Non-Goals](./non-goals#not-in-operator). |
+| `in` / `not in` | `x in seq`, `x not in seq` | Membership, as in Django (since 2.9.0): a list holds an equal item, a string a substring, a mapping a key. A test Django cannot run, such as a number as the container, is false for both `in` and `not in`, as in Django. Some answers still differ — see [Behavioural differences](#behavioural-differences). | `_utils.isIn(x, seq, "python")`; `not in` binds at the same level as `in`. |
 | `is` / `is not` | `x is None` | Identity comparison (`===` / `!==`), **not** a Jinja2-style test. | `is None` / `is not None` route through the existence check so a missing value is distinguished from a real one. See [The `is` operator](#the-is-operator). |
 | `True` `False` `None` | literals | Python-style boolean and null literals. | Lower to JavaScript `true` / `false` / `null`. |
 | `( )` | grouping | Parenthesised sub-expressions (lenient — real DTL `{% if %}` has no parens). | |
@@ -203,6 +203,7 @@ These behaviours are **supported** but diverge from Django because the JavaScrip
 | Object stringification | Python `str()` / `repr()`. | JavaScript `String(x)` — objects without a custom `toString` render `"[object Object]"`; `null` / `undefined` render `""`. |
 | `date` / `time` | `strftime`-style format codes, locale-aware. | PHP-style codes via the shared `swig-core` formatter; no locale plumbing. Pass an explicit format string. |
 | Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `make_list`, `slice` and `truncatechars` can split one into invalid halves. |
+| `in` and `not in` | Python equality: `True in [1]`, `0 in [False]` and `[1, 2] in [[1, 2]]` are true, and `1 in {'1': 'x'}` is false. `not x in y` is `not (x in y)`. | Membership as in Django since 2.9.0, except: a boolean and a number are different items and a list or a mapping inside a list matches only the same object, so those three are false; a number tests a mapping key with the same digits, so `1 in {"1": "x"}` is true. `not` binds tighter than `in` and the comparisons, so `not x in y` reads as `(not x) in y`: write `x not in y`. |
 
 See [Migrating from Django](./migration) for the porting view of these.
 
