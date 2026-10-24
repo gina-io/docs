@@ -223,23 +223,32 @@ name your staging answer does not return (`<prefix>[<index>][id]`, say), or leav
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
-### Security — swig's `striptags` filter runs in linear time (bundle restart)
+### Security — swig's `striptags` filter runs in linear time, and swig-core caps the ranges it builds (bundle restart)
 
-Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.1` in both of its manifests.
-Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
-text with many `<` and no `>` after them, 100,000 characters took about four seconds, so a
-template that applied `striptags` to request data could be made to block the event loop.
-2.9.1 runs it in linear time with the same output: see swig's
-[2.9.1 release notes](https://github.com/gina-io/swig/blob/v2.9.1/HISTORY.md). Gina's own
-code and templates never call `striptags`.
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.3` in both of its manifests.
+
+- Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
+  text with many `<` and no `>` after them, 100,000 characters took about four seconds, so a
+  template that applied `striptags` to request data could be made to block the event loop.
+  2.9.1 runs it in linear time with the same output: see the advisory
+  [GHSA-rvx7-jqr9-c242](https://github.com/gina-io/swig/security/advisories/GHSA-rvx7-jqr9-c242).
+  Gina's own code and templates never call `striptags`.
+- Up to 2.9.1, `@rhinostone/swig-core` built a range of any size, so a large bound from template
+  data could exhaust the heap: see the advisory
+  [GHSA-f8f4-95q3-38qw](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
+  Native swig has no range syntax, so a bundle that renders with it never reaches that code.
+  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.3 takes your
+  application off the swig-core versions the advisory lists.
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.9.1 or later.
+- Upgrading gina installs `@rhinostone/swig` 2.9.3 or later.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
   frontend through [`swig.package`](/reference/settings#swig), renders with the project's
-  own copy: update it to 2.9.1 or later, which also fixes filters of the Twig, Jinja2 and
-  Django frontends.
+  own copy: update it to 2.9.3 or later, which also fixes the frontends: filters in all three,
+  Twig ranges and `batch`, Jinja2 `slice` and `batch`, and Jinja2 and Django `for` loops.
+
+Server-side only: **restart the bundle**.
 
 ---
 
