@@ -74,7 +74,7 @@ Straight copy-paste — no changes needed:
 - `{{ a + b }}`, `{{ a * b }}`, `{{ a ** b }}`, `{{ a // b }}`, `{{ a ~ b }}` (string concat)
 - `{{ a if cond else b }}` (inline conditional, with or without the `else` arm)
 - `{% if %}` / `{% elif %}` / `{% else %}` / `{% endif %}`
-- `{% for item in items %}` with the `loop.*` variables (`loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`) and the empty-fallback `{% else %}`
+- `{% for item in items %}` with the `loop.*` variables (`loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`) and the empty-fallback `{% else %}`, and loop filters such as `{% for x in xs if x > 1 %}` (since 2.9.4)
 - `{% set foo = 1 %}` including body form `{% set foo %}…{% endset %}`
 - `{% extends "layout.jinja2" %}` with `{% block content %}` overrides (multi-level chains too)
 - `{% include "partial.jinja2" %}` including `with context` / `without context` / `ignore missing`
