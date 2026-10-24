@@ -43,8 +43,8 @@ covered the placeholder.
   placeholder covered by a requirement gave `null` in the method's object.
 - `req.body` is now the same object as `req.post`, `req.put` or `req.patch` on the first
   request to a route too, and holds the URL values there; on that first request it held
-  the client's keys only. A top-level JSON array body is unchanged: `req.body` keeps the
-  array.
+  the client's keys only. A top-level JSON array body: on `POST` and `PATCH` see the Fixed
+  entry below; on `PUT`, `req.put` and `req.body` hold an object keyed by index, as before.
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
@@ -90,6 +90,28 @@ placeholder, as the `GET` path does, and sets `req.delete` and `req.params` from
 requirement on every placeholder to work around the `404`, nothing changes for you.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a top-level JSON array body is the array on every request, a path's first included (bundle restart)
+
+On a `POST` or `PATCH` whose body is a top-level JSON array (`[{"a":"1"},2]`, whatever its
+content type, `application/json` included), the first request to each path reached the
+action with `req.post` / `req.patch` as an object keyed by index (`{ "0": …, "1": … }`), a
+separate object from `req.body`, while every later request to that path got the array
+itself, the same object as `req.body`. On a route with URL placeholders each new value is a
+new path, so the first request for each one got the object, and a `true`, `false` or `on`
+segment beside the array was a boolean on that request only. Since 0.7.6 every request gets
+the array, `req.body` is that array, and the route's URL placeholders are named properties
+of it, with the `true` / `false` / `on` rule above (`JSON.stringify` leaves them out: read
+them by name or from `req.params`). A placeholder named like a property of the array itself
+(`length`, `map`, …) is in `req.params` only.
+
+**What to check:** an action that read such a body by index (`req.post[0]`,
+`Object.keys(req.post)`) works as before; one that used `Array.isArray(req.post)`,
+`req.post.length` or an array method now gets the array on the first request to a path too.
+`req.body` was already the array. A `PUT` is unchanged: `req.put` and `req.body` hold an
+object keyed by index on every request.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
 
 ### Fixed — a template a route middleware renders sees the filters `setup.js` registers (bundle restart)
 
