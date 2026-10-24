@@ -250,7 +250,7 @@ Compiled templates are cached by the loader's resolved filename when `options.ca
 
 _Available since `v2.2.0`._
 
-Pass `{ codegenMode: 'async' }` to opt the compiled body into the async-codegen path. The returned compiled function yields a `Promise<{output, exports}>` instead of a string — async filters, dynamic `{% include %}` paths, and async-only loaders are all reachable from this shape. Use against a loader that sets `loader.async === true`.
+Pass `{ codegenMode: 'async' }` to opt the compiled body into the async-codegen path. The returned compiled function yields a `Promise<{output, exports}>` instead of a string — dynamic `{% include %}` paths and async-only loaders are both reachable from this shape. Filters are not awaited, so a filter must return its value, not a Promise. Use against a loader that sets `loader.async === true`.
 
 ```js
 swig.compileFile('page.html', { codegenMode: 'async' }, function (err, fn) {
