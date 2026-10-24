@@ -168,6 +168,8 @@ When your templates live behind an asynchronous source — S3, Redis, a CDN, an 
 
 Available since `v2.2.0`, the cb form of [`renderFile(path, locals, cb)`](./api#renderfile) and [`compileFile(path, { codegenMode: 'async' }, cb)`](./api#async-codegen) closes the gap. Set `loader.async === true` on the loader object and the dispatch automatically routes through the async-codegen path: the compiled body is an `AsyncFunction`, and each nested template (the `extends` parent, an `include`, an `import` / `from` source) is resolved **at render time** through the user loader's `load(id, cb)` arm via `_swig.getTemplate(path)`, awaiting each as it is reached.
 
+Since `v2.9.4` this holds wherever the tag sits: an `{% include %}`, `{% import %}`, `{% from %}` or `{% block %}` inside a for loop (its else or empty branch too), a with, a filter or apply tag, a set block or a Django spaceless block renders as on the sync path, in every flavor that has those tags; before, such a template failed on this path. The loop runs its items one after another, so the loop variables and `loop.*` (Django `forloop.*`) keep their values. A macro whose body holds one of those tags is not supported on this path: calling it throws an error that names the macro and its template, and a template that only defines it renders. Move the tag out of the macro, to where the macro is called.
+
 Dispatch is **explicit-flag only** — `load.length` is not consulted. The built-in dual-mode loaders (`swig.loaders.fs()` and `swig.loaders.memory()`) keep their existing sync-cb path. Opt-in is per-loader via the `async: true` flag.
 
 ### Dynamic paths
