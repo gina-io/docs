@@ -55,6 +55,22 @@ flowchart LR
 
 **Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
 
+### GHSA-f8f4-95q3-38qw — array size from template data in ranges, `batch` and `slice` {#ghsa-f8f4-95q3-38qw}
+
+**Affected:** `@rhinostone/swig-twig` from `2.0.0-alpha.3`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-core` from `2.0.0-alpha.5`, each before `2.9.2`. High, CWE-789 and CWE-835, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
+
+**Root cause:** a swig-twig range `a..b`, the padding of `batch` (swig-twig and swig-jinja2) and the columns of swig-jinja2 `slice` built an array whose length came from a number in the data, so a large number exhausted the heap and aborted the process; under a 256 MB heap `1e8` (a `slice` count of `1e7`) did so within a second. A range whose values reach 2^53 never ended, since adding 1 no longer changes a JavaScript number. Reaching any of these takes an application that passes request data into the bound, the size or the count. Native swig and swig-django have none of these features.
+
+**Fixed in `2.9.2`:** a range of more than 1,000,000 elements is empty, as for an infinite bound; `slice` with more than 1,000,000 columns returns an empty list; `batch` leaves the last chunk unpadded for a size above 1,000,000. See the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
+
+### GHSA-rvx7-jqr9-c242 — quadratic-time regular expressions in `striptags`, `trim` and other filters {#ghsa-rvx7-jqr9-c242}
+
+**Affected:** `@rhinostone/swig` before `2.9.1` (`striptags`, every release), `@rhinostone/swig-twig` from `2.0.0-alpha.3`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-django` from `2.7.0`, each before `2.9.1`. High, CWE-1333, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
+
+**Root cause:** several filters used regular expressions that take time quadratic in the length of their input on some inputs: `striptags` in every flavor on text with many `<` and no `>` after them, `trim` in swig-twig and swig-jinja2 on a long run of the trimmed characters inside the text, swig-jinja2 `format` on a `%` followed by a long run of zeros, and swig-django `truncatewords`, `pluralize`, `slugify` and `floatformat`. On 100 000 characters each blocked the event loop for seconds. Reaching one takes an application that applies the filter to request data.
+
+**Fixed in `2.9.1`:** the filters run in linear time with the same output. See the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-rvx7-jqr9-c242).
+
 ### GHSA-q89c-947c-m7xr — code execution through the template filename {#ghsa-q89c-947c-m7xr}
 
 **Affected:** all five packages before `2.8.3`, including the 1.x line. Critical, CWE-94, CVSS 9.8 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`).
