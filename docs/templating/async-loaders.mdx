@@ -282,6 +282,17 @@ flowchart TD
 The engine resolves the page template and every nested `extends` / `include` /
 `import` through the loader, so an entire template tree can live off-disk.
 
+:::note Tags inside a swig macro
+With swig, this holds everywhere except inside a `{% macro %}` body: a macro that holds an
+`{% include %}`, `{% import %}` or `{% block %}` throws when it is called, with an error that
+names the macro and its template, and a template that only defines it still renders. Move the
+tag to where the macro is called. Inside a `{% for %}` loop or a `{% filter %}` tag these tags
+resolve through the loader like anywhere else. This is the behaviour of `@rhinostone/swig`
+`2.9.4`, which Gina requires since `v0.7.6`; with swig `2.9.3` or earlier, a template with one
+of these tags inside a loop, a filter or a macro failed to compile on this path. See
+[Swig loaders](/templating/swig/loaders#async-loaders).
+:::
+
 ## Security
 
 A loader sits between your bundle and a backend you may not fully control, so

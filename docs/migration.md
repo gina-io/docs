@@ -246,7 +246,8 @@ Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:b
 
 ### Security — swig's `striptags` filter runs in linear time, and swig-core caps the ranges it builds (bundle restart)
 
-Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.3` in both of its manifests.
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.4` in both of its manifests
+(2.9.4 also changes two render paths: see the next entry).
 
 - Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
   text with many `<` and no `>` after them, 100,000 characters took about four seconds, so a
@@ -258,16 +259,45 @@ Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.3` in both of its
   data could exhaust the heap: see the advisory
   [GHSA-f8f4-95q3-38qw](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
   Native swig has no range syntax, so a bundle that renders with it never reaches that code.
-  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.3 takes your
+  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.4 takes your
   application off the swig-core versions the advisory lists.
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.9.3 or later.
+- Upgrading gina installs `@rhinostone/swig` 2.9.4 or later.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
   frontend through [`swig.package`](/reference/settings#swig), renders with the project's
-  own copy: update it to 2.9.3 or later, which also fixes the frontends: filters in all three,
+  own copy: update it to 2.9.4 or later; 2.9.3 also fixed the frontends: filters in all three,
   Twig ranges and `batch`, Jinja2 `slice` and `batch`, and Jinja2 and Django `for` loops.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — swig keeps the output before an `{% import %}`, and async-loader templates render includes inside loops (bundle restart)
+
+Up to 2.9.3, [`@rhinostone/swig`](/templating/swig) had two defects that 2.9.4, which Gina now
+requires, fixes:
+
+- On the default render path, swig dropped what a template had rendered before an
+  `{% import %}`: the output above the tag, the layout's output before a block of an extends
+  child that holds one, every item of a `for` loop that holds one, and a macro's output before
+  the tag. An import at the very top of a template was not affected. 2.9.4 keeps that output.
+- With an [async template loader](/templating/async-loaders) (`settings.template.swig.loader`),
+  a template with an `{% include %}` or `{% import %}` inside a `for` loop or a `filter` tag,
+  or with an `{% include %}`, `{% import %}` or `{% block %}` anywhere in a macro body, failed to
+  compile, even when the macro was never called. 2.9.4 renders the loop and filter cases and a template that only defines such a
+  macro; calling the macro throws an error that names it and its template.
+
+**What to check:**
+
+- A template whose `{% import %}` follows other output now renders that output. Most often it is
+  a comment and blank lines above the import, which now come out as blank lines at the start of
+  the template's output: check an answer whose leading whitespace matters, for instance an HTML
+  fragment a script inserts and then reads with `firstChild`.
+- With an async template loader, move an `{% include %}`, `{% import %}` or `{% block %}` out of
+  a macro body, to where the macro is called: calling such a macro throws.
+- A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a frontend
+  through [`swig.package`](/reference/settings#swig), renders with the project's own copy:
+  update it to 2.9.4 or later.
 
 Server-side only: **restart the bundle**.
 
