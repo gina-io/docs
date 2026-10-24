@@ -148,8 +148,8 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 | `sort` | 0/1 | Sorted copy; pass a truthy argument for descending. |
 | `list` | 0 | Coerce to a list — string → characters, mapping → keys. |
 | `unique` | 0/1 | Unique items, first-seen order; case-insensitive for strings by default. |
-| `batch` | 1/2 | Chunk into rows of N; optional pad value for the last row. |
-| `slice` | 1/2 | Distribute across N columns (the inverse of `batch` — distinct from the `seq[::]` subscript). |
+| `batch` | 1/2 | Chunk into rows of N; optional pad value for the last row. A size above 1,000,000 leaves the last row unpadded (since 2.9.2). |
+| `slice` | 1/2 | Distribute across N columns (the inverse of `batch` — distinct from the `seq[::]` subscript). More than 1,000,000 columns give an empty list (since 2.9.2). |
 | `dictsort` | 0–3 | Sort a mapping into `[key, value]` pairs by key (or value), case-insensitive by default. |
 | `groupby` | 1 | Group a sequence of objects by a (dotted) attribute into `{ grouper, list }` records. |
 | `min` / `max` | 0/1 | Smallest / largest item; case-insensitive string compare by default. |

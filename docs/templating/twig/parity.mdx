@@ -26,7 +26,7 @@ Twig operators that `@rhinostone/swig-twig` accepts and the native swig frontend
 | Operator | Shape | Semantics | Lowering |
 | --- | --- | --- | --- |
 | `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
-| `..` | `a..b` | Integer or single-character range. | `_utils.range(a, b)` |
+| `..` | `a..b` | Integer or single-character range. A numeric range with an infinite bound (since 2.8.2) or of more than 1,000,000 elements (since 2.9.2) is empty; from 2^53 on, adding 1 no longer changes a JavaScript number, so a range whose values reach 2^53 counts as too long. | `_utils.range(a, b)` |
 | `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
 | `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
 | `is not` | `x is not <test>` | Negated predicate. | `!(_ext._test_<name>(...))` |
@@ -134,7 +134,7 @@ These are new to `swig-twig` and match upstream Twig semantics where possible:
 
 | Filter | Arity | Notes |
 | --- | --- | --- |
-| `batch` | 1/2 | Chunk an array into groups of N. Optional pad value for the final group. |
+| `batch` | 1/2 | Chunk an array into groups of N. Optional pad value for the final group. A size above 1,000,000 leaves the final group unpadded (since 2.9.2). |
 | `default` | 1 | Fallback value when the input is `undefined`, `null`, or `''`. |
 | `format` | N | `printf`-style format — delegates to a vendored formatter. |
 | `keys` | 0 | `Object.keys(input)`. |
