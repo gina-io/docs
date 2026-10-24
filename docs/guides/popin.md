@@ -284,6 +284,24 @@ An element of the answer carrying
 page **behind** the dialog, wherever the rest of the answer goes. If the answer
 held nothing else, the dialog keeps its own content rather than being blanked.
 
+### Links inside popins
+
+A link in the content (an `<a href>` with no `id`, no `#` in its URL and no `target`)
+loads its page into the same popin instead of navigating the page. A link with a
+`target` opens that window as usual, and an element carrying `gina-popin-close`
+closes the popin.
+
+While such a load is in flight, the popin waits for the page the user asked for:
+`gina.popin.close(name)` and a form's `close()` are ignored until it lands or fails.
+Escape and the close button still close the popin, and the late answer is then
+dropped. Once the load has settled, every close works.
+
+*Fixed in 0.7.6:* after such a load, Escape closed the `<dialog>` while the popin
+stayed open, its trigger could no longer show it, and `gina.popin.close(name)`, a
+form's `close()` and a [client navigation](/guides/client-navigation#after-a-swap)
+did nothing. A close during the load let the late answer fill the closed popin, or
+reopen it.
+
 ## Loading state
 
 While a popin loads, the trigger carries a loading attribute and the container

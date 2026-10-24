@@ -223,6 +223,27 @@ name your staging answer does not return (`<prefix>[<index>][id]`, say), or leav
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a popin closes after a link inside it loaded a page (bundle restart and re-bake)
+
+A plain link in popin content loads its page into the same popin (see
+[Links inside popins](/guides/popin#links-inside-popins)). After such a load, landed or
+failed, Escape closed the `<dialog>` while the popin stayed open for Gina: no `close`
+event fired, and its trigger could no longer show it. Escape on a non-modal popin did
+nothing, and `gina.popin.close(name)`, a form's `close()` and a
+[client navigation](/guides/client-navigation#after-a-swap) (which closes the open popin
+through that call) did nothing at all. The same followed a `gina.popin.load()` of an
+open popin, a link load into a `data-gina-dialog-target` popin, a link with a `target`,
+and a form's redirect into its own popin. A close while such a load was in flight let
+the late answer fill the closed popin, or reopen a declarative one. Since 0.7.6 every
+close works once the load has settled, Escape and the close button also close while it
+is in flight, and a close drops the late answer.
+
+**What to check:** nothing in most pages. While a link's load is in flight,
+`gina.popin.close(name)` and a form's `close()` are still ignored: the popin waits for
+the page the user asked for.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Security — swig's `striptags` filter runs in linear time, and swig-core caps the ranges it builds (bundle restart)
 
 Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.3` in both of its manifests.
