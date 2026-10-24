@@ -81,7 +81,7 @@ A call that throws resolves to `undefined` (renders `""`), mirroring Django's `s
 | Tag | Ends | Notes |
 | --- | --- | --- |
 | `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains and `and`/`or`/`not`/`in`/`is` conditions. |
-| `for` / `empty` / `endfor` | Yes | `forloop.counter`/`counter0`/`revcounter`/`revcounter0`/`first`/`last`/`parentloop`, empty-fallback `{% empty %}`, two-variable unpack `{% for k, v in mapping %}`, and dict pseudo-methods `{% for k, v in d.items %}` / `d.keys` / `d.values`. The `reversed` modifier is [deferred](./non-goals#deferred-tag-forms). Loop variables containing `.` are rejected (prototype-chain guard). |
+| `for` / `empty` / `endfor` | Yes | `forloop.counter`/`counter0`/`revcounter`/`revcounter0`/`first`/`last`/`parentloop`, empty-fallback `{% empty %}`, and dict pseudo-methods `{% for k, v in d.items %}` / `d.keys` / `d.values`. One loop variable over a dict binds each key and two over a list unpack each item, as in Django, so `{% for k, v in pairs %}` binds the key and the value (since 2.9.3; before, one variable over a dict bound each value and two over a list bound the index and the item). Two loop variables over a dict give the key and the value, a swig extension (see [Behavioural differences](#behavioural-differences)). The `reversed` modifier is [deferred](./non-goals#deferred-tag-forms). Loop variables containing `.` are rejected (prototype-chain guard). |
 | `block` / `endblock` | Yes | Named block for template inheritance. `{% endblock name %}` accepted. `{{ block.super }}` is [deferred](./non-goals#deferred-tag-forms). |
 | `extends` | No | Static (`{% extends "base.django" %}`) and dynamic (`{% extends layout_var %}`) — the dynamic form resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | `{% include "partial.django" %}` with Django's space-separated `with k=v` context and trailing `only` for isolation. No `ignore missing` (Django raises) — see [Behavioural differences](#behavioural-differences). |
@@ -191,8 +191,8 @@ These behaviours are **supported** but diverge from Django because the JavaScrip
 
 | Area | Django | `@rhinostone/swig-django` |
 | --- | --- | --- |
-| `{% for k, v in pairs %}` over a list of pairs | Unpacks each pair into `k` and `v`. | Binds `k` to the index and `v` to the pair. Index the pair instead: `{% for p in pairs %}{{ p.0 }}={{ p.1 }}{% endfor %}`. |
-| `{% for x in mapping %}` (single var) | Iterates the dict's **keys**. | Iterates the dict's **values** (swig object iteration). Use `{% for k in d.keys %}` for keys, `{% for k, v in d.items %}` for pairs. |
+| `{% for k, v in d %}` over a dict, without `.items` | Iterates the keys and unpacks each one, so it raises unless every key has two characters. | Gives the key and the value, as `{% for k, v in d.items %}` does. |
+| `{% for k, v in items %}` where an item does not hold two values | Raises a `ValueError` (`Need 2 values to unpack in for loop`). | Binds what the item holds (since 2.9.3): a missing value renders empty, extra values are ignored, and an item that is not a list, a string or a mapping binds nothing. |
 | `forloop.length` | No such field. | Present (swig exposes it) — harmless extra acceptance. |
 | `default` on `""` | Substitutes (the value is falsy). | Same — substitutes. A missing variable also arrives as `""` after engine coercion, so `default` fires on it too. |
 | `{{ True }}` / `{{ False }}` | Render `"True"` / `"False"`. | Render `"true"` / `"false"` (JavaScript booleans). Rarely output directly; in conditions they behave correctly. |

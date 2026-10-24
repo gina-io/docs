@@ -30,7 +30,7 @@ flowchart TD
   D -->|Yes| H[Project / pre-format in the controller]
   D -->|No| E{Uses block.super, the reversed for-modifier, or cycle/firstof as?}
   E -->|Yes| I[Restructure - see Non-Goals]
-  E -->|No| J{Relies on single-var dict iteration, or renders True/None directly?}
+  E -->|No| J{Renders True/None directly?}
   J -->|Yes| K[Review behavioural deltas]
   J -->|No| OK[Template ports as-is]
   F --> OK
@@ -93,9 +93,8 @@ Straight copy-paste — no changes needed:
 
 ### Dict iteration
 
-Django auto-calls `.items` / `.keys` / `.values` (no parens), and so does swig-django — `{% for k, v in d.items %}` ports as-is. Two deltas:
+Django auto-calls `.items` / `.keys` / `.values` (no parens), and so does swig-django — `{% for k, v in d.items %}` ports as-is, and `{% for x in mydict %}` iterates the dict's keys, as in Django (since 2.9.3; it iterated the values before). One delta:
 
-- **Single-variable iteration yields values, not keys.** `{% for x in mydict %}` iterates the dict's **values** here (Django iterates keys). Use `{% for k in mydict.keys %}` if you want keys.
 - **A single loop variable on `.items` isn't supported** — `{% for pair in d.items %}` throws; use two variables `{% for k, v in d.items %}`.
 
 ```django

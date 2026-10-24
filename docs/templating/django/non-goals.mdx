@@ -22,7 +22,7 @@ The rejections fall into four buckets:
 - **Deferred.** Design work awaiting demand — [open an issue](https://github.com/gina-io/swig/issues) if you hit one.
 - **Not DTL syntax.** Forms that aren't Django to begin with (or were removed from Django).
 
-Behaviours that are *supported but differ* from Django (single-variable dict iteration yielding values, `{{ True }}` rendering `"true"`, `forloop.length` existing, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
+Behaviours that are *supported but differ* from Django (two loop variables over a dict giving the key and the value, `{{ True }}` rendering `"true"`, `forloop.length` existing, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
 
 ## Won't support (security)
 
