@@ -304,6 +304,20 @@ looks for its delete link.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — a click inside a popin link with a `target` opens that window (bundle restart and re-bake)
+
+A link with a `target` in popin content opens that window (see
+[Links inside popins](/guides/popin#links-inside-popins)). A click on an element inside
+such a link, an icon or a `<span>` label, loaded the link's page into the popin instead:
+the popin read the link's `href` and `target` from the element clicked, which carries
+neither. Since 0.7.6 it reads them from the link itself, so the window opens wherever the
+click lands inside it.
+
+**What to check:** nothing in most pages. A plain link (no `id`, no `#` and no `target`)
+still loads its page into the same popin, whichever element inside it is clicked.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a popin closes after a link inside it loaded a page (bundle restart and re-bake)
 
 A plain link in popin content loads its page into the same popin (see

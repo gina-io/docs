@@ -302,6 +302,9 @@ form's `close()` and a [client navigation](/guides/client-navigation#after-a-swa
 did nothing. A close during the load let the late answer fill the closed popin, or
 reopen it.
 
+*Fixed in 0.7.6:* a click on an element inside a link with a `target` (an icon, or a
+`<span>` label) loaded the link's page into the popin instead of opening that window.
+
 ## Loading state
 
 While a popin loads, the trigger carries a loading attribute and the container
