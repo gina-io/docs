@@ -105,6 +105,8 @@ Declares a parent template. Must be the first statement in the child template.
 
 The parent path may be **dynamic** — `{% extends layout_var %}` or any expression — but a dynamic parent resolves only on the [async render path](./loaders#async-loaders) (`renderFile(path, locals, cb)` against a loader with `loader.async === true`). On the synchronous render path the parent is resolved at compile time, so it must be a string literal.
 
+An extends cycle (`a.html` extends `b.html`, which extends `a.html`) fails with `Illegal circular extends of "<name>".` on both render paths. On the async render path, where it fails since `2.9.5`, a dynamic parent that names the template itself fails the same way.
+
 The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `macro`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
 
 ## filter
@@ -226,6 +228,8 @@ Suppress errors for missing files with `ignore missing`:
 ```
 
 Files are resolved through the active [loader](./loaders).
+
+A template may include itself, for a recursive structure such as a tree, as long as the recursion ends. On the async render path a render fails once 1000 templates are in progress (since `2.9.5`, see [Async loaders](./loaders#async-loaders)); on the sync render path a deep recursion ends at the JavaScript stack limit.
 
 ## macro
 
