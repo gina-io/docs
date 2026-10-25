@@ -63,6 +63,36 @@ removes it.
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
+### Changed — an HTTP/2 `self.query()` that reaches its `requestTimeout` fails at once and is not sent again (bundle restart)
+
+A `self.query()` to an HTTP/2 upstream that gets no response within its `requestTimeout`
+now fails with `TIMEOUT` at that moment, and only its own stream is cancelled. A connected
+session is kept, and the next call checks it with a pre-flight PING before using it; a
+session that never finished connecting is dropped, and the next call opens a new one.
+Before 0.7.6 the timeout destroyed the session and sent a safe method (or a call with
+`retryUnsafe: true`) up to twice more: a slow but live upstream ran the same action three
+times while the caller waited three timeouts plus half a second, every other request in
+flight on that session failed with a 500 that carried no error code, and a call waiting on
+a session that never connected raised an uncaught `ERR_HTTP2_STREAM_CANCEL`. HTTP/1.1 calls
+are unchanged.
+
+**What to check:**
+
+- A call that a second attempt used to save now fails with `TIMEOUT`: an upstream that
+  answers slowly once (a cache warming up), a connection lost during the call when
+  `requestTimeout` is shorter than about 8 seconds (the next call recovers), and a call
+  with `retryUnsafe: true`. Raise `requestTimeout` for a slow upstream, or retry in the
+  action where a second attempt is safe.
+- Each timeout sends an `RST_STREAM`, which the upstream counts: more than
+  `http2Options.maxStreamResetsPerSecond` (default 200) within one second on one session
+  make an Isaac upstream close that session with a warning, and an upstream running on
+  Node.js also closes it at a sustained rate above 33 per second, once the runtime's
+  budget of 1,000 resets is spent (`streamResetBurst` / `streamResetRate`). Raise the
+  limits on the upstream, or set `server.query.http2SessionPool` on the caller; see
+  [HTTP/2 client resilience](/guides/http2-resilience).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
 ### Fixed — `req.params` is set on a `DELETE` route whose regex requirements cover its placeholders (bundle restart and re-bake)
 
 On a `DELETE` route whose `requirements` put a regex on every URL placeholder
