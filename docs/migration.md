@@ -103,13 +103,14 @@ segment beside the array was a boolean on that request only. Since 0.7.6 every r
 the array, `req.body` is that array, and the route's URL placeholders are named properties
 of it, with the `true` / `false` / `on` rule above (`JSON.stringify` leaves them out: read
 them by name or from `req.params`). A placeholder named like a property of the array itself
-(`length`, `map`, …) is in `req.params` only.
+(`length`, `map`, …) or with digits only (`:5`) is in `req.params` only, on every request.
 
 **What to check:** an action that read such a body by index (`req.post[0]`,
 `Object.keys(req.post)`) works as before; one that used `Array.isArray(req.post)`,
 `req.post.length` or an array method now gets the array on the first request to a path too.
-`req.body` was already the array. A `PUT` is unchanged: `req.put` and `req.body` hold an
-object keyed by index on every request.
+`req.body` was already the array, except an empty one: an empty JSON document (`[]`, or `{}`)
+leaves `req.body` the request's text, while `req.post` / `req.patch` holds the parsed value.
+A `PUT` is unchanged: `req.put` and `req.body` hold an object keyed by index on every request.
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
