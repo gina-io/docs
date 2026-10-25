@@ -66,9 +66,11 @@ Server-side only: **restart the bundle** (no re-bake for this change).
 ### Changed — an HTTP/2 `self.query()` that reaches its `requestTimeout` fails at once and is not sent again (bundle restart)
 
 A `self.query()` to an HTTP/2 upstream that gets no response within its `requestTimeout`
-now fails with `TIMEOUT` at that moment, and only its own stream is cancelled. A connected
-session is kept, and the next call checks it with a pre-flight PING before using it; a
-session that never finished connecting is dropped, and the next call opens a new one.
+now fails with `TIMEOUT` at that moment, and on a connected session only its own stream is
+cancelled. A connected session is kept, and the next call checks it with a pre-flight PING
+before using it; a session that never finished connecting is dropped, the next call opens a
+new one, and the calls that were waiting on it, never sent, are sent again on a new session
+(next entry).
 Before 0.7.6 the timeout destroyed the session and sent a safe method (or a call with
 `retryUnsafe: true`) up to twice more: a slow but live upstream ran the same action three
 times while the caller waited three timeouts plus half a second, every other request in
@@ -89,6 +91,35 @@ are unchanged.
   Node.js also closes it at a sustained rate above 33 per second, once the runtime's
   budget of 1,000 resets is spent (`streamResetBurst` / `streamResetRate`). Raise the
   limits on the upstream, or set `server.query.http2SessionPool` on the caller; see
+  [HTTP/2 client resilience](/guides/http2-resilience).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — an HTTP/2 `self.query()` retry leaves the other calls on its session alone, and a call never sent is sent again (bundle restart)
+
+A `self.query()` call over HTTP/2 that is retried after a 502, a stream error or a stream
+that ended early now leaves its session to the other calls in flight on it: the session is
+dropped from the cache and closed once they have answered. Before 0.7.6 the retry
+destroyed the session, and those calls failed with a 500. A call that was never sent —
+still waiting for a session that never connected when Gina dropped that session, at
+another call's timeout or, on Bun, at the keepalive deadline — is now sent again on a new
+session, whatever its method (on Bun it failed with a 500). A stream that ends without its
+response (a reset before any response, or its session destroyed under it) now follows the
+premature-close rule: a safe method, or a call with `retryUnsafe: true`, is sent up to
+twice more, then the call fails with `PREMATURE_CLOSE` (503); before, it came back as
+`{ status: 200, empty: true }` or as a 500. On Bun 1.2 and 1.3, an empty response now comes
+back as `{ status: 200, empty: true }` as on Node.js, where it was a 500, and a refused
+connection or a failed TLS handshake gets its typed error (`ECONNREFUSED` 503,
+`STREAM_ERROR` 500), not retried.
+
+**What to check:**
+
+- An upstream that resets a stream before answering (with `NO_ERROR`, or on Bun with any
+  code) now receives a safe method up to three times, and the caller gets `PREMATURE_CLOSE`
+  where it used to get an empty success (a 500 on Bun 1.2 and 1.3).
+- On Bun 1.2 and 1.3, an empty response that completes while its session is being closed
+  after another call's retry is read as incomplete: a safe method is sent again, an unsafe
+  one fails with `PREMATURE_CLOSE`. Node.js and Bun 1.4 are not affected. See
   [HTTP/2 client resilience](/guides/http2-resilience).
 
 Server-side only: **restart the bundle** (no re-bake for this change).
