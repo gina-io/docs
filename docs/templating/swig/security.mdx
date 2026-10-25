@@ -55,6 +55,22 @@ flowchart LR
 
 **Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
 
+### GHSA-86pr-x856-xrq5 — templates that include, import or extend themselves on the async render path {#ghsa-86pr-x856-xrq5}
+
+**Affected:** `@rhinostone/swig`, `@rhinostone/swig-core` and `@rhinostone/swig-twig` from `2.2.0`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-django` from `2.7.0`, each before `2.9.5`. High, CWE-674 and CWE-400, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
+
+**Root cause:** on the [async render path](./loaders#async-loaders) (`renderFile(path, locals, cb)` with a loader that sets `loader.async`, or `compileFile` with `codegenMode: 'async'`) nothing limited how deeply templates could nest. A template that includes, imports or extends itself, directly or through other templates, therefore loaded templates until the heap ran out and the process aborted; under a 64 MB heap `2.9.4` aborted after 11 to 14 seconds. Reaching it from a request takes an application that puts request data into an include or extends path; a template mistake reaches it without any. The sync render path ends these renders and was not affected.
+
+**Fixed in `2.9.5`:** each top-level async render counts the templates it has in progress, and loading a template while 1000 are in progress fails the render with an error that names it; an extends cycle fails at once with the sync path's `Illegal circular extends` error. See [Async loaders](./loaders#async-loaders) and the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-86pr-x856-xrq5).
+
+### GHSA-g628-5x3r-g298 — a nested block override shown on other pages through the compile cache {#ghsa-g628-5x3r-g298}
+
+**Affected:** every release of `@rhinostone/swig`, `@rhinostone/swig-core`, `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` before `2.9.5`; the code dates from the original swig 1.4.2. Medium, CWE-668, CVSS 6.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N`).
+
+**Root cause:** with the default memory cache, a page that extends a layout used the layout's cached parse tree as its parent, and the block remap rewrote that cached tree. Once the layout was in the compile cache (compiled, rendered or included on its own), or the middle template of a three-level chain had been rendered as a page, the first page that overrode a block nested inside another block or tag (an `if`, a `for` loop) put its block into the cached layout, and every page compiled later that did not override that block rendered it until the cache was cleared. The leaked block renders with the data of the page that shows it; what leaks is template content written for another page, such as a block only administrators should see. In native swig the same shared parent made `{% parent %}` in a middle template that was in the compile cache render that template's block twice.
+
+**Fixed in `2.9.5`:** a parent taken from the compile cache is copied before its blocks are remapped, and the copy carries the parent's file name. See [Cache keys](./loaders#cache-keys) and the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-g628-5x3r-g298).
+
 ### GHSA-f8f4-95q3-38qw — array size from template data in ranges, `batch` and `slice` {#ghsa-f8f4-95q3-38qw}
 
 **Affected:** `@rhinostone/swig-twig` from `2.0.0-alpha.3`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-core` from `2.0.0-alpha.5`, each before `2.9.2`. High, CWE-789 and CWE-835, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
