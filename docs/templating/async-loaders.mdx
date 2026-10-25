@@ -234,7 +234,11 @@ re-*compiling* it. Use either or both.
 *not* share request state — the web root, generated URLs and locale resolved by
 the `getUrl` / `getWebroot` / `t` filters are bound to each request at render
 time, so concurrent requests through a shared engine never see one another's
-context.
+context. With swig, each render also works on its own copy of the data: since `v0.7.6`
+Gina copies a plain object an action passes for each render, and swig `2.9.6` renders
+on a copy made at the top of each render, so a name one render sets (`{% set %}`, a
+macro, an import) does not reach another. A dotted set (`{% set site.user = who %}`)
+still writes into the nested object it names.
 
 **Development always recompiles.** `cache` has no effect in development (dev
 mode): edits to an inline map or a remote template are picked up on the next
@@ -284,11 +288,11 @@ The engine resolves the page template and every nested `extends` / `include` /
 
 :::note Tags inside a swig macro
 With swig, this holds everywhere except inside a `{% macro %}` body: a macro that holds an
-`{% include %}`, `{% import %}` or `{% block %}` throws when it is called, with an error that
+`{% include %}`, `{% import %}` or `{% block %}`, or since swig `2.9.6` a `{% parent %}`, throws when it is called, with an error that
 names the macro and its template, and a template that only defines it still renders. Move the
 tag to where the macro is called. Inside a `{% for %}` loop or a `{% filter %}` tag these tags
 resolve through the loader like anywhere else. This is the behaviour of `@rhinostone/swig`
-`2.9.4` and later (Gina requires `2.9.5` since `v0.7.6`); with swig `2.9.3` or earlier, a template with one
+`2.9.4` and later (Gina requires `2.9.6` since `v0.7.6`); with swig `2.9.3` or earlier, a template with one
 of these tags inside a loop, a filter or a macro failed to compile on this path. See
 [Swig loaders](/templating/swig/loaders#async-loaders).
 :::
@@ -311,7 +315,7 @@ Gina applies guards on every resolve:
   directly or through another template, fails its render once more than 1,000
   templates are nested, with an error that names the template, and an `extends`
   cycle fails at once with `Illegal circular extends`. This is the behaviour of
-  `@rhinostone/swig` `2.9.5`, which Gina requires since `v0.7.6`; up to `2.9.4`
+  `@rhinostone/swig` `2.9.5` and later (Gina requires `2.9.6` since `v0.7.6`); up to `2.9.4`
   such a render loaded templates until the heap ran out and the process aborted
   (advisory [GHSA-86pr-x856-xrq5](/templating/swig/security#ghsa-86pr-x856-xrq5)).
 - **Host allowlist and TLS are your responsibility.** Gina fetches from whatever

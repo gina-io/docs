@@ -427,9 +427,9 @@ one level deep (its members are shared); the response body is unchanged.
 
 Server-side only: **restart the bundle**.
 
-### Security — swig bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
+### Security — swig renders on a copy of the data it is given, bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
 
-Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.5` in both of its manifests
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.6` in both of its manifests
 (2.9.4 also changes two render paths: see the next entry).
 
 - Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
@@ -442,7 +442,7 @@ Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.5` in both of its
   data could exhaust the heap: see the advisory
   [GHSA-f8f4-95q3-38qw](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
   Native swig has no range syntax, so a bundle that renders with it never reaches that code.
-  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.5 takes your
+  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.6 takes your
   application off the swig-core versions the advisory lists.
 - Up to 2.9.4, nothing bounded how deeply templates nested on swig's async render path, so a
   template that includes, imports or extends itself, directly or through another template, loaded
@@ -457,15 +457,32 @@ Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.5` in both of its
   [GHSA-g628-5x3r-g298](https://github.com/gina-io/swig/security/advisories/GHSA-g628-5x3r-g298).
   Gina builds the engines of both its render paths with `cache: false`, so a bundle's rendering
   never reaches that code; code of your own that compiles with swig and `cache: 'memory'` does.
+- Up to 2.9.5, swig rendered on the data object it was given, so a name a template set
+  (`{% set %}`, a macro, an import, a loop variable) landed in that object, and a later render
+  given the same object read it; with swig's memory compile cache, a compile given data in its
+  options kept it for later compiles of the same file: see the advisory
+  [GHSA-25w8-77gg-4ccw](https://github.com/gina-io/swig/security/advisories/GHSA-25w8-77gg-4ccw).
+  Since this release Gina renders on its own copy of a plain object an action passes to
+  `self.render()` (see « `self.render()` no longer writes request data into the object an
+  action passes » above) and does not copy a class instance; 2.9.6 renders on a copy made at the
+  top of each render, which covers that class instance too and keeps its prototype methods and
+  getters. Gina builds its engines with `cache: false`, so its rendering never reaches the cached
+  case. A dotted set such as `{% set site.user = who %}` still writes into the nested object it
+  names.
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.9.5 or later.
+- Upgrading gina installs `@rhinostone/swig` 2.9.6 or later.
+- On 2.9.6 a template no longer sees a top-level property of its data that is not enumerable,
+  and reads a top-level getter once per render. On the async render path, `{% parent %}` now
+  renders the block of the template above (it rendered nothing), calling a macro that holds
+  `{% parent %}` throws, and an imported template's own sets stay out of the template that
+  imports it.
 - With an async template loader, a render that nests more than 1,000 templates now fails with an
   error that names the template, where it used to exhaust the heap.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
   frontend through [`swig.package`](/reference/settings#swig), renders with the project's
-  own copy: update it to 2.9.5 or later; 2.9.3 also fixed the frontends: filters in all three,
+  own copy: update it to 2.9.6 or later; 2.9.3 also fixed the frontends: filters in all three,
   Twig ranges and `batch`, Jinja2 `slice` and `batch`, and Jinja2 and Django `for` loops.
 
 Server-side only: **restart the bundle**.
@@ -473,7 +490,7 @@ Server-side only: **restart the bundle**.
 ### Fixed — swig keeps the output before an `{% import %}`, and async-loader templates render includes inside loops (bundle restart)
 
 Up to 2.9.3, [`@rhinostone/swig`](/templating/swig) had two defects that 2.9.4 fixes (Gina now
-requires 2.9.5: see the entry above):
+requires 2.9.6: see the entry above):
 
 - On the default render path, swig dropped what a template had rendered before an
   `{% import %}`: the output above the tag, the layout's output before a block of an extends
@@ -495,7 +512,7 @@ requires 2.9.5: see the entry above):
   a macro body, to where the macro is called: calling such a macro throws.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a frontend
   through [`swig.package`](/reference/settings#swig), renders with the project's own copy:
-  update it to 2.9.5 or later.
+  update it to 2.9.6 or later.
 
 Server-side only: **restart the bundle**.
 
