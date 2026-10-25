@@ -325,6 +325,44 @@ the page the user asked for.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Security — `self.render()` no longer writes request data into the object an action passes (bundle restart)
+
+`self.render()` and `self.renderWithoutLayout()` combine the object an action passes with Gina's
+own page data. Up to 0.7.5 that combine wrote into the object itself:
+
+- the default swig renderer added the request's session block (`page.data.session`, its `id`
+  included), the request's `page.view` and, with the [Csrf plugin](/guides/csrf) adopted, its
+  `gina.csrfToken` and `gina.csrfInput`;
+- the nunjucks renderers and the async swig renderer wrote the request's Csrf values into an
+  object's own `gina` member, and its `page.view` values into an object's own `page.view` member.
+
+The combine keeps a value that is already there, so an object an action passes to more than one
+render, such as a module-level object or a `require()`d JSON module, carried the first request's
+session id, CSRF token and URL into the pages of later requests, `gina.session` in the client
+bootstrap included. A fresh object per call, the pattern the
+[controller guide](/guides/controller#selfrenderdata) shows, was not affected. The session cookie
+stays signed, so a session id read from a page does not open that session. A security advisory
+accompanies this fix.
+
+Since 0.7.6 each render combines a copy of the object: the object itself, its `page`, `page.view`,
+`page.data`, `page.environment`, `gina` and `session` members, and every member Gina's page data
+also holds are new for the render, and everything else is shared, so a template reads the same
+values as before.
+
+**What to check:**
+
+- Finish the object before you call `self.render()`: a change made to it afterwards, at its top
+  level or in those members, may no longer reach the template. A member Gina does not write, such
+  as a list, is still shared.
+- The object no longer gains `page`, `gina` or `session` keys during the render: read those
+  values from your own data, not back from the object.
+- An object frozen with `Object.freeze()` now renders; a render that had to add a key to it
+  failed with a 500.
+- A class instance passed as the object, or placed at one of those paths, is not copied and keeps
+  the 0.7.5 behaviour: pass a plain object.
+
+Server-side only: **restart the bundle**.
+
 ### Security — swig bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
 
 Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.5` in both of its manifests

@@ -116,7 +116,8 @@ Every action must terminate with exactly one of these.
 
 Renders an HTML template using [Swig](/templating/swig). The template is resolved from the route's `param.file`
 value (defaults to the rule name). Data is merged with environment and routing metadata before
-being passed to the template.
+being passed to the template. The object you pass is read, never written: each render works on a
+copy, so the same object can be passed on every request. Finish building it before the call.
 
 ```js
 this.home = function(req, res, next) {
