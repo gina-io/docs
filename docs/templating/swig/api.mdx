@@ -35,7 +35,7 @@ The `SwigOpts` object is accepted by `setDefaults`, the constructor, and most pe
 | `varControls` | `[string, string]` | `['{{', '}}']` | Open/close for variable expressions. |
 | `tagControls` | `[string, string]` | `['{%', '%}']` | Open/close for tag statements. |
 | `cmtControls` | `[string, string]` | `['{#', '#}']` | Open/close for comments. |
-| `locals` | `object` | `{}` | Default context merged under per-call locals. |
+| `locals` | `object` | `{}` | Default context merged under per-call locals. A render works on a copy, so what a template sets stays out of this object (since `2.9.6`); a dotted set such as `{% set site.user = who %}` still writes into the object `site` holds, since the copy is shallow. |
 | `cache` | `'memory' \| false \| { get, set }` | `'memory'` | Compiled-template cache. |
 | `loader` | `{ resolve, load }` | `swig.loaders.fs()` | Template loader — see [Loaders](./loaders). |
 
@@ -118,7 +118,7 @@ Compile `source` and render it in one step. Returns the output string.
 | Arg | Type | Description |
 | --- | --- | --- |
 | `source` | string | Template source. |
-| `options` | [`SwigOpts`](#options) | Per-call options. `options.locals` is the render context. `options.filename` is used for the cache key and error messages. |
+| `options` | [`SwigOpts`](#options) | Per-call options. `options.locals` is the render context for this call: since `2.9.6` a cached compile does not keep it (before, later calls with the same `filename` rendered the first call's locals, see [GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)). `options.filename` is used for the cache key and error messages. |
 
 ```js
 swig.render('Hello, {{ name }}!', { locals: { name: 'World' } });
@@ -175,7 +175,7 @@ swig.renderFile('page.html', { name: 'World' }, function (err, html) {
 
 Dispatch is **explicit-flag only** — `load.length` is not consulted, so the built-in dual-mode `swig.loaders.fs()` and `swig.loaders.memory()` (which accept both sync and cb forms) keep their existing sync-cb path.
 
-On this path, `{% include %}` and `{% extends %}` resolve dynamic paths at render time — the path expression is evaluated against the locals and the template fetched through `loader.load`. `{% import %}` / `{% from %}` still require string-literal paths (a dynamic path throws at parse time). Since `v2.9.4`, an `{% include %}`, `{% import %}`, `{% from %}` or `{% block %}` inside a loop or another statement body renders on this path too; a macro that holds one throws a clear error when it is called here. See [Loaders — Async loaders](./loaders#async-loaders).
+On this path, `{% include %}` and `{% extends %}` resolve dynamic paths at render time — the path expression is evaluated against the locals and the template fetched through `loader.load`. `{% import %}` / `{% from %}` still require string-literal paths (a dynamic path throws at parse time). Since `v2.9.4`, an `{% include %}`, `{% import %}`, `{% from %}` or `{% block %}` inside a loop or another statement body renders on this path too; a macro that holds one, or (since `v2.9.6`) a `{% parent %}`, throws a clear error when it is called here. Since `v2.9.6`, `{% parent %}` renders on this path and an imported template's own bindings stay out of the template that imports it. See [Loaders — Async loaders](./loaders#async-loaders).
 
 ---
 
@@ -227,7 +227,7 @@ var tpl = swig.compile('Hello, {{ name }}!');
 tpl({ name: 'World' });  // => "Hello, World!"
 ```
 
-Use this when you need to compile once and render many times with different contexts.
+Use this when you need to compile once and render many times with different contexts. Since `2.9.6` each call works on a copy of the locals it is given, so what one call sets reaches neither the next call nor the object passed in; a call made while another render of the same instance runs, such as a helper that renders a partial, still shares the object it is given. A dotted set such as `{% set site.user = who %}` still writes into the object `site` holds, since the copy is shallow.
 
 ---
 
@@ -244,7 +244,7 @@ var tpl = swig.compileFile('/views/page.html');
 tpl({ title: 'Home' });
 ```
 
-Compiled templates are cached by the loader's resolved filename when `options.cache !== false`.
+Compiled templates are cached by the loader's resolved filename when `options.cache !== false`. The cached template does not keep `options.locals`: each call applies its own (since `2.9.6`).
 
 ### Async codegen
 
@@ -347,7 +347,7 @@ Do not pass untrusted input to `run` — see [Security](./security#swig-run-is-n
 swig.register(path, fn)
 ```
 
-Register a pre-compiled template function under a template path. Later `include` lookups and [`compileFile`](#compilefile) / [`renderFile`](#renderfile) calls are served from the template cache without compiling. Added in v2.8.0.
+Register a pre-compiled template function under a template path. Later `include` lookups and [`compileFile`](#compilefile) / [`renderFile`](#renderfile) calls are served from the template cache without compiling. Added in v2.8.0. Since `v2.9.6`, `compileFile(path, { locals })` applies those locals to a registered template too.
 
 The path is normalized through the active loader's `resolve`, so registering `'partials/nav.html'` and writing `{% include "partials/nav.html" %}` agree on the cache key. The entry is stored as a locals-binding wrapper — the call shape `include` expects — so registered partials may use variables, filters, and extensions freely. Passing a path to [`run`](#run) registers the same way, but renders the template once as a side effect; prefer `register` when no output is wanted.
 
@@ -360,6 +360,8 @@ swig.render('{% include "partials/nav.html" %}', {
   locals: { user: 'Jane' }
 });
 ```
+
+Before `2.9.6`, calling `render` again with the same `filename` and other `locals` rendered the first call's `locals` ([GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)).
 
 Throws when the instance has caching disabled — the registry is the template cache, so there would be nowhere to keep the registration. For the same reason, [`invalidateCache`](#invalidatecache) drops every registration made against the built-in memory cache.
 
@@ -474,7 +476,7 @@ When writing a custom tag's `compile`, emit JS that reads from `_ctx`, writes to
 
 ## Caching
 
-- **`cache: 'memory'`** — templates are stored by the loader's resolved filename. The default.
+- **`cache: 'memory'`** — templates are stored by the loader's resolved filename, without the locals of the call that compiled them (since `2.9.6`). The default.
 - **`cache: false`** — templates are recompiled on every call. Useful during development; **do not** ship to production.
 - **Custom cache** — pass an object with `get(key)` and `set(key, value)`. Keys are resolved filenames from the loader; a template compiled with `codegenMode: 'async'` is kept under its name followed by `#async` (since `2.8.2`), apart from its sync compile.
 

@@ -196,9 +196,11 @@ set up when the macro runs, recursively across import depth:
 ```
 
 :::note
-Import aliases occupy the template's variable namespace. An alias — including a
-file's own transitively-imported aliases — overrides a context variable of the
-same name. Pick alias names that don't collide with your locals.
+An import alias occupies the template's variable namespace: it overrides a
+context variable of the same name, so pick alias names that don't collide with
+your locals. The aliases an imported file sets up for itself stay out of the
+template that imports it, on the sync path and, since `2.9.6`, on the
+[async render path](./loaders#async-loaders).
 :::
 
 ## include
@@ -270,7 +272,7 @@ Emit verbatim content — the parser does not tokenize inside a `raw` block. Use
 
 ## set
 
-Declare or update a context variable. Valid at the top of a template even when extending.
+Declare or update a context variable. Valid at the top of a template even when extending. The variable lives in the render's context, a copy of the locals made at the top of the render (since `2.9.6`), so it does not reach the object the caller passed; a dotted set such as `{% set site.user = who %}` still writes into the object `site` holds, since the copy is shallow.
 
 ```swig
 {% set page_title = "Home" %}

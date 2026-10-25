@@ -146,12 +146,13 @@ The [async render path](#async-loaders) compares resolved names in the same way:
 
 ### Cache keys
 
-Compiled templates are cached under the string returned by `resolve`. Two implications:
+Compiled templates are cached under the string returned by `resolve`. Implications:
 
 - Calls to `resolve` that return the same string share the same compiled function. This is what makes `{% extends %}` cheap.
 - Changing a loader's `basepath` does not invalidate existing cache entries. Call [`swig.invalidateCache()`](./api#invalidatecache) immediately after swapping in a new loader.
 - A template compiled with `codegenMode: 'async'` is cached under the same string followed by `#async` (since `2.8.2`), so the sync and async compiles of a file never share an entry.
 - A page that extends a template held in the cache works on a copy of that template's parse tree (since `2.9.5`). Before, compiling the page rewrote the cached tree, so a page's override of a block nested inside another block or tag showed on other pages that extend the same layout ([GHSA-g628-5x3r-g298](./security#ghsa-g628-5x3r-g298)).
+- A cached template keeps no locals: the `locals` given in the options of `render`, `compile` or `compileFile` apply to that call only (since `2.9.6`). Before, the cached function kept the locals of the call that compiled it, and later calls for the same file rendered them ([GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)).
 
 ### Browser loaders
 
@@ -171,9 +172,11 @@ When your templates live behind an asynchronous source — S3, Redis, a CDN, an 
 
 Available since `v2.2.0`, the cb form of [`renderFile(path, locals, cb)`](./api#renderfile) and [`compileFile(path, { codegenMode: 'async' }, cb)`](./api#async-codegen) closes the gap. Set `loader.async === true` on the loader object and the dispatch automatically routes through the async-codegen path: the compiled body is an `AsyncFunction`, and each nested template (the `extends` parent, an `include`, an `import` / `from` source) is resolved **at render time** through the user loader's `load(id, cb)` arm via `_swig.getTemplate(path)`, awaiting each as it is reached.
 
-Since `v2.9.4` this holds wherever the tag sits: an `{% include %}`, `{% import %}`, `{% from %}` or `{% block %}` inside a for loop (its else or empty branch too), a with, a filter or apply tag, a set block or a Django spaceless block renders as on the sync path, in every flavor that has those tags; before, such a template failed on this path. The loop runs its items one after another, so the loop variables and `loop.*` (Django `forloop.*`) keep their values. A macro whose body holds one of those tags is not supported on this path: calling it throws an error that names the macro and its template, and a template that only defines it renders. Move the tag out of the macro, to where the macro is called.
+Since `v2.9.4` this holds wherever the tag sits: an `{% include %}`, `{% import %}`, `{% from %}` or `{% block %}` inside a for loop (its else or empty branch too), a with, a filter or apply tag, a set block or a Django spaceless block renders as on the sync path, in every flavor that has those tags; before, such a template failed on this path. The loop runs its items one after another, so the loop variables and `loop.*` (Django `forloop.*`) keep their values. A macro whose body holds one of those tags, or (since `v2.9.6`) native swig's `{% parent %}`, is not supported on this path: calling it throws an error that names the macro and its template, and a template that only defines it renders. Move the tag out of the macro, to where the macro is called.
 
 Since `v2.9.5` an async render has a bound. Each top-level render counts the templates it has in progress (each `{% include %}`, each `{% import %}` or `{% from %}` source and each `{% extends %}` parent counts one while it renders), and loading a template while 1000 are in progress fails the render with `Template "<name>" is nested more than 1000 levels deep: a template probably includes, imports or extends itself.`. An extends cycle fails at once with `Illegal circular extends of "<name>".`, the error the sync path gives. Before `2.9.5`, a template that includes, imports or extends itself, directly or through other templates, loaded templates on this path until the process ran out of memory ([GHSA-86pr-x856-xrq5](./security#ghsa-86pr-x856-xrq5)). A recursive include renders up to 1000 levels deep; each render, and each call of a function compiled with `codegenMode: 'async'`, has its own count, and the includes of a loop count one at a time. An include marked `ignore missing` swallows the error, as it swallows any error of the template it includes.
+
+Since `v2.9.6`, native swig's `{% parent %}` in a block of a template that extends another renders the version of the block in the template above on this path, as on the sync path; before, it rendered nothing. An imported template's own bindings (its macros, its top-level sets, the aliases of its own imports) also stay out of the template that imports it, as on the sync path, and the imported macros still see them while they run; before, they landed in the importer's context, and an importer's variable named like one of the imported macros was replaced by that macro.
 
 Dispatch is **explicit-flag only** — `load.length` is not consulted. The built-in dual-mode loaders (`swig.loaders.fs()` and `swig.loaders.memory()`) keep their existing sync-cb path. Opt-in is per-loader via the `async: true` flag.
 

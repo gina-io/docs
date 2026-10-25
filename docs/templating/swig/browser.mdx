@@ -62,6 +62,8 @@ flowchart LR
    </script>
    ```
 
+   Each call renders the `locals` it is given. Before `2.9.6`, rendering again under the same `filename` with new `locals` showed the first call's data ([GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)).
+
 ## Self-registering AOT bundle — many templates at once
 
 For projects with more than a handful of templates, compile the whole directory into one bundle. With `--register` (added in v2.8.0) the bundle registers itself against the global `swig` as soon as the script loads — no wiring code:
