@@ -55,6 +55,20 @@ flowchart LR
 
 **Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
 
+### GHSA-25w8-77gg-4ccw — data passed to one render reaching other renders {#ghsa-25w8-77gg-4ccw}
+
+**Affected:** every release of `@rhinostone/swig`, `@rhinostone/swig-core`, `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` before `2.9.6`; the code dates from the original swig 1.4.2. High, CWE-488, CVSS 8.2 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`).
+
+**Root cause:** data passed to one render reached other renders in three ways.
+
+- **Locals in the options of a cached compile.** With the default memory cache, or a custom cache object, `compile(source, options)` cached the compiled template under `options.filename`, and the cached function kept the `locals` in the options of the call that created it. `render(source, { filename, locals })`, the call the [`register`](./api#register) and [browser](./browser) examples make, therefore rendered the first call's locals on every later call for that file, and a later `renderFile` of the file, or an `{% include %}` of it, got them merged under its own.
+- **An instance's default locals.** A render without call-time locals on an instance with default locals, and `run` without locals, used the defaults object itself as the template's context, so what a template set (`{% set %}`, macros, imports, loop variables, Django `{% cycle %}` state) stayed in it and reached every later render on that instance. Instances built without their own locals share one defaults object, so `run` on one instance reached the others.
+- **A locals object passed to more than one render.** On an instance without default locals, `renderFile(path, locals)`, `compileFile(path)(locals)`, `compile(source)(locals)` and a template stored with `register` used the caller's object as the template's context, so the names a template set landed in it: a later render given the same object read them, and two concurrent renders on the [async render path](./loaders#async-loaders) given one object read each other's.
+
+With a request-scoped helper in the locals, such as one that reads the current user from `AsyncLocalStorage`, one user's page showed another user's data.
+
+**Fixed in `2.9.6`:** the cache keeps a function without the locals of the call that created it, and each call binds its own; a render without call-time locals, and `run` without locals, work on a copy of the default locals; a render works on a copy of the locals object it is given, made at its top, and a template rendered as part of it, such as an include, shares that copy. Three cases still write into the object they are given: a template rendered from inside another render of the same instance (a helper that renders a partial with an object of its own), an include given an object with `with … only`, and a dotted set such as `{% set site.user = who %}`, since the copy is shallow. Upgrade the five packages together: the 2.9.6 frontends require `@rhinostone/swig-core` 2.9.6. See [Cache keys](./loaders#cache-keys) and the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-25w8-77gg-4ccw).
+
 ### GHSA-86pr-x856-xrq5 — templates that include, import or extend themselves on the async render path {#ghsa-86pr-x856-xrq5}
 
 **Affected:** `@rhinostone/swig`, `@rhinostone/swig-core` and `@rhinostone/swig-twig` from `2.2.0`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-django` from `2.7.0`, each before `2.9.5`. High, CWE-674 and CWE-400, CVSS 7.5 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H`).
@@ -182,7 +196,7 @@ Shipping `.safe`: `safe`, `raw`, `json` / `json_encode` (which self-escape `<`, 
 The in-memory cache is keyed by the loader's resolved filename. Templates compiled for one user's context can be served to another user if the cache key collides — this is a feature (cross-request template reuse) but it means:
 
 - Do not include per-request secrets in the loader's `resolve()` output.
-- Do not bake per-user data into `precompile` output — keep per-request data in the `locals` context, which is re-bound on every render.
+- Do not bake per-user data into `precompile` output — keep per-request data in the `locals` context, which each call binds anew. Before `2.9.6`, `locals` given in the options of `render`, `compile` or `compileFile` stayed in the cached template and reached later calls for the same file ([GHSA-25w8-77gg-4ccw](#ghsa-25w8-77gg-4ccw)).
 
 ## `eval` / `new Function` inventory
 
