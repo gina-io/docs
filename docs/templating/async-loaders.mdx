@@ -288,7 +288,7 @@ With swig, this holds everywhere except inside a `{% macro %}` body: a macro tha
 names the macro and its template, and a template that only defines it still renders. Move the
 tag to where the macro is called. Inside a `{% for %}` loop or a `{% filter %}` tag these tags
 resolve through the loader like anywhere else. This is the behaviour of `@rhinostone/swig`
-`2.9.4`, which Gina requires since `v0.7.6`; with swig `2.9.3` or earlier, a template with one
+`2.9.4` and later (Gina requires `2.9.5` since `v0.7.6`); with swig `2.9.3` or earlier, a template with one
 of these tags inside a loop, a filter or a macro failed to compile on this path. See
 [Swig loaders](/templating/swig/loaders#async-loaders).
 :::
@@ -307,6 +307,13 @@ Gina applies guards on every resolve:
   resolved URL stays under the configured `origin + basePath`. A template that
   resolves to a different origin (for example an absolute `http://elsewhere/x`)
   is rejected.
+- **Nesting bound (swig).** A template that includes, imports or extends itself,
+  directly or through another template, fails its render once more than 1,000
+  templates are nested, with an error that names the template, and an `extends`
+  cycle fails at once with `Illegal circular extends`. This is the behaviour of
+  `@rhinostone/swig` `2.9.5`, which Gina requires since `v0.7.6`; up to `2.9.4`
+  such a render loaded templates until the heap ran out and the process aborted
+  (advisory [GHSA-86pr-x856-xrq5](/templating/swig/security#ghsa-86pr-x856-xrq5)).
 - **Host allowlist and TLS are your responsibility.** Gina fetches from whatever
   `origin` you configure and trusts the transport. Point `origin` only at hosts
   you control or trust, prefer `https://`, and treat template source from a

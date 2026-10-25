@@ -275,9 +275,9 @@ the page the user asked for.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
-### Security — swig's `striptags` filter runs in linear time, and swig-core caps the ranges it builds (bundle restart)
+### Security — swig bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
 
-Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.4` in both of its manifests
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.5` in both of its manifests
 (2.9.4 also changes two render paths: see the next entry).
 
 - Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
@@ -290,23 +290,38 @@ Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.4` in both of its
   data could exhaust the heap: see the advisory
   [GHSA-f8f4-95q3-38qw](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
   Native swig has no range syntax, so a bundle that renders with it never reaches that code.
-  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.4 takes your
+  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.5 takes your
   application off the swig-core versions the advisory lists.
+- Up to 2.9.4, nothing bounded how deeply templates nested on swig's async render path, so a
+  template that includes, imports or extends itself, directly or through another template, loaded
+  templates until the heap ran out and the process aborted: see the advisory
+  [GHSA-86pr-x856-xrq5](https://github.com/gina-io/swig/security/advisories/GHSA-86pr-x856-xrq5).
+  Gina renders on that path when a bundle sets an
+  [async template loader](/templating/async-loaders) (`settings.template.swig.loader`). 2.9.5
+  fails such a render once more than 1,000 templates are nested, and an `extends` cycle at once.
+- Up to 2.9.4, with swig's memory compile cache, the first page that overrode a block nested
+  inside a tag of a cached layout put its override into that layout, so other pages extending it
+  showed that page's block: see the advisory
+  [GHSA-g628-5x3r-g298](https://github.com/gina-io/swig/security/advisories/GHSA-g628-5x3r-g298).
+  Gina builds the engines of both its render paths with `cache: false`, so a bundle's rendering
+  never reaches that code; code of your own that compiles with swig and `cache: 'memory'` does.
 
 **What to check:**
 
-- Upgrading gina installs `@rhinostone/swig` 2.9.4 or later.
+- Upgrading gina installs `@rhinostone/swig` 2.9.5 or later.
+- With an async template loader, a render that nests more than 1,000 templates now fails with an
+  error that names the template, where it used to exhaust the heap.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
   frontend through [`swig.package`](/reference/settings#swig), renders with the project's
-  own copy: update it to 2.9.4 or later; 2.9.3 also fixed the frontends: filters in all three,
+  own copy: update it to 2.9.5 or later; 2.9.3 also fixed the frontends: filters in all three,
   Twig ranges and `batch`, Jinja2 `slice` and `batch`, and Jinja2 and Django `for` loops.
 
 Server-side only: **restart the bundle**.
 
 ### Fixed — swig keeps the output before an `{% import %}`, and async-loader templates render includes inside loops (bundle restart)
 
-Up to 2.9.3, [`@rhinostone/swig`](/templating/swig) had two defects that 2.9.4, which Gina now
-requires, fixes:
+Up to 2.9.3, [`@rhinostone/swig`](/templating/swig) had two defects that 2.9.4 fixes (Gina now
+requires 2.9.5: see the entry above):
 
 - On the default render path, swig dropped what a template had rendered before an
   `{% import %}`: the output above the tag, the layout's output before a block of an extends
@@ -328,7 +343,7 @@ requires, fixes:
   a macro body, to where the macro is called: calling such a macro throws.
 - A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a frontend
   through [`swig.package`](/reference/settings#swig), renders with the project's own copy:
-  update it to 2.9.4 or later.
+  update it to 2.9.5 or later.
 
 Server-side only: **restart the bundle**.
 
