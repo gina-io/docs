@@ -285,6 +285,25 @@ name your staging answer does not return (`<prefix>[<index>][id]`, say), or leav
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — the upload trigger warning names only a control the page must provide (bundle restart and re-bake)
+
+The form validator warned « did not find `upload reset trigger` » in the browser console
+at the first selection of every upload input, for the reset control Gina adds itself once
+the staging succeeds (twice when the input had no preview container). A
+`$forms[id].reBind()` of an edit form warned « did not find `upload delete trigger` » for
+a saved file's delete link that was on the page and already bound. Since 0.7.6 the warning
+names only a control the page has to provide: a saved file's delete link
+(`<input id>-<index>-delete-trigger`, see
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form)), or an id
+declared with `data-gina-form-upload-reset-trigger` or `data-gina-form-upload-delete-trigger`
+that matches no element.
+
+**What to check:** nothing; removing a file works as before. One case still warns: a
+`reBind()` after a file was staged reads the staged file's preview as a saved file and
+looks for its delete link.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ### Fixed — a popin closes after a link inside it loaded a page (bundle restart and re-bake)
 
 A plain link in popin content loads its page into the same popin (see

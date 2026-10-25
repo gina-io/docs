@@ -640,6 +640,11 @@ the form submits them unchanged until the file is deleted:
 <a href="#" id="contract-0-delete-trigger">Delete</a>
 ```
 
+If a file has no delete link, Gina names the id it looked for in a browser-console
+warning when it binds the form. *Since 0.7.6* it no longer warns about a missing reset
+control, which it adds itself, unless you declared that control's id with
+`data-gina-form-upload-reset-trigger` and no element has that id.
+
 Activating a delete link sends the removal request to
 `data-gina-form-upload-delete-action`, then removes the files' nodes, their
 delete links and their `contract[<index>][…]` fields. With one file to delete and
