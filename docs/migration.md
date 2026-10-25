@@ -325,6 +325,30 @@ the page the user asked for.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `self.throwError()` no longer writes into the error object an action passes (bundle restart)
+
+Up to 0.7.5 the one-argument form `self.throwError({ error, fields })`, and its `flash` and
+`errors` variants, combined the object with Gina's own error data by writing into it: the object
+received the response's `status` and incident `ref`, on an HTML request a `stack`, and on a
+[custom error page](/guides/error-pages) that page's data (`isRenderingCustomError`, `bundle`,
+`pathname`, `title`). An object an action passes on more than one request, such as a module-level
+error object, then answered later requests with the first request's incident ref, on the JSON body
+and on the error page, and on an HTML request its `fields` were missing from the custom page's
+data. A frozen object made `throwError()` itself throw. In the local scope the built-in error page
+also rewrote the `stack` of an `Error` or a plain object passed in the three-argument form
+`self.throwError(res, code, err)`, at every call. Since 0.7.6 Gina combines a copy of the object,
+one level deep (its members are shared), and trims a local copy of the stack.
+
+**What to check:**
+
+- Gina no longer writes the incident ref into your object: when your code needs the ref after the
+  call, set your own `ref` on the object (it is honoured when relay-safe, see
+  [Incident ref](/guides/controller#incident-ref)).
+- A class instance passed as the object is not copied and keeps the 0.7.5 behaviour: pass a plain
+  object.
+
+Server-side only: **restart the bundle**.
+
 ### Security — `self.render()` no longer writes request data into the object an action passes (bundle restart)
 
 `self.render()` and `self.renderWithoutLayout()` combine the object an action passes with Gina's
@@ -360,6 +384,32 @@ values as before.
   failed with a 500.
 - A class instance passed as the object, or placed at one of those paths, is not copied and keeps
   the 0.7.5 behaviour: pass a plain object.
+
+Server-side only: **restart the bundle**.
+
+### Security — `self.renderJSON()` no longer writes its Inspector sidecars into the object an action passes (bundle restart)
+
+In development, and during a production
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation)
+for a request carrying `x-gina-inspector: true`, `self.renderJSON()` adds the request's query log
+(`__ginaQueries`: each statement's text and its parameter shapes, or its values with
+`inspector.queries.captureValues`) and its timeline (`__ginaFlow`) to the response, for the
+Inspector and for [calls between bundles](/guides/multi-bundle#what-travels-between-bundles). Up to
+0.7.5 it added them to the object the action passed, so an object an action passes to more than one
+`renderJSON()` call, such as a memoized or cached response object, kept the first request's
+sidecars and sent them in every later response built from it, to any client, external ones
+included, and after the window had closed. The security advisory that accompanies the
+`self.render()` fix above covers this one too.
+
+Since 0.7.6 `renderJSON()` writes the sidecars into a copy of the object, made once per response,
+one level deep (its members are shared); the response body is unchanged.
+
+**What to check:**
+
+- An object you pass to `renderJSON()` no longer gains `__ginaQueries` or `__ginaFlow` keys: read
+  the query log in the Inspector, not back from the object.
+- A class instance passed as the object is not copied and keeps the 0.7.5 behaviour: pass a plain
+  object.
 
 Server-side only: **restart the bundle**.
 

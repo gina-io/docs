@@ -523,6 +523,9 @@ self.throwError(res, 500, { ref: 'ORDER-42', message: 'payment capture failed' }
 self.throwError({ status: 502, message: 'payment capture failed', ref: 'ORDER-42' });
 ```
 
+Gina does not write the minted ref back into the object you pass (since 0.7.6): when your code
+needs the ref after the call, set your own as above.
+
 **Custom error pages** receive the same value as `data.ref`, so you can surface
 it in your branded HTML error template (the built-in fallback page renders it
 automatically):
