@@ -379,7 +379,8 @@ render, such as a module-level object or a `require()`d JSON module, carried the
 session id, CSRF token and URL into the pages of later requests, `gina.session` in the client
 bootstrap included. A fresh object per call, the pattern the
 [controller guide](/guides/controller#selfrenderdata) shows, was not affected. The session cookie
-stays signed, so a session id read from a page does not open that session. A security advisory
+stays signed, so a session id read from a page does not open that session. A security advisory,
+[GHSA-2jvf-v3wm-pc9p](https://github.com/gina-io/gina/security/advisories/GHSA-2jvf-v3wm-pc9p),
 accompanies this fix.
 
 Since 0.7.6 each render combines a copy of the object: the object itself, its `page`, `page.view`,
@@ -413,7 +414,9 @@ Inspector and for [calls between bundles](/guides/multi-bundle#what-travels-betw
 `renderJSON()` call, such as a memoized or cached response object, kept the first request's
 sidecars and sent them in every later response built from it, to any client, external ones
 included, and after the window had closed. The security advisory that accompanies the
-`self.render()` fix above covers this one too.
+`self.render()` fix above,
+[GHSA-2jvf-v3wm-pc9p](https://github.com/gina-io/gina/security/advisories/GHSA-2jvf-v3wm-pc9p),
+covers this one too.
 
 Since 0.7.6 `renderJSON()` writes the sidecars into a copy of the object, made once per response,
 one level deep (its members are shared); the response body is unchanged.
