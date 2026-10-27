@@ -101,7 +101,7 @@ Tags explicitly **not implemented** (throw at parse time):
 
 See [Non-Goals](./non-goals) for the full list and the error messages they produce.
 
-**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it.
+**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it. On the sync path they stayed reachable through the importing alias (`{{ alias.inner.macro() }}`) until `2.9.7`; since then that renders nothing on both paths.
 
 ## Filters
 

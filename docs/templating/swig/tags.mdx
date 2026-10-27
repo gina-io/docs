@@ -200,7 +200,10 @@ An import alias occupies the template's variable namespace: it overrides a
 context variable of the same name, so pick alias names that don't collide with
 your locals. The aliases an imported file sets up for itself stay out of the
 template that imports it, on the sync path and, since `2.9.6`, on the
-[async render path](./loaders#async-loaders).
+[async render path](./loaders#async-loaders). On the sync path they stayed
+reachable through the importing alias until `2.9.7`: now
+`{{ buttons.icons.disk() }}` renders nothing on both paths, while
+`buttons.save()` still uses `icons`.
 :::
 
 ## include
