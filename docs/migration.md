@@ -427,6 +427,28 @@ one level deep (its members are shared); the response body is unchanged.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — a page rendered with an async swig loader or with nunjucks carries the request's session (bundle restart)
+
+With an [async template loader](/templating/async-loaders) (`settings.template.swig.loader`) and
+with [nunjucks](/templating/nunjucks) (`render.engine: nunjucks`, with or without
+`settings.template.nunjucks.loader`), a page rendered for a request that has a session now gets the
+request's session block under `page.data.session` (`id`, `lastModified`, `createdAt`, `expiresAt`,
+`timeout`), as with the default swig renderer. Up to 0.7.5 those three renderers never built it: a
+template read no session value, and the client bootstrap Gina adds to the page kept its
+`{{ page.data.session.id }}`, `.timeout`, `.createdAt` and `.lastModified` placeholders as written,
+so in the browser `gina.session.id` held that text and `gina.session.timeout` was `NaN`.
+
+**What to check:**
+
+- A template on those engines that tested `page.data.session`, or browser code that read
+  `gina.session`, now sees the request's session: drop any workaround that read it another way.
+- An action's own `session` member keeps its keys and gets the keys of the block it lacks, and an
+  action's own `page.data` member gets the block; the object the action passes is not written.
+- A page without a session now carries empty session values in the client bootstrap
+  (`gina.session.id` is `''`), as with the default swig renderer.
+
+Server-side only: **restart the bundle**.
+
 ### Security — swig renders on a copy of the data it is given, bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
 
 Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.6` in both of its manifests
