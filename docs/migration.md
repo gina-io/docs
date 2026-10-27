@@ -19,6 +19,527 @@ upward to the target version.
 
 ---
 
+## 0.7.5 → 0.7.6
+
+### Changed — a URL placeholder's value wins over a query or body key of the same name (bundle restart)
+
+When the query string or the body carries a key named like one of the route's URL
+placeholders (`"url": "/items/:grp/:id"` with `?id=99`, or a `PUT` body `{ "id": "99" }`),
+the method's object (`req.get`, `req.head`, `req.put`, `req.patch`, `req.post`,
+`req.delete`) now holds the URL value on every request, as `req.params` does. Before 0.7.6
+the answer depended on the request: the first request to a method and path took the URL
+value on `GET`, `HEAD`, `PUT` and `PATCH`, and every later request the client's value; a
+`POST` always took the client's value, and so did a `DELETE` unless a regex requirement
+covered the placeholder.
+
+**What to check:**
+
+- An action that reads a query or body key named like one of its route's URL placeholders
+  and expects the client's value: read it from `req.originalUrl` (`GET`), `req.query`
+  (`DELETE`) or `req.rawBody` (`POST`, `PUT`, `PATCH`), or rename the key.
+- A URL segment `true`, `false` or `on` now reaches the method's object and `req.params` as
+  a boolean on every request; some requests gave the string before. A segment `null` stays
+  the string `"null"` on every request; from the second request to a route on, a
+  placeholder covered by a requirement gave `null` in the method's object.
+- `req.body` is now the same object as `req.post`, `req.put` or `req.patch` on the first
+  request to a route too, and holds the URL values there; on that first request it held
+  the client's keys only. A top-level JSON array body: on `POST` and `PATCH` see the Fixed
+  entry below; on `PUT`, `req.put` and `req.body` hold an object keyed by index, as before.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Changed — the boot-time sweep of staged uploads waits for the timeout plus one hour (bundle restart)
+
+With `upload.autoTmpCleanupTimeout` armed, a bundle's boot sweeps its landing directories for
+staged `.part` files a previous process stranded. It now removes a part once its modification
+time is older than the timeout plus one hour; before `0.7.6` the threshold was the timeout
+floored at one hour, which for a timeout of an hour or more is the moment the owning
+process's own timer fires, read on the sweeping node's clock. On a staging directory that
+several nodes share, a clock running ahead or a cached modification time could then remove a
+part its owner still held.
+
+**What to check:** nothing. A part a restart stranded waits one hour longer before the sweep
+removes it.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Changed — an HTTP/2 `self.query()` that reaches its `requestTimeout` fails at once and is not sent again (bundle restart)
+
+A `self.query()` to an HTTP/2 upstream that gets no response within its `requestTimeout`
+now fails with `TIMEOUT` at that moment, and on a connected session only its own stream is
+cancelled. A connected session is kept, and the next call checks it with a pre-flight PING
+before using it; a session that never finished connecting is dropped, the next call opens a
+new one, and the calls that were waiting on it, never sent, are sent again on a new session
+(next entry).
+Before 0.7.6 the timeout destroyed the session and sent a safe method (or a call with
+`retryUnsafe: true`) up to twice more: a slow but live upstream ran the same action three
+times while the caller waited three timeouts plus half a second, every other request in
+flight on that session failed with a 500 that carried no error code, and a call waiting on
+a session that never connected raised an uncaught `ERR_HTTP2_STREAM_CANCEL`. HTTP/1.1 calls
+are unchanged.
+
+**What to check:**
+
+- A call that a second attempt used to save now fails with `TIMEOUT`: an upstream that
+  answers slowly once (a cache warming up), a connection lost during the call when
+  `requestTimeout` is shorter than about 8 seconds (the next call recovers), and a call
+  with `retryUnsafe: true`. Raise `requestTimeout` for a slow upstream, or retry in the
+  action where a second attempt is safe.
+- Each timeout sends an `RST_STREAM`, which the upstream counts: more than
+  `http2Options.maxStreamResetsPerSecond` (default 200) within one second on one session
+  make an Isaac upstream close that session with a warning, and an upstream running on
+  Node.js also closes it at a sustained rate above 33 per second, once the runtime's
+  budget of 1,000 resets is spent (`streamResetBurst` / `streamResetRate`). Raise the
+  limits on the upstream, or set `server.query.http2SessionPool` on the caller; see
+  [HTTP/2 client resilience](/guides/http2-resilience).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — an HTTP/2 `self.query()` retry leaves the other calls on its session alone, and a call never sent is sent again (bundle restart)
+
+A `self.query()` call over HTTP/2 that is retried after a 502, a stream error or a stream
+that ended early now leaves its session to the other calls in flight on it: the session is
+dropped from the cache and closed once they have answered. Before 0.7.6 the retry
+destroyed the session, and those calls failed with a 500. A call that was never sent —
+still waiting for a session that never connected when Gina dropped that session, at
+another call's timeout or, on Bun, at the keepalive deadline — is now sent again on a new
+session, whatever its method (on Bun it failed with a 500). A stream that ends without its
+response (a reset before any response, or its session destroyed under it) now follows the
+premature-close rule: a safe method, or a call with `retryUnsafe: true`, is sent up to
+twice more, then the call fails with `PREMATURE_CLOSE` (503); before, it came back as
+`{ status: 200, empty: true }` or as a 500. On Bun 1.2 and 1.3, an empty response now comes
+back as `{ status: 200, empty: true }` as on Node.js, where it was a 500, and a refused
+connection or a failed TLS handshake gets its typed error (`ECONNREFUSED` 503,
+`STREAM_ERROR` 500), not retried.
+
+**What to check:**
+
+- An upstream that resets a stream before answering (with `NO_ERROR`, or on Bun with any
+  code) now receives a safe method up to three times, and the caller gets `PREMATURE_CLOSE`
+  where it used to get an empty success (a 500 on Bun 1.2 and 1.3).
+- On Bun 1.2 and 1.3, an empty response that completes while its session is being closed
+  after another call's retry is read as incomplete: a safe method is sent again, an unsafe
+  one fails with `PREMATURE_CLOSE`. Node.js and Bun 1.4 are not affected. See
+  [HTTP/2 client resilience](/guides/http2-resilience).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — `req.params` is set on a `DELETE` route whose regex requirements cover its placeholders (bundle restart and re-bake)
+
+On a `DELETE` route whose `requirements` put a regex on every URL placeholder
+(`"url": "/items/:grp/:id"`, `"requirements": { "grp": "/^[a-z0-9]+$/", "id": "/^[0-9]+$/" }`),
+`req.params.grp` and `req.params.id` stayed unset: the router matches such a route in a
+branch of its own, which wrote the matched values to `req.delete` only. Every other route
+set them. Since 0.7.6 that branch sets `req.params` too, for each placeholder the route
+binds in `param`, so an action reads the URL values from `req.params` on every route.
+
+**What to check:** nothing — `req.delete` is unchanged. An action that read
+`req.params.<key>` on such a route and found `undefined` now finds the URL value.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `DELETE` route whose requirements cover only some of its placeholders matches (bundle restart and re-bake)
+
+A `DELETE` route with a regex requirement on some of its URL placeholders but not all
+(`"url": "/items/:grp/:id"`, `"requirements": { "id": "/^[0-9]+$/" }`) answered `404` on
+every request: the router matches a `DELETE` route that declares `requirements` in a branch
+of its own, which skipped the placeholder without a requirement instead of scoring it. The
+same route on `GET` matched. Since 0.7.6 that branch accepts any non-empty segment for such a
+placeholder, as the `GET` path does, and sets `req.delete` and `req.params` from it.
+
+**What to check:** a `DELETE` route of that shape now answers. If you had declared a
+requirement on every placeholder to work around the `404`, nothing changes for you.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a top-level JSON array body is the array on every request, a path's first included (bundle restart)
+
+On a `POST` or `PATCH` whose body is a top-level JSON array (`[{"a":"1"},2]`, whatever its
+content type, `application/json` included), the first request to each path reached the
+action with `req.post` / `req.patch` as an object keyed by index (`{ "0": …, "1": … }`), a
+separate object from `req.body`, while every later request to that path got the array
+itself, the same object as `req.body`. On a route with URL placeholders each new value is a
+new path, so the first request for each one got the object, and a `true`, `false` or `on`
+segment beside the array was a boolean on that request only. Since 0.7.6 every request gets
+the array, `req.body` is that array, and the route's URL placeholders are named properties
+of it, with the `true` / `false` / `on` rule above (`JSON.stringify` leaves them out: read
+them by name or from `req.params`). A placeholder named like a property of the array itself
+(`length`, `map`, …) or with digits only (`:5`) is in `req.params` only, on every request.
+
+**What to check:** an action that read such a body by index (`req.post[0]`,
+`Object.keys(req.post)`) works as before; one that used `Array.isArray(req.post)`,
+`req.post.length` or an array method now gets the array on the first request to a path too.
+`req.body` was already the array, except an empty one: an empty JSON document (`[]`, or `{}`)
+leaves `req.body` the request's text, while `req.post` / `req.patch` holds the parsed value.
+A `PUT` is unchanged: `req.put` and `req.body` hold an object keyed by index on every request.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — a template a route middleware renders sees the filters `setup.js` registers (bundle restart)
+
+A route middleware that answers with `self.render()` rendered a template that saw none of the
+filters, tags and extensions the bundle registers in `controllers/setup.js` until a request
+had reached a controller action in the same process: the router runs `setup.js` for an
+action request only, after the middlewares. The template answered a `500` `Invalid filter`
+from boot until then, and on every request for a route whose middleware renders them all. A
+swig render now runs `setup.js` on its engine when that engine has not run it yet; an action
+request still runs it once. See
+[Rendering a template from a middleware](/guides/middleware#rendering-a-template-from-a-middleware).
+
+**What to check:** a `setup.js` that does more than register filters, tags and extensions
+(one that reads the request, or answers it) now also runs for the first middleware render
+after a boot — including a request a middleware refuses with a render, such as a login
+wall's, with that request's `req`. A throw there is logged and the render goes on. A filter
+named like one of gina's own still loses to gina's.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Added — `page.environment.packageVersion`, the project's own version (bundle restart)
+
+Templates can read the `version` of the project's `package.json` as
+`page.environment.packageVersion`, read once per process. It is not set when the project has
+no `package.json` or no `version` in it, so guard it with `{% if %}`. It is not the
+`${projectVersion}` of configuration files, which is the version in the gina manifest. See
+[The project's version in a template](/guides/views#the-projects-version-in-a-template).
+
+**What to check:** nothing — the field is new.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — a saved file's delete link goes away when a new selection replaces it (bundle restart and re-bake)
+
+In an edit form showing a saved file with a delete link (`<input id>-<index>-delete-trigger`),
+choosing a new file replaces the saved one: its index, its fields and its preview. The link
+stayed when it sat after the preview container (the shape the
+[uploads guide](/guides/file-uploads#saved-files-in-an-edit-form) shows): the staging
+success empties the container, which took a link placed inside it but not one placed after
+it, so the link stayed on the page, bound to a file the input no longer held — activating it
+sent no request, removed nothing, and logged a console warning. Since 0.7.6 the replaced
+file's delete link is removed when the staging succeeds, wherever it sits; after a failed
+staging the link stays, and the next successful selection removes it.
+
+**What to check:** a page script that keeps a reference to a saved file's delete link after
+a new selection now finds it detached. A link placed inside the preview container is
+unchanged (the container reset removed it already).
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — reset and delete links keep working after an emptied selection (bundle restart and re-bake)
+
+A `change` on a staged file input that carries no file (an emptied selection) emptied the
+input's record of the files it shows, while their previews and hidden fields stayed in the
+form. Their reset or delete link then sent no request and removed nothing, and a console
+warning named the mismatch. Since 0.7.6 such a change leaves that record as it was, so the
+links still reset the staged files and delete the saved ones.
+
+**What to check:** nothing in most pages. The files stay in the form after an emptied
+selection, as before, until their reset or delete link is used.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a failed staging, or one still uploading, leaves the files shown working (bundle restart and re-bake)
+
+A new selection on a staged file input now takes the input over when its staging
+succeeds: the preview container is emptied, the replaced files' delete links go, the
+input's reset and delete links act on the new files, and the form's hidden
+`<prefix>[<index>][…]` fields are written, all with the staging answer. Before 0.7.6
+the selection did most of that when the file was chosen:
+
+- a failed staging emptied the preview container, taking the previews of the files
+  still in the form, and any reset or delete link inside it, off the page; a saved
+  file's delete link placed after the container sent no request; and the hidden fields
+  the failed selection had added were submitted empty, beside a saved file's own or as
+  an entry of their own when the saved file had been deleted;
+- while a staging was on the wire, a saved file's delete link sent no request (a console
+  warning named the mismatch), and a staged file's reset also took the new file's
+  hidden fields out of the form, so the form submitted no file while the page showed one.
+
+Since 0.7.6 a failed staging changes nothing but the error it shows, and while a file
+uploads the files shown keep working. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** a page script that reads the new file's hidden fields right after the
+selection, before the staging answers: they are written when the staging succeeds. The
+fields already in the form (a saved file's, or ones you declared) are not touched until
+then.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a new file's own `name` is submitted when its staging answer carries one (bundle restart and re-bake)
+
+The staging success fills the form's hidden `<prefix>[<index>][…]` fields from the
+staging answer, one key at a time, and filled `name` only while its field was empty. So
+in an edit form that declares `<prefix>[<index>][name]` with the saved file's name,
+choosing a new file submitted the saved file's `name` beside the new file's `location`
+and `originalFilename`, and a second file chosen on the same input submitted the first
+file's `name`. Since 0.7.6 the answer's `name` fills the field like every other key. An
+answer without `name` (the staging answer the
+[uploads guide](/guides/file-uploads#you-provide-the-staging-routes) shows has none)
+leaves the field as it is.
+
+**What to check:** a page or a server that relied on a declared `name` surviving a
+replacement, as a stable key for the saved record for instance, now receives the
+staging answer's `name` when the answer carries one. Keep such a key in a field whose
+name your staging answer does not return (`<prefix>[<index>][id]`, say), or leave
+`name` out of the answer.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — the upload trigger warning names only a control the page must provide (bundle restart and re-bake)
+
+The form validator warned « did not find `upload reset trigger` » in the browser console
+at the first selection of every upload input, for the reset control Gina adds itself once
+the staging succeeds (twice when the input had no preview container). A
+`$forms[id].reBind()` of an edit form warned « did not find `upload delete trigger` » for
+a saved file's delete link that was on the page and already bound. Since 0.7.6 the warning
+names only a control the page has to provide: a saved file's delete link
+(`<input id>-<index>-delete-trigger`, see
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form)), or an id
+declared with `data-gina-form-upload-reset-trigger` or `data-gina-form-upload-delete-trigger`
+that matches no element.
+
+**What to check:** nothing; removing a file works as before. One case still warns: a
+`reBind()` after a file was staged reads the staged file's preview as a saved file and
+looks for its delete link.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a click inside a popin link with a `target` opens that window (bundle restart and re-bake)
+
+A link with a `target` in popin content opens that window (see
+[Links inside popins](/guides/popin#links-inside-popins)). A click on an element inside
+such a link, an icon or a `<span>` label, loaded the link's page into the popin instead:
+the popin read the link's `href` and `target` from the element clicked, which carries
+neither. Since 0.7.6 it reads them from the link itself, so the window opens wherever the
+click lands inside it.
+
+**What to check:** nothing in most pages. A plain link (no `id`, no `#` and no `target`)
+still loads its page into the same popin, whichever element inside it is clicked.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a popin closes after a link inside it loaded a page (bundle restart and re-bake)
+
+A plain link in popin content loads its page into the same popin (see
+[Links inside popins](/guides/popin#links-inside-popins)). After such a load, landed or
+failed, Escape closed the `<dialog>` while the popin stayed open for Gina: no `close`
+event fired, and its trigger could no longer show it. Escape on a non-modal popin did
+nothing, and `gina.popin.close(name)`, a form's `close()` and a
+[client navigation](/guides/client-navigation#after-a-swap) (which closes the open popin
+through that call) did nothing at all. The same followed a `gina.popin.load()` of an
+open popin, a link load into a `data-gina-dialog-target` popin, a link with a `target`,
+and a form's redirect into its own popin. A close while such a load was in flight let
+the late answer fill the closed popin, or reopen a declarative one. Since 0.7.6 every
+close works once the load has settled, Escape and the close button also close while it
+is in flight, and a close drops the late answer.
+
+**What to check:** nothing in most pages. While a link's load is in flight,
+`gina.popin.close(name)` and a form's `close()` are still ignored: the popin waits for
+the page the user asked for.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `self.throwError()` no longer writes into the error object an action passes (bundle restart)
+
+Up to 0.7.5 the one-argument form `self.throwError({ error, fields })`, and its `flash` and
+`errors` variants, combined the object with Gina's own error data by writing into it: the object
+received the response's `status` and incident `ref`, on an HTML request a `stack`, and on a
+[custom error page](/guides/error-pages) that page's data (`isRenderingCustomError`, `bundle`,
+`pathname`, `title`). An object an action passes on more than one request, such as a module-level
+error object, then answered later requests with the first request's incident ref, on the JSON body
+and on the error page, and on an HTML request its `fields` were missing from the custom page's
+data. A frozen object made `throwError()` itself throw. In the local scope the built-in error page
+also rewrote the `stack` of an `Error` or a plain object passed in the three-argument form
+`self.throwError(res, code, err)`, at every call. Since 0.7.6 Gina combines a copy of the object,
+one level deep (its members are shared), and trims a local copy of the stack.
+
+**What to check:**
+
+- Gina no longer writes the incident ref into your object: when your code needs the ref after the
+  call, set your own `ref` on the object (it is honoured when relay-safe, see
+  [Incident ref](/guides/controller#incident-ref)).
+- A class instance passed as the object is not copied and keeps the 0.7.5 behaviour: pass a plain
+  object.
+
+Server-side only: **restart the bundle**.
+
+### Security — `self.render()` no longer writes request data into the object an action passes (bundle restart)
+
+`self.render()` and `self.renderWithoutLayout()` combine the object an action passes with Gina's
+own page data. Up to 0.7.5 that combine wrote into the object itself:
+
+- the default swig renderer added the request's session block (`page.data.session`, its `id`
+  included), the request's `page.view` and, with the [Csrf plugin](/guides/csrf) adopted, its
+  `gina.csrfToken` and `gina.csrfInput`;
+- the nunjucks renderers and the async swig renderer wrote the request's Csrf values into an
+  object's own `gina` member, and its `page.view` values into an object's own `page.view` member.
+
+The combine keeps a value that is already there, so an object an action passes to more than one
+render, such as a module-level object or a `require()`d JSON module, carried the first request's
+session id, CSRF token and URL into the pages of later requests, `gina.session` in the client
+bootstrap included. A fresh object per call, the pattern the
+[controller guide](/guides/controller#selfrenderdata) shows, was not affected. The session cookie
+stays signed, so a session id read from a page does not open that session. A security advisory
+accompanies this fix.
+
+Since 0.7.6 each render combines a copy of the object: the object itself, its `page`, `page.view`,
+`page.data`, `page.environment`, `gina` and `session` members, and every member Gina's page data
+also holds are new for the render, and everything else is shared, so a template reads the same
+values as before.
+
+**What to check:**
+
+- Finish the object before you call `self.render()`: a change made to it afterwards, at its top
+  level or in those members, may no longer reach the template. A member Gina does not write, such
+  as a list, is still shared.
+- The object no longer gains `page`, `gina` or `session` keys during the render: read those
+  values from your own data, not back from the object.
+- An object frozen with `Object.freeze()` now renders; a render that had to add a key to it
+  failed with a 500.
+- A class instance passed as the object, or placed at one of those paths, is not copied and keeps
+  the 0.7.5 behaviour: pass a plain object.
+
+Server-side only: **restart the bundle**.
+
+### Security — `self.renderJSON()` no longer writes its Inspector sidecars into the object an action passes (bundle restart)
+
+In development, and during a production
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation)
+for a request carrying `x-gina-inspector: true`, `self.renderJSON()` adds the request's query log
+(`__ginaQueries`: each statement's text and its parameter shapes, or its values with
+`inspector.queries.captureValues`) and its timeline (`__ginaFlow`) to the response, for the
+Inspector and for [calls between bundles](/guides/multi-bundle#what-travels-between-bundles). Up to
+0.7.5 it added them to the object the action passed, so an object an action passes to more than one
+`renderJSON()` call, such as a memoized or cached response object, kept the first request's
+sidecars and sent them in every later response built from it, to any client, external ones
+included, and after the window had closed. The security advisory that accompanies the
+`self.render()` fix above covers this one too.
+
+Since 0.7.6 `renderJSON()` writes the sidecars into a copy of the object, made once per response,
+one level deep (its members are shared); the response body is unchanged.
+
+**What to check:**
+
+- An object you pass to `renderJSON()` no longer gains `__ginaQueries` or `__ginaFlow` keys: read
+  the query log in the Inspector, not back from the object.
+- A class instance passed as the object is not copied and keeps the 0.7.5 behaviour: pass a plain
+  object.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — a page rendered with an async swig loader or with nunjucks carries the request's session (bundle restart)
+
+With an [async template loader](/templating/async-loaders) (`settings.template.swig.loader`) and
+with [nunjucks](/templating/nunjucks) (`render.engine: nunjucks`, with or without
+`settings.template.nunjucks.loader`), a page rendered for a request that has a session now gets the
+request's session block under `page.data.session` (`id`, `lastModified`, `createdAt`, `expiresAt`,
+`timeout`), as with the default swig renderer. Up to 0.7.5 those three renderers never built it: a
+template read no session value, and the client bootstrap Gina adds to the page kept its
+`{{ page.data.session.id }}`, `.timeout`, `.createdAt` and `.lastModified` placeholders as written,
+so in the browser `gina.session.id` held that text and `gina.session.timeout` was `NaN`.
+
+**What to check:**
+
+- A template on those engines that tested `page.data.session`, or browser code that read
+  `gina.session`, now sees the request's session: drop any workaround that read it another way.
+- An action's own `session` member keeps its keys and gets the keys of the block it lacks, and an
+  action's own `page.data` member gets the block; the object the action passes is not written.
+- A page without a session now carries empty session values in the client bootstrap
+  (`gina.session.id` is `''`), as with the default swig renderer.
+
+Server-side only: **restart the bundle**.
+
+### Security — swig renders on a copy of the data it is given, bounds async renders, keeps a cached layout unchanged, runs `striptags` in linear time and caps swig-core ranges (bundle restart)
+
+Gina now requires [`@rhinostone/swig`](/templating/swig) `^2.9.6` in both of its manifests
+(2.9.4 also changes two render paths: see the next entry).
+
+- Up to 2.9.0, swig's `striptags` filter ran in time quadratic in the length of its input: on
+  text with many `<` and no `>` after them, 100,000 characters took about four seconds, so a
+  template that applied `striptags` to request data could be made to block the event loop.
+  2.9.1 runs it in linear time with the same output: see the advisory
+  [GHSA-rvx7-jqr9-c242](https://github.com/gina-io/swig/security/advisories/GHSA-rvx7-jqr9-c242).
+  Gina's own code and templates never call `striptags`.
+- Up to 2.9.1, `@rhinostone/swig-core` built a range of any size, so a large bound from template
+  data could exhaust the heap: see the advisory
+  [GHSA-f8f4-95q3-38qw](https://github.com/gina-io/swig/security/advisories/GHSA-f8f4-95q3-38qw).
+  Native swig has no range syntax, so a bundle that renders with it never reaches that code.
+  2.9.2 returns an empty range above 1,000,000 elements, and requiring 2.9.6 takes your
+  application off the swig-core versions the advisory lists.
+- Up to 2.9.4, nothing bounded how deeply templates nested on swig's async render path, so a
+  template that includes, imports or extends itself, directly or through another template, loaded
+  templates until the heap ran out and the process aborted: see the advisory
+  [GHSA-86pr-x856-xrq5](https://github.com/gina-io/swig/security/advisories/GHSA-86pr-x856-xrq5).
+  Gina renders on that path when a bundle sets an
+  [async template loader](/templating/async-loaders) (`settings.template.swig.loader`). 2.9.5
+  fails such a render once more than 1,000 templates are nested, and an `extends` cycle at once.
+- Up to 2.9.4, with swig's memory compile cache, the first page that overrode a block nested
+  inside a tag of a cached layout put its override into that layout, so other pages extending it
+  showed that page's block: see the advisory
+  [GHSA-g628-5x3r-g298](https://github.com/gina-io/swig/security/advisories/GHSA-g628-5x3r-g298).
+  Gina builds the engines of both its render paths with `cache: false`, so a bundle's rendering
+  never reaches that code; code of your own that compiles with swig and `cache: 'memory'` does.
+- Up to 2.9.5, swig rendered on the data object it was given, so a name a template set
+  (`{% set %}`, a macro, an import, a loop variable) landed in that object, and a later render
+  given the same object read it; with swig's memory compile cache, a compile given data in its
+  options kept it for later compiles of the same file: see the advisory
+  [GHSA-25w8-77gg-4ccw](https://github.com/gina-io/swig/security/advisories/GHSA-25w8-77gg-4ccw).
+  Since this release Gina renders on its own copy of a plain object an action passes to
+  `self.render()` (see « `self.render()` no longer writes request data into the object an
+  action passes » above) and does not copy a class instance; 2.9.6 renders on a copy made at the
+  top of each render, which covers that class instance too and keeps its prototype methods and
+  getters. Gina builds its engines with `cache: false`, so its rendering never reaches the cached
+  case. A dotted set such as `{% set site.user = who %}` still writes into the nested object it
+  names.
+
+**What to check:**
+
+- Upgrading gina installs `@rhinostone/swig` 2.9.6 or later.
+- On 2.9.6 a template no longer sees a top-level property of its data that is not enumerable,
+  and reads a top-level getter once per render. On the async render path, `{% parent %}` now
+  renders the block of the template above (it rendered nothing), calling a macro that holds
+  `{% parent %}` throws, and an imported template's own sets stay out of the template that
+  imports it.
+- With an async template loader, a render that nests more than 1,000 templates now fails with an
+  error that names the template, where it used to exhaust the heap.
+- A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a
+  frontend through [`swig.package`](/reference/settings#swig), renders with the project's
+  own copy: update it to 2.9.6 or later; 2.9.3 also fixed the frontends: filters in all three,
+  Twig ranges and `batch`, Jinja2 `slice` and `batch`, and Jinja2 and Django `for` loops.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — swig keeps the output before an `{% import %}`, and async-loader templates render includes inside loops (bundle restart)
+
+Up to 2.9.3, [`@rhinostone/swig`](/templating/swig) had two defects that 2.9.4 fixes (Gina now
+requires 2.9.6: see the entry above):
+
+- On the default render path, swig dropped what a template had rendered before an
+  `{% import %}`: the output above the tag, the layout's output before a block of an extends
+  child that holds one, every item of a `for` loop that holds one, and a macro's output before
+  the tag. An import at the very top of a template was not affected. 2.9.4 keeps that output.
+- With an [async template loader](/templating/async-loaders) (`settings.template.swig.loader`),
+  a template with an `{% include %}` or `{% import %}` inside a `for` loop or a `filter` tag,
+  or with an `{% include %}`, `{% import %}` or `{% block %}` anywhere in a macro body, failed to
+  compile, even when the macro was never called. 2.9.4 renders the loop and filter cases and a template that only defines such a
+  macro; calling the macro throws an error that names it and its template.
+
+**What to check:**
+
+- A template whose `{% import %}` follows other output now renders that output. Most often it is
+  a comment and blank lines above the import, which now come out as blank lines at the start of
+  the template's output: check an answer whose leading whitespace matters, for instance an HTML
+  fragment a script inserts and then reads with `firstChild`.
+- With an async template loader, move an `{% include %}`, `{% import %}` or `{% block %}` out of
+  a macro body, to where the macro is called: calling such a macro throws.
+- A bundle that sets [`swig.useProject: true`](/reference/settings#swig), or selects a frontend
+  through [`swig.package`](/reference/settings#swig), renders with the project's own copy:
+  update it to 2.9.6 or later.
+
+Server-side only: **restart the bundle**.
+
+---
+
 ## 0.7.4 → 0.7.5
 
 ### Security — a query value no longer replaces a URL segment in a route's template path (bundle restart)
@@ -34,9 +555,8 @@ held (see the 0.7.3 → 0.7.4 entry on template paths below). This is the residu
 states.
 
 A placeholder that is a URL segment of the route now takes the URL value. The query or body
-value of the same name stays readable in `req.get` or `req.post`, and no longer reaches
-`param.file`. A value that would leave the template root is now ignored the same way, so the
-URL's template renders instead of a `500`.
+value of the same name no longer reaches `param.file`. A value that would leave the template
+root is now ignored the same way, so the URL's template renders instead of a `500`.
 
 **What to check:**
 

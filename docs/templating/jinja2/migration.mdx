@@ -23,7 +23,7 @@ This guide is for teams with existing Jinja2 templates written against [Python J
 ```mermaid
 flowchart TD
   A[.jinja2 / .j2 template] --> B{Uses .items / .keys / .values on a dict?}
-  B -->|Yes| F[Drop .items - iterate the mapping directly]
+  B -->|Yes| F[Loop over the mapping itself - see the .items section]
   B -->|No| C{Uses call / do / trans / a SandboxedEnvironment?}
   C -->|Yes| G[Rewrite with supported tags or handle in the controller]
   C -->|No| D{Uses map / select / selectattr filters?}
@@ -58,13 +58,13 @@ In `@rhinostone/swig-jinja2` a mapping is a plain JavaScript object with **no `.
 {% for k, v in mapping %}{{ k }}={{ v }}{% endfor %}
 ```
 
-For sorted iteration, use the `dictsort` filter and index each pair:
+For sorted iteration, use the `dictsort` filter; its pairs unpack into the key and the value, as in Jinja2:
 
 ```jinja2
-{% for pair in mapping|dictsort %}{{ pair[0] }}={{ pair[1] }}{% endfor %}
+{% for k, v in mapping|dictsort %}{{ k }}={{ v }}{% endfor %}
 ```
 
-Do not unpack the pairs (`{% for k, v in mapping|dictsort %}`): swig binds `k` to the index and `v` to the pair, so the loop renders `0=a,1` where Jinja2 renders `a=1`. A loop with one variable over a mapping (`{% for x in mapping %}`) yields the values, where Jinja2 yields the keys; use `mapping|list` for the keys. See [Behavioural differences](./parity#behavioural-differences).
+A loop with one variable over a mapping (`{% for k in mapping %}`) yields the keys, as in Jinja2, so `{{ mapping[k] }}` stands in for `.values()`. Both follow Jinja2 since 2.9.3; before, one variable over a mapping yielded the values, and two variables over a list bound the index and the item, so the `dictsort` loop above rendered `0=a,1` where Jinja2 renders `a=1`. See [Behavioural differences](./parity#behavioural-differences).
 
 ## What ports cleanly
 
@@ -74,7 +74,7 @@ Straight copy-paste — no changes needed:
 - `{{ a + b }}`, `{{ a * b }}`, `{{ a ** b }}`, `{{ a // b }}`, `{{ a ~ b }}` (string concat)
 - `{{ a if cond else b }}` (inline conditional, with or without the `else` arm)
 - `{% if %}` / `{% elif %}` / `{% else %}` / `{% endif %}`
-- `{% for item in items %}` with the `loop.*` variables (`loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`) and the empty-fallback `{% else %}`
+- `{% for item in items %}` with the `loop.*` variables (`loop.index`, `loop.index0`, `loop.first`, `loop.last`, `loop.length`) and the empty-fallback `{% else %}`, and loop filters such as `{% for x in xs if x > 1 %}` (since 2.9.4)
 - `{% set foo = 1 %}` including body form `{% set foo %}…{% endset %}`
 - `{% extends "layout.jinja2" %}` with `{% block content %}` overrides (multi-level chains too)
 - `{% include "partial.jinja2" %}` including `with context` / `without context` / `ignore missing`

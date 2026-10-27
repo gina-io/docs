@@ -195,7 +195,7 @@ request after an `await` or in a callback. Nothing is written onto your class.
 | `self.getConfig(key)` | Read bundle configuration (`settings.json`, `app.json`, etc.) |
 | `self.getLocales([languageCode])` | Return the locales of the request's resolved language, or of the language code given |
 | `self.getFormsRules()` | Return the form validation rules the client selected (see [below](#reading-form-validation-rules)) |
-| `self.render(data)` | Render an HTML response and terminate the request |
+| `self.render(data)` | Render an HTML response and terminate the request (see [Rendering a template from a middleware](#rendering-a-template-from-a-middleware)) |
 | `self.renderJSON(data)` | Render a JSON response and terminate the request |
 | `self.renderWithoutLayout(data)` | Render the current view without its layout and terminate the request |
 | `self.redirect(url, permanent)` | Issue a redirect and terminate the request |
@@ -308,6 +308,28 @@ rejected. For re-validating a posted body on the server, see
 [Validating a submitted body in the controller](/guides/forms-and-validation#validating-a-submitted-body-in-the-controller):
 there is no built-in method that re-runs the rule engine against a request body,
 so that check belongs in your action.
+
+### Rendering a template from a middleware
+
+`self.render(data)` renders the route's template as an action's render does: your data is
+`page.data`, and `page.environment` carries the same values. Since `0.7.6` the template also
+sees the filters, tags and extensions your bundle registers in `controllers/setup.js`, from
+the first request after a boot.
+
+The router runs `setup.js` only for a request that reaches a controller action, after the
+route middlewares. A swig render now runs `setup.js` itself on its template engine when that
+engine has not run it yet, with the members the router hands it (`this.engine`,
+`this.getConfig`, …); an action request still runs it once. Before `0.7.6`, a template a
+middleware rendered answered a `500` `Invalid filter` until a request had reached an action
+in the same process, and on every request when the route's middleware renders them all, such
+as a login or maintenance wall. With Nunjucks (`render.engine: "nunjucks"`), a render already
+ran `setup.js` itself.
+
+Two consequences for `setup.js`: register synchronously, because a render does not wait for a
+promise it returns; and expect it to run for a request a middleware refuses with a render
+(the login wall's request, with its own `req`), where before it ran only for a request that
+reached an action. A bundle filter named like one of gina's own (`nl2br`, `getUrl`, …) still
+loses to gina's.
 
 ---
 
@@ -532,5 +554,6 @@ from the same bundle, the shared version runs because auth-local does not define
 ## See also
 
 - [Routing guide](./routing) — Declaring routes and attaching middleware
-- [Views and templates](./views) — How middleware can call `self.render()`
+- [Rendering a template from a middleware](#rendering-a-template-from-a-middleware) — What a middleware's `self.render()` sees
+- [Views and templates](./views) — Templates, layouts and the data a template reads
 - [Routing API reference](/api/routing) — `getRoute()` for building redirect URLs inside middlewares

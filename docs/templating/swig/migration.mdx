@@ -142,7 +142,7 @@ swig.renderFile('page.html', {
 | Django | Swig equivalent |
 | --- | --- |
 | `{{ x\|filter:"arg" }}` | `{{ x\|filter("arg") }}` — parens, not colon. |
-| `{% if x in xs %}` | Same — but note Django's `not in` works; Swig's does not (see above). |
+| `{% if x in xs %}` | `{% if xs.indexOf(x) !== -1 %}` for a list or a string; `{% if x in xs %}` for a mapping. Swig's `in` tests keys, and there is no `not in` (see above). |
 | `{{ block.super }}` | `{% parent %}` |
 | `{% with x=1 %}...{% endwith %}` | `{% set x = 1 %}` |
 | `{% firstof a b c %}` | `{% if a %}{{ a }}{% elseif b %}{{ b }}{% else %}{{ c }}{% endif %}` |
@@ -375,7 +375,7 @@ Swig additionally **bypasses autoescape for function-call output** (e.g. `{{ for
 Use this as a per-template review pass:
 
 1. **Search for `is ` and `is not `** (Jinja2 / Twig) — replace each with the closest `===` / `!==` / `!` equivalent, or a custom filter.
-2. **Search for `not in`** — wrap as `not (x in xs)`.
+2. **Search for `in` and `not in`** — Swig's `in` tests keys: rewrite an item test on a list or a string as `xs.indexOf(x) !== -1` (`=== -1` for `not in`), and `x not in d` on a mapping as `not (x in d)`.
 3. **Search for `forloop.`** (Django only) — replace with `loop.`.
 4. **Search for `block.super` / `super()` / `parent()`** — replace with `{% parent %}`.
 5. **Search for `|filter:"arg"`** (Django only) — rewrite as `|filter("arg")`.

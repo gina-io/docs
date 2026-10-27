@@ -304,6 +304,13 @@ closing the session with `GOAWAY(INTERNAL_ERROR)` and no server-side event), whi
 counts every received reset and can be tuned through `streamResetBurst` +
 `streamResetRate` — both keys together, or neither.
 
+Since `0.7.6` a `self.query()` that reaches its `requestTimeout` cancels its stream with an
+`RST_STREAM`, so timed-out calls count toward both limits: more than
+`maxStreamResetsPerSecond` of them within one second on one session trip Isaac's guard,
+and on Node.js a sustained rate above 33 per second trips the runtime's limit once its
+1,000-reset burst is spent; see [HTTP/2 client resilience](/guides/http2-resilience) for
+the caller's side.
+
 On Bun that runtime layer does not exist: Bun's HTTP/2 server has no frame-level reset
 limit (measured on Bun 1.2–1.4) and ignores the two keys — a bundle setting them on Bun
 logs one boot warning — so `maxStreamResetsPerSecond` is the only rapid-reset limit

@@ -52,6 +52,8 @@ sequenceDiagram
     else Transient failure
         Note over A: Retry with backoff<br/>(up to 2 retries)
         A->>B: Retry request
+    else No response within requestTimeout
+        Note over A: Fail with TIMEOUT, cancel only this stream<br/>(not retried since 0.7.6)
     end
 ```
 
@@ -64,9 +66,14 @@ failures. The first retry is immediate; subsequent retries are delayed by 500 ms
 give the network time to stabilise. A 502 is the exception: each of its retries waits
 2 seconds.
 
+Since `0.7.6`, a retry after a premature close, a stream error or a 502 evicts the session
+the attempt used and is sent on a fresh one. The evicted session is closed gracefully, so
+the other requests in flight on it still get their answers. A session error or a
+connection reset means the session itself is gone, and it is destroyed.
+
 Retried error types:
-- Stream timeout (no response within `requestTimeout`)
-- Premature close (GOAWAY / network reset)
+- Premature close — the stream ended without its complete response: a GOAWAY, a network
+  reset, a stream reset before any response, or its session destroyed under it
 - HTTP/2 stream error (`ERR_HTTP2_STREAM_ERROR`); a stream that fails with another
   code is not retried, unless it was refused before processing (below)
 - Connection reset (`ECONNRESET`)
@@ -76,18 +83,77 @@ Retried error types:
 
 Every retry above re-sends a request the upstream may already have executed, so it is
 gated on the method: only a safe method (`GET`, `HEAD`, `OPTIONS`, `TRACE`) is replayed
-unless the call opts in with `retryUnsafe: true`. Two cases are exempt, because nothing
-was sent or processed (both since `0.6.33`):
+unless the call opts in with `retryUnsafe: true`. Three cases are exempt, because nothing
+was sent or processed:
 
 - a cached session that died between the cache lookup and the send — `request()` throws
-  synchronously — is retried on a fresh session for any method;
+  synchronously — is retried on a fresh session for any method (since `0.6.33`);
 - a request the upstream or the runtime **refused before processing it** — `REFUSED_STREAM`
   ([RFC 9113 §8.7](https://www.rfc-editor.org/rfc/rfc9113#section-8.7): closed "prior to
   any processing having occurred"), or the runtime declining to create the stream after a
   GOAWAY — is retried for any method too: on a fresh session when the old one was closing,
-  on the same session when a healthy upstream merely refused a stream at its limit.
+  on the same session when a healthy upstream merely refused a stream at its limit (since
+  `0.6.33`);
+- a request that was **never sent** — still waiting for its session to connect when Gina
+  dropped that session, at another call's stream timeout or, on Bun, at the keepalive
+  deadline — is re-sent for any method, on a fresh session (since `0.7.6`).
 
 **`ECONNREFUSED` is never retried** — the target process is down, retrying won't help.
+Nor is any request on a session that failed to connect on its own (a refused connection,
+a failed TLS handshake): each gets that session's error, `ECONNREFUSED` (503) or
+`STREAM_ERROR` (500).
+
+:::info Before `0.7.6`
+A retry after a 502 — and on Node.js after a stream reset — destroyed the session, so every
+other request in flight on it failed with a 500 (a `STREAM_ERROR` on Bun 1.4, a 500 with no
+error code elsewhere). A stream that ended without its response came back as
+`{ status: 200, empty: true }` (a reset before any response, on Node.js and Bun 1.4; on
+Bun 1.4, a reset with an error code too) or as a 500, and was never retried. On Bun, a
+request still waiting for a session that never connected failed with a 500 when the
+keepalive deadline dropped that session. On Bun 1.2 and 1.3, every empty body (a `HEAD`,
+an empty 200 or 404) came back as a 500, and a refused connection or a failed TLS
+handshake as a 500 with no error code (on 1.2.21, a failed handshake as an empty success).
+:::
+
+:::note Bun 1.2 and 1.3
+An empty response that completes while its session is being closed — after another
+request's retry evicted it — is read as incomplete: a safe method is sent again, an unsafe
+one fails with `PREMATURE_CLOSE`. Node.js and Bun 1.4 are not affected.
+:::
+
+**A stream timeout is not retried** (since `0.7.6`). A call that gets no response within
+`requestTimeout` fails with `TIMEOUT` at that moment, and on a connected session only its
+own stream is cancelled (`RST_STREAM` with `CANCEL`). A timeout is no proof that the
+connection is dead: on a live but slow upstream a re-send ran the request again. The
+session is kept and marked stale, so the next call sends a pre-flight PING first (Layer 2
+below) and moves to a fresh connection if no PONG comes back; the other requests in flight
+on it are not affected. A session that never finished connecting is evicted and destroyed,
+so the next call opens a new one, and the requests still waiting on it, never sent, are
+re-sent on a fresh session for any method (above).
+
+:::info Before `0.7.6`
+A stream timeout evicted and destroyed the session and re-sent the call up to twice
+(safe methods, or `retryUnsafe`): a slow but live upstream ran the request three times,
+the caller waited three times `requestTimeout` plus half a second, and every other
+request in flight on the session failed with a 500. A call a second attempt used to
+save now fails with `TIMEOUT`: an upstream that answers slowly once (a cache warming
+up), a connection lost during the call when `requestTimeout` is shorter than about
+8 seconds (the next call recovers), and a `retryUnsafe` call. Retry such a call in the
+application where a second attempt is safe, or raise its `requestTimeout`.
+:::
+
+:::caution Many timeouts at once
+Each timed-out call sends one `RST_STREAM`, and the upstream counts client resets: on
+one session, more than `maxStreamResetsPerSecond` (default 200) within one second make
+an Isaac upstream close that session with a warning, and an upstream running on Node.js
+also closes it at a sustained rate above 33 per second, once the runtime's budget of
+1,000 resets is spent (`streamResetBurst` / `streamResetRate`; see
+[HTTP/2 security hardening](/guides/http2-native#http2-security-hardening)). The
+timed-out calls have already failed, the calls still in flight on that session are
+retried as after any `GOAWAY` (Layer 1), and the next call opens a fresh session. If a
+caller can reach these rates, raise the upstream's limits or spread its calls over a
+[session pool](#session-pool).
+:::
 
 :::info A completed stream is never reset
 Since `0.6.33` the client no longer sends an `RST_STREAM` after a completed response
@@ -167,9 +233,9 @@ Since `0.6.33`:
   replacement, which kept running outside the cache with its own keepalive — an
   orphaned connection — and the next call opened yet another one.
 - **A session that loses its place in the cache is closed gracefully.** When a session
-  leaves the cache without having been found dead — evicted to make room, or deleted —
-  its keepalive stops and it is closed once its in-flight requests have answered; no new
-  request is sent on it.
+  leaves the cache without having been found dead — evicted to make room, deleted, or
+  (since `0.7.6`) left behind by a retry — its keepalive stops and it is closed once its
+  in-flight requests have answered; no new request is sent on it.
 - **At most 50 sessions are cached per bundle process**, all upstreams together. When a
   new session would exceed that, the oldest is evicted — gracefully: requests in flight
   on it still get their answers. Before `0.6.33` it was destroyed with them.
@@ -269,17 +335,17 @@ All constants are defined in `controller.js` and are not currently user-configur
 
 ## Error codes
 
-When all retries are exhausted, `self.query()` returns a `GinaHttp2Error` with one
-of these codes:
+When a call fails (after its retries, for the codes that are retried), `self.query()`
+returns a `GinaHttp2Error` with one of these codes:
 
 | Code | Meaning | Retried? |
 |---|---|---|
-| `TIMEOUT` | Stream timeout — no response within `requestTimeout` | Yes (safe methods, or `retryUnsafe`) |
-| `PREMATURE_CLOSE` | Stream closed before response complete (GOAWAY / reset) | Yes (safe methods, or `retryUnsafe`) |
-| `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send, or a request refused before processing, exhausts into) | Yes for the HTTP/2 stream and session errors (safe methods, or `retryUnsafe`; the gone-before-send and refused-before-processing cases for any method); any other stream failure is not retried |
+| `TIMEOUT` | Stream timeout — no response within `requestTimeout` | No (since `0.7.6`): only its stream is cancelled |
+| `PREMATURE_CLOSE` | The stream ended without its complete response (a GOAWAY, a reset before any response, its session destroyed under it); also a never-sent request whose retries ran out | Yes (safe methods, or `retryUnsafe`; a never-sent request for any method) |
+| `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send, or a request refused before processing, exhausts into); also a session that failed to connect without a refused connection, such as a failed TLS handshake | Yes for the HTTP/2 stream and session errors (safe methods, or `retryUnsafe`; the gone-before-send and refused-before-processing cases for any method); any other stream failure, and a session that failed to connect, is not retried |
 | `ECONNRESET` | Connection reset by peer | Yes (safe methods, or `retryUnsafe`) |
 | `BAD_GATEWAY` | The upstream answered 502 on every attempt | Yes — each retry after 2 s (safe methods, or `retryUnsafe`) |
-| `ECONNREFUSED` | Connection refused — target process is down | **No** |
+| `ECONNREFUSED` | Connection refused, or reset before the session connected — target process is down | **No** |
 | `PREFLIGHT_TIMEOUT` | Pre-flight PING got no PONG within deadline | Yes |
 | `PREFLIGHT_FAILED` | Pre-flight PING errored (a *cancelled* PING never produces this since `0.6.33` — the request is sent) | Yes |
 
@@ -305,12 +371,19 @@ layer adds negligible overhead (one timestamp comparison per request).
 
 ## Observability
 
-When a retry or pre-flight PING event occurs, Gina logs it at the `warn` level.
+When a retry, a stream timeout or a pre-flight PING event occurs, Gina logs it at the `warn` level.
 Look for these patterns in your logs:
 
 - `[HTTP2] Pre-flight PING timeout` / `[HTTP2] Pre-flight PING error` — a cached
   session was evicted before the request was sent
-- `[HTTP2][RETRYING]` — a transient failure triggered a retry
+- `[HTTP2][RETRYING]` — a transient failure triggered a retry; `… was never sent (its
+  session never connected)` or `… was refused before it was processed (…)` when nothing
+  had been processed, so the request was re-sent for any method
+- `[HTTP2] Premature stream close on <METHOD> <path> — no complete response…` — a stream
+  ended without its response (re-sent for a safe method, or `retryUnsafe`)
+- `[HTTP2] Stream timeout (…) on <METHOD> <path> — cancelling this stream, no re-send` — a
+  call reached `requestTimeout` (`— the session never connected: evicting it, no re-send`
+  when its session never finished connecting)
 - `[HTTP2] PING timeout` / `[HTTP2] PING failed` — the keepalive found a dead session
 - `[http2] GOAWAY received` — the upstream closed the session
 - `[HTTP2] Session cache limit (50) reached` — the oldest session was evicted to make

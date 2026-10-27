@@ -105,6 +105,8 @@ Declares a parent template. Must be the first statement in the child template.
 
 The parent path may be **dynamic** — `{% extends layout_var %}` or any expression — but a dynamic parent resolves only on the [async render path](./loaders#async-loaders) (`renderFile(path, locals, cb)` against a loader with `loader.async === true`). On the synchronous render path the parent is resolved at compile time, so it must be a string literal.
 
+An extends cycle (`a.html` extends `b.html`, which extends `a.html`) fails with `Illegal circular extends of "<name>".` on both render paths. On the async render path, where it fails since `2.9.5`, a dynamic parent that names the template itself fails the same way.
+
 The child's non-block content is discarded — only `{% block %}` overrides and block-level tags (`set`, `import`, `macro`, `extends`) survive. See [template inheritance](./getting-started#template-inheritance).
 
 ## filter
@@ -160,9 +162,12 @@ Conditional. Supports `and`, `or`, `not`, comparison operators, `in`, and the `?
 
 ```swig
 {% if user and user.active %}…{% endif %}
-{% if "admin" in user.roles %}…{% endif %}
+{% if "admin" in user.permissions %}…{% endif %}
+{% if user.roles.indexOf("admin") !== -1 %}…{% endif %}
 {% if not items %}Empty.{% endif %}
 ```
+
+`in` tests a key: a property name of an object or an index of an array. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
 
 Branch with [`elseif`](#elseif) / [`else`](#else).
 
@@ -191,9 +196,11 @@ set up when the macro runs, recursively across import depth:
 ```
 
 :::note
-Import aliases occupy the template's variable namespace. An alias — including a
-file's own transitively-imported aliases — overrides a context variable of the
-same name. Pick alias names that don't collide with your locals.
+An import alias occupies the template's variable namespace: it overrides a
+context variable of the same name, so pick alias names that don't collide with
+your locals. The aliases an imported file sets up for itself stay out of the
+template that imports it, on the sync path and, since `2.9.6`, on the
+[async render path](./loaders#async-loaders).
 :::
 
 ## include
@@ -223,6 +230,8 @@ Suppress errors for missing files with `ignore missing`:
 ```
 
 Files are resolved through the active [loader](./loaders).
+
+A template may include itself, for a recursive structure such as a tree, as long as the recursion ends. On the async render path a render fails once 1000 templates are in progress (since `2.9.5`, see [Async loaders](./loaders#async-loaders)); on the sync render path a deep recursion ends at the JavaScript stack limit.
 
 ## macro
 
@@ -263,7 +272,7 @@ Emit verbatim content — the parser does not tokenize inside a `raw` block. Use
 
 ## set
 
-Declare or update a context variable. Valid at the top of a template even when extending.
+Declare or update a context variable. Valid at the top of a template even when extending. The variable lives in the render's context, a copy of the locals made at the top of the render (since `2.9.6`), so it does not reach the object the caller passed; a dotted set such as `{% set site.user = who %}` still writes into the object `site` holds, since the copy is shallow.
 
 ```swig
 {% set page_title = "Home" %}

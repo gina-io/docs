@@ -62,6 +62,8 @@ flowchart LR
    </script>
    ```
 
+   Each call renders the `locals` it is given. Before `2.9.6`, rendering again under the same `filename` with new `locals` showed the first call's data ([GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)).
+
 ## Self-registering AOT bundle — many templates at once
 
 For projects with more than a handful of templates, compile the whole directory into one bundle. With `--register` (added in v2.8.0) the bundle registers itself against the global `swig` as soon as the script loads — no wiring code:
@@ -90,7 +92,7 @@ See [CLI — AOT bundle](./cli#aot-bundle--compile-a-directory) for the full fla
 
 The full bundle compiles templates through `new Function`, so pages using it need `'unsafe-eval'` in their `script-src` Content-Security-Policy — even when every template was pre-compiled, because a cache miss falls through to the compiler.
 
-`dist/swig.runtime.min.js` (added in v2.8.0, ~22 KB minified vs ~81 KB for the full bundle) removes the compiler entirely: no parser ships, the artifact contains zero `new Function`, and any compiling call (`render` on a source string, `compile`, `precompile`) throws a clear "runtime-only build has no compiler" error instead. Pair it with a `--register` bundle for a fully CSP-clean pipeline:
+`dist/swig.runtime.min.js` (added in v2.8.0; ~24 KB minified vs ~85 KB for the full bundle as of 2.9.0) removes the compiler entirely: no parser ships, the artifact contains zero `new Function`, and any compiling call (`render` on a source string, `compile`, `precompile`) throws a clear "runtime-only build has no compiler" error instead. Pair it with a `--register` bundle for a fully CSP-clean pipeline:
 
 ```html
 <script src="swig.runtime.min.js"></script>
@@ -132,7 +134,7 @@ The repository produces four files under `dist/`:
 | `dist/swig.js` | Full development bundle — parser + runtime, full source for debugging. |
 | `dist/swig.min.js` | Full production bundle. Terser-minified + source-mapped. |
 | `dist/swig.runtime.js` | Runtime-only development bundle — executes registered pre-compiled templates; no parser, no `new Function`. Added in v2.8.0. |
-| `dist/swig.runtime.min.js` | Runtime-only production bundle (~22 KB minified). Safe under a strict CSP without `'unsafe-eval'`. Added in v2.8.0. |
+| `dist/swig.runtime.min.js` | Runtime-only production bundle (~24 KB minified as of 2.9.0). Safe under a strict CSP without `'unsafe-eval'`. Added in v2.8.0. |
 
 Build locally:
 

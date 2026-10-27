@@ -116,7 +116,8 @@ Every action must terminate with exactly one of these.
 
 Renders an HTML template using [Swig](/templating/swig). The template is resolved from the route's `param.file`
 value (defaults to the rule name). Data is merged with environment and routing metadata before
-being passed to the template.
+being passed to the template. The object you pass is read, never written: each render works on a
+copy, so the same object can be passed on every request. Finish building it before the call.
 
 ```js
 this.home = function(req, res, next) {
@@ -522,6 +523,9 @@ self.throwError(res, 500, { ref: 'ORDER-42', message: 'payment capture failed' }
 self.throwError({ status: 502, message: 'payment capture failed', ref: 'ORDER-42' });
 ```
 
+Gina does not write the minted ref back into the object you pass (since 0.7.6): when your code
+needs the ref after the call, set your own as above.
+
 **Custom error pages** receive the same value as `data.ref`, so you can surface
 it in your branded HTML error template (the built-in fallback page renders it
 automatically):
@@ -569,6 +573,32 @@ this.get = function(req, res, next) {
 };
 ```
 
+`req.params.<key>` is set on every route and for every method. Before 0.7.6 it stayed
+unset on one route shape: a `DELETE` route whose `requirements` put a regex on each of
+its URL placeholders (the router matches such a route in a branch of its own, which wrote
+the matched values to `req.delete` only). Since 0.7.6 that branch sets `req.params` too.
+
+When the query string or the body carries a key named like one of the route's URL
+placeholders, the method's object holds the URL value, as `req.params` does: the value the
+route matched, and checked when a requirement covers the placeholder. The client's value
+stays readable in `req.originalUrl` on a `GET`, in `req.query` on a `DELETE`, and in
+`req.rawBody` on a `POST`, `PUT` or `PATCH`:
+
+```js
+// "url": "/items/:id", "param": { "control": "remove", "id": ":id" }
+// DELETE /items/42?id=99
+this.remove = function(req, res, next) {
+  req.delete.id;  // "42" — the URL value
+  req.params.id;  // "42"
+  req.query.id;   // "99" — the client's value
+};
+```
+
+Before 0.7.6 the client's value won on a `POST`, on a `DELETE` whose placeholder had no regex
+requirement, and on every request to a route after the first one (a `DELETE` placeholder with
+a regex requirement always took the URL value). A URL segment `true`, `false` or `on` reaches
+the method's object and `req.params` as a boolean; a segment `null` stays the string `"null"`.
+
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` — the actual URL segment value captured at request time.
 
@@ -585,13 +615,13 @@ action written for `GET` reads its parameters the same way when it answers a
 
 | Property | Set for | Contains |
 |---|---|---|
-| `req.get` | `GET`, `HEAD` | Query-string parameters (`?key=value`); on a `HEAD`, the same object as `req.head` |
-| `req.post` | `POST` | Parsed request body (JSON or form-encoded) |
-| `req.put` | `PUT` | Parsed request body, merged with URI params |
-| `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update |
-| `req.delete` | `DELETE` | Query-string parameters |
-| `req.head` | `HEAD` | Query-string parameters — body is suppressed in the response; `req.get` is this same object |
-| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` |
+| `req.get` | `GET`, `HEAD` | Query-string parameters (`?key=value`) and the route's URL placeholders (`:id` → `req.get.id`); on a `HEAD`, the same object as `req.head` |
+| `req.post` | `POST` | Parsed request body (JSON or form-encoded) and the route's URL placeholders; a top-level JSON array body is the array itself, the placeholders named on it (since 0.7.6 on the first request to a path too) |
+| `req.put` | `PUT` | Parsed request body and the route's URL placeholders; a top-level JSON array body arrives as an object keyed by index (`{ "0": …, "1": … }`) |
+| `req.patch` | `PATCH` | Parsed request body — fields to apply as a partial update — and the route's URL placeholders; a top-level JSON array body as for `req.post` |
+| `req.delete` | `DELETE` | Query-string parameters and the route's URL placeholders |
+| `req.head` | `HEAD` | Query-string parameters and the route's URL placeholders — body is suppressed in the response; `req.get` is this same object |
+| `req.body` | `POST`, `PUT`, `PATCH` | Alias — same reference as `req.post`, `req.put`, or `req.patch` when the request carries a body (since 0.7.6 also on the first request to a path, where it held only the client's keys); a top-level JSON array body is the array on `POST` and `PATCH`, an object keyed by index on `PUT`; an empty JSON document (`[]` or `{}`) leaves it the request's text |
 | `req.rawBody` | non-multipart POST/PUT/PATCH | The exact **unparsed** body string, captured before parsing — `''` for an empty body; not set for `multipart/form-data` uploads (use `req.files`). Use it to verify webhook signatures (see below). |
 
 :::note How request values are decoded
@@ -832,7 +862,8 @@ curl -I https://api.example.com/documents/42
 # content-length: 847
 ```
 
-Query-string parameters and URI params are merged in automatically for all methods:
+Query-string parameters and URI params are merged in automatically for all methods; when
+both carry the same name, the URI param wins (since 0.7.6, see [URL parameters](#url-parameters)):
 
 ```js
 // GET /search?q=gina&page=2
@@ -853,8 +884,9 @@ if (req.post.count() > 0) {
 
 A few string values are coerced on the way in. `"true"`, `"false"` and `"on"` become
 booleans (`"on"` is what a checked checkbox submits, so it arrives as `true`), and
-`"null"` becomes `null` in request bodies. Nothing else is cast: a numeric value such
-as `"2"` stays a string, so convert it before comparing.
+`"null"` becomes `null` in request bodies. A URL placeholder's segment follows the
+same rule, except `null`, which stays the string `"null"`. Nothing else is cast: a numeric
+value such as `"2"` stays a string, so convert it before comparing.
 
 :::note OPTIONS
 `OPTIONS` is reserved for CORS preflight and is handled internally — it never

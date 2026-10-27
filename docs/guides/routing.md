@@ -140,7 +140,7 @@ unique across the project.
 
 ### Parameterized URL
 
-Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` (and `req.get.<key>` for GET requests).
+Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` and into the method's own object (`req.get.<key>` on a GET, `req.delete.<key>` on a DELETE, `req.put.<key>` on a PUT, and so on). `req.params` is set for every method; on a `DELETE` route whose `requirements` put a regex on each placeholder it was left unset before 0.7.6. A query or body key of the same name does not replace it: since 0.7.6 the method's object holds the URL value on every request (see [URL parameters](/guides/controller#url-parameters)).
 
 ```json
 "invoice": {
@@ -343,6 +343,10 @@ slashes, flags after the last slash):
 ```
 
 `/docs/intro` matches. `/docs/pricing` does not — the router tries the next route.
+
+A route may put a requirement on some of its placeholders only: a placeholder without one
+accepts any non-empty segment. (On a `DELETE` route that was not so before 0.7.6 — a `DELETE`
+route whose requirements covered only some of its placeholders never matched.)
 
 :::warning A regex requirement is a partial match — anchor it
 The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the
@@ -808,7 +812,9 @@ Contains the matched route's resolved metadata:
 ### `req.get` / `req.post` / `req.put` / `req.delete`
 
 The parsed request payload for the corresponding HTTP method. URL parameters and
-query strings are merged in automatically.
+query strings are merged in automatically; when both carry the same name, the URL
+parameter wins (since 0.7.6 on every request; before, the query or body value won on
+some requests: see [URL parameters](/guides/controller#url-parameters)).
 
 ```js
 // GET /invoice/abc-123?page=2
@@ -831,7 +837,8 @@ if (req.post.count() > 0) {
 ```
 
 String values `"null"`, `"true"`, and `"false"` are automatically cast to their
-JavaScript equivalents.
+JavaScript equivalents. A URL placeholder's segment follows its own rule: `true`, `false`
+and `on` become booleans, and `null` stays the string `"null"`.
 
 ---
 
