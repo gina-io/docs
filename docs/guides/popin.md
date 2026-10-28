@@ -289,7 +289,10 @@ held nothing else, the dialog keeps its own content rather than being blanked.
 A link in the content (an `<a href>` with no `id`, no `#` in its URL and no `target`)
 loads its page into the same popin instead of navigating the page. A link with a
 `target` opens that window as usual, and an element carrying `gina-popin-close`
-closes the popin.
+closes the popin. Any of them that carries `disabled` (any value but `"false"`) does
+nothing when clicked, wherever the click lands on it; remove the attribute, or set it
+to `"false"`, and it works again. An `<a>` with no `href` that carries `disabled` is
+left as you wrote it.
 
 While such a load is in flight, the popin waits for the page the user asked for:
 `gina.popin.close(name)` and a form's `close()` are ignored until it lands or fails.
@@ -304,6 +307,13 @@ reopen it.
 
 *Fixed in 0.7.6:* a click on an element inside a link with a `target` (an icon, or a
 `<span>` label) loaded the link's page into the popin instead of opening that window.
+
+*Fixed in 0.7.7:* a link carrying `disabled` when the content loaded was followed by
+the browser, in the page or in its `target` window, even once the attribute was
+removed. On a link disabled later, a click on an icon or a `<span>` inside it loaded
+the link into the popin, and a click on the link itself left `gina.popin.close(name)`
+and a form's `close()` ignored. A click inside a disabled close element closed the
+popin.
 
 ## Loading state
 
