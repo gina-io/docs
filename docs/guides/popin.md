@@ -313,7 +313,9 @@ the browser, in the page or in its `target` window, even once the attribute was
 removed. On a link disabled later, a click on an icon or a `<span>` inside it loaded
 the link into the popin, and a click on the link itself left `gina.popin.close(name)`
 and a form's `close()` ignored. A click inside a disabled close element closed the
-popin.
+popin. A click on an `<a>` with no `href`, or with an empty one, left
+`gina.popin.close(name)` and a form's `close()` ignored, even when the anchor's own
+click handler called the close.
 
 ## Loading state
 
