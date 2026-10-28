@@ -30,7 +30,7 @@ Behaviours that are *supported but differ* from Python Jinja2 (macro output auto
 
 | Capability | Upstream Jinja2 | Why rejected |
 | --- | --- | --- |
-| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
+| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
 
 ### Deferred
 

@@ -147,7 +147,7 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 
 | Vector | Why not | Risk |
 | --- | --- | --- |
-| `{{ foo[varname] }}` where `varname` resolves to `"__proto__"` at runtime | Would require a runtime wrapper and add overhead to every bracket access. | Low — info leak only, not RCE. |
+| `{{ foo[varname] }}` where `varname` resolves to `"__proto__"` at runtime | The key is known only at run time, and no runtime check tests it. | Low — info leak only, not RCE. |
 | `{{ foo["__pr" + "oto__"] }}` | Result only known at runtime. | Low — same as above. |
 | `{{ Function("return process")() }}` | Template source is trusted; globals are available by design. | N/A — SSTI is game over for any template engine. |
 | `{{ eval("code") }}` | Same as above. | N/A — by design. |
