@@ -38,6 +38,8 @@ swig.setFilter('shout', function (input) {
 // {{ "hello"|shout }}  => HELLO!
 ```
 
+A filter receives an empty string for a missing or `null` variable, and since 2.9.10 for a subscript that finds nothing: with `users` empty, `{{ users[0]|shout }}` renders `!` (before, `UNDEFINED!`). It can still receive `undefined` or `null` from a function call or from the filter before it, and `String(undefined)` is `"undefined"`, so `{{ fn()|shout }}` renders `UNDEFINED!` when `fn` returns nothing. Check for `undefined` and `null` when a filter needs a string.
+
 ### Bypassing autoescape
 
 Mark a filter `safe` to opt out of the final autoescape pass. Use this only when the filter's output is trusted HTML.

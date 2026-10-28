@@ -60,7 +60,7 @@ Property access works like JavaScript — use brackets when keys contain non-alp
 
 ### Undefined and falsy values
 
-An undefined or `null` variable renders as an empty string. `false` and `0` render as `false` and `0`.
+An undefined or `null` variable renders as an empty string, and so does a missing property reached with dots, such as `{{ user.email }}`. Since 2.9.10 brackets and calls follow the same rule: `{{ users[0] }}`, `{{ users[0].name }}` and `{{ user['email'] }}` render an empty string when there is nothing there, and so does a function call that returns `undefined` or `null` (before, these printed `undefined` or `null`, or failed with `Cannot read properties of undefined`). `false` and `0` render as `false` and `0`.
 
 ### Filters
 

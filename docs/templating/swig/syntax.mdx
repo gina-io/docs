@@ -49,6 +49,8 @@ Identifiers resolve against the locals context passed at render time.
 {{ users[0].name }}
 ```
 
+A missing variable, or a missing property reached with dots, renders as an empty string. Since 2.9.10 so does a subscript that finds nothing: with `users` empty, `{{ users[0] }}` renders an empty string (before, `undefined`) and so does `{{ users[0].name }}` (before, it failed with `Cannot read properties of undefined`). Where such a subscript enters a filter or an arithmetic operand it reads as an empty string, as a missing variable does: `{{ users[0].name|upper }}` renders an empty string and `{{ users[0] * 2 }}` renders `0`. In a tag argument that applies a filter, such as `{% set name = users[0]|upper %}`, a missing subscript still fails with `Cannot read properties of undefined`.
+
 ### Operators
 
 Arithmetic: `+  -  *  /  %`
@@ -77,7 +79,7 @@ The ternary's `else` branch is required — `{{ x ? "a" }}` throws `Expected col
 
 ### Function calls
 
-Variables can be functions. Function output is **never autoescaped**.
+Variables can be functions. Function output is **never autoescaped**. A call that returns `undefined` or `null` renders as an empty string (since 2.9.10; before, it printed `undefined` or `null`).
 
 ```swig
 {{ formatDate(user.birthday) }}

@@ -33,7 +33,7 @@ All of the following throw a generic `Unexpected tag "<name>"` error at parse ti
 | Tag | Upstream purpose | Why rejected |
 | --- | --- | --- |
 | `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where varname resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
-| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [prototype-chain hardening](../swig/security#prototype-chain-hardening)). Small surface widening, for pure sugar over `{{ foo.method() }}` — autoescape already discards the return value. |
+| `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [prototype-chain hardening](../swig/security#prototype-chain-hardening)). Small surface widening, for pure sugar over `{{ foo.method() }}`, which runs the method and renders an empty string when it returns `undefined` or `null` (since 2.9.10; before, it printed `undefined` or `null`). |
 
 ### Deferred
 
