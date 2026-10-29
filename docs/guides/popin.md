@@ -286,10 +286,37 @@ held nothing else, the dialog keeps its own content rather than being blanked.
 
 ### Links inside popins
 
-A link in the content (an `<a href>` with no `id`, no `#` in its URL and no `target`)
-loads its page into the same popin instead of navigating the page. A link with a
-`target` opens that window as usual, and an element carrying `gina-popin-close`
-closes the popin.
+A link in the content (an `<a href>` with no `id`, no `#` in its URL, no `target` and
+no `download`) loads its page into the same popin instead of navigating the page. A
+link with a `target` opens that window as usual, a link with `download` saves its file,
+and a link whose URL has a scheme other than http(s) (`mailto:`, `tel:`,
+`javascript:`) is left to the browser, as it would be outside a popin. An element
+carrying `gina-popin-close` closes the popin. Any of them that carries `disabled` (any
+value but `"false"`) does nothing when clicked, wherever the click lands on it; remove
+the attribute, or set it to `"false"`, and it works again. An `<a>` with no `href` that
+carries `disabled` is left as you wrote it.
+
+An `<a>` that has no `href` when the content loads can be given one by your script
+afterwards, for example once the URL of a file is known: its click then follows the
+same rules. A URL that answers with a file is loaded into the popin like any page
+unless the link carries `download`, so write `download` (or a `target`) on such a link
+together with its `href`.
+
+```html
+<a class="get-file">Download the archive</a>
+```
+
+```js
+// in your script, once the URL is known
+var a = document.querySelector('.get-file');
+a.setAttribute('href', '/files/archive.zip');
+a.setAttribute('download', '');
+```
+
+In a popin registered with the validator, a link inside a form carrying
+`data-gina-form-inherits-data` loads with that data added to its URL as
+`?inheritedData=`. A link given its `href` after the content loaded, and a `download`
+link, do not carry it.
 
 While such a load is in flight, the popin waits for the page the user asked for:
 `gina.popin.close(name)` and a form's `close()` are ignored until it lands or fails.
@@ -304,6 +331,20 @@ reopen it.
 
 *Fixed in 0.7.6:* a click on an element inside a link with a `target` (an icon, or a
 `<span>` label) loaded the link's page into the popin instead of opening that window.
+
+*Fixed in 0.7.7:* a link carrying `disabled` when the content loaded was followed by
+the browser, in the page or in its `target` window, even once the attribute was
+removed. On a link disabled later, a click on an icon or a `<span>` inside it loaded
+the link into the popin, and a click on the link itself left `gina.popin.close(name)`
+and a form's `close()` ignored. A click inside a disabled close element closed the
+popin. A click on an `<a>` with no `href`, or with an empty one, left
+`gina.popin.close(name)` and a form's `close()` ignored, even when the anchor's own
+click handler called the close.
+
+*Fixed in 0.7.7:* an `<a>` given its `href` after the content loaded did nothing when
+clicked, and `gina.popin.close(name)` and a form's `close()` were ignored afterwards. A
+link carrying `download` loaded its file into the popin instead of saving it, and a
+`mailto:`, `tel:` or `javascript:` link failed with an error.
 
 ## Loading state
 

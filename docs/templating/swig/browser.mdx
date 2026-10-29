@@ -88,6 +88,8 @@ swig.registerBundle(require('./dist/templates.js'));
 
 See [CLI — AOT bundle](./cli#aot-bundle--compile-a-directory) for the full flag reference and caveats.
 
+A compiled template keeps the behaviour of the swig release that compiled it, so compile your templates again when you upgrade swig: a bundle compiled by 2.9.10 and registered on 2.9.11 still prints `undefined` for `{{ items|first }}` over an empty list.
+
 ## Strict CSP — the runtime-only build
 
 The full bundle compiles templates through `new Function`, so pages using it need `'unsafe-eval'` in their `script-src` Content-Security-Policy — even when every template was pre-compiled, because a cache miss falls through to the compiler.

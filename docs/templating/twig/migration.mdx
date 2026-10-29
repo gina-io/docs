@@ -121,7 +121,7 @@ Practical consequences:
 
 - **Object method calls require JS functions.** `{{ user.getName() }}` works if `user.getName` is a JS function; it does not fall back to a PHP magic `__call`.
 - **Iteration is over enumerable JS own properties.** `{% for k, v in obj %}` yields `Object.keys(obj)` order — which is insertion order for string keys in modern JS engines.
-- **Stringification uses `String(x)`.** Objects without a custom `toString` render as `"[object Object]"` rather than throwing. If you rely on upstream Twig's `__toString` magic, define `toString` on the locals object before passing it in.
+- **Stringification uses `String(x)`.** Objects without a custom `toString` render as `"[object Object]"` rather than throwing. If you rely on upstream Twig's `__toString` magic, define `toString` on the locals object before passing it in. An output that comes out `null` or `undefined` renders as `""` (since 2.9.10; before, only a variable without filters did, and a function result, a subscript or a filter result printed `null` or `undefined`).
 
 ### Shared backend guarantees
 

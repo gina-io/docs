@@ -25,7 +25,7 @@ The matrices below are ground truth: each row maps to a symbol actually exported
 | --- | --- | --- | --- |
 | `**` | `a ** b` | Power. | `Math.pow(a, b)` |
 | `//` | `a // b` | Floor division. | `Math.floor(a / b)` |
-| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty, as in Jinja2 (before, `undefinedx`). A function or filter result that is `undefined` or `null` gives `undefined` or `null` (`fn() ~ "x"` gives `undefinedx` or `nullx`), where Jinja2 writes `None` for any `None` operand (`Nonex`). | `(String(a) + String(b))` |
 | `+` `-` `*` `/` `%` | `a + b` | Arithmetic. `+` also concatenates when either side is a string (JavaScript coercion). | See [Behavioural differences](#behavioural-differences) for `+` on mixed types. |
 | `a if c else b` | inline conditional | Returns `a` when `c` is truthy, else `b`. The `else` arm is optional (`a if c` yields `""` when `c` is falsy). | |
 | `in` / `not in` | `x in seq`, `x not in seq` | Membership, as in Jinja2 (since 2.9.0): a list holds an equal item, a string a substring, a mapping a key. A test Jinja2 cannot run, such as a number as the container, is false for `in` and true for `not in`. Some answers still differ from Jinja2 — see [Behavioural differences](#behavioural-differences). | `_utils.isIn(x, seq, "python")`; `not in` binds at the same level as `in`. |
@@ -53,7 +53,7 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 
 ## `is` tests {#is-tests}
 
-`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Jinja2 constructor registers the 16 built-ins below via `setExtension`:
+`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Jinja2 constructor registers the 18 built-ins below via `setExtension`:
 
 | Test | Shape | Semantics |
 | --- | --- | --- |
@@ -69,6 +69,8 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 | `string` | `x is string` | `typeof x === 'string'`. |
 | `number` | `x is number` | `typeof x === 'number'`, so `NaN` and the infinities count. |
 | `boolean` | `x is boolean` | `typeof x === 'boolean'`. |
+| `true` | `x is true` | `true` only for the boolean `true` (`x === true`), as Python's `x is True`, so `1 is true` is false (since 2.9.9). |
+| `false` | `x is false` | `true` only for the boolean `false` (`x === false`), so `0 is false` is false (since 2.9.9). |
 | `callable` | `x is callable` | `typeof x === 'function'`. |
 | `lower` | `x is lower` | `true` if `x` is a string with at least one cased letter and no uppercase or titlecase letter, as Python's `str.islower`. |
 | `upper` | `x is upper` | `true` if `x` is a string with at least one cased letter and no lowercase or titlecase letter, as Python's `str.isupper`. |
@@ -202,6 +204,7 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | `{% for k, v in items %}` where an item does not hold two values | Raises a `ValueError` (too many or not enough values to unpack), or a `TypeError` for an item that is not iterable. | Binds what the item holds (since 2.9.3): a missing value renders empty, extra values are ignored, and an item that is not a list, a string or a mapping binds nothing. |
 | `{% for x in a if c else b %}` | Raises `TemplateSyntaxError`: in a `for` tag, `if` starts a loop filter, so an inline-if iterable needs parentheses, `(a if c else b)`. | Also accepts it without the parentheses: it iterates `a` when `c` holds and `b` otherwise. |
 | `+` on mixed types | `1 + "x"` raises `TypeError`. | Coerces (`"1x"`), JavaScript-style. Use `~` for explicit, intentional string concatenation. |
+| A member or subscript of a missing value (`x.y` with `x` undefined, `users[0].name` with `users` empty) | Raises `UndefinedError`, as does arithmetic on a missing item (`users[0] * 2`); `users[0]` alone and `users[0]\|upper` render `""`, and `users[0] ~ "x"` gives `x`. | Renders `""` (for a subscript since 2.9.10; before, `users[0].name` failed with `Cannot read properties of undefined`), and in arithmetic a missing item reads as `""`: `users[0] * 2` gives `0` and `users[0] + 1` gives `1`. |
 | `in` and `not in` | Python equality: `True in [1]`, `0 in [False]`, `[1, 2] in [[1, 2]]` and `None in [None]` are true and `1 in {'1': 'x'}` is false; an undefined variable is not `''`; `None in 'abc'` raises. | Membership as in Jinja2 since 2.9.0, except: a boolean and a number are different items, so `true in [1]` and `0 in [false]` are false; a list or a mapping inside a list matches only the same object, so `[1, 2] in [[1, 2]]` is false; a `null` or undefined variable tests like `""`, so it is in every string and in a list holding `""`, and not in a list holding `null`; a number tests a mapping key with the same digits, so `1 in {"1": "x"}` is true. |
 | `is sequence` | A mapping is also a sequence. | An array or string only; a mapping is `is mapping`. |
 | `with x = …` values | Evaluate against the enclosing scope. | Same — evaluated against the outer scope (object-literal merge, not sequential). |
@@ -209,7 +212,7 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | `round` | Float-repr rounding (`42.55\|round(1)` → `42.5`). | Naive decimal rounding (`42.55\|round(1)` → `42.6`). |
 | String filters on an array (`upper`, `lower`, `capitalize`, `title`, `striptags`) | Work on the list's string form: `['hELLO']\|capitalize` gives the string `['hello']`. | Apply to each element and return an array: `['hELLO']\|capitalize` gives the array `['Hello']`, which renders as `Hello`. |
 | Rendering `true`, `false` and `null` | `True`, `False`, `None` — so `true\|urlencode` gives `True`, and a mapping with those values gives `a=True&b=None`. | `true`, `false`, and an empty string for `null` / `undefined`; `urlencode` gives `true` and `a=true&b=null`. |
-| `none`, `None`, `True`, `False` | Constants. | Looked up as variables, so they render as an empty string, and `x == none` is also true when `x` is `0` or `""`. Test with `x is none`, which is also true for an undefined variable, and write booleans as `true` / `false`. |
+| `none`, `None`, `True`, `False` | Constants. | Constants too (since 2.9.9; before, they were variable names that rendered as an empty string), and a template that binds one of them fails to compile. `none` renders as an empty string wherever a variable holding None does; `x == none` is true for an undefined variable, as `x is none` is, where Jinja2 gives false; and a None that a filter returns reaches the next filter as `null`, so `{{ x\|default(none)\|upper }}` renders `[object Object]` (Jinja2: `NONE`). |
 | Characters outside the Basic Multilingual Plane, such as an emoji | Count as one character. | Count as two: `length` gives 2, and `first`, `last`, `list`, `reverse`, `sort`, `unique`, `truncate` and slicing can split one into invalid halves. |
 | `is` tests on `null`, an undefined variable, a boolean or a value the test does not take, and `divisibleby(0)` | For example: `x is defined` is true for `None`; `even`, `odd` and `divisibleby` raise on anything but a number, and `divisibleby(0)` raises; `True is number` and `True is odd` are true; `lower` and `upper` test the string form of any value, so `{'a': 1}` or `1e300` is `lower`. | For example: `x is defined` is false and `x is undefined` true for `null`; for the other tests except `none`, a `null` or undefined variable tests like `""`, so `is string` is true for it, and `is iterable` and `is sequence` for `null`; `even`, `odd` and `divisibleby` return false on anything but a number, and `divisibleby(0)` returns false; `true is number` and `true is odd` are false; `lower` and `upper` are false for anything but a string. |
 

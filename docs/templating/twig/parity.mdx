@@ -25,7 +25,7 @@ Twig operators that `@rhinostone/swig-twig` accepts and the native swig frontend
 
 | Operator | Shape | Semantics | Lowering |
 | --- | --- | --- | --- |
-| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. | `(String(a) + String(b))` |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty (before, `undefinedx`). A function or filter result that is `undefined` or `null` gives `undefined` or `null`: `fn() ~ "x"` gives `undefinedx` when `fn` returns nothing. | `(String(a) + String(b))` |
 | `..` | `a..b` | Integer or single-character range. A numeric range with an infinite bound (since 2.8.2) or of more than 1,000,000 elements (since 2.9.2) is empty; from 2^53 on, adding 1 no longer changes a JavaScript number, so a range whose values reach 2^53 counts as too long. | `_utils.range(a, b)` |
 | `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
 | `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
@@ -101,7 +101,7 @@ Tags explicitly **not implemented** (throw at parse time):
 
 See [Non-Goals](./non-goals) for the full list and the error messages they produce.
 
-**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it.
+**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it. On the sync path they stayed reachable through the importing alias (`{{ alias.inner.macro() }}`) until `2.9.7`; since then that renders nothing on both paths.
 
 ## Filters
 

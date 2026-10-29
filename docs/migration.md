@@ -19,6 +19,236 @@ upward to the target version.
 
 ---
 
+## 0.7.6 → 0.7.7
+
+### Security — `self.renderJSON()` adds its Inspector sidecars in development only (bundle restart)
+
+Up to 0.7.6, during a production
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation),
+`self.renderJSON()` added the request's query log (`__ginaQueries`: each statement's text, its
+parameter shapes or, with `inspector.queries.captureValues`, its values, the `.sql` file's server
+path, the bundle and connector names and the result counts) and its timeline (`__ginaFlow`) to the
+JSON response of any request carrying `x-gina-inspector: true`. `self.query()` sends that header on a
+[call to another bundle](/guides/multi-bundle#what-travels-between-bundles) so that the caller can
+merge the callee's capture into its own, but any client can send it: while a window was open, an
+unauthenticated client could read its own request's query log and timeline. Only a bundle that
+enables `inspector.instrumentation`, while a window is open, is affected, from 0.4.0 to 0.7.6. A
+security advisory accompanies this fix.
+
+Since 0.7.7 `renderJSON()` adds the sidecars in development only. During a window the capture leaves
+only over the authenticated `/_gina/agent` channel, as the Inspector guide describes.
+
+**What to check:**
+
+- In a production window, a caller's Inspector no longer shows the queries and timeline of a bundle
+  it calls: open a window on each bundle that serves the page, as the Inspector guide recommends.
+- Development is unchanged: the sidecars still travel between bundles and are merged into the
+  caller's query log.
+
+Server-side only: **restart the bundle**.
+
+### Security — Gina requires `ws` `^8.22.0`, whose default fragment limits are lower (bundle restart)
+
+Gina 0.7.7 requires `ws` `^8.22.0` in both of its manifests, so an upgrade moves a project off
+ws 8.21.0 even when its lockfile pins it. ws 8.21.1 lowered a WebSocket server's default
+`maxFragments` from 131,072 to 16,384 fragments per message and its default `maxBufferedChunks`
+from 1,048,576 to 262,144, and counts empty fragments toward the limit, completing the fix of
+[GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p): under the 8.21.0
+defaults, a client sending many fragments could still exhaust the server's memory
+([ws issue #2331](https://github.com/websockets/ws/issues/2331)). No advisory names 8.21.0.
+
+Gina's WebSocket servers run on those defaults: the Inspector's agent channel, which is refused
+outside development unless you enable it with its key, and the engine.io server a bundle starts
+through `ioServer` (engine.io passes no fragment limit of its own).
+
+**What to check:** these servers now close, with code 1008, the connection of a client that
+sends one message in more than 16,384 fragments. A WebSocket server of your own on the same `ws` copy can
+raise the limits with its `maxFragments` and `maxBufferedChunks` options.
+
+Server-side only: **restart the bundle**.
+
+### Changed — Gina requires `@rhinostone/swig` `^2.9.11`, which changes some native swig outputs (bundle restart)
+
+Gina 0.7.7 requires `@rhinostone/swig` `^2.9.11` in both of its manifests. Swig 2.9.11 is a fix
+release, with no advisory, that changes what some native swig templates render:
+
+- A filter in a `set`, `if`, `elseif`, `for`, `include` or `filter` tag argument applies to its own
+  operand, as in an output. `{% set y = arr[0]|upper %}` over an empty array no longer throws, shapes
+  such as `{% for c in (x)|reverse %}` or `{% include name|default("p.html") %}` now compile, and a
+  filter after a function or method call with an expression before it applies to that call only, in
+  a `set`, `if`, `elseif` or `for` argument alike, where it applied to the whole expression before
+  it: `{% set y = a + f(x)|upper %}` with `a = "x"` and `x = "ab"` gives `xAB`, where it gave `XAB`,
+  and `{% if z and f(x)|upper %}` with `z = 0` is now false.
+- A filter after a literal in an output that holds an operator or a ternary applies to the literal:
+  `{{ 3|default(1) + 1 }}` gives `4`, where it gave `3`.
+- An output whose variable is followed by a filter renders an empty string when the last filter
+  returns `undefined` or `null`, for example `{{ items|first }}` over an empty array, or a custom
+  filter that returns nothing; swig printed the word `undefined` or `null`.
+- Inside an `{% autoescape true %}` region, a missing subscript or member, or a call that returns
+  `undefined`, renders an empty string. Gina's own `settings.swig.autoescape` is a boolean, which
+  already did.
+
+Upgrading gina installs 2.9.11 or later. A project copy loaded through `swig.useProject`, or a
+frontend selected through `swig.package`, keeps its own version: update it there.
+
+**What to check:**
+
+- A `set`, `if`, `elseif` or `for` argument with a filter after a function or method call that has
+  an operator, `and` or `or` before it: the filter now applies to the call only. A filter after a
+  variable, and a filtered call with nothing before it, are unchanged.
+- A template or test that expected the text `undefined` or `null` from a filtered output, or a
+  throw from a filtered tag argument.
+- A template your application compiles ahead of time with swig (`swig.precompile()` output, or a
+  bundle registered with `swig.registerBundle`) keeps the behaviour of the swig release that
+  compiled it: compile it again after the upgrade ([Browser usage](/templating/swig/browser)). Gina
+  compiles its own templates at render time and keeps no compiled template on disk, so the restart
+  recompiles them.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — an HTTP/2 `self.query()` body cut short is no longer delivered as a success (bundle restart)
+
+A `self.query()` response over HTTP/2 whose body is cut short mid-transfer now follows the
+premature-close rule (see [HTTP/2 client resilience](/guides/http2-resilience)): a body
+shorter than the response's `content-length`, or any body received on a session Gina tore
+down itself (its keepalive or pre-flight PING deadline, a stream error that ends the session,
+the boot warmup's deadline), is sent again on a fresh session for a safe method or a call with
+`retryUnsafe: true`, and any other call fails with `PREMATURE_CLOSE` (503). Before 0.7.7 the
+caller got the partial body as a success, or a `{ status: 500 }` with no error code when that
+body was JSON. On Bun 1.2 and 1.3, an empty response that completes while its session is being
+closed is no longer read as incomplete.
+
+**What to check:**
+
+- An action that used a partial body, or handled that uncoded 500, now gets `PREMATURE_CLOSE`
+  for an unsafe method: handle that code, or set `retryUnsafe: true` where a second attempt
+  is safe.
+- A body sent with no `content-length` and cut by the connection closing or resetting is still
+  delivered as received. Gina's own HTTP/2 answers declare their length since 0.7.7 (next
+  entry).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — an HTTP/2 success answer declares its `content-length` (bundle restart)
+
+Over HTTP/2, a success answer from `self.renderJSON()`, `self.render()` with swig or nunjucks
+(with or without an async loader), `self.renderXML()` or the render cache now declares its
+`content-length`, as it already did over HTTP/1.1. A client can then tell a body cut short from
+a complete one, which Gina's own `self.query()` does since 0.7.7 (previous entry).
+
+**What to check:** nothing in most applications. A 204, 205 or 304 answer still declares no
+length, since a Node.js HTTP/2 client resets a 204 or 205 that declares one, and
+`self.renderStream()` still sends none.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — a 4xx or 5xx answer without a Gina `status` reaches `self.query()` as an error (bundle restart)
+
+Up to 0.7.6 `self.query()` decided between an error and a success on the body's `status` field
+only, on HTTP/1.1 and HTTP/2, and read the response's status line only for an HTTP/2 502. A 4xx or
+5xx whose body carried no `status` (an empty body, text, JSON without `status`, or the HTML page a
+proxy in front of a bundle answers with itself) therefore reached the caller as a success: an empty
+one as `{ status: 200, empty: true }` over HTTP/2 and `''` over HTTP/1.1, any other with its body.
+
+Since 0.7.7 such an answer, for a status Gina's status-code map knows, reaches the callback as the
+[error object](/guides/controller) `{ status, error, message }`: `status` from the status line,
+`error` the map's label, `message` the body text, the JSON text, or the label for an empty body. The
+promisified call rejects with it, and an `.onComplete()` handle receives it as `err`. A body that
+carries `status` still decides, and a status the map does not know (such as 599) is still delivered
+as a success.
+
+**What to check:**
+
+- A caller of a non-Gina upstream, or of a bundle reached through a proxy, that read a 4xx or 5xx
+  answer as a success (its fields, or `result.empty`) now gets `err`.
+- A `forward` route now answers such a status through `throwError()`, with its status. Before, it
+  relayed the answer to the client as a 200 carrying its body.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — a link or a close element carrying `disabled` in a popin does nothing when clicked (bundle restart and re-bake)
+
+An element carrying `disabled` (any value but `"false"`) in popin content, a link with an
+`href` or a `gina-popin-close` element, now does nothing when clicked, wherever the click lands
+on it (see [Links inside popins](/guides/popin#links-inside-popins)). Before 0.7.7 a link
+carrying `disabled` when the content loaded was followed by the browser, in the whole page or
+in its `target` window, even once the attribute was removed. On a link disabled later, a click
+on an icon or a `<span>` inside it loaded the link into the popin, and a click on the link
+itself left `gina.popin.close(name)` and a form's `close()` ignored. A click on markup inside a
+disabled close element closed the popin. A link whose `disabled` is removed, or set to
+`"false"`, now works as the same link without it.
+
+**What to check:** a page that counted on a disabled link being followed by the browser. An
+`<a>` with no `href` that carries `disabled` is still left as written.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a click on markup added inside a close button that is also a legacy trigger dispatches the trigger (bundle restart and re-bake)
+
+A `.gina-popin-close` element that also carries `data-gina-popin-name` (a legacy trigger) now
+dispatches its trigger when the click lands on markup added inside it after the trigger was
+registered (an icon, a label), as a click on the button itself does. Before 0.7.7 the popin
+read the trigger's event name from the element clicked, so such a click did nothing; markup
+already inside the button when the trigger was registered was not affected.
+
+**What to check:** nothing in most pages.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a click on an `<a>` with no `href` in a popin leaves the popin able to close (bundle restart and re-bake)
+
+A click on an `<a>` with no `href`, or with `href=""`, in popin content no longer leaves the
+popin unable to close. Before 0.7.7 `gina.popin.close(name)` and a form's `close()` did nothing
+after such a click, a close from the anchor's own click handler included, because the popin
+waited for a load that never came. The anchor still loads nothing and keeps the `href="#"`
+Gina gives it, until the page gives it a real `href` (next entry).
+
+**What to check:** in a popin registered with the validator, the anchor's click no longer
+appends the inherited data of the form around it to that `href`; a link's load still carries
+it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — an `<a>` given its `href` after the popin content loaded works when clicked (bundle restart and re-bake)
+
+An `<a>` in popin content that has no `href` when the content is bound, and is given one by the
+page afterwards, now follows the rules of a link when clicked (see
+[Links inside popins](/guides/popin#links-inside-popins)): its page loads into the popin, and
+one carrying a `target`, a `download`, a `#` in its URL or a scheme other than http(s) is left
+to the browser. This also holds after a partial swap of the popin
+(`data-gina-dialog-target`). Before 0.7.7 its click did nothing, and `gina.popin.close(name)`
+and a form's `close()` were ignored afterwards.
+
+**What to check:** its load carries no `?inheritedData`, even inside a form carrying inherited
+data in a popin registered with the validator. An anchor carrying `disabled` still does
+nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `download` link in a popin saves its file (bundle restart and re-bake)
+
+A link carrying `download` in popin content is now left to the browser, which saves the file.
+Before 0.7.7 its click loaded the file into the popin by XHR and wrote its bytes there.
+
+**What to check:** inside a form carrying inherited data, in a popin registered with the
+validator, such a link is saved from its `href` as written, with no `?inheritedData`. A link
+that carries its own `id` is handled as before: its click closes the popin.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `mailto:`, `tel:` or `javascript:` link in a popin is left to the browser (bundle restart and re-bake)
+
+A link in popin content whose URL has a scheme other than http(s) is now left to the browser,
+as it is outside a popin. Before 0.7.7 its click fetched the URL by XHR, which failed with an
+error and opened nothing.
+
+**What to check:** the test reads the `href` as written, so a URL written with leading spaces
+is still fetched.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+---
+
 ## 0.7.5 → 0.7.6
 
 ### Changed — a URL placeholder's value wins over a query or body key of the same name (bundle restart)
@@ -379,7 +609,8 @@ render, such as a module-level object or a `require()`d JSON module, carried the
 session id, CSRF token and URL into the pages of later requests, `gina.session` in the client
 bootstrap included. A fresh object per call, the pattern the
 [controller guide](/guides/controller#selfrenderdata) shows, was not affected. The session cookie
-stays signed, so a session id read from a page does not open that session. A security advisory
+stays signed, so a session id read from a page does not open that session. A security advisory,
+[GHSA-2jvf-v3wm-pc9p](https://github.com/gina-io/gina/security/advisories/GHSA-2jvf-v3wm-pc9p),
 accompanies this fix.
 
 Since 0.7.6 each render combines a copy of the object: the object itself, its `page`, `page.view`,
@@ -413,7 +644,9 @@ Inspector and for [calls between bundles](/guides/multi-bundle#what-travels-betw
 `renderJSON()` call, such as a memoized or cached response object, kept the first request's
 sidecars and sent them in every later response built from it, to any client, external ones
 included, and after the window had closed. The security advisory that accompanies the
-`self.render()` fix above covers this one too.
+`self.render()` fix above,
+[GHSA-2jvf-v3wm-pc9p](https://github.com/gina-io/gina/security/advisories/GHSA-2jvf-v3wm-pc9p),
+covers this one too.
 
 Since 0.7.6 `renderJSON()` writes the sidecars into a copy of the object, made once per response,
 one level deep (its members are shared); the response body is unchanged.

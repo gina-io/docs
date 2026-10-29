@@ -30,7 +30,7 @@ Behaviours that are *supported but differ* from Django (two loop variables over 
 
 | Capability | Why rejected |
 | --- | --- |
-| Sandboxed rendering | swig-django's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). A partial sandbox requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. Django's own template language is not a sandbox either — it relies on autoescape, not on isolating the source. |
+| Sandboxed rendering | swig-django's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). A partial sandbox requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. Django's own template language is not a sandbox either — it relies on autoescape, not on isolating the source. |
 
 The **runtime bracket-access guard** is the same known gap as every other frontend: `{{ foo[varname] }}` where `varname` resolves to `"__proto__"` at render time is not blocked. The compile-time `_dangerousProps` checks cover dotted access, string-literal bracket access, and every context-writing tag. See [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
 
@@ -87,7 +87,6 @@ The core tag is supported; a specific form is not:
 | `{{ block.super }}` | Deferred | No error — block override works; rendering the parent's content inside an override is not yet wired. |
 | `{% firstof a b as var %}` | Deferred | `The "as" (assign-to-variable) form of "firstof" is not yet supported`. |
 | `{% cycle "a" "b" as name %}` / `{% cycle name %}` / `… silent` | Deferred | `Named cycles (the "as name" form of "cycle") are not yet supported`. |
-| `{% for x in d.items %}` (single loop var) | Deferred | `... requires two loop variables` — use `{% for k, v in d.items %}`. |
 
 ### Filters
 

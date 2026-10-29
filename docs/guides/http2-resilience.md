@@ -73,7 +73,10 @@ connection reset means the session itself is gone, and it is destroyed.
 
 Retried error types:
 - Premature close — the stream ended without its complete response: a GOAWAY, a network
-  reset, a stream reset before any response, or its session destroyed under it
+  reset, a stream reset before any response, or its session destroyed under it; since
+  `0.7.7`, also a body cut short: shorter than the response's `content-length`, or received
+  on a session Gina tore down itself (its keepalive or pre-flight PING deadline, a stream
+  error that ends the session, the boot warmup's keepalive deadline)
 - HTTP/2 stream error (`ERR_HTTP2_STREAM_ERROR`); a stream that fails with another
   code is not retried, unless it was refused before processing (below)
 - Connection reset (`ECONNRESET`)
@@ -115,10 +118,30 @@ an empty 200 or 404) came back as a 500, and a refused connection or a failed TL
 handshake as a 500 with no error code (on 1.2.21, a failed handshake as an empty success).
 :::
 
-:::note Bun 1.2 and 1.3
-An empty response that completes while its session is being closed — after another
-request's retry evicted it — is read as incomplete: a safe method is sent again, an unsafe
-one fails with `PREMATURE_CLOSE`. Node.js and Bun 1.4 are not affected.
+:::info Before `0.7.7`
+A body cut short mid-transfer reached the caller as a success carrying the partial body,
+or as a 500 with no error code when that partial body was JSON: a body cut by the
+connection closing after its `content-length` was declared (every runtime), a body on a
+session Gina's own keepalive or pre-flight PING deadline, or the boot warmup's, tore down
+(Node.js, Bun 1.2 and 1.3), and a body cut by a reset after its `content-length` was
+declared (Bun 1.2 and 1.3). On Bun 1.2 and 1.3, an empty response that completed while its
+session was being closed — after another request's retry evicted it — was read as
+incomplete: a safe method was sent again, an unsafe one failed with `PREMATURE_CLOSE`.
+A 4xx or 5xx whose body carried no `status` came back as a success, on HTTP/1.1 too: an
+empty one as `{ status: 200, empty: true }` (on HTTP/1.1, `''`), any other with its body.
+Since 0.7.7 it is an error carrying its status, as the
+[controller guide](/guides/controller) describes under « Error shape ».
+:::
+
+:::note A body sent with no `content-length`
+A response that declares no `content-length` and is cut short by the connection closing or
+resetting, with no teardown of Gina's, is still taken as received. The stream's reset code
+marks such a cut on every runtime, but on Bun 1.2 a complete body followed by a close
+sometimes carries it too, so Gina does not read it for a non-empty body. Gina's own HTTP/2
+success answers declare their length since `0.7.7` (`renderJSON()`, `render()`,
+`renderXML()` and render-cache hits read into memory; never a 204, 205 or 304, which carry
+no content), so this concerns `renderStream()` answers, error pages, a render-cache entry
+streamed from disk, and upstreams that send no length.
 :::
 
 **A stream timeout is not retried** (since `0.7.6`). A call that gets no response within
@@ -341,7 +364,7 @@ returns a `GinaHttp2Error` with one of these codes:
 | Code | Meaning | Retried? |
 |---|---|---|
 | `TIMEOUT` | Stream timeout — no response within `requestTimeout` | No (since `0.7.6`): only its stream is cancelled |
-| `PREMATURE_CLOSE` | The stream ended without its complete response (a GOAWAY, a reset before any response, its session destroyed under it); also a never-sent request whose retries ran out | Yes (safe methods, or `retryUnsafe`; a never-sent request for any method) |
+| `PREMATURE_CLOSE` | The stream ended without its complete response (a GOAWAY, a reset before any response, its session destroyed under it, and since `0.7.7` a body shorter than its `content-length` or received on a session Gina tore down itself); also a never-sent request whose retries ran out | Yes (safe methods, or `retryUnsafe`; a never-sent request for any method) |
 | `STREAM_ERROR` | HTTP/2 stream error, or a session error (the session was closed by a GOAWAY while the stream was in flight; also the code a session gone before the send, or a request refused before processing, exhausts into); also a session that failed to connect without a refused connection, such as a failed TLS handshake | Yes for the HTTP/2 stream and session errors (safe methods, or `retryUnsafe`; the gone-before-send and refused-before-processing cases for any method); any other stream failure, and a session that failed to connect, is not retried |
 | `ECONNRESET` | Connection reset by peer | Yes (safe methods, or `retryUnsafe`) |
 | `BAD_GATEWAY` | The upstream answered 502 on every attempt | Yes — each retry after 2 s (safe methods, or `retryUnsafe`) |

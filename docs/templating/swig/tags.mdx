@@ -13,6 +13,8 @@ prereqs:
 
 Tags control flow, define reusable structures, and orchestrate template inheritance. Each tag is written between `{% … %}` markers. Tags that open a block must be closed with `{% end<name> %}`.
 
+In a `set`, `if`, `elseif`, `for`, `include` or `filter` argument a filter applies to the operand just before it, as in `{{ }}` output. Up to 2.9.10 a filter after a function or method call in a `set`, `if`, `elseif` or `for` argument applied to everything before it: `{% if z and f(x)|upper %}` tested `(z and f(x))|upper`, and `{% set y = a + f(x)|upper %}` upper-cased `a` too. In 2.9.10 a filter after a parenthesized operand, as in `{% set y = (x)|upper %}`, and a filter in an `include` path, as in `{% include name|default("p.html") %}`, failed to compile; both work since 2.9.11.
+
 | Tag | Ends | Block-level | Purpose |
 | --- | --- | --- | --- |
 | [`autoescape`](#autoescape) | ✅ | — | Override autoescape for a region. |
@@ -127,6 +129,8 @@ Accepts filter arguments:
 {% endfilter %}
 ```
 
+Since 2.9.11 the arguments may hold filters, as in `{% filter replace("a", x|upper) %}`, and empty parentheses are accepted, as in `{% filter upper() %}`; 2.9.10 failed to compile both.
+
 ## for
 
 Iterate over arrays, objects, or strings.
@@ -200,7 +204,10 @@ An import alias occupies the template's variable namespace: it overrides a
 context variable of the same name, so pick alias names that don't collide with
 your locals. The aliases an imported file sets up for itself stay out of the
 template that imports it, on the sync path and, since `2.9.6`, on the
-[async render path](./loaders#async-loaders).
+[async render path](./loaders#async-loaders). On the sync path they stayed
+reachable through the importing alias until `2.9.7`: now
+`{{ buttons.icons.disk() }}` renders nothing on both paths, while
+`buttons.save()` still uses `icons`.
 :::
 
 ## include

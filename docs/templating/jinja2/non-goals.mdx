@@ -30,7 +30,7 @@ Behaviours that are *supported but differ* from Python Jinja2 (macro output auto
 
 | Capability | Upstream Jinja2 | Why rejected |
 | --- | --- | --- |
-| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known unclosable gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
+| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing runtime bracket access (`foo[varname]` where `varname` resolves to `"__proto__"` — a [known gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
 
 ### Deferred
 
@@ -39,7 +39,7 @@ These tags throw `Unexpected tag "<name>"` at parse time:
 | Tag | Upstream purpose | Why not yet |
 | --- | --- | --- |
 | `{% call %}` | Invoke a macro with a `{% call %}…{% endcall %}` body reachable via `caller()`. | Core Jinja2, but needs a `caller()` runtime contract and a dedicated IR node. Most likely of the three to ship later — [open an issue](https://github.com/gina-io/swig/issues) if you need it. |
-| `{% do %}` | Evaluate an expression for its side effects. | A Jinja2 **extension** (`jinja2.ext.do`), not core — opt-in even upstream. Small surface for pure sugar over `{{ foo.method() }}`; autoescape already discards the output. |
+| `{% do %}` | Evaluate an expression for its side effects. | A Jinja2 **extension** (`jinja2.ext.do`), not core — opt-in even upstream. Small surface for pure sugar over `{{ foo.method() }}`, which runs the method and renders an empty string when it returns `undefined` or `null`. |
 | `{% trans %}` / `{% endtrans %}` | Mark a block for i18n translation. | A Jinja2 **extension** (`jinja2.ext.i18n`), not core. Translation catalogs and pluralization need a runtime swig-core does not provide; do i18n in the controller and pass translated strings in as locals. |
 
 If you need one of these, either express the same intent with supported tags, register a [custom tag](../swig/extending#custom-tags) scoped to your application, or [open an issue](https://github.com/gina-io/swig/issues) with a concrete use case.
