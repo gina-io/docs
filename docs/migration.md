@@ -86,6 +86,123 @@ frontend selected through `swig.package`, keeps its own version: update it there
 
 Server-side only: **restart the bundle**.
 
+### Fixed — an HTTP/2 `self.query()` body cut short is no longer delivered as a success (bundle restart)
+
+A `self.query()` response over HTTP/2 whose body is cut short mid-transfer now follows the
+premature-close rule (see [HTTP/2 client resilience](/guides/http2-resilience)): a body
+shorter than the response's `content-length`, or any body received on a session Gina tore
+down itself (its keepalive or pre-flight PING deadline, a stream error that ends the session,
+the boot warmup's deadline), is sent again on a fresh session for a safe method or a call with
+`retryUnsafe: true`, and any other call fails with `PREMATURE_CLOSE` (503). Before 0.7.7 the
+caller got the partial body as a success, or a `{ status: 500 }` with no error code when that
+body was JSON. On Bun 1.2 and 1.3, an empty response that completes while its session is being
+closed is no longer read as incomplete.
+
+**What to check:**
+
+- An action that used a partial body, or handled that uncoded 500, now gets `PREMATURE_CLOSE`
+  for an unsafe method: handle that code, or set `retryUnsafe: true` where a second attempt
+  is safe.
+- A body sent with no `content-length` and cut by the connection closing or resetting is still
+  delivered as received. Gina's own HTTP/2 answers declare their length since 0.7.7 (next
+  entry).
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — an HTTP/2 success answer declares its `content-length` (bundle restart)
+
+Over HTTP/2, a success answer from `self.renderJSON()`, `self.render()` with swig or nunjucks
+(with or without an async loader), `self.renderXML()` or the render cache now declares its
+`content-length`, as it already did over HTTP/1.1. A client can then tell a body cut short from
+a complete one, which Gina's own `self.query()` does since 0.7.7 (previous entry).
+
+**What to check:** nothing in most applications. A 204, 205 or 304 answer still declares no
+length, since a Node.js HTTP/2 client resets a 204 or 205 that declares one, and
+`self.renderStream()` still sends none.
+
+Server-side only: **restart the bundle** (no re-bake for this change).
+
+### Fixed — a link or a close element carrying `disabled` in a popin does nothing when clicked (bundle restart and re-bake)
+
+An element carrying `disabled` (any value but `"false"`) in popin content, a link with an
+`href` or a `gina-popin-close` element, now does nothing when clicked, wherever the click lands
+on it (see [Links inside popins](/guides/popin#links-inside-popins)). Before 0.7.7 a link
+carrying `disabled` when the content loaded was followed by the browser, in the whole page or
+in its `target` window, even once the attribute was removed. On a link disabled later, a click
+on an icon or a `<span>` inside it loaded the link into the popin, and a click on the link
+itself left `gina.popin.close(name)` and a form's `close()` ignored. A click on markup inside a
+disabled close element closed the popin. A link whose `disabled` is removed, or set to
+`"false"`, now works as the same link without it.
+
+**What to check:** a page that counted on a disabled link being followed by the browser. An
+`<a>` with no `href` that carries `disabled` is still left as written.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a click on markup added inside a close button that is also a legacy trigger dispatches the trigger (bundle restart and re-bake)
+
+A `.gina-popin-close` element that also carries `data-gina-popin-name` (a legacy trigger) now
+dispatches its trigger when the click lands on markup added inside it after the trigger was
+registered (an icon, a label), as a click on the button itself does. Before 0.7.7 the popin
+read the trigger's event name from the element clicked, so such a click did nothing; markup
+already inside the button when the trigger was registered was not affected.
+
+**What to check:** nothing in most pages.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a click on an `<a>` with no `href` in a popin leaves the popin able to close (bundle restart and re-bake)
+
+A click on an `<a>` with no `href`, or with `href=""`, in popin content no longer leaves the
+popin unable to close. Before 0.7.7 `gina.popin.close(name)` and a form's `close()` did nothing
+after such a click, a close from the anchor's own click handler included, because the popin
+waited for a load that never came. The anchor still loads nothing and keeps the `href="#"`
+Gina gives it, until the page gives it a real `href` (next entry).
+
+**What to check:** in a popin registered with the validator, the anchor's click no longer
+appends the inherited data of the form around it to that `href`; a link's load still carries
+it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — an `<a>` given its `href` after the popin content loaded works when clicked (bundle restart and re-bake)
+
+An `<a>` in popin content that has no `href` when the content is bound, and is given one by the
+page afterwards, now follows the rules of a link when clicked (see
+[Links inside popins](/guides/popin#links-inside-popins)): its page loads into the popin, and
+one carrying a `target`, a `download`, a `#` in its URL or a scheme other than http(s) is left
+to the browser. This also holds after a partial swap of the popin
+(`data-gina-dialog-target`). Before 0.7.7 its click did nothing, and `gina.popin.close(name)`
+and a form's `close()` were ignored afterwards.
+
+**What to check:** its load carries no `?inheritedData`, even inside a form carrying inherited
+data in a popin registered with the validator. An anchor carrying `disabled` still does
+nothing.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `download` link in a popin saves its file (bundle restart and re-bake)
+
+A link carrying `download` in popin content is now left to the browser, which saves the file.
+Before 0.7.7 its click loaded the file into the popin by XHR and wrote its bytes there.
+
+**What to check:** inside a form carrying inherited data, in a popin registered with the
+validator, such a link is saved from its `href` as written, with no `?inheritedData`. A link
+that carries its own `id` is handled as before: its click closes the popin.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a `mailto:`, `tel:` or `javascript:` link in a popin is left to the browser (bundle restart and re-bake)
+
+A link in popin content whose URL has a scheme other than http(s) is now left to the browser,
+as it is outside a popin. Before 0.7.7 its click fetched the URL by XHR, which failed with an
+error and opened nothing.
+
+**What to check:** the test reads the `href` as written, so a URL written with leading spaces
+is still fetched.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.5 → 0.7.6
