@@ -19,6 +19,36 @@ upward to the target version.
 
 ---
 
+## 0.7.6 → 0.7.7
+
+### Security — `self.renderJSON()` adds its Inspector sidecars in development only (bundle restart)
+
+Up to 0.7.6, during a production
+[instrumentation window](/guides/inspector#instrumentation-window--query--flow-capture-outside-dev-mode-inspectorinstrumentation),
+`self.renderJSON()` added the request's query log (`__ginaQueries`: each statement's text, its
+parameter shapes or, with `inspector.queries.captureValues`, its values, the `.sql` file's server
+path, the bundle and connector names and the result counts) and its timeline (`__ginaFlow`) to the
+JSON response of any request carrying `x-gina-inspector: true`. `self.query()` sends that header on a
+[call to another bundle](/guides/multi-bundle#what-travels-between-bundles) so that the caller can
+merge the callee's capture into its own, but any client can send it: while a window was open, an
+unauthenticated client could read its own request's query log and timeline. Only a bundle that
+enables `inspector.instrumentation`, while a window is open, is affected, from 0.4.0 to 0.7.6. A
+security advisory accompanies this fix.
+
+Since 0.7.7 `renderJSON()` adds the sidecars in development only. During a window the capture leaves
+only over the authenticated `/_gina/agent` channel, as the Inspector guide describes.
+
+**What to check:**
+
+- In a production window, a caller's Inspector no longer shows the queries and timeline of a bundle
+  it calls: open a window on each bundle that serves the page, as the Inspector guide recommends.
+- Development is unchanged: the sidecars still travel between bundles and are merged into the
+  caller's query log.
+
+Server-side only: **restart the bundle**.
+
+---
+
 ## 0.7.5 → 0.7.6
 
 ### Changed — a URL placeholder's value wins over a query or body key of the same name (bundle restart)

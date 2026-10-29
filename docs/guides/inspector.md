@@ -140,9 +140,9 @@ Each query entry shows:
 - **Connector** — which connector was used (e.g. `couchbase`, `mysql`, `postgresql`, `sqlite`)
 - **Index badges** — which database indexes cover the query (see below)
 
-A **search bar** filters across all fields. When bundle A calls bundle B via HTTP
-(`self.query()`), B's queries travel back as a `__ginaQueries` JSON sidecar and are
-merged into A's query log automatically — giving you full-page query visibility across
+A **search bar** filters across all fields. In development, when bundle A calls bundle B
+via HTTP (`self.query()`), B's queries travel back as a `__ginaQueries` JSON sidecar and
+are merged into A's query log automatically — giving you full-page query visibility across
 bundle boundaries.
 
 **Capturing bound parameter values.** By default the params table — and the connectors'
@@ -480,9 +480,12 @@ returns `401`.
 
 - **Egress is remote-only.** While a window is open, captured queries and flow are
   streamed over the **authenticated `/_gina/agent` SSE** — never injected into a
-  response body. To view them, also enable the agent endpoint (`inspector.agent`,
-  above) and connect the standalone Inspector with `?target=<host>&key=<agent-key>`.
-  For a page assembled from multiple bundles, open a window on each participating bundle.
+  response body, whatever headers the request carries (up to 0.7.6, a request sending
+  `x-gina-inspector: true` received its query log and timeline in its JSON response;
+  see the [migration guide](/migration)). To view them, also enable the agent endpoint
+  (`inspector.agent`, above) and connect the standalone Inspector with
+  `?target=<host>&key=<agent-key>`. For a page assembled from multiple bundles, open a
+  window on each participating bundle.
 - **Redaction caveat.** Inspector redaction masks secret-*named* fields, but a query's
   statement text and positional parameters reach the key holder **as-is**. Treat the
   instrumentation key as privileged and keep windows short.
