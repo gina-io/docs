@@ -33,7 +33,9 @@ JSON response of any request carrying `x-gina-inspector: true`. `self.query()` s
 merge the callee's capture into its own, but any client can send it: while a window was open, an
 unauthenticated client could read its own request's query log and timeline. Only a bundle that
 enables `inspector.instrumentation`, while a window is open, is affected, from 0.4.0 to 0.7.6. A
-security advisory accompanies this fix.
+security advisory,
+[GHSA-jhw4-95q6-2rhv](https://github.com/gina-io/gina/security/advisories/GHSA-jhw4-95q6-2rhv),
+accompanies this fix.
 
 Since 0.7.7 `renderJSON()` adds the sidecars in development only. During a window the capture leaves
 only over the authenticated `/_gina/agent` channel, as the Inspector guide describes.
