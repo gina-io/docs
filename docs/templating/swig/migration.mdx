@@ -31,7 +31,7 @@ Constructs available in every engine. Anything not listed here likely differs �
 | Variable output | `{{ var }}` | ✅ | ✅ | ✅ | ✅ |
 | Attribute access | `{{ var.attr }}` | ✅ | ✅ | ✅ | ✅ |
 | Bracket access | `{{ var[key] }}` | ✅ | ✅ | — [^1] | ✅ |
-| Filter chain | `{{ x\|upper\|trim }}` | ✅ | ✅ | ✅ | ✅ |
+| Filter chain | `{{ x\|striptags\|upper }}` | ✅ | ✅ | ✅ | ✅ |
 | Conditional | `{% if %} / {% elif %} / {% else %} / {% endif %}` | ✅ | ✅ | ✅ [^2] | ✅ |
 | Loop | `{% for x in xs %} / {% endfor %}` | ✅ | ✅ | ✅ | ✅ |
 | Inheritance | `{% extends "parent" %}` + `{% block name %}` | ✅ | ✅ | ✅ | ✅ |
