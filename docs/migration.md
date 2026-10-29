@@ -47,6 +47,26 @@ only over the authenticated `/_gina/agent` channel, as the Inspector guide descr
 
 Server-side only: **restart the bundle**.
 
+### Security — Gina requires `ws` `^8.22.0`, whose default fragment limits are lower (bundle restart)
+
+Gina 0.7.7 requires `ws` `^8.22.0` in both of its manifests, so an upgrade moves a project off
+ws 8.21.0 even when its lockfile pins it. ws 8.21.1 lowered a WebSocket server's default
+`maxFragments` from 131,072 to 16,384 fragments per message and its default `maxBufferedChunks`
+from 1,048,576 to 262,144, and counts empty fragments toward the limit, completing the fix of
+[GHSA-96hv-2xvq-fx4p](https://github.com/advisories/GHSA-96hv-2xvq-fx4p): under the 8.21.0
+defaults, a client sending many fragments could still exhaust the server's memory
+([ws issue #2331](https://github.com/websockets/ws/issues/2331)). No advisory names 8.21.0.
+
+Gina's WebSocket servers run on those defaults: the Inspector's agent channel, which is refused
+outside development unless you enable it with its key, and the engine.io server a bundle starts
+through `ioServer` (engine.io passes no fragment limit of its own).
+
+**What to check:** these servers now close, with code 1008, the connection of a client that
+sends one message in more than 16,384 fragments. A WebSocket server of your own on the same `ws` copy can
+raise the limits with its `maxFragments` and `maxBufferedChunks` options.
+
+Server-side only: **restart the bundle**.
+
 ### Changed — Gina requires `@rhinostone/swig` `^2.9.11`, which changes some native swig outputs (bundle restart)
 
 Gina 0.7.7 requires `@rhinostone/swig` `^2.9.11` in both of its manifests. Swig 2.9.11 is a fix
