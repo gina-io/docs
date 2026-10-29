@@ -218,7 +218,7 @@ These fail with `Unexpected tag`, `Unable to parse …`, or "Mismatched nesting 
 | `{% verbatim %}...{% endverbatim %}` | `{% raw %}...{% endraw %}` | |
 | `{% embed "layout.twig" %}...{% endembed %}` | `{% extends "layout" %}` in a child template | No `embed` — inline the block overrides into a dedicated child. |
 | `{% use "blocks.twig" %}` | Not supported | Horizontal reuse has no equivalent. Inline or factor through macros. |
-| `{% do x.flush() %}` | `{{ x.flush() }}` or compute in controller | No `do` tag. `{{ x.flush() }}` runs the call and renders an empty string when it returns `undefined` or `null` (since 2.9.10; before, it printed `undefined` or `null`); any other return value is printed. Prefer moving side effects out of templates. |
+| `{% do x.flush() %}` | `{{ x.flush() }}` or compute in controller | No `do` tag. `{{ x.flush() }}` runs the call and renders an empty string when it returns `undefined` or `null` (since 2.9.10, before which it printed `undefined` or `null`; since 2.9.11 under the autoescape `'html'` or `'js'` option or in an `{% autoescape %}` block with escaping on); any other return value is printed. Prefer moving side effects out of templates. |
 | `{% sandbox %}` | Not supported | No sandbox mode — the security model is documented in [Security](./security). |
 | `{% deprecated "…" %}` | Not supported | |
 | `{{ parent() }}` | `{% parent %}` | Swig uses a dedicated tag, not a function call. |
