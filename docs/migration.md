@@ -47,6 +47,45 @@ only over the authenticated `/_gina/agent` channel, as the Inspector guide descr
 
 Server-side only: **restart the bundle**.
 
+### Changed — Gina requires `@rhinostone/swig` `^2.9.11`, which changes some native swig outputs (bundle restart)
+
+Gina 0.7.7 requires `@rhinostone/swig` `^2.9.11` in both of its manifests. Swig 2.9.11 is a fix
+release, with no advisory, that changes what some native swig templates render:
+
+- A filter in a `set`, `if`, `elseif`, `for`, `include` or `filter` tag argument applies to its own
+  operand, as in an output. `{% set y = arr[0]|upper %}` over an empty array no longer throws, shapes
+  such as `{% for c in (x)|reverse %}` or `{% include name|default("p.html") %}` now compile, and a
+  filter after a function or method call with an expression before it applies to that call only, in
+  a `set`, `if`, `elseif` or `for` argument alike, where it applied to the whole expression before
+  it: `{% set y = a + f(x)|upper %}` with `a = "x"` and `x = "ab"` gives `xAB`, where it gave `XAB`,
+  and `{% if z and f(x)|upper %}` with `z = 0` is now false.
+- A filter after a literal in an output that holds an operator or a ternary applies to the literal:
+  `{{ 3|default(1) + 1 }}` gives `4`, where it gave `3`.
+- An output whose variable is followed by a filter renders an empty string when the last filter
+  returns `undefined` or `null`, for example `{{ items|first }}` over an empty array, or a custom
+  filter that returns nothing; swig printed the word `undefined` or `null`.
+- Inside an `{% autoescape true %}` region, a missing subscript or member, or a call that returns
+  `undefined`, renders an empty string. Gina's own `settings.swig.autoescape` is a boolean, which
+  already did.
+
+Upgrading gina installs 2.9.11 or later. A project copy loaded through `swig.useProject`, or a
+frontend selected through `swig.package`, keeps its own version: update it there.
+
+**What to check:**
+
+- A `set`, `if`, `elseif` or `for` argument with a filter after a function or method call that has
+  an operator, `and` or `or` before it: the filter now applies to the call only. A filter after a
+  variable, and a filtered call with nothing before it, are unchanged.
+- A template or test that expected the text `undefined` or `null` from a filtered output, or a
+  throw from a filtered tag argument.
+- A template your application compiles ahead of time with swig (`swig.precompile()` output, or a
+  bundle registered with `swig.registerBundle`) keeps the behaviour of the swig release that
+  compiled it: compile it again after the upgrade ([Browser usage](/templating/swig/browser)). Gina
+  compiles its own templates at render time and keeps no compiled template on disk, so the restart
+  recompiles them.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.5 → 0.7.6
