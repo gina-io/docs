@@ -1175,7 +1175,14 @@ read, so such an answer reached the callback as a success (an empty one over HTT
 `{ status: 200, empty: true }`).
 
 When the connection itself fails (TCP error, timeout), the callback receives a
-native `Error` with a `.stack` property.
+native `Error` with a `.stack` property. Over HTTP/1.1, a call that reaches `requestTimeout`
+fails with an `Error` whose `code` is `ETIMEDOUT`, with `status` 503, `retryCount` (the number
+of re-sends before it) and the message `[HTTP1] No response from <hostname> after <time>`;
+relayed with `self.throwError(err)`, it answers 503. Over HTTP/2 the timeout is a
+`GinaHttp2Error` coded `TIMEOUT`, also with `status` 503
+([HTTP/2 resilience](/guides/http2-resilience)). Before 0.7.8 an HTTP/1.1 timeout failed like a
+reset connection (`ECONNRESET`, reported as « could not connect » for a bundle's port, with no
+`status`), and a response that stalled after its headers never called back.
 
 **Handling errors**
 

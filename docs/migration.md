@@ -19,6 +19,37 @@ upward to the target version.
 
 ---
 
+## 0.7.7 → 0.7.8
+
+### Fixed — an HTTP/1.1 `self.query()` timeout fails with its own error (bundle restart)
+
+Up to 0.7.7, an HTTP/1.1 `self.query()` call that reached its `requestTimeout` failed like a reset
+connection: an `Error` coded `ECONNRESET` with the message « socket hang up », which reads
+« `Controller::query()` could not connect to [ … ] using port N » when the port belongs to a
+bundle, and with no `status`, so relaying it with `self.throwError(err)` or receiving it through an
+`.onComplete()` handle answered 500. When the upstream had sent its response headers before the
+timeout and then stalled, the call never called back at all.
+
+Since 0.7.8 the timeout fails, in both cases, with an [`Error`](/guides/controller) whose `code`
+is `ETIMEDOUT`, with `status` 503, `retryCount` and the message
+`[HTTP1] No response from <hostname> after <time>`. HTTP/2 calls are unchanged: their timeout
+already failed with a 503 (`TIMEOUT`).
+
+**What to check:**
+
+- Code that recognised a timed-out HTTP/1.1 call by `err.code === 'ECONNRESET'` or by the
+  « could not connect » message now sees `ETIMEDOUT` and « No response from ». A refused connection
+  still reads « could not connect ».
+- A timed-out call that your action relays with `self.throwError(err)` now answers 503 instead of
+  500, and an `.onComplete()` handle receives it with `status` 503 instead of 500.
+- The re-send rule is unchanged: a GET, HEAD, OPTIONS or TRACE, or a call with `retryUnsafe`, is
+  still re-sent (twice by default) before the error is delivered, and the circuit breaker
+  (`server.query.circuitBreaker`) still counts the timeout.
+
+Server-side only: **restart the bundle**.
+
+---
+
 ## 0.7.6 → 0.7.7
 
 ### Security — `self.renderJSON()` adds its Inspector sidecars in development only (bundle restart)
