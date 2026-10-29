@@ -127,6 +127,10 @@ session Gina's own keepalive or pre-flight PING deadline, or the boot warmup's, 
 declared (Bun 1.2 and 1.3). On Bun 1.2 and 1.3, an empty response that completed while its
 session was being closed — after another request's retry evicted it — was read as
 incomplete: a safe method was sent again, an unsafe one failed with `PREMATURE_CLOSE`.
+A 4xx or 5xx whose body carried no `status` came back as a success, on HTTP/1.1 too: an
+empty one as `{ status: 200, empty: true }` (on HTTP/1.1, `''`), any other with its body.
+Since 0.7.7 it is an error carrying its status, as the
+[controller guide](/guides/controller) describes under « Error shape ».
 :::
 
 :::note A body sent with no `content-length`

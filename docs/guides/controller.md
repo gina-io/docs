@@ -1165,6 +1165,15 @@ not an `Error` instance:
 }
 ```
 
+The status is the body's `status` when the upstream sent one. When the body carries
+none (an empty body, text, JSON without `status`, or the HTML page a proxy in front of
+a bundle answers with itself), a 4xx or 5xx is read from the response's status line,
+for a status Gina's status-code map knows: `error` is the map's label, and `message`
+the body text, the JSON text, or the label for an empty body. A status the map does not
+know (such as 599) is delivered as a success. Before 0.7.7 only the body's `status` was
+read, so such an answer reached the callback as a success (an empty one over HTTP/2 as
+`{ status: 200, empty: true }`).
+
 When the connection itself fails (TCP error, timeout), the callback receives a
 native `Error` with a `.stack` property.
 

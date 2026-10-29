@@ -122,6 +122,30 @@ length, since a Node.js HTTP/2 client resets a 204 or 205 that declares one, and
 
 Server-side only: **restart the bundle** (no re-bake for this change).
 
+### Fixed — a 4xx or 5xx answer without a Gina `status` reaches `self.query()` as an error (bundle restart)
+
+Up to 0.7.6 `self.query()` decided between an error and a success on the body's `status` field
+only, on HTTP/1.1 and HTTP/2, and read the response's status line only for an HTTP/2 502. A 4xx or
+5xx whose body carried no `status` (an empty body, text, JSON without `status`, or the HTML page a
+proxy in front of a bundle answers with itself) therefore reached the caller as a success: an empty
+one as `{ status: 200, empty: true }` over HTTP/2 and `''` over HTTP/1.1, any other with its body.
+
+Since 0.7.7 such an answer, for a status Gina's status-code map knows, reaches the callback as the
+[error object](/guides/controller) `{ status, error, message }`: `status` from the status line,
+`error` the map's label, `message` the body text, the JSON text, or the label for an empty body. The
+promisified call rejects with it, and an `.onComplete()` handle receives it as `err`. A body that
+carries `status` still decides, and a status the map does not know (such as 599) is still delivered
+as a success.
+
+**What to check:**
+
+- A caller of a non-Gina upstream, or of a bundle reached through a proxy, that read a 4xx or 5xx
+  answer as a success (its fields, or `result.empty`) now gets `err`.
+- A `forward` route now answers such a status through `throwError()`, with its status. Before, it
+  relayed the answer to the client as a 200 carrying its body.
+
+Server-side only: **restart the bundle**.
+
 ### Fixed — a link or a close element carrying `disabled` in a popin does nothing when clicked (bundle restart and re-bake)
 
 An element carrying `disabled` (any value but `"false"`) in popin content, a link with an
