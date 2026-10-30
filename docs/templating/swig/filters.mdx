@@ -21,6 +21,8 @@ Filters transform values inside a `{{ … }}` expression using the pipe characte
 
 Filters marked ✅ are not re-escaped by the autoescape pass — either flagged `.safe` (output trusted as-is), or, for `escape`/`e`, because the HTML escape is idempotent. See [Security](./security#what-the-guards-protect-against) for the model.
 
+A filter or a call that finds nothing hands the next filter `undefined` or `null`. Since `2.9.13` the string filters (`upper`, `lower`, `capitalize`, `title`, `addslashes`, `striptags`, `url_encode`, `url_decode`, `escape`) read that as an empty string, in outputs and in tag arguments: `{{ items|first|lower }}` over an empty list and `{{ fn()|upper }}` render an empty string, where they failed or printed `[object Object]`. `first`, `last`, `replace` and `date` also give an empty string for such an input, `length` gives `0`, and `default` still uses its fallback.
+
 | Filter | Safe | Purpose |
 | --- | --- | --- |
 | [`addslashes`](#addslashes) | — | Backslash-escape `\`, `'`, `"`. |
@@ -53,7 +55,7 @@ Filters marked ✅ are not re-escaped by the autoescape pass — either flagged 
 
 ## addslashes
 
-Backslash-escape `\`, `'`, `"`.
+Backslash-escape `\`, `'`, `"`. A number or a boolean is read as text (since `2.9.13`; before, it failed).
 
 ```swig
 {{ '"quoted string"'|addslashes }}
@@ -73,7 +75,7 @@ Also recurses into arrays and objects via `iterateFilter`.
 
 ## date
 
-PHP-style date format. Accepts a `Date`, ISO string, or timestamp.
+PHP-style date format. Accepts a `Date`, ISO string, or timestamp. A missing, `null`, empty or invalid value gives an empty string (since `2.9.13`; before, `NaN`, or 1970 for a filter or call result of `null`).
 
 ```swig
 {{ user.birthday|date('F jS, Y') }}
@@ -121,7 +123,7 @@ Not flagged `.safe`, but its output is not double-escaped: the HTML escape is id
 
 ## first
 
-First element of an array or first character of a string.
+First element of an array or first character of a string. An empty string for `undefined` or `null` (since `2.9.13`; before, it failed).
 
 ```swig
 {{ [1, 2, 3]|first }}  {# => 1 #}
@@ -160,7 +162,7 @@ Marked **safe** — the output HTML-escapes `<`, `>`, `&`, and `'` (as `\u00xx`)
 
 ## last
 
-Last element of an array or last character of a string.
+Last element of an array or last character of a string. An empty string for `undefined` or `null` (since `2.9.13`; before, it failed).
 
 ```swig
 {{ [1, 2, 3]|last }}  {# => 3 #}
@@ -168,7 +170,7 @@ Last element of an array or last character of a string.
 
 ## length
 
-Length of an array or string, or key count of an object.
+Length of an array or string, or key count of an object. `0` for `undefined` or `null` (since `2.9.13`; before, `undefined` failed).
 
 ```swig
 {{ "hello"|length }}   {# => 5 #}
@@ -196,7 +198,7 @@ Prefer [`safe`](#safe) when possible — both behave identically.
 
 ## replace
 
-Regex-based replace.
+Regex-based replace. Since `2.9.13` `undefined` or `null` gives an empty string, a number or a boolean is read as text, and a missing replacement, such as a subscript that finds nothing, reads as an empty string (before, these failed or printed `undefined`). An array or an object still fails.
 
 ```swig
 {{ "banana"|replace("a", "A") }}
@@ -300,7 +302,7 @@ See [Extending Swig — Custom Filters](./extending#custom-filters).
 
 ## Recursion into arrays and objects
 
-Most built-in filters call `iterateFilter` internally, so passing an array or object applies the filter to each element/value. A custom filter can opt in; `iterateFilter` lives in `@rhinostone/swig-core`, which `@rhinostone/swig` installs:
+Most built-in filters call `iterateFilter` internally, so passing an array or object applies the filter to each element/value. Since `2.9.13` it gives an empty string back for an `undefined` or `null` input ([what that means for a custom filter](./extending#recursing-into-arrays-and-objects)). A custom filter can opt in; `iterateFilter` lives in `@rhinostone/swig-core`, which `@rhinostone/swig` installs:
 
 ```js
 var iterateFilter = require('@rhinostone/swig-core/lib/filters').iterateFilter;

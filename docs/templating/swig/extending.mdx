@@ -102,7 +102,7 @@ function exclamate(input) {
 swig.setFilter('exclamate', exclamate);
 ```
 
-Returning `undefined` from `iterateFilter` means "input is scalar — handle it directly".
+Returning `undefined` from `iterateFilter` means "input is scalar — handle it directly". Since `2.9.13` an `undefined` or `null` input comes back as an empty string, so with the check above your code does not run on it: `{{ fn()|exclamate }}` renders an empty string when `fn` returns nothing (before, `undefined!`, and `[object Object]` for `null`).
 
 ## Custom tags
 
