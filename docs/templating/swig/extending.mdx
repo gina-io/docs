@@ -157,7 +157,7 @@ Returns a JS source string that is spliced into the compiled function body.
 | `compiler` | Reference to `parser.compile` — call it to recurse into `content`. |
 | `args` | JS-source fragments emitted by `parse` (what ended up in `parser.out`). |
 | `content` | Child tokens between the opening tag and `end<name>` — empty when `ends = false`. |
-| `parents` | Parent template chain (for `block` / `parent` resolution). |
+| `parents` | On the sync render path, the parent templates' parse trees, or, inside a `{% block %}` since `2.9.12`, the farther definitions of that block, nearest first (entries with `name` and `blocks`, no `tokens`). Empty on the async render path. |
 | `options` | The Swig options. |
 | `blockName` | Name of the enclosing `{% block %}`, if any. |
 
@@ -178,6 +178,8 @@ exports.compile = function (compiler, args) {
   return '_output += _ext.translate(' + args[0] + ');';
 };
 ```
+
+On the async render path a `{% block %}` body is emitted at the top of the template function, so since `2.9.12` it cannot read a variable your tag's emitted code declares around the block. Put such a value in `_ctx`, which it still reaches.
 
 ### ends
 
