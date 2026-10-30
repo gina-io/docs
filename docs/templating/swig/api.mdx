@@ -156,7 +156,7 @@ swig.renderFile('/views/page.html', { title: 'Home' }, function (err, html) {
 
 _Available since `v2.2.0`._
 
-When the active loader sets `loader.async === true`, the cb form of `renderFile` routes through the async-codegen path automatically, loading each template through `loader.load(id, cb)` as the render reaches it. No call-site change is required; opt-in is via the loader flag.
+When the active loader sets `loader.async === true`, the cb form of `renderFile` routes through the async-codegen path automatically, loading each template through `loader.load(id, cb)` as the render reaches it. No call-site change is required; opt-in is via the loader flag. Since `2.9.13` the compiled templates stay in the instance's cache, as on the sync path (see [Caching](#caching)), and the callback is called once: an exception it throws surfaces as an unhandled rejection, where the callback was called again with that exception.
 
 ```js
 var asyncLoader = {
@@ -476,9 +476,9 @@ When writing a custom tag's `compile`, emit JS that reads from `_ctx`, writes to
 
 ## Caching
 
-- **`cache: 'memory'`** — templates are stored by the loader's resolved filename, without the locals of the call that compiled them (since `2.9.6`). The default.
+- **`cache: 'memory'`** — templates are stored by the loader's resolved filename, without the locals of the call that compiled them (since `2.9.6`). The default. Since `2.9.13` the async render path (`renderFile` with `loader.async`) keeps its templates here too, so an edited template is not picked up until you call [`invalidateCache`](#invalidatecache).
 - **`cache: false`** — templates are recompiled on every call. Useful during development; **do not** ship to production.
-- **Custom cache** — pass an object with `get(key)` and `set(key, value)`. Keys are resolved filenames from the loader; a template compiled with `codegenMode: 'async'` is kept under its name followed by `#async` (since `2.8.2`), apart from its sync compile.
+- **Custom cache** — pass an object with `get(key)` and `set(key, value)`. Keys are resolved filenames from the loader; a template compiled with `codegenMode: 'async'` is kept under its name followed by `#async` (since `2.8.2`), apart from its sync compile. The async render path uses that entry too (since `2.9.13`). [`invalidateCache`](#invalidatecache) does not reach a custom cache, so drop the entry yourself when a template changes.
 
 ```js
 swig.setDefaults({
