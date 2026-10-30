@@ -63,7 +63,9 @@ Declares a named override point inside a template that is being extended.
 {% block title %}Contact — My Site{% endblock %}
 ```
 
-Blocks must have unique names within a template. Use [`parent`](#parent) inside an overriding block to emit the parent's content.
+Blocks must have unique names within a template: what a repeated name renders is undefined, though since `2.9.12` it renders alike on the two [render paths](./loaders#async-loaders) in most shapes. Use [`parent`](#parent) inside an overriding block to emit the parent's content.
+
+A block nested in another block is a definition of its own name, so an extending template can override it without overriding the block around it. Since `2.9.12` this also holds for a block nested in any block of the extending template, even when the root has no block for the enclosing one: over `<{% block b %}P{% endblock %}>`, the child `{% extends "base.html" %}{% block zz %}{% block b %}N{% endblock %}{% endblock %}` renders `<N>`, where it rendered `<P>` before.
 
 ## else
 
@@ -266,6 +268,16 @@ Inside an overriding `{% block %}`, emit the parent block's rendered content.
 ```
 
 Only valid inside a block that overrides an inherited one.
+
+Since `2.9.12`, blocks follow one chain of definitions per name, nested blocks included, on both render paths: `{% parent %}` renders the next definition of its block's name, and a block rendered through `{% parent %}` keeps the overrides of the blocks nested in it. With the layout `<{% block o %}O[{% block i %}I{% endblock %}]{% endblock %}>`, and each child starting with `{% extends "base.html" %}`:
+
+| Child blocks | Renders |
+| --- | --- |
+| `{% block i %}C{% parent %}{% endblock %}` | `<O[CI]>` |
+| `{% block o %}X{% parent %}{% endblock %}{% block i %}C{% endblock %}` | `<XO[C]>` |
+| `{% block o %}Y{% block i %}C{% parent %}{% endblock %}{% endblock %}` | `<YCI>` |
+
+A block that renders itself through a nested block or `{% parent %}` fails with an error naming the block when the render reaches it.
 
 ## raw
 
