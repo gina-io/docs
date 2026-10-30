@@ -25,7 +25,7 @@ Twig operators that `@rhinostone/swig-twig` accepts and the native swig frontend
 
 | Operator | Shape | Semantics | Lowering |
 | --- | --- | --- | --- |
-| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty (before, `undefinedx`). A function or filter result that is `undefined` or `null` gives `undefined` or `null`: `fn() ~ "x"` gives `undefinedx` when `fn` returns nothing. | `(String(a) + String(b))` |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty (before, `undefinedx`). Since 2.9.13 so does a function or filter result that is `undefined` or `null`, here and at an arithmetic or unary operand: `fn() ~ "x"` gives `x` and `1 + fn()` gives `1` when `fn` returns nothing (before, `undefinedx` and `NaN`). | `(String(a) + String(b))` |
 | `..` | `a..b` | Integer or single-character range. A numeric range with an infinite bound (since 2.8.2) or of more than 1,000,000 elements (since 2.9.2) is empty; from 2^53 on, adding 1 no longer changes a JavaScript number, so a range whose values reach 2^53 counts as too long. | `_utils.range(a, b)` |
 | `??` | `a ?? b` | Null-coalesce. Falls back if `a` is undefined, `null`, or missing. | `IRVarRefExists(a) ? a : b` when LHS is a `VarRef`; native `??` otherwise. |
 | `is` | `x is <test>` | Predicate. Routes through `_ext._test_<name>(subject, ...args)`. | See [Is-tests](#is-tests). |
@@ -105,7 +105,7 @@ See [Non-Goals](./non-goals) for the full list and the error messages they produ
 
 ## Filters
 
-`@rhinostone/swig-twig` ships 24 built-in filters. They live in `packages/swig-twig/lib/filters.js`.
+`@rhinostone/swig-twig` ships 24 built-in filters. They live in `packages/swig-twig/lib/filters.js`. Since 2.9.13 a filter after a filter or a call that found nothing renders an empty string: `{{ items|first|lower }}` over an empty list no longer fails.
 
 ### Shared with native swig
 
@@ -113,11 +113,11 @@ Same semantics as [native swig filters](../swig/filters):
 
 | Filter | Arity | Notes |
 | --- | --- | --- |
-| `length` | 0 | `.length` of arrays/strings, `Object.keys().length` of objects. |
+| `length` | 0 | `.length` of arrays/strings, `Object.keys().length` of objects. `0` for `undefined`, `null` and an empty string (since 2.9.13). |
 | `lower` | 0 | `toLowerCase`. |
 | `upper` | 0 | `toUpperCase`. |
-| `first` | 0 | First element. |
-| `last` | 0 | Last element. |
+| `first` | 0 | First element. An empty string for `undefined` or `null` (since 2.9.13; before, it failed). |
+| `last` | 0 | Last element. An empty string for `undefined` or `null` (since 2.9.13; before, it failed). |
 | `join` | 1 | `Array.prototype.join(sep)`. |
 | `reverse` | 0 | Returns a reversed **copy** (does not mutate). |
 | `sort` | 0 | Returns a sorted **copy** (does not mutate). |
@@ -126,7 +126,7 @@ Same semantics as [native swig filters](../swig/filters):
 | `json_encode` | 0/1 | `JSON.stringify` with optional indent. Not marked safe, so its output is autoescaped. |
 | `raw` | 0 | Pass-through. Marked `.safe = true`. |
 | `escape` / `e` | 0/1 | HTML-escape. Accepts type argument (`'html'`, `'js'`, …). |
-| `date` | 1 | PHP-style format via shared `dateformatter.js`. |
+| `date` | 1 | PHP-style format via shared `dateformatter.js`. A missing value, `null`, an empty string and `"now"` give the current date (Twig documents this for `null`), and a string that is no date gives an empty string (since 2.9.13; before, `NaN`, or 1970 for a filter or call result of `null`). |
 
 ### Twig-specific
 
@@ -150,7 +150,7 @@ One filter exists in both frontends with diverged semantics:
 
 | Filter | Arity | Notes |
 | --- | --- | --- |
-| `replace` | 1 | Accepts a `{ from: to, … }` object map (PHP `strtr` shape) — native swig takes a regex and substitution. See below. |
+| `replace` | 1 | Accepts a `{ from: to, … }` object map (PHP `strtr` shape) — native swig takes a regex and substitution. A replacement that is `undefined` or `null` is written as an empty string (since 2.9.13; before, `undefined` or `null`). See below. |
 
 **Native swig** accepts a regex and a substitution: `input.replace(regex, sub)`.
 

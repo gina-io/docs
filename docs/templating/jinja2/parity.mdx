@@ -23,9 +23,9 @@ The matrices below are ground truth: each row maps to a symbol actually exported
 
 | Operator | Shape | Semantics | Lowering / notes |
 | --- | --- | --- | --- |
-| `**` | `a ** b` | Power. | `Math.pow(a, b)` |
+| `**` | `a ** b` | Power. A function or filter result that is `undefined` or `null`, or a subscript that finds nothing, gives `NaN` (`fn() ** 2`), where a missing variable reads as `""` (`x ** 2` gives `0`). | `Math.pow(a, b)` |
 | `//` | `a // b` | Floor division. | `Math.floor(a / b)` |
-| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty, as in Jinja2 (before, `undefinedx`). A function or filter result that is `undefined` or `null` gives `undefined` or `null` (`fn() ~ "x"` gives `undefinedx` or `nullx`), where Jinja2 writes `None` for any `None` operand (`Nonex`). | `(String(a) + String(b))` |
+| `~` | `a ~ b` | String concatenation. Coerces both sides to strings. A missing or `null` variable reads as `""`, and since 2.9.10 so does a subscript that finds nothing: `arr[0] ~ "x"` gives `x` when `arr` is empty, as in Jinja2 (before, `undefinedx`). Since 2.9.13 so does a function or filter result that is `undefined` or `null`, here and at an arithmetic or unary operand: `fn() ~ "x"` gives `x` (before, `undefinedx` or `nullx`), where Jinja2 writes `None` for any `None` operand (`Nonex`). | `(String(a) + String(b))` |
 | `+` `-` `*` `/` `%` | `a + b` | Arithmetic. `+` also concatenates when either side is a string (JavaScript coercion). | See [Behavioural differences](#behavioural-differences) for `+` on mixed types. |
 | `a if c else b` | inline conditional | Returns `a` when `c` is truthy, else `b`. The `else` arm is optional (`a if c` yields `""` when `c` is falsy). | |
 | `in` / `not in` | `x in seq`, `x not in seq` | Membership, as in Jinja2 (since 2.9.0): a list holds an equal item, a string a substring, a mapping a key. A test Jinja2 cannot run, such as a number as the container, is false for `in` and true for `not in`. Some answers still differ from Jinja2 — see [Behavioural differences](#behavioural-differences). | `_utils.isIn(x, seq, "python")`; `not in` binds at the same level as `in`. |
@@ -119,6 +119,8 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 
 `@rhinostone/swig-jinja2` ships 39 built-in filters (42 callable names counting the `e`, `count`, and `d` aliases). They live in `packages/swig-jinja2/lib/filters.js`. Every filter below was cross-checked against Python Jinja2 3.x.
 
+Since 2.9.13 a filter whose input is `undefined` or `null` no longer fails or prints `undefined`, `null` or `[object Object]`: a filter after a filter or a call that found nothing renders an empty string (`{{ items|first|lower }}` over an empty list, `{{ fn()|upper }}`), and `truncate`, `indent`, `center`, `urlencode`, `striptags` and `title` read such an input as an empty string, where Jinja2 writes `None` for a `None` value.
+
 ### Strings & formatting
 
 | Filter | Arity | Notes |
@@ -131,7 +133,7 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 | `replace` | 2/3 | Literal substring replace with optional count — **matches Python Jinja2** (`replace(old, new, count)`), not the Twig object-map form. |
 | `striptags` | 0 | Strip tags/comments, collapse whitespace to single spaces, trim. Recurses into arrays / objects. |
 | `format` | N | `printf`-style — `%s %d %i %u %f %F %e %E %g %G %x %X %o %c %%`, with flags (`-` `+` space `0`), width, and `.precision`. The exponent and `%g` forms print as Python's do. |
-| `wordcount` | 0 | Count `\w+` runs. |
+| `wordcount` | 0 | Count `\w+` runs. `0` for `undefined` or `null` (since 2.9.13; before, `1`). |
 | `wordwrap` | 1–3 | Greedy word-wrap to a width; breaks over-long words by default. A width of 0 or less returns the text unchanged, where Jinja2 raises. |
 | `indent` | 1–3 | Indent each line; first line and blank lines skipped unless `first`/`blank`. |
 | `center` | 1 | Center within a field width (extra space on the right). |
@@ -145,7 +147,7 @@ Tags explicitly **not implemented** (throw at parse time): `{% call %}`, `{% do 
 | --- | --- | --- |
 | `first` / `last` | 0 | First / last item of an array, string, or mapping. |
 | `join` | 0/1 | Join with a glue string (default empty, the Jinja2 default — not a comma). |
-| `length` / `count` | 0 | Length of an array/string, or key count of a mapping. |
+| `length` / `count` | 0 | Length of an array/string, or key count of a mapping. `0` for `undefined`, `null` and an empty string (since 2.9.13; before, an empty string). |
 | `reverse` | 0 | Reversed copy (does not mutate). |
 | `sort` | 0/1 | Sorted copy; pass a truthy argument for descending. |
 | `list` | 0 | Coerce to a list — string → characters, mapping → keys. |
@@ -170,7 +172,7 @@ On a mapping, `first`, `last`, `min`, `max`, `reverse`, `unique`, `sort`, `list`
 | `float` | 0/1 | Parse a float with a default. |
 | `default` / `d` | 1/2 | Fallback value — see [Behavioural differences](#behavioural-differences) for the empty-string case. |
 | `tojson` | 0/1 | JSON-serialize, HTML-safe. Marked safe. |
-| `date` | 1–3 | PHP-style format tokens via the shared `@rhinostone/swig-core` date formatter. A swig-family extension — Jinja2 core has no `date` filter. |
+| `date` | 1–3 | PHP-style format tokens via the shared `@rhinostone/swig-core` date formatter. A swig-family extension — Jinja2 core has no `date` filter. A missing, `null`, empty or invalid value gives an empty string (since 2.9.13; before, `NaN`, or 1970 for a filter or call result of `null`). |
 
 ### Safe filters
 
