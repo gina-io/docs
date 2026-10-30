@@ -1,8 +1,14 @@
 name: Token expiry reminder
 
+# The earliest expiry date of the deploy credentials lives in the
+# DEPLOY_TOKEN_EXPIRY repository secret (YYYY-MM-DD), so it appears neither in
+# this file nor in a run log (secrets print as ***). The reminder issue names
+# no credential and no date.
+
 on:
   schedule:
     - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+  workflow_dispatch:
 
 jobs:
   check:
@@ -11,13 +17,20 @@ jobs:
       issues: write
     steps:
       - name: Check token expiry
+        env:
+          EXPIRY: ${{ secrets.DEPLOY_TOKEN_EXPIRY }}
         run: |
-          EXPIRY="2027-03-03"
-          TODAY=$(date +%Y-%m-%d)
-          DAYS=$(( ($(date -d "$EXPIRY" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
+          # GNU date reads an empty string as today, so an unset secret would
+          # open a reminder every week: fail the run instead.
+          if ! [[ "$EXPIRY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "::error::The DEPLOY_TOKEN_EXPIRY secret is unset or is not a YYYY-MM-DD date."
+            exit 1
+          fi
+          EXPIRY_S=$(date -d "$EXPIRY" +%s)
+          TODAY_S=$(date -d "$(date +%Y-%m-%d)" +%s)
+          DAYS=$(( (EXPIRY_S - TODAY_S) / 86400 ))
           if [ "$DAYS" -le 14 ]; then
-            echo "TOKEN_EXPIRING=true" >> $GITHUB_ENV
-            echo "DAYS_LEFT=$DAYS" >> $GITHUB_ENV
+            echo "TOKEN_EXPIRING=true" >> "$GITHUB_ENV"
           fi
 
       - name: Open reminder issue
@@ -28,18 +41,15 @@ jobs:
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Action required: tokens expire in ${process.env.DAYS_LEFT} days`,
+              title: `Action required: deploy credential rotation due`,
               body: [
-                `The following secrets expire on **2026-09-02** (90-day tokens created 2026-06-04):`,
+                `One or more deploy credentials expire within 14 days.`,
                 ``,
-                `| Secret | Where to rotate |`,
-                `|---|---|`,
-                `| \`VERCEL_TOKEN\` | https://vercel.com/account/settings/tokens |`,
-                `| \`CLOUDFLARE_API_TOKEN\` | https://dash.cloudflare.com/profile/api-tokens |`,
-                ``,
-                `After rotating both tokens:`,
+                `After rotating them:`,
                 `1. Update the secrets at https://github.com/gina-io/docs/settings/secrets/actions`,
-                `2. Update the \`EXPIRY\` date in \`.github/workflows/token-expiry-reminder.yml\``,
+                `2. Set the \`DEPLOY_TOKEN_EXPIRY\` secret to the earliest new expiry date (YYYY-MM-DD).`,
+                ``,
+                `Close this issue without naming a credential or a date.`,
               ].join('\n'),
               labels: ['maintenance']
             })
