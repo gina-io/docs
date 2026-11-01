@@ -65,7 +65,9 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 
 `defined` and `null` on a bare `VarRef` are compiled through the `IRVarRefExists` IR node so the defined/undefined signal is preserved (the default `emitVarRef` coerces missing context slots to empty strings, which would wash out the test). Other subjects fall through the normal expression path.
 
-Register additional tests by exposing them on `_ext._test_<name>`:
+A test name the instance does not hold is a compile error wherever it stands, as in Twig (since 2.10.0): `x is frob` throws `Invalid test "frob" on line 2.`. Before, it read as false, and `is not` as true, with no error. Twig's `none`, `sequence`, `mapping` and `constant` tests are among those names, since swig-twig does not provide them: write `is null` for `is none`. Twig's `true`, `same as` and `divisible by` tests fail to compile as well, as they did before; swig-twig spells the last one `divisibleby`.
+
+Register additional tests by exposing them on `_ext._test_<name>`, before the compile that uses them:
 
 ```js
 var twig = require('@rhinostone/swig-twig');
@@ -164,6 +166,8 @@ One filter exists in both frontends with diverged semantics:
 Port regex-based replacements by enumerating every substitution, or register a custom `regex_replace` filter.
 
 ### Registering your own
+
+Register a filter before the compile that uses it: a filter name the instance does not hold is a compile error wherever it stands, in a branch not taken and in `{% apply %}` too, as in Twig (since 2.10.0). The error names its line and file: `Invalid filter "nosuch" on line 3 in file page.html.`. Before, the template compiled, then threw `_filters.nosuch is not a function` at render, or passed unnoticed in a branch not taken. `{{ x|toString }}` and `{{ x|hasOwnProperty }}`, which called the `Object.prototype` method, are rejected too.
 
 Same shape as the native frontend:
 
