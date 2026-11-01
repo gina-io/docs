@@ -173,6 +173,8 @@ This is **not** the same as Django's `is_safe=True`: in Django, `is_safe` only m
 
 ### Registering your own
 
+Register a filter before the compile that uses it: a filter name the instance does not hold is a compile error wherever it stands, in a branch not taken too, as in Django (since 2.10.0). The error names its line and file: `Invalid filter "nosuch" on line 3 in file page.html.`. Before, the template compiled, then threw `_filters.nosuch is not a function` at render, or passed unnoticed in a branch not taken. `{{ x|toString }}` and `{{ x|hasOwnProperty }}`, which called the `Object.prototype` method, are rejected too.
+
 ```js
 django.setFilter('exclaim', function (input) { return String(input) + '!'; });
 django.render('{{ msg|exclaim }}', { locals: { msg: 'hi' } });

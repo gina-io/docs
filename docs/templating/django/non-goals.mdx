@@ -90,7 +90,7 @@ The core tag is supported; a specific form is not:
 
 ### Filters
 
-These Django built-in filters are not yet implemented; a reference to one fails at render because the filter is not registered. [Open an issue](https://github.com/gina-io/swig/issues) to prioritise.
+These Django built-in filters are not yet implemented; a reference to one is a compile error (`Invalid filter "dictsort" on line 1.`; since 2.10.0, before it failed at render). [Open an issue](https://github.com/gina-io/swig/issues) to prioritise.
 
 | Filter | Upstream purpose | Why not yet |
 | --- | --- | --- |
