@@ -389,7 +389,7 @@ swig.registerBundle(require('./dist/templates.js'));
 swig.setFilter(name, fn)
 ```
 
-Register a filter function on this instance.
+Register a filter function on this instance, before the compile that uses it ([what an unknown name does](./extending#custom-filters)).
 
 ```js
 swig.setFilter('shout', function (input) {
