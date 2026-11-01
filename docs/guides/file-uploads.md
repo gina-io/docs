@@ -104,7 +104,10 @@ name), and reports back.
 
 ### Staged file lifecycle
 
-A staged part (a server-generated `.part` file in the landing directory) has
+A multipart request that does not complete (its parse fails, its client goes
+away, or it passes `maxFieldsSize`) removes the parts it staged at once, the
+finished ones included, and its action does not run. A staged part of a request
+that does complete (a server-generated `.part` file in the landing directory) has
 exactly **two** reclaim paths: the move performed when `self.store()` publishes
 it, and the `autoTmpCleanupTimeout` deletion timer. A part that never reaches
 `store()` — a request refused *after* the multipart parse (authentication,
@@ -222,7 +225,7 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 |---|---|
 | `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
 | `uploadDir` | Alternative global landing directory. When both are set, `uploadDir` wins over `tmpPath`. |
-| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request larger than this is rejected with **HTTP 431** before any file is read. |
+| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request whose `content-length` is larger is rejected with **HTTP 431** before any file is read. One that sends no `content-length` (a chunked or an HTTP/2 request) is rejected with **HTTP 431** once the bytes received pass it: the files it had staged are removed and the connection closes, so a client still writing may read the close instead of the answer. |
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |

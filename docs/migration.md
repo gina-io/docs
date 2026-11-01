@@ -48,6 +48,21 @@ already failed with a 503 (`TIMEOUT`).
 
 Server-side only: **restart the bundle**.
 
+### Fixed — a multipart upload that does not complete stops and removes what it staged (bundle restart)
+
+A multipart upload whose parse fails, or whose client goes away, now stops at once: the request
+stops feeding the parser, its write streams close and every file it staged is removed, the parts
+that had finished included. A failed parse is still answered HTTP 400. Nothing changes for an
+upload that completes.
+
+`upload.maxFieldsSize` now counts the bytes a multipart request sends, as well as reading its
+`content-length`. **Check this one:** a client that sends a body larger than the cap with no
+`content-length` (chunked, or HTTP/2) was accepted up to 0.7.7 and is now answered HTTP 431, its
+staged files removed and the connection closed. Raise `maxFieldsSize` if such uploads are
+legitimate. A browser form sends a `content-length`, which was already checked.
+
+Server-side: pickup is a bundle restart, no re-bake.
+
 ---
 
 ## 0.7.6 → 0.7.7
