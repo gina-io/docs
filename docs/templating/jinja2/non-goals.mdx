@@ -20,7 +20,7 @@ The rejections fall into two buckets:
 - **Won't support (security).** A threat-model call; unlikely to change.
 - **Deferred.** Design work awaiting demand — [open an issue](https://github.com/gina-io/swig/issues) if you hit one.
 
-Behaviours that are *supported but differ* from Python Jinja2 (macro output autoescaped, `default` falling back on `""`, `for k, v in mapping` without `.items()`, `is integer`/`is float` absent, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
+Behaviours that are *supported but differ* from Python Jinja2 (macro output autoescaped, `default` falling back on `""`, `for k, v in mapping` without `.items()`, `1.0 is integer` being true, …) are **not** rejections — they live in [Parity → Behavioural differences](./parity#behavioural-differences).
 
 ## Unsupported tags
 
@@ -54,7 +54,7 @@ The collection filters that take **another filter or test by name** are not impl
 | `select` / `reject` | Keep / drop items that pass a test. |
 | `selectattr` / `rejectattr` | Keep / drop items whose attribute passes a test. |
 
-A reference to one of these (e.g. `{{ items|map("upper") }}`) fails at render because the filter is not registered. Filters in swig-core are pure `_filters["name"](input, ...args)` functions with **no access** to the filter or test registry, so a filter cannot resolve `"upper"` or `"odd"` to another filter/test at runtime. Supporting them needs parser-level rewriting of the leading name argument into a `_filters[...]` / `_ext._test_<name>` reference — deferred. [Open an issue](https://github.com/gina-io/swig/issues) with a use case to prioritise.
+A reference to one of these (e.g. `{{ items|map("upper") }}`) fails like any [unknown filter name](./parity#unknown-names): a compile error (`Invalid filter "map" on line 1.`), or directly inside an `if` the same error when the expression is reached (since 2.10.0; before, it failed at render). Filters in swig-core are pure `_filters["name"](input, ...args)` functions with **no access** to the filter or test registry, so a filter cannot resolve `"upper"` or `"odd"` to another filter/test at runtime. Supporting them needs parser-level rewriting of the leading name argument into a `_filters[...]` / `_ext._test_<name>` reference — deferred. [Open an issue](https://github.com/gina-io/swig/issues) with a use case to prioritise.
 
 `map(attribute="x")` is additionally blocked by the macro/filter keyword-argument non-goal below.
 
@@ -134,7 +134,7 @@ Rationale: bracket-notation writes at runtime can reach through the prototype ch
 Tracked, not yet implemented:
 
 - **Global functions.** Jinja2's `range()`, `dict()`, `cycler()`, `joiner()`, `lipsum()`, and `namespace()` are not exposed. To iterate a count, pass an array in locals or write a literal `{% for i in [1, 2, 3] %}`.
-- **`is integer` / `is float`.** Not registered — JavaScript has a single `number` type. Use `is number` (both evaluate to `false`).
+- **Comparison tests and `escaped`.** Jinja2's `eq`, `ne`, `lt`, `le`, `gt`, `ge`, their aliases (`equalto`, `greaterthan`, `lessthan`) and `escaped` are not provided, and fail as [unknown names](./parity#unknown-names). Use the operators.
 - **Locale-aware `date`.** The shared PHP-style formatter from `@rhinostone/swig-core` does not plumb locale rules (weekday/month names in non-English locales). Pre-format on the controller side.
 - **Runtime bracket-access guard.** `{{ foo[varname] }}` with `varname` resolving to `"__proto__"` at runtime is not blocked — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
 

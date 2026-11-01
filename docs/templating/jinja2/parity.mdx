@@ -53,7 +53,7 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 
 ## `is` tests {#is-tests}
 
-`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Jinja2 constructor registers the 18 built-ins below via `setExtension`:
+`is <test>` and `is not <test>` route through the `_ext._test_<name>` slot. The Jinja2 constructor registers 20 of the built-ins below via `setExtension`; the parser reads the last two, the guards `filter` and `test`:
 
 | Test | Shape | Semantics |
 | --- | --- | --- |
@@ -68,6 +68,8 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 | `sequence` | `x is sequence` | `true` if `x` is an array or a string. |
 | `string` | `x is string` | `typeof x === 'string'`. |
 | `number` | `x is number` | `typeof x === 'number'`, so `NaN` and the infinities count. |
+| `integer` | `x is integer` | `true` if `x` is a number with no fractional part (since 2.10.0). JavaScript has one number type, so this reads the value: `1.0` and `1e300` are integers here and floats in Python. A boolean is not an integer, as in Jinja2. |
+| `float` | `x is float` | `true` if `x` is a number with a fractional part, `NaN` or an infinity (since 2.10.0). `1.0` and `1e300` are not floats here. |
 | `boolean` | `x is boolean` | `typeof x === 'boolean'`. |
 | `true` | `x is true` | `true` only for the boolean `true` (`x === true`), as Python's `x is True`, so `1 is true` is false (since 2.9.9). |
 | `false` | `x is false` | `true` only for the boolean `false` (`x === false`), so `0 is false` is false (since 2.9.9). |
@@ -75,14 +77,16 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 | `lower` | `x is lower` | `true` if `x` is a string with at least one cased letter and no uppercase or titlecase letter, as Python's `str.islower`. |
 | `upper` | `x is upper` | `true` if `x` is a string with at least one cased letter and no lowercase or titlecase letter, as Python's `str.isupper`. |
 | `sameas` | `x is sameas(other)` or `x is sameas other` | Strict identity (`===`). |
+| `filter` | `"name" is filter` | `true` if the instance holds a filter of that name when the template compiles (since 2.10.0). See [Unknown filter and test names](#unknown-names). |
+| `test` | `"name" is test` | The same for a test (since 2.10.0). |
 
 `defined`, `undefined`, and `none` on a bare variable are compiled through the `IRVarRefExists` IR node so the defined/undefined signal survives (the default variable lookup coerces missing context slots to empty strings, which would wash out the test).
 
 A test takes its one argument with or without parentheses, as in Jinja2 (since 2.8.2): `x is divisibleby 3`, `x is sameas false`. On `null`, an undefined variable, a boolean, or a value a test is not meant for, some tests answer differently from Jinja2 — see [Behavioural differences](#behavioural-differences).
 
-Jinja2's `integer` and `float` tests are **not** registered — JavaScript has a single `number` type, so `5` and `5.0` are indistinguishable. `x is integer` / `x is float` evaluate to `false`; use `x is number` instead.
+A test name the instance does not hold [fails like an unknown filter](#unknown-names) (since 2.10.0). Among those names are Jinja2's comparison tests `eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases `equalto`, `greaterthan` and `lessthan`, and `escaped`, which swig-jinja2 does not provide; write `x < 3` for `x is lt 3`. `x is in y` does not parse; write `x in y`.
 
-Register additional tests by exposing them on `_ext._test_<name>`:
+Register additional tests by exposing them on `_ext._test_<name>`, before the compile that uses them:
 
 ```js
 var jinja2 = require('@rhinostone/swig-jinja2');
@@ -97,7 +101,7 @@ jinja2.render('{{ "yes" if n is positive else "no" }}', { locals: { n: 3 } });
 
 | Tag | Ends | Notes |
 | --- | --- | --- |
-| `set` | No¹ | `{% set x = 5 %}`, expression RHS, and body form `{% set x %}…{% endset %}`. Dotted LHS (`set obj.k`) is supported; bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). |
+| `set` | No¹ | `{% set x = 5 %}`, expression RHS, and body form `{% set x %}…{% endset %}`. Dotted LHS (`set obj.k`) is supported; bracket-notation LHS throws — see [Non-Goals](./non-goals#bracket-notation-set). A filter on the body form (`{% set x\|upper %}…{% endset %}`) fails to compile (`Expected assignment operator`), where Jinja2 applies it; put a `{% filter %}` block in the body instead. |
 | `if` / `elif` / `else` / `endif` | Yes | Full multi-branch conditionals, including `elif` chains. |
 | `for` / `else` / `endfor` | Yes | `loop.index`/`index0`/`first`/`last`/`length` and empty-fallback `{% else %}`. Loop filters work as in Jinja2 (since 2.9.4): `{% for x in xs if x > 1 %}` keeps the items the test holds for, the test sees the loop variables and the enclosing `loop`, and `loop.index`, `loop.length`, `loop.last` and the `{% else %}` branch count only the kept items. One loop variable over a mapping binds each key and two over a list unpack each item, as in Jinja2, so `{% for k, v in mapping\|dictsort %}` binds the key and the value (since 2.9.3; before, one variable over a mapping bound each value and two over a list bound the index and the item). `{% for k, v in mapping %}` gives the key and the value without `.items()` (see [Behavioural differences](#behavioural-differences)). Loop variables containing `.` are rejected (prototype-chain guard). |
 | `block` / `endblock` | Yes | Named block for template inheritance. |
@@ -180,6 +184,8 @@ These bypass autoescape (the autoescape `e` tail is not appended): **`safe`** an
 
 ### Registering your own
 
+Register a filter before the compile that uses it: see [Unknown filter and test names](#unknown-names).
+
 ```js
 jinja2.setFilter('exclaim', function (input) { return String(input) + '!'; });
 jinja2.render('{{ msg|exclaim }}', { locals: { msg: 'hi' } });
@@ -193,6 +199,40 @@ jinja2.setFilter('monospace', monospace);
 ```
 
 See [Extending Swig](../swig/extending) for the full filter/tag extension contract — it is identical across frontends.
+
+## Unknown filter and test names {#unknown-names}
+
+A filter or test name the instance does not hold fails as in Jinja2 (since 2.10.0). It is a compile error that names its line and file, such as `Invalid filter "nosuch" on line 3 in file page.html.`, except directly inside an `if` or an inline-if, where the template compiles and the same error is thrown when the expression is reached:
+
+```jinja2
+{{ x|nosuch }}                                                   {# compile error #}
+{{ x is frob }}                                                  {# compile error #}
+{% if c %}{{ x|nosuch }}{% endif %}                              {# compiles; throws when c holds #}
+{{ (x|nosuch) if c else "none" }}                                {# compiles; throws when c holds #}
+{% if c %}{% for i in l %}{{ i|nosuch }}{% endfor %}{% endif %}  {# compile error #}
+```
+
+Directly inside an `if` means a condition of the `if` or an `elif`, or a branch with no other block tag around the name; the value of a `set` and the iterable of a `for` in a branch count. The body of a `for`, a `with`, a set block, a `macro` or a `block` does not, even inside an `if`, and neither does the name in a `{% filter %}` tag. An `and` or `or` outside an `if` is a compile error too, although its right side may never run. An `if` nested in a `for` counts.
+
+Before 2.10.0 an unknown filter compiled, then threw `_filters.nosuch is not a function` at render; an unknown test read as false, and `is not` as true, with no error. `{{ x|toString }}` and `{{ x|hasOwnProperty }}`, which called the `Object.prototype` method, are rejected now.
+
+So register a custom filter or test before the compile that uses it. Guard an optional name with a string literal as the subject, as in Jinja2; the answer is fixed when the template compiles:
+
+```jinja2
+{% if "markdown" is filter %}{{ body|markdown }}{% else %}{{ body }}{% endif %}
+{% if "positive" is test %}{{ n is positive }}{% endif %}
+```
+
+A few shapes differ from Jinja2:
+
+| Shape | Python Jinja2 | `@rhinostone/swig-jinja2` |
+| --- | --- | --- |
+| A loop filter inside an `if`: `{% if c %}{% for i in l if i\|nosuch %}…{% endfor %}{% endif %}` | Compile error. | Compiles; throws when the loop runs. |
+| Another value of a `with` holding an inline-if: `{% with a = x\|nosuch, b = ("T" if c else "E") %}` | Compile error. | Compiles; throws when the `with` runs. |
+| An operand beside an inline-if: `{{ (x\|nosuch) ~ ("T" if c else "E") }}` | Compile error. | Compiles; throws when the expression runs. |
+| An `{% import %}` or `{% from %}` in a branch not taken, whose file holds an unknown name or is missing | Renders: the file is read when the tag runs. | The sync render path reads that file at compile, so the compile fails. The [async render path](../swig/loaders#async-loaders) renders. |
+| A filter or test registered after the compile, used inside an `if` | Renders: the name is looked up at render. | Throws when the expression is reached. |
+| `x is filter` or `x is test` with a subject that is not a string literal | Answers at render. | `Invalid test "filter"`, at compile or, inside an `if`, when reached. |
 
 ## Behavioural differences
 

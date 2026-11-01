@@ -120,7 +120,11 @@ Python's `+` raises `TypeError` on mixed number/string operands; Jinja2 template
 
 ### Tests: `integer` / `float`
 
-JavaScript has a single `number` type, so `is integer` and `is float` are not registered and evaluate to `false`. Replace both with `is number`. Likewise `is sequence` is `true` for arrays and strings but not mappings (a mapping is `is mapping`).
+JavaScript has a single `number` type, so `is integer` and `is float` read the value (since 2.10.0; before, both were false): `1.0` and `1e300` are integers here and floats in Python, while `1`, `1.5`, `NaN` and the infinities answer as in Python. Use `is number` where the difference does not matter. Likewise `is sequence` is `true` for arrays and strings but not mappings (a mapping is `is mapping`).
+
+### Unknown filter and test names
+
+A name the instance does not hold fails as in Jinja2 (since 2.10.0), with the differences listed under [Parity → Unknown filter and test names](./parity#unknown-names). Jinja2's comparison tests (`eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases) and `escaped` are among those names, so rewrite `x is lt 3` as `x < 3`.
 
 ### `round`
 
