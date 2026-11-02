@@ -233,6 +233,25 @@ A few behaviours worth knowing:
 - **Only the touched field shows its error.** The whole-form pass controls the
   submit button, but error messages appear for fields the user has actually
   interacted with — untouched invalid fields stay quiet until submit.
+- **A value your script writes is not a touch (since 0.7.8).** `el.value = …` from a script re-checks
+  the form: the submit control opens or closes, and the error is stored, so a click on a gated submit
+  control reveals it. It paints nothing new: no message, no `aria-invalid`, nothing in the live region.
+  If the field already shows a message, that message changes or clears. To show the error at once,
+  dispatch a real `change` after the write:
+  `el.dispatchEvent(new Event('change', { bubbles: true }))`. Before 0.7.8 the write painted the error
+  on a field nobody had touched. A write to a `<textarea>`, or to a `tel`, `url`, `search`, `time`,
+  `datetime-local`, `month` or `week` input, re-checks nothing, as before: dispatch `change` after it.
+- **A reset runs no live check (since 0.7.8).** `form.reset()`, a reset button and the handle's
+  `.resetFields()` restore the values, clear the error display and re-read the submit control. Nothing
+  is painted or announced, and a `query` answer that comes back afterwards is dropped. Before 0.7.8 each
+  field ran its own check: the live region announced an error and kept it, a required checkbox or radio
+  stayed in error, and `.resetFields()` alone left every empty required field in error.
+- **Give each control its own `id`.** Live checking keys its listeners on the control's `id`. Of two
+  controls that share one, in one form or in two, only the first is live-checked: the second shows no
+  error, and its form's submit control stays gated while the user types. Duplicate ids are invalid HTML,
+  and since 0.7.8 the bind says so in the console, once per form and id. A reset now works on the form's
+  own controls; before 0.7.8 the second form's reset wrote to the first form's field and painted its
+  error.
 - **Warnings vs. errors.** While a field is still being edited it shows only a
   soft *warning* border (`form-item-warning`) — the error message itself stays
   hidden. Once the field is committed (blur, or submit), it becomes a hard
@@ -1465,7 +1484,7 @@ exposing:
 | `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
 | `.reBind()` | re-scan the form after you have changed its DOM: what the previous bind attached is detached, then attached again — your `.on()` handlers and the declarative `data-gina-form-event-on-*` callbacks stay |
 | `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle |
-| `.resetFields()` | restore fields to their initial values |
+| `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8) |
 | `.resetErrorsDisplay()` | clear rendered error/warning state |
 
 Events are attached with `.on(eventName, handler)`:

@@ -372,6 +372,64 @@ unchanged.
 `lib/merge` and the polyfill are in the browser bundle: **restart the bundle and rebuild its
 static assets** (`gina bundle:build`).
 
+### Fixed — a form reset runs no live check (bundle restart and re-bake)
+
+Up to 0.7.7 a form reset ran each field's live check, because restoring a value counted as a change.
+After `form.reset()` or a click on a reset button, the live region announced an error (« Cannot be left
+empty ») and kept it, and a required checkbox or radio stayed in error. `.resetFields()` alone left every
+empty required field in error, and the form's `errors` kept the fields after their display was cleared. A
+bound field removed from the page, or an empty `<select>`, made the reset throw, with nothing reset.
+
+Since 0.7.8 a reset restores the values, clears the display and the `errors` store, and re-reads the
+submit control, with nothing painted or announced. A `query` answer that comes back after the reset is
+dropped, and a submit it refuses paints nothing; a submit it accepts still sends the values the click
+asked for. The submit control is also re-read when the `query` field is not the last of its rule set: up
+to 0.7.7 it kept its state, and the first click on a valid form was refused.
+
+**What to check:**
+
+- A workaround that called `.resetErrorsDisplay()` after `.resetFields()` is no longer needed. It still
+  works.
+- `.resetFields()` now also clears the display and, with live checking on, re-reads the submit control,
+  and it can send the `query` of a field whose value is not empty, as a reset always did. With live
+  checking off it runs no check: no `query`, and a native `disabled` your page set on the submit control
+  stays. It still ends on each control's
+  value when the form was bound; `form.reset()` still ends `text` and `hidden` inputs on their
+  `defaultValue`.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
+### Fixed — two forms that share a field id (bundle restart and re-bake)
+
+Live checking keys its listeners on the control's `id`, so of two controls that share an id only the first
+is live-checked. That stays: duplicate ids are invalid HTML. Up to 0.7.7 nothing said so, and the second
+form's `.resetFields()`, or a reset of that form, emptied the FIRST form's field and painted its error.
+
+Since 0.7.8 the bind warns once per form and id
+(`[FormValidator] form #second: the id ref is used more than once in this page…`), and a reset works on the
+form's own controls.
+
+**What to check:** the console, for that warning, on any page with two forms. Give each control its own id:
+that is what turns the second form's live check on.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
+### Fixed — a script's `el.value = …` no longer paints an error (bundle restart and re-bake)
+
+Up to 0.7.7 a write from a script ran the live check as a user's change would: a field nobody had touched
+showed its error, and the live region announced it. Since 0.7.8 such a write still re-checks the form (the
+submit control opens or closes, the error is stored, and a click on a gated submit control reveals it), but
+it paints nothing new. A message already showing changes or clears.
+
+**What to check:**
+
+- Code that relied on the write to show an error: dispatch a real `change` after it,
+  `el.dispatchEvent(new Event('change', { bubbles: true }))`. That paints as before.
+- Code that worked around the paint (a `.reset()` or a `.resetErrorsDisplay()` right after the write) can
+  drop it.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
 ---
 
 ## 0.7.6 → 0.7.7
