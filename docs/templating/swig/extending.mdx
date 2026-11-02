@@ -38,6 +38,8 @@ swig.setFilter('shout', function (input) {
 // {{ "hello"|shout }}  => HELLO!
 ```
 
+Register a filter before the compile that uses it. A filter name the instance does not hold is a compile error in native swig, and since 2.10.0 in swig-twig and swig-django; in swig-jinja2 too, except [directly inside an `if` or an inline-if](../jinja2/parity#unknown-names).
+
 A filter receives an empty string for a missing or `null` variable, and for a subscript that finds nothing since 2.9.10 (since 2.9.11 under the autoescape `'html'` or `'js'` option or in an `{% autoescape %}` block with escaping on): with `users` empty, `{{ users[0]|shout }}` renders `!` (before, `UNDEFINED!`). It can still receive `undefined` or `null` from a function call or from the filter before it, and `String(undefined)` is `"undefined"`, so `{{ fn()|shout }}` renders `UNDEFINED!` when `fn` returns nothing. Check for `undefined` and `null` when a filter needs a string. When the last filter returns `undefined` or `null`, the output renders an empty string; 2.9.10 still printed `undefined` or `null` when that filter followed a plain variable, as in `{{ name|myFilter }}`.
 
 ### Bypassing autoescape
@@ -102,7 +104,7 @@ function exclamate(input) {
 swig.setFilter('exclamate', exclamate);
 ```
 
-Returning `undefined` from `iterateFilter` means "input is scalar — handle it directly".
+Returning `undefined` from `iterateFilter` means "input is scalar — handle it directly". Since `2.9.13` an `undefined` or `null` input comes back as an empty string, so with the check above your code does not run on it: `{{ fn()|exclamate }}` renders an empty string when `fn` returns nothing (before, `undefined!`, and `[object Object]` for `null`).
 
 ## Custom tags
 
@@ -157,7 +159,7 @@ Returns a JS source string that is spliced into the compiled function body.
 | `compiler` | Reference to `parser.compile` — call it to recurse into `content`. |
 | `args` | JS-source fragments emitted by `parse` (what ended up in `parser.out`). |
 | `content` | Child tokens between the opening tag and `end<name>` — empty when `ends = false`. |
-| `parents` | Parent template chain (for `block` / `parent` resolution). |
+| `parents` | On the sync render path, the parent templates' parse trees, or, inside a `{% block %}` since `2.9.12`, the farther definitions of that block, nearest first (entries with `name` and `blocks`, no `tokens`). Empty on the async render path. |
 | `options` | The Swig options. |
 | `blockName` | Name of the enclosing `{% block %}`, if any. |
 
@@ -178,6 +180,8 @@ exports.compile = function (compiler, args) {
   return '_output += _ext.translate(' + args[0] + ');';
 };
 ```
+
+On the async render path a `{% block %}` body is emitted at the top of the template function, so since `2.9.12` it cannot read a variable your tag's emitted code declares around the block. Put such a value in `_ctx`, which it still reaches.
 
 ### ends
 

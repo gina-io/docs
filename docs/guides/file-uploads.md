@@ -104,7 +104,10 @@ name), and reports back.
 
 ### Staged file lifecycle
 
-A staged part (a server-generated `.part` file in the landing directory) has
+A multipart request that does not complete (its parse fails, its client goes
+away, or it passes `maxFieldsSize`) removes the parts it staged at once, the
+finished ones included, and its action does not run. A staged part of a request
+that does complete (a server-generated `.part` file in the landing directory) has
 exactly **two** reclaim paths: the move performed when `self.store()` publishes
 it, and the `autoTmpCleanupTimeout` deletion timer. A part that never reaches
 `store()` — a request refused *after* the multipart parse (authentication,
@@ -222,7 +225,7 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 |---|---|
 | `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
 | `uploadDir` | Alternative global landing directory. When both are set, `uploadDir` wins over `tmpPath`. |
-| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request larger than this is rejected with **HTTP 431** before any file is read. |
+| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request whose `content-length` is larger is rejected with **HTTP 431** before any file is read. One that sends no `content-length` (a chunked or an HTTP/2 request) is rejected with **HTTP 431** once the bytes received pass it: the files it had staged are removed and the request is cut — on HTTP/1.1 the connection closes; on HTTP/2 the request's stream stops being read while the session keeps serving its other streams — so a client still writing may read the close, or stall, instead of the answer. |
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
@@ -554,7 +557,14 @@ returned, followed by its preview's `originalFilename` when the answer described
 a preview. A staging action that stores files with `self.store()` finds them
 under those names, since `store()` publishes each file under its original name.
 One that stores them under other names, a generated one for instance, has to map
-each `originalFilename` back to the file it stored.
+each `originalFilename` back to the file it stored. When the answer gives no
+`originalFilename` for a preview, the request leaves that preview out; when it
+gives none for a file, the request names the file by the name of the file the
+user chose.
+
+*Changed in 0.7.8.* A file or a preview whose staging answer carried no
+`originalFilename` was named « undefined », in the reset request and in the
+`files` the removal callback receives.
 
 *Changed in 0.7.6.* A `change` on the input that carries no file (an emptied
 selection) leaves the input's files as they were, so their reset or delete control
@@ -673,6 +683,14 @@ file's location and original filename; a second file chosen on the same input
 likewise submitted the first file's `name`. A key your answer leaves out, `name`
 included, leaves its field as it is: keep a value that a replacement must not
 change, a record id for instance, in a field whose name the answer does not return.
+
+*Changed in 0.7.8.* Re-binding the form — `$forms[id].reBind()`, `.bind()`, or `destroy()`
+followed by `validateFormById()` — keeps the files an input has staged. Gina reads
+`<input id>-preview` for saved files again only once none of the input's staged files still has
+its reset control `<input id>-<index>-reset-trigger` on the page, as after your page replaces the
+container to show the saved file. Before, a re-bind after a staging read the staged previews as
+saved files: a file shown without an image could no longer be reset and the form still saved it,
+and an image logged a warning for a delete link the page never had.
 
 ### Persisting the preview
 

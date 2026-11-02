@@ -129,7 +129,9 @@ development.
 ## When your page is served
 
 - **XHR / API requests always get JSON** — `{ status, error, message, ref }`
-  — never the HTML page.
+  — never the HTML page. An error the server answers rather than your
+  controller (a request whose data does not parse, a controller that fails to
+  build) carries `{ status, error, ref }`, its text in `error`.
 - **Only HTML-looking URLs qualify**: a URL with no extension, or ending in
   `.html` / `.htm`. An HTML-branch request whose URL carries another
   extension (`.json`, `.png`, …) gets the built-in fallback page instead.

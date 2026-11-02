@@ -19,6 +19,487 @@ upward to the target version.
 
 ---
 
+## 0.7.7 → 0.7.8
+
+### Changed — Gina requires `@rhinostone/swig` `^2.11.0`, which changes some native swig outputs (bundle restart)
+
+Gina 0.7.8 requires `@rhinostone/swig` `^2.11.0` in both of its manifests. Native swig templates
+change between 2.9.11 and 2.11.0 through 2.9.12 and 2.9.13, fix releases with no advisory; 2.10.0
+and 2.11.0 themselves change only the swig-twig, swig-jinja2 and swig-django frontends (in 2.11.0,
+swig-jinja2 and swig-django compare `==`, `!=` and `in` with Python's equality). What a native
+template can render differently:
+
+- `date` of a missing, `null`, empty or unparseable value renders an empty string, where it printed
+  `NaN/NaN/NaN`.
+- A filter or call result that is `undefined` or `null` reads as an empty string at a `+` or unary
+  operand, in an output and in a `set` argument alike: `{{ "a" + f() }}` renders `a`, where it
+  printed `aundefined`, and `{{ 1 + f() }}` and `{{ -f() }}` render `1` and `0`, where they printed
+  `NaN`.
+- A filter after a filter or a call that found nothing renders an empty string:
+  `{{ items|first|lower }}` over an empty array threw, and `{{ f()|upper }}` with a `null` result
+  printed `[object Object]`. `first`, `last` and `replace` give an empty string for an `undefined`
+  or `null` input, and `length` gives `0`, where they threw.
+- Blocks nested in blocks follow one chain of definitions per block name. A block nested in any
+  block of an extending template defines its name even when the root has no block for the
+  enclosing one. `{% parent %}` in a block nested in an override renders the next definition of its
+  name, where it rendered nothing, and so does `{% parent %}` in an override of a nested block on
+  the sync path, as the async path already did. A block that renders itself through a nested block
+  or `{% parent %}` fails with an error naming the block, where the render overflowed the stack.
+
+The engines Gina builds pass `cache: false`, so the template cache that swig 2.9.13 added to its
+async loader path does not engage: a layout and an include are still loaded on every render (see
+[Async template loaders](/templating/async-loaders)). Gina's own templates use none of the shapes
+above. Upgrading gina installs 2.11.0 or later. A project copy loaded through `swig.useProject`, or
+a frontend selected through `swig.package`, keeps its own version: update it there, with the
+release notes of that frontend.
+
+**What to check:**
+
+- A template that prints `date` of a value that can be missing or invalid: a heading or a field
+  built from it can now be empty, where it showed `NaN`.
+- A template or test that expected the text `undefined`, `null`, `NaN` or `[object Object]` from
+  such an expression, or a throw from a filter applied to a missing value.
+- A template your application compiles ahead of time with swig (`swig.precompile()` output, or a
+  bundle registered with `swig.registerBundle`) keeps the behaviour of the swig release that
+  compiled it: compile it again after the upgrade ([Browser usage](/templating/swig/browser)). A
+  restart recompiles the templates Gina renders.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — an HTTP/1.1 `self.query()` timeout fails with its own error (bundle restart)
+
+Up to 0.7.7, an HTTP/1.1 `self.query()` call that reached its `requestTimeout` failed like a reset
+connection: an `Error` coded `ECONNRESET` with the message « socket hang up », which reads
+« `Controller::query()` could not connect to [ … ] using port N » when the port belongs to a
+bundle, and with no `status`, so relaying it with `self.throwError(err)` or receiving it through an
+`.onComplete()` handle answered 500. When the upstream had sent its response headers before the
+timeout and then stalled, the call never called back at all.
+
+Since 0.7.8 the timeout fails, in both cases, with an [`Error`](/guides/controller) whose `code`
+is `ETIMEDOUT`, with `status` 503, `retryCount` and the message
+`[HTTP1] No response from <hostname> after <time>`. HTTP/2 calls are unchanged: their timeout
+already failed with a 503 (`TIMEOUT`).
+
+**What to check:**
+
+- Code that recognised a timed-out HTTP/1.1 call by `err.code === 'ECONNRESET'` or by the
+  « could not connect » message now sees `ETIMEDOUT` and « No response from ». A refused connection
+  still reads « could not connect ».
+- A timed-out call that your action relays with `self.throwError(err)` now answers 503 instead of
+  500, and an `.onComplete()` handle receives it with `status` 503 instead of 500.
+- The re-send rule is unchanged: a GET, HEAD, OPTIONS or TRACE, or a call with `retryUnsafe`, is
+  still re-sent (twice by default) before the error is delivered, and the circuit breaker
+  (`server.query.circuitBreaker`) still counts the timeout.
+
+Server-side only: **restart the bundle**.
+
+### Security — a multipart upload that does not complete stops and removes what it staged (bundle restart)
+
+A multipart upload whose parse fails, or whose client goes away, now stops at once: the request
+stops feeding the parser, its write streams close and every file it staged is removed, the parts
+that had finished included. A failed parse is still answered HTTP 400. Nothing changes for an
+upload that completes.
+
+`upload.maxFieldsSize` now counts the bytes a multipart request sends, as well as reading its
+`content-length`. **Check this one:** a client that sends a body larger than the cap with no
+`content-length` (chunked, or HTTP/2) was accepted up to 0.7.7 and is now answered HTTP 431 and
+its staged files removed; on HTTP/1.1 the connection then closes, on HTTP/2 the request's stream
+stops being read while the session keeps serving its other streams. Raise `maxFieldsSize` if such
+uploads are legitimate. A browser form sends a `content-length`, which was already checked.
+
+Server-side: pickup is a bundle restart, no re-bake.
+
+### Fixed — a form re-bound after a file was staged keeps the staged files (bundle restart and re-bake)
+
+Up to 0.7.7, a form re-bound while one of its file inputs showed a file the user had staged —
+`$forms[id].reBind()`, `.bind()`, or `destroy()` followed by `validateFormById()` — read the
+staged previews in `<input id>-preview` as saved files:
+
+- a file shown without an image (a PDF whose staging answer carries no `preview` thumbnail) lost
+  its entry, so its reset control removed nothing and the form still saved the file the user had
+  removed;
+- beside an image on a `multiple` input, that file's reset removed the image instead, and the form
+  still saved the PDF;
+- an image logged « did not find `upload delete trigger` » for a delete link the page never had
+  (the case the 0.7.6 entry below says still warns).
+
+Since 0.7.8 a re-bind leaves an input's staged files as they are while their reset controls are on
+the page. Once the page has replaced the preview container, for instance to show the saved file
+after a save, the container is read again as before; a form re-bound before any staging, or after
+a reset, is unchanged. See
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:** nothing; a form that is not re-bound while a file is staged works as before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a reset no longer names a file « undefined » (bundle restart and re-bake)
+
+Up to 0.7.7, when a staging answer gave no `originalFilename` for a file or for its `preview`,
+the client stored the missing name on the preview image as the text « undefined », and the reset
+sent it: in its `{ "files": [ … ] }` request and in the `files` that the
+`data-gina-form-upload-on-reset` callback receives. The guide's own `preview` example carries no
+`originalFilename`, so the reset of a file staged with that shape named its preview « undefined ».
+
+Since 0.7.8 a name is recorded only when the answer gives one: the reset leaves a preview without
+one out of the request, and names a file without one by the name of the file the user chose. See
+[Previews and removal](/guides/file-uploads#previews-and-removal).
+
+**What to check:** if your staging answer gives no `originalFilename` for a file, its reset now
+names the file by the name of the file the user chose instead of « undefined »; a reset route that
+skipped or refused « undefined » no longer receives it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Security — `mv()`, `rm()`, `mkdir()` and `cp()` call back once, and keep what they could not copy (bundle restart)
+
+Up to 0.7.7, the async operations of the [path helper](/globals/path) could throw past your
+callback, lose it, or destroy data while reporting a success:
+
+- A source that another `mv()` or `rm()` took during a move threw an uncaught exception, which stops
+  the bundle, or lost the callback, which leaves the request unanswered. `rm()`, and so `mv()`, also
+  lost it on a failed `lstat` or `readdir`, `mkdir()` lost it on any failure, and `mv()` with no
+  callback threw on a failure.
+- `mv(x, x)`, `mv(dir, dir)`, `cp(dir, dir)` and `mv()` of a file to the folder it already sits in
+  destroyed the path and reported a success. So did a rename that only changes the case, on a
+  filesystem that ignores case.
+- Moving a folder that held an unreadable file reported a success and removed the source, that file
+  included. Copying one reported a success with the file left out.
+- `cp()` or `mv()` of a folder onto a folder that holds it destroyed the whole of that folder, then
+  threw an uncaught exception. A folder copied into itself recursed until the path was too long, left
+  that nest on disk and never called back.
+- An existing destination that could not be cleared ended the process with `process.exit(1)`.
+
+Since 0.7.8 every call calls back once. A path another operation takes counts as done, and any other
+failure reaches the callback (`mv()` with no callback logs it). A folder copy copies all it can and
+reports its first failure at the end, and `mv()` then keeps its source. A target that already is the
+source is a no-op, and so is a file moved to the folder it already sits in; a rename that only changes
+the case renames. The two folder shapes are refused before anything is written, with an `Error` whose
+`code` is `EINVAL`. See [Copy and move](/globals/path#copy-and-move).
+
+**What to check:**
+
+- Your builds: `bundle:build`, `project:build`, `bundle:copy` and `bundle:add` copy with `cp()`, so they
+  now fail on a file they cannot read, where they silently left it out.
+- Code that calls `rm()` or `mv()`: an `unlink` the system denies is now a failure, where it read as a
+  success with the file still there.
+
+Server-side only: **restart the bundle**.
+
+### Security — on Bun, an HTTP/2 `self.query()` timeout belongs to its call, and a session no longer stops at the upstream's stream limit (bundle restart)
+
+This concerns bundles that run on Bun. Node.js is unchanged.
+
+Up to 0.7.7, `requestTimeout` was not a call's own on Bun, whose `setTimeout()` on a client stream
+sets one timer for the whole session:
+
+- A call could fail at another call's timeout, with a message naming its own `requestTimeout`.
+- A response still streaming past `requestTimeout` failed mid-body.
+- On Bun 1.4, a hung call never called back once another call on its session had finished, and a
+  `requestTimeout` above 5 seconds, the default 10 seconds included, never fired.
+- On Bun 1.2 and 1.3, a slow upload failed at `requestTimeout` while it was still moving.
+- Each call left a `timeout` listener on the session or its socket, which printed a
+  `MaxListenersExceededWarning`.
+
+On Bun 1.4, a session also stopped sending once as many calls had completed on it as the upstream's
+stream limit (256 against an Isaac upstream's default): each later call on it failed with `TIMEOUT` on
+a short `requestTimeout`, or never called back on the default one, and the session did not recover.
+
+Since 0.7.8 each stream has its own timer on Bun, following what Node.js does, and a session keeps
+sending past that count. See [HTTP/2 client resilience](/guides/http2-resilience).
+
+**What to check:**
+
+- A hung call that never called back on Bun 1.4 now fails with `TIMEOUT` (503) at its
+  `requestTimeout`, so the action waiting on it now answers.
+- A call that failed at a sibling's timeout, or mid-body, now runs to its own timeout.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — on Node.js 24 and 26 and Bun 1.4, a call sent on a session just destroyed is re-sent (bundle restart)
+
+Up to 0.7.7, on a connection that had silently dropped, a call whose pre-flight PING was pending when
+the keepalive deadline destroyed the session failed with a 500 `STREAM_ERROR`, « The session has been
+destroyed », for any method, though nothing had been sent. Since 0.7.8 it is re-sent on a fresh session,
+as [HTTP/2 client resilience](/guides/http2-resilience) describes. Node.js 22 and 25 and Bun 1.2 and 1.3
+already recovered.
+
+**What to check:** code that retried on this 500 no longer sees it; the call now succeeds, or fails with
+the code of its retry.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — Safari: every key is native on a live-checked `autocomplete="off"` field (bundle restart and re-bake)
+
+Up to 0.7.7, on Safari, while a live-checked `<input>` with `autocomplete="off"` (or `"false"`) had
+focus, gina cancelled each key and rebuilt the value by hand:
+
+- `email` and `number` fields typed backwards and were posted that way: `123` sent `321`, with an
+  uncaught `InvalidStateError` per key and no warning.
+- Tab did nothing on `email`, `password`, `tel`, `number`, `url` and `search`. From a `text` field it
+  skipped a `password`, an `email`, a `<textarea>` or a checkbox, and it stayed inside the form.
+- Enter did not submit, `maxlength` was ignored, ArrowUp, ArrowDown and Shift with an arrow did
+  nothing useful, and neither `input` nor `beforeinput` fired.
+- A `readonly` you wrote was lifted on every focus.
+- A `query` rule sent one request per key.
+- A field that already had focus when gina bound it (`autofocus`, a `.reBind()` during typing) took
+  no keys until it was left and focused again.
+- After `.destroy()` or `.unbind()` the field took no keys while the form stayed on the page.
+
+Since 0.7.8 every key is native, as on any other field and any other browser. The field is still
+`readonly` until it has focus, because Safari's form fill skips a readonly control. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:**
+
+- A `keyup` listener you added because `input` did not fire on such a field on Safari can go: `input`
+  fires for each key.
+- Tab now follows Safari's own order, which skips buttons unless the user turned them on in Safari's
+  settings. gina's own Tab used to stop on a button.
+- gina's `readonly` now reads `readonly="gina"`. `[readonly]` selectors and the `readOnly` property
+  still see it; a selector on the old value, `[readonly="readonly"]`, does not.
+- A `readonly` you write, in the markup or from a script, now stays: code that counted on Safari
+  lifting it on focus will find the field locked, as in every other browser.
+- Live checking on such a field now waits for the typing pause, as on a plain field, where each key
+  used to check it at once.
+- A test driver: `fill()` still needs `focus()` first on such a field.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — `Collection.notIn()` and `delete()` return `[]` on an empty source (bundle restart and re-bake)
+
+Up to 0.7.7, the array form of `notIn`, `notIn(rows, key)`, also with no key or with `false`, returned
+`rows` itself when the searched array was empty: a `new Collection([])`, or an empty `find()` result
+chained into `notIn`. The call handed back the very rows it excludes, none of which belong to the
+source. `delete(rows, key)` delegates to `notIn` and did the same.
+
+Since 0.7.8 both return `[]`. The filter-object form, `notIn({ … })`, already did.
+
+**What to check:**
+
+- Code that assigns the result of `notIn(rows, key)` to the list it filters got `rows` back when that
+  list was empty. It now gets an empty list.
+- Code that counted on the old result, and wants `rows` when the source is empty, now takes `rows`
+  directly.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — an `Error` handed to the server's error responder answers with its text (bundle restart)
+
+Up to 0.7.7, the server's error responder (the `throwError` the router and the request parser
+use, which a bundle's `controllers/setup.js` also receives as `this.throwError`) wrote an `Error`
+object it was handed as `"error":{}` in a JSON error body, and a
+[custom error page](/guides/error-pages) received the object itself as `page.data.message`, which
+rendered `[object Object]`. It was handed one in three cases: a POST or PATCH whose
+`application/json` body does not parse, a `requireController()` call whose controller throws while
+it is built, and a `setup.js` calling `this.throwError(res, code, err)` with an `Error`. Outside the
+local scope it also deleted the `stack` of the error object passed in.
+
+Since 0.7.8 it writes the error's text, as for an error passed as `err.stack`: the whole stack in
+the local scope, its first line (`Error: <message>`) elsewhere. The error object passed in is left
+as it was.
+
+**What to check:**
+
+- A client that reads `error` from these responses now receives a string, for example
+  `"Error: Could not parse application/json POST body. …"` outside the local scope.
+- A custom error template that prints `page.data.message` now shows that text; in the local scope
+  it carries the stack, as for the other errors the server answers.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — request data no longer switches a swig render into error-page mode (bundle restart)
+
+Up to 0.7.7, with the swig engine, an action that renders request data, such as
+`self.render(req.get)`, switched into error-page rendering when the request carried
+`isRenderingCustomError=true`, and the request was answered 500. Since 0.7.8 only gina's own
+error-page rendering sets that mode, as with the nunjucks engine; the value reaches the template
+like any other request value.
+
+Nothing to change in your code. Server-side only: **restart the bundle**.
+
+### Fixed — `| length` returns a string's length (bundle restart)
+
+Up to 0.7.7, the `length` filter gina registers on swig and on nunjucks rendered nothing for a
+string: `{{ "abc" | length }}` rendered empty, `{% if title | length %}` was false for any string,
+and `{{ "hello" | length }}`, the example on the [swig filters page](/templating/swig/filters#length),
+rendered empty instead of 5. Only a string that reads as JSON, such as `'{"a":1}'` or `"5"`, gave
+its length. On nunjucks, a string passed through `| safe` gave nothing, or 2 for a JSON-looking one.
+
+Since 0.7.8 a string gives its length on both engines, with or without `| safe`. Arrays, objects
+and collections count as before.
+
+**What to check:**
+
+- On swig, a missing or null variable now gives 0. Swig hands a filter an empty string for one, so
+  `{{ missing | length }}` renders `0` where it rendered nothing, and
+  `{{ missing | length | default("No") }}` gives `0` instead of `No`, as swig's own `length` filter
+  does. `{% if missing | length %}` stays false. Nunjucks already gave 0.
+- A template that relied on `| length` rendering nothing for a string, or on a `| default(...)`
+  after it taking over, now shows the count.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — `merge()` and `JSON.clone` keep a key named after an `Object.prototype` member (bundle restart and re-bake)
+
+Up to 0.7.7, a fill-only [`merge()`](/api/merge) — the default mode — read a target's value through the
+prototype chain, so on a plain object a source key named `toString`, `valueOf`, `isPrototypeOf`,
+`hasOwnProperty`, `propertyIsEnumerable` or gina's own `count` counted as an existing value: the
+inherited function was written back as an own key over the source's value, and JSON output then omitted
+the key. A PUT form or JSON field so named reached the action as nothing, and a GET `inheritedData`
+carrying `toString` lost it. Two related paths failed the same way: `merge()`'s array-element fill tested
+ownership with the element's own `hasOwnProperty`, so a PUT body such as
+`list[0][hasOwnProperty]=1&list[0][b]=2` answered 500 « newTarget[a].hasOwnProperty is not a function »;
+and `JSON.clone`, the server's and the browser bundle's, filled a key only when the target had no value
+for it, read through the chain, so a cloned object lost the same keys (a GET `inheritedData` is cloned
+before it is merged, so a nested `toString` or `hasOwnProperty` was lost there too).
+
+Since 0.7.8 a key the target holds only through `Object.prototype` counts as missing and is filled; a
+key the target owns, or inherits from its own prototype (an entity's query methods, a class's own
+`toString`), keeps winning as documented. The array-element fill tests ownership through the built-in,
+and both cloners fill a key the target does not own. Override mode (`merge(target, source, true)`) is
+unchanged.
+
+**What to check:**
+
+- A request field named after one of those members now reaches your action (`req.put`, `req.get`
+  through `inheritedData`, a nested element on PUT). Code that reads such a bag with
+  `bag.hasOwnProperty(key)` should use `Object.prototype.hasOwnProperty.call(bag, key)`, since the own
+  key now shadows the method, as it already did on POST, PATCH and GET.
+- A merge that relied on the old behaviour to drop such a key, or on a `toString`-named data key being
+  replaced by the built-in function, now keeps the data value.
+
+`lib/merge` and the polyfill are in the browser bundle: **restart the bundle and rebuild its
+static assets** (`gina bundle:build`).
+
+### Fixed — a form reset runs no live check (bundle restart and re-bake)
+
+Up to 0.7.7 a form reset ran each field's live check, because restoring a value counted as a change.
+After `form.reset()` or a click on a reset button, the live region announced an error (« Cannot be left
+empty ») and kept it, and a required checkbox or radio stayed in error. `.resetFields()` alone left every
+empty required field in error, and the form's `errors` kept the fields after their display was cleared. A
+bound field removed from the page, or an empty `<select>`, made the reset throw, with nothing reset.
+
+Since 0.7.8 a reset restores the values, clears the display and the `errors` store, and re-reads the
+submit control, with nothing painted or announced. A `query` answer that comes back after the reset is
+dropped, and a submit it refuses paints nothing; a submit it accepts still sends the values the click
+asked for. The submit control is also re-read when the `query` field is not the last of its rule set: up
+to 0.7.7 it kept its state, and the first click on a valid form was refused.
+
+**What to check:**
+
+- A workaround that called `.resetErrorsDisplay()` after `.resetFields()` is no longer needed. It still
+  works.
+- `.resetFields()` now also clears the display and, with live checking on, re-reads the submit control,
+  and it can send the `query` of a field whose value is not empty, as a reset always did. With live
+  checking off it runs no check: no `query`, and a native `disabled` your page set on the submit control
+  stays. It still ends on each control's
+  value when the form was bound; `form.reset()` still ends `text` and `hidden` inputs on their
+  `defaultValue`.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
+### Fixed — two forms that share a field id (bundle restart and re-bake)
+
+Live checking keys its listeners on the control's `id`, so of two controls that share an id only the first
+is live-checked. That stays: duplicate ids are invalid HTML. Up to 0.7.7 nothing said so, and the second
+form's `.resetFields()`, or a reset of that form, emptied the FIRST form's field and painted its error.
+
+Since 0.7.8 the bind warns once per form and id
+(`[FormValidator] form #second: the id ref is used more than once in this page…`), and a reset works on the
+form's own controls.
+
+**What to check:** the console, for that warning, on any page with two forms. Give each control its own id:
+that is what turns the second form's live check on.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
+### Fixed — a script's `el.value = …` no longer paints an error (bundle restart and re-bake)
+
+Up to 0.7.7 a write from a script ran the live check as a user's change would: a field nobody had touched
+showed its error, and the live region announced it. Since 0.7.8 such a write still re-checks the form (the
+submit control opens or closes, the error is stored, and a click on a gated submit control reveals it), but
+it paints nothing new. A message already showing changes or clears.
+
+**What to check:**
+
+- Code that relied on the write to show an error: dispatch a real `change` after it,
+  `el.dispatchEvent(new Event('change', { bubbles: true }))`. That paints as before.
+- Code that worked around the paint (a `.reset()` or a `.resetErrorsDisplay()` right after the write) can
+  drop it.
+
+The browser bundle changed: **restart the bundle and re-bake it**.
+
+### Fixed — a `query` rule with no sync rule beside it froze the tab (bundle restart and re-bake)
+
+Up to 0.7.7, on an otherwise valid form, the re-validation that follows a clean `query` answer asked the
+same `query` again, and that answer started the re-validation again. It happened for a field whose only
+rule is `query`, and for a `query` field that also drives a `_case_` block, with or without a sync rule.
+
+- **From 0.6.7 to 0.7.7**, with a value in the field, the tab froze when the user typed in it, or already
+  at page load when the field was the last or the only one of its rule set.
+- **From 0.6.5 to 0.7.7**, with that last or only field empty, the page sent requests without end from page
+  load.
+- In the versions before 0.6.7, the same typing could throw « Maximum call stack size exceeded » in the
+  console instead of freezing.
+
+Since 0.7.8 the re-validation does not ask again a `query` whose answer is in: the form settles, and the
+submit control follows the verdict.
+
+**What to check:**
+
+- On a version before 0.7.8, the workaround is a sync rule on the field, such as `isRequired` or `isString`.
+  It does not help a field that drives a `_case_` block. Since 0.7.8 the rule is no longer needed for this,
+  and it can stay.
+
+The browser bundle changed: **restart the bundles and re-bake.**
+
+### Fixed — a navigation that cuts the routing fetch (bundle restart and re-bake)
+
+A navigation can cut the fetch of `_gina/assets/routing.json` while a page boots. Up to 0.7.7 the page being
+left printed `[gina] routing dependency failed to load` in the console, though nothing was wrong with the
+page that followed. On WebKit, the fetch is cut when the navigation starts: when that navigation did not
+replace the page, because it answered a 204 or was a download, the page stayed with no routing table, and
+client `getRoute()` and `toUrl()` stayed degraded until reload.
+
+Since 0.7.8 a fetch that got no answer is asked again after 300 ms, 1 s and 2.5 s before it counts as a
+failure. A page that is really left prints nothing, and a page that stays gets its table.
+
+**What to check:**
+
+- On a real network failure, the console error and your `gina.ready` handlers now come about 3.8 s later
+  than before, and the page makes three more requests. Handlers are still released, with no table, as the
+  [earlier note](/migration) describes. An HTTP error or a body that is not JSON still fails at once.
+
+The browser bundle changed: **restart the bundles and re-bake.**
+
+### Security — a download name with a character above U+00FF (bundle restart and re-bake)
+
+Up to 0.7.7, a download name holding a character above U+00FF (a typographic apostrophe, a CJK or
+emoji name, or an accent typed as a separate combining mark) broke the `Content-Disposition` header:
+
+- **On HTTP/1.1**, `self.downloadFromURL()` and `self.downloadFromLocal()` answered `500`, and
+  `self.serveFromStorage()` with `download` or `filename` ended the bundle process (from 0.6.8, the
+  release that added it).
+- **On HTTP/2**, `self.downloadFromLocal()` and `self.serveFromStorage()` answered `200` with the name cut
+  to one byte per character, or with no `Content-Disposition` at all; `self.downloadFromURL()` answered `500`.
+
+Since 0.7.8 such a name gets an RFC 8187 `filename*=UTF-8''…` parameter, which browsers prefer, after a
+`filename` fallback that reads `?` for each character above U+00FF. An accent typed as a separate
+combining mark is composed first, so a name such as `résumé.pdf` keeps the plain form, and every other
+name keeps the header it had. A throw inside `serveFromStorage()`'s storage callbacks (a header the
+response refuses, for instance) is now answered `500` instead of ending the process. In the browser
+bundle, a download fetched by XHR (`data-gina-link`) reads its name from `filename*` first.
+
+**What to check:**
+
+- A client that reads only the `filename` parameter now sees `?` in place of those characters.
+- The `s3` adapter's offload path, which puts the name in the presigned URL, is unchanged.
+
+The server code and the browser bundle changed: **restart the bundles and re-bake.**
+
+---
+
 ## 0.7.6 → 0.7.7
 
 ### Security — `self.renderJSON()` adds its Inspector sidecars in development only (bundle restart)

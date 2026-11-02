@@ -514,6 +514,9 @@ Validates the value against a remote endpoint (e.g. a uniqueness check).
 
 - In the **browser** it performs an asynchronous `XMLHttpRequest` and is
   effectively terminal — put it **last** in the chain.
+- **Before 0.7.8**, a field whose only rule is `query`, or a `query` field that drives a `_case_` block,
+  could freeze the tab or send requests without end on an otherwise valid form: see the
+  [migration notes](/migration).
 - On the **server** it returns a `Promise`.
 - **Default message:** *Must be a valid response*
 

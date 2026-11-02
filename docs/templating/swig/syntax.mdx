@@ -79,7 +79,7 @@ The ternary's `else` branch is required — `{{ x ? "a" }}` throws `Expected col
 
 ### Function calls
 
-Variables can be functions. Function output is **never autoescaped**. A call that returns `undefined` or `null` renders as an empty string (since 2.9.10, before which it printed `undefined` or `null`; since 2.9.11 under the autoescape `'html'` or `'js'` option or in an `{% autoescape %}` block with escaping on).
+Variables can be functions. Function output is **never autoescaped**. A call that returns `undefined` or `null` renders as an empty string (since 2.9.10, before which it printed `undefined` or `null`; since 2.9.11 under the autoescape `'html'` or `'js'` option or in an `{% autoescape %}` block with escaping on). Since 2.9.13 such a result, and a filter result that is `undefined` or `null`, reads as an empty string at an arithmetic or unary operand, as a variable holding one does: `{{ 1 + fn() }}` renders `1`, `{{ -fn() }}` renders `0` and `{{ 1 + items|first }}` over an empty list renders `1` (before, `NaN`). A template compiled by an earlier release keeps the old reading until it is compiled again.
 
 ```swig
 {{ formatDate(user.birthday) }}

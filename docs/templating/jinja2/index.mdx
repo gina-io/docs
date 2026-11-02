@@ -120,7 +120,7 @@ See [Loaders](../swig/loaders) for the full contract — it is identical across 
 | `setFilter` / `setTag` / `setExtension` | Yes | Yes |
 | Tag set | 15 built-ins | 13 built-ins (see [Parity](./parity)) |
 | Filter set | 25 built-ins | 39 built-ins (see [Parity](./parity)) |
-| Is-tests | — | 16 (`defined`, `undefined`, `none`, `even`, `odd`, `divisibleby`, `iterable`, `mapping`, `sequence`, `string`, `number`, `boolean`, `callable`, `lower`, `upper`, `sameas`) |
+| Is-tests | — | 29 (`defined`, `undefined`, `none`, `even`, `odd`, `divisibleby`, `iterable`, `mapping`, `sequence`, `string`, `number`, `integer`, `float`, `boolean`, `true`, `false`, `callable`, `lower`, `upper`, `sameas`, and since 2.11.0 the comparison tests `eq`, `equalto`, `ne`, `lt`, `lessthan`, `le`, `gt`, `greaterthan`, `ge`), and the guards `filter` and `test` |
 
 [^gina-autoescape]: In a gina bundle both run with [`settings.swig.autoescape`](/reference/settings#swig), which is `false` until 0.8.0.
 

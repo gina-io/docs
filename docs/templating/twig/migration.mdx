@@ -53,7 +53,7 @@ Straight copy-paste — no changes needed:
 - `{% include "partial.twig" %}` including `with { … } only` variants
 - `{% macro name(args) %}`, `{% import "macros.twig" as forms %}`, `{% from "macros.twig" import one, two as alias %}`
 - `{% apply upper %}…{% endapply %}`, `{% verbatim %}…{% endverbatim %}`, `{% with { scope: value } only %}…{% endwith %}`
-- `is defined`, `is null`, `is empty`, `is iterable`, `is odd`, `is even`, `is divisibleby(n)`
+- `is defined`, `is null`, `is empty`, `is iterable`, `is odd`, `is even`; Twig's `is divisible by(n)` is spelled `is divisibleby(n)` here, and its `none`, `same as`, `sequence`, `mapping`, `constant` and `true` tests fail to compile (see [Parity → `is` tests](./parity#is-tests))
 - String interpolation: `"Hello #{name}"`
 
 ## Semantic differences

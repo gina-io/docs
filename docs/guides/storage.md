@@ -262,7 +262,7 @@ What one call gives you:
 | --- | --- |
 | `contentType` | Served verbatim — your informed choice, bypassing the downgrade below. |
 | `cacheControl` | Replaces the immutable caching default, verbatim. |
-| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). On the offload path it rides the presigned URL as `response-content-disposition`, so the provider's response carries it too. |
+| `download` | `true` emits `Content-Disposition: attachment` (the stored `originalName` by default, control characters stripped). On the in-process path, a name with a character above U+00FF also gets an RFC 8187 `filename*` parameter after a `filename` fallback that reads `?` for each such character (since 0.7.8). On the offload path it rides the presigned URL as `response-content-disposition`, so the provider's response carries it too. |
 | `filename` | The attachment filename (implies `download`). |
 | `offload` | `false` forces the in-process proxy path on an offload-capable driver — a private bucket, IP-gated egress, or byte-level control. Default: offload when the driver can. |
 
