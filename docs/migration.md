@@ -106,6 +106,41 @@ skipped or refused « undefined » no longer receives it.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `mv()`, `rm()`, `mkdir()` and `cp()` call back once, and keep what they could not copy (bundle restart)
+
+Up to 0.7.7, the async operations of the [path helper](/globals/path) could throw past your
+callback, lose it, or destroy data while reporting a success:
+
+- A source that another `mv()` or `rm()` took during a move threw an uncaught exception, which stops
+  the bundle, or lost the callback, which leaves the request unanswered. `rm()`, and so `mv()`, also
+  lost it on a failed `lstat` or `readdir`, `mkdir()` lost it on any failure, and `mv()` with no
+  callback threw on a failure.
+- `mv(x, x)`, `mv(dir, dir)`, `cp(dir, dir)` and `mv()` of a file to the folder it already sits in
+  destroyed the path and reported a success. So did a rename that only changes the case, on a
+  filesystem that ignores case.
+- Moving a folder that held an unreadable file reported a success and removed the source, that file
+  included. Copying one reported a success with the file left out.
+- `cp()` or `mv()` of a folder onto a folder that holds it destroyed the whole of that folder, then
+  threw an uncaught exception. A folder copied into itself recursed until the path was too long, left
+  that nest on disk and never called back.
+- An existing destination that could not be cleared ended the process with `process.exit(1)`.
+
+Since 0.7.8 every call calls back once. A path another operation takes counts as done, and any other
+failure reaches the callback (`mv()` with no callback logs it). A folder copy copies all it can and
+reports its first failure at the end, and `mv()` then keeps its source. A target that already is the
+source is a no-op, and so is a file moved to the folder it already sits in; a rename that only changes
+the case renames. The two folder shapes are refused before anything is written, with an `Error` whose
+`code` is `EINVAL`. See [Copy and move](/globals/path#copy-and-move).
+
+**What to check:**
+
+- Your builds: `bundle:build`, `project:build`, `bundle:copy` and `bundle:add` copy with `cp()`, so they
+  now fail on a file they cannot read, where they silently left it out.
+- Code that calls `rm()` or `mv()`: an `unlink` the system denies is now a failure, where it read as a
+  success with the file still there.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.6 → 0.7.7

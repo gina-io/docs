@@ -160,6 +160,9 @@ new _('/var/app/cache').mkdir(function(err) {
 });
 ```
 
+*Changed in 0.7.8.* A folder that cannot be created now reaches the callback; before, the callback
+never ran. Two concurrent calls for the same path both succeed.
+
 ---
 
 ### Removal
@@ -176,6 +179,10 @@ Async removal. Uses a per-operation EventEmitter.
 |-----------|------|-------------|
 | `callback` | `function` | Called with `(err)` |
 
+*Changed in 0.7.8.* Every call calls back once. A path another remove takes meanwhile is not a
+failure. Any other failure reaches the callback, including an `unlink` the system denies, which used
+to read as a success with the file still there.
+
 ---
 
 ### Copy and move
@@ -190,19 +197,49 @@ Copies a file or directory to `target`. Supports exclusion lists.
 | `excluded` | `Array<string\|RegExp>` | Files or patterns to skip |
 | `callback` | `function` | Called with `(err)` |
 
-Three copy strategies are applied automatically:
-- File → file
-- Directory contents → directory (when target already exists)
-- Full directory → directory (when target does not exist)
+What it does depends on the source:
+
+- **A file** is written to `target`, created or replaced atomically. When `target` is an existing
+  folder, the file goes inside it under its own name.
+- **A folder** is copied to `target`. An existing `target` is **replaced**: what it held is removed
+  first. A trailing slash on either path changes nothing.
+- **A symlink** becomes a new symlink to the same real path. An existing `target` is a failure
+  (`EEXIST`).
+
+A target that already is the source, by another spelling, through a symlinked parent or as a hard
+link, is a no-op that reports a success.
+
+*Changed in 0.7.8.*
+
+- A folder copy copies all it can and reports its first failure at the end. It used to leave out a
+  file it could not read and report a success.
+- A folder copied onto a folder that holds it, or into itself, is refused before anything is written,
+  with an `Error` whose `code` is `EINVAL`. The first destroyed the whole of the folder that holds it,
+  and the second recursed until the path was too long. With an `excluded` list that names the
+  destination, a folder can still be copied into itself.
 
 #### `.mv(target, callback)`
 
-Moves (or renames) a file or directory. Implemented as `.cp()` followed by `.rm()`.
+Moves (or renames) a file or directory. Implemented as `.cp()` followed by `.rm()`, so the rules of
+`.cp()` apply, and the source is removed only once the copy has succeeded.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `target` | `string` | Destination path |
 | `callback` | `function` | Called with `(err)` |
+
+*Changed in 0.7.8.*
+
+- Every call calls back once, whatever happens to its paths meanwhile. A source that another move or
+  remove took during the move used to throw an uncaught exception or lose the callback. A failure now
+  reaches the callback; with no callback it is logged, where it threw.
+- A target that already is the source is a no-op, and so is a file moved to the folder it already sits
+  in. Both used to destroy it and report a success.
+- A rename that only changes the case renames, on a filesystem that ignores case. It used to destroy
+  the path.
+- A folder whose copy reported a failure keeps its source. It used to be removed, with the file that
+  could not be read.
+- A folder moved onto a folder that holds it, or into itself, is refused as in `.cp()` (`EINVAL`).
 
 ---
 
