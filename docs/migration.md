@@ -21,12 +21,13 @@ upward to the target version.
 
 ## 0.7.7 → 0.7.8
 
-### Changed — Gina requires `@rhinostone/swig` `^2.10.0`, which changes some native swig outputs (bundle restart)
+### Changed — Gina requires `@rhinostone/swig` `^2.11.0`, which changes some native swig outputs (bundle restart)
 
-Gina 0.7.8 requires `@rhinostone/swig` `^2.10.0` in both of its manifests. Native swig templates
-change between 2.9.11 and 2.10.0 through 2.9.12 and 2.9.13, fix releases with no advisory; 2.10.0
-itself changes only the swig-twig, swig-jinja2 and swig-django frontends. What a native template
-can render differently:
+Gina 0.7.8 requires `@rhinostone/swig` `^2.11.0` in both of its manifests. Native swig templates
+change between 2.9.11 and 2.11.0 through 2.9.12 and 2.9.13, fix releases with no advisory; 2.10.0
+and 2.11.0 themselves change only the swig-twig, swig-jinja2 and swig-django frontends (in 2.11.0,
+swig-jinja2 and swig-django compare `==`, `!=` and `in` with Python's equality). What a native
+template can render differently:
 
 - `date` of a missing, `null`, empty or unparseable value renders an empty string, where it printed
   `NaN/NaN/NaN`.
@@ -48,7 +49,7 @@ can render differently:
 The engines Gina builds pass `cache: false`, so the template cache that swig 2.9.13 added to its
 async loader path does not engage: a layout and an include are still loaded on every render (see
 [Async template loaders](/templating/async-loaders)). Gina's own templates use none of the shapes
-above. Upgrading gina installs 2.10.0 or later. A project copy loaded through `swig.useProject`, or
+above. Upgrading gina installs 2.11.0 or later. A project copy loaded through `swig.useProject`, or
 a frontend selected through `swig.package`, keeps its own version: update it there, with the
 release notes of that frontend.
 
