@@ -89,8 +89,9 @@ gated on the method: only a safe method (`GET`, `HEAD`, `OPTIONS`, `TRACE`) is r
 unless the call opts in with `retryUnsafe: true`. Three cases are exempt, because nothing
 was sent or processed:
 
-- a cached session that died between the cache lookup and the send — `request()` throws
-  synchronously — is retried on a fresh session for any method (since `0.6.33`);
+- a cached session that died between the cache lookup and the send — the send fails before
+  anything leaves — is retried on a fresh session for any method (since `0.6.33`; on Node.js 24
+  and 26 and Bun 1.4, since `0.7.8`);
 - a request the upstream or the runtime **refused before processing it** — `REFUSED_STREAM`
   ([RFC 9113 §8.7](https://www.rfc-editor.org/rfc/rfc9113#section-8.7): closed "prior to
   any processing having occurred"), or the runtime declining to create the stream after a
@@ -165,6 +166,17 @@ up), a connection lost during the call when `requestTimeout` is shorter than abo
 application where a second attempt is safe, or raise its `requestTimeout`.
 :::
 
+:::info Before `0.7.8`, on Bun
+Bun's `setTimeout()` on a client stream sets one timer for the whole session, so `requestTimeout` was
+not a call's own and the other requests in flight were affected: a call could fail at another call's
+timeout, with a message naming its own, and a response still streaming past `requestTimeout` failed
+mid-body. On Bun 1.4 a hung call never called back once another call on its session had finished, and
+a `requestTimeout` above 5 seconds, the default 10 seconds included, never fired. On Bun 1.2 and 1.3 a
+slow upload failed at `requestTimeout` while it was still moving. Since `0.7.8` each stream has its own
+timer on Bun, following what Node.js does: response headers do not refresh it, data and the completed
+upload do, and an upload that still moves does not time out.
+:::
+
 :::caution Many timeouts at once
 Each timed-out call sends one `RST_STREAM`, and the upstream counts client resets: on
 one session, more than `maxStreamResetsPerSecond` (default 200) within one second make
@@ -204,6 +216,11 @@ that same PING, and all of them proceed — or retry — on its outcome. A **can
 PING (`ERR_HTTP2_PING_CANCEL`) is inconclusive rather than proof of a dead session: the
 request is sent anyway, and if the session really is gone, the send fails before
 anything leaves and is retried on a fresh session.
+
+:::info Before `0.7.8`, on Node.js 24 and 26 and Bun 1.4
+A call whose pre-flight PING was pending when the keepalive deadline destroyed the session failed with
+a 500 `STREAM_ERROR`, « The session has been destroyed », though nothing had been sent.
+:::
 
 :::info Since `0.6.33`
 Before, every stale caller sent its own PING. Node.js keeps at most 10 PINGs
@@ -269,6 +286,12 @@ landed between the pre-flight PING and the send — is refused before any proces
 error) and is retried on a fresh session **for any method**, since nothing was
 processed. Before `0.6.33` it went through the stream-error path, where only a safe
 method is replayed, and a POST failed with a 503.
+
+:::info Before `0.7.8`, on Bun 1.4
+A session stopped sending once as many calls had completed on it as the upstream's stream limit (256
+against an Isaac upstream's default): each later call on it failed with `TIMEOUT` on a short
+`requestTimeout`, or never called back on the default one, and the session did not recover.
+:::
 
 ### The upstream closes idle sessions
 

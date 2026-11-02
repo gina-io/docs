@@ -141,6 +141,49 @@ the case renames. The two folder shapes are refused before anything is written, 
 
 Server-side only: **restart the bundle**.
 
+### Fixed — on Bun, an HTTP/2 `self.query()` timeout belongs to its call, and a session no longer stops at the upstream's stream limit (bundle restart)
+
+This concerns bundles that run on Bun. Node.js is unchanged.
+
+Up to 0.7.7, `requestTimeout` was not a call's own on Bun, whose `setTimeout()` on a client stream
+sets one timer for the whole session:
+
+- A call could fail at another call's timeout, with a message naming its own `requestTimeout`.
+- A response still streaming past `requestTimeout` failed mid-body.
+- On Bun 1.4, a hung call never called back once another call on its session had finished, and a
+  `requestTimeout` above 5 seconds, the default 10 seconds included, never fired.
+- On Bun 1.2 and 1.3, a slow upload failed at `requestTimeout` while it was still moving.
+- Each call left a `timeout` listener on the session or its socket, which printed a
+  `MaxListenersExceededWarning`.
+
+On Bun 1.4, a session also stopped sending once as many calls had completed on it as the upstream's
+stream limit (256 against an Isaac upstream's default): each later call on it failed with `TIMEOUT` on
+a short `requestTimeout`, or never called back on the default one, and the session did not recover.
+
+Since 0.7.8 each stream has its own timer on Bun, following what Node.js does, and a session keeps
+sending past that count. See [HTTP/2 client resilience](/guides/http2-resilience).
+
+**What to check:**
+
+- A hung call that never called back on Bun 1.4 now fails with `TIMEOUT` (503) at its
+  `requestTimeout`, so the action waiting on it now answers.
+- A call that failed at a sibling's timeout, or mid-body, now runs to its own timeout.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — on Node.js 24 and 26 and Bun 1.4, a call sent on a session just destroyed is re-sent (bundle restart)
+
+Up to 0.7.7, on a connection that had silently dropped, a call whose pre-flight PING was pending when
+the keepalive deadline destroyed the session failed with a 500 `STREAM_ERROR`, « The session has been
+destroyed », for any method, though nothing had been sent. Since 0.7.8 it is re-sent on a fresh session,
+as [HTTP/2 client resilience](/guides/http2-resilience) describes. Node.js 22 and 25 and Bun 1.2 and 1.3
+already recovered.
+
+**What to check:** code that retried on this 500 no longer sees it; the call now succeeds, or fails with
+the code of its retry.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.6 → 0.7.7
