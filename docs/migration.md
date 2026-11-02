@@ -473,7 +473,7 @@ failure. A page that is really left prints nothing, and a page that stays gets i
 
 The browser bundle changed: **restart the bundles and re-bake.**
 
-### Fixed — a download name with a character above U+00FF (bundle restart and re-bake)
+### Security — a download name with a character above U+00FF (bundle restart and re-bake)
 
 Up to 0.7.7, a download name holding a character above U+00FF (a typographic apostrophe, a CJK or
 emoji name, or an accent typed as a separate combining mark) broke the `Content-Disposition` header:
