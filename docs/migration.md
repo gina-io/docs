@@ -57,9 +57,10 @@ upload that completes.
 
 `upload.maxFieldsSize` now counts the bytes a multipart request sends, as well as reading its
 `content-length`. **Check this one:** a client that sends a body larger than the cap with no
-`content-length` (chunked, or HTTP/2) was accepted up to 0.7.7 and is now answered HTTP 431, its
-staged files removed and the connection closed. Raise `maxFieldsSize` if such uploads are
-legitimate. A browser form sends a `content-length`, which was already checked.
+`content-length` (chunked, or HTTP/2) was accepted up to 0.7.7 and is now answered HTTP 431 and
+its staged files removed; on HTTP/1.1 the connection then closes, on HTTP/2 the request's stream
+stops being read while the session keeps serving its other streams. Raise `maxFieldsSize` if such
+uploads are legitimate. A browser form sends a `content-length`, which was already checked.
 
 Server-side: pickup is a bundle restart, no re-bake.
 
