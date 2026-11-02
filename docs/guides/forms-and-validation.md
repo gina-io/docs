@@ -262,12 +262,15 @@ A few behaviours worth knowing:
   — a hook for your own styling. The key localizes like any other built-in
   label (see [Localizing built-in error labels](#localizing-built-in-error-labels)).
 - **On Safari, a field with `autocomplete="off"` is `readonly` until it has
-  focus.** Safari ignores `autocomplete="off"`, so on a live-check form the
-  validator keeps the browser's autofill list away from an `<input>` with that
-  value (or `"false"`): it marks the field `readonly` when it binds, lifts that
-  on `focusin`, restores it on `focusout`, and while the field has focus applies
-  the keystrokes itself, Cmd and Ctrl shortcuts excepted. The check reads the
-  user agent, a `Safari` token with no `Chrome` or `Chromium` token, so it covers
+  focus.** Safari ignores `autocomplete="off"` but its form fill skips a readonly
+  control, so on a live-check form the validator marks an `<input>` with that
+  value (or `"false"`) `readonly` when it binds, lifts that on `focusin` and
+  restores it on `focusout`. Every key is native (*changed in 0.7.8*, see the
+  [migration notes](/migration)), and Safari's own list of suggestions can still
+  show. The attribute reads `readonly="gina"`, and only that value is lifted: a
+  `readonly` you write, in the markup or from a script at any time, stays. A
+  field that already has focus when it binds takes it on blur, and `.destroy()`
+  and `.unbind()` remove gina's. The check reads the user agent, a `Safari` token with no `Chrome` or `Chromium` token, so it covers
   Safari and the iOS browsers that run its engine; a `<textarea>` or a custom
   element is left alone. A test driver meets this state: Playwright's WebKit
   carries such a user agent, and its `fill()` requires an editable element

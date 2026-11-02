@@ -184,6 +184,43 @@ the code of its retry.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — Safari: every key is native on a live-checked `autocomplete="off"` field (bundle restart and re-bake)
+
+Up to 0.7.7, on Safari, while a live-checked `<input>` with `autocomplete="off"` (or `"false"`) had
+focus, gina cancelled each key and rebuilt the value by hand:
+
+- `email` and `number` fields typed backwards and were posted that way: `123` sent `321`, with an
+  uncaught `InvalidStateError` per key and no warning.
+- Tab did nothing on `email`, `password`, `tel`, `number`, `url` and `search`. From a `text` field it
+  skipped a `password`, an `email`, a `<textarea>` or a checkbox, and it stayed inside the form.
+- Enter did not submit, `maxlength` was ignored, ArrowUp, ArrowDown and Shift with an arrow did
+  nothing useful, and neither `input` nor `beforeinput` fired.
+- A `readonly` you wrote was lifted on every focus.
+- A `query` rule sent one request per key.
+- A field that already had focus when gina bound it (`autofocus`, a `.reBind()` during typing) took
+  no keys until it was left and focused again.
+- After `.destroy()` or `.unbind()` the field took no keys while the form stayed on the page.
+
+Since 0.7.8 every key is native, as on any other field and any other browser. The field is still
+`readonly` until it has focus, because Safari's form fill skips a readonly control. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:**
+
+- A `keyup` listener you added because `input` did not fire on such a field on Safari can go: `input`
+  fires for each key.
+- Tab now follows Safari's own order, which skips buttons unless the user turned them on in Safari's
+  settings. gina's own Tab used to stop on a button.
+- gina's `readonly` now reads `readonly="gina"`. `[readonly]` selectors and the `readOnly` property
+  still see it; a selector on the old value, `[readonly="readonly"]`, does not.
+- A `readonly` you write, in the markup or from a script, now stays: code that counted on Safari
+  lifting it on focus will find the field locked, as in every other browser.
+- Live checking on such a field now waits for the typing pause, as on a plain field, where each key
+  used to check it at once.
+- A test driver: `fill()` still needs `focus()` first on such a field.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.6 → 0.7.7
