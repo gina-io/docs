@@ -21,6 +21,50 @@ upward to the target version.
 
 ## 0.7.7 → 0.7.8
 
+### Changed — Gina requires `@rhinostone/swig` `^2.10.0`, which changes some native swig outputs (bundle restart)
+
+Gina 0.7.8 requires `@rhinostone/swig` `^2.10.0` in both of its manifests. Native swig templates
+change between 2.9.11 and 2.10.0 through 2.9.12 and 2.9.13, fix releases with no advisory; 2.10.0
+itself changes only the swig-twig, swig-jinja2 and swig-django frontends. What a native template
+can render differently:
+
+- `date` of a missing, `null`, empty or unparseable value renders an empty string, where it printed
+  `NaN/NaN/NaN`.
+- A filter or call result that is `undefined` or `null` reads as an empty string at a `+` or unary
+  operand, in an output and in a `set` argument alike: `{{ "a" + f() }}` renders `a`, where it
+  printed `aundefined`, and `{{ 1 + f() }}` and `{{ -f() }}` render `1` and `0`, where they printed
+  `NaN`.
+- A filter after a filter or a call that found nothing renders an empty string:
+  `{{ items|first|lower }}` over an empty array threw, and `{{ f()|upper }}` with a `null` result
+  printed `[object Object]`. `first`, `last` and `replace` give an empty string for an `undefined`
+  or `null` input, and `length` gives `0`, where they threw.
+- Blocks nested in blocks follow one chain of definitions per block name. A block nested in any
+  block of an extending template defines its name even when the root has no block for the
+  enclosing one. `{% parent %}` in a block nested in an override renders the next definition of its
+  name, where it rendered nothing, and so does `{% parent %}` in an override of a nested block on
+  the sync path, as the async path already did. A block that renders itself through a nested block
+  or `{% parent %}` fails with an error naming the block, where the render overflowed the stack.
+
+The engines Gina builds pass `cache: false`, so the template cache that swig 2.9.13 added to its
+async loader path does not engage: a layout and an include are still loaded on every render (see
+[Async template loaders](/templating/async-loaders)). Gina's own templates use none of the shapes
+above. Upgrading gina installs 2.10.0 or later. A project copy loaded through `swig.useProject`, or
+a frontend selected through `swig.package`, keeps its own version: update it there, with the
+release notes of that frontend.
+
+**What to check:**
+
+- A template that prints `date` of a value that can be missing or invalid: a heading or a field
+  built from it can now be empty, where it showed `NaN`.
+- A template or test that expected the text `undefined`, `null`, `NaN` or `[object Object]` from
+  such an expression, or a throw from a filter applied to a missing value.
+- A template your application compiles ahead of time with swig (`swig.precompile()` output, or a
+  bundle registered with `swig.registerBundle`) keeps the behaviour of the swig release that
+  compiled it: compile it again after the upgrade ([Browser usage](/templating/swig/browser)). A
+  restart recompiles the templates Gina renders.
+
+Server-side only: **restart the bundle**.
+
 ### Fixed — an HTTP/1.1 `self.query()` timeout fails with its own error (bundle restart)
 
 Up to 0.7.7, an HTTP/1.1 `self.query()` call that reached its `requestTimeout` failed like a reset
