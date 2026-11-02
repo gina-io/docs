@@ -454,6 +454,25 @@ submit control follows the verdict.
 
 The browser bundle changed: **restart the bundles and re-bake.**
 
+### Fixed — a navigation that cuts the routing fetch (bundle restart and re-bake)
+
+A navigation can cut the fetch of `_gina/assets/routing.json` while a page boots. Up to 0.7.7 the page being
+left printed `[gina] routing dependency failed to load` in the console, though nothing was wrong with the
+page that followed. On WebKit, the fetch is cut when the navigation starts: when that navigation did not
+replace the page, because it answered a 204 or was a download, the page stayed with no routing table, and
+client `getRoute()` and `toUrl()` stayed degraded until reload.
+
+Since 0.7.8 a fetch that got no answer is asked again after 300 ms, 1 s and 2.5 s before it counts as a
+failure. A page that is really left prints nothing, and a page that stays gets its table.
+
+**What to check:**
+
+- On a real network failure, the console error and your `gina.ready` handlers now come about 3.8 s later
+  than before, and the page makes three more requests. Handlers are still released, with no table, as the
+  [earlier note](/migration) describes. An HTTP error or a body that is not JSON still fails at once.
+
+The browser bundle changed: **restart the bundles and re-bake.**
+
 ---
 
 ## 0.7.6 → 0.7.7
