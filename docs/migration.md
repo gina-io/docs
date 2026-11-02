@@ -430,6 +430,30 @@ it paints nothing new. A message already showing changes or clears.
 
 The browser bundle changed: **restart the bundle and re-bake it**.
 
+### Fixed — a `query` rule with no sync rule beside it froze the tab (bundle restart and re-bake)
+
+Up to 0.7.7, on an otherwise valid form, the re-validation that follows a clean `query` answer asked the
+same `query` again, and that answer started the re-validation again. It happened for a field whose only
+rule is `query`, and for a `query` field that also drives a `_case_` block, with or without a sync rule.
+
+- **From 0.6.7 to 0.7.7**, with a value in the field, the tab froze when the user typed in it, or already
+  at page load when the field was the last or the only one of its rule set.
+- **From 0.6.5 to 0.7.7**, with that last or only field empty, the page sent requests without end from page
+  load.
+- In the versions before 0.6.7, the same typing could throw « Maximum call stack size exceeded » in the
+  console instead of freezing.
+
+Since 0.7.8 the re-validation does not ask again a `query` whose answer is in: the form settles, and the
+submit control follows the verdict.
+
+**What to check:**
+
+- On a version before 0.7.8, the workaround is a sync rule on the field, such as `isRequired` or `isString`.
+  It does not help a field that drives a `_case_` block. Since 0.7.8 the rule is no longer needed for this,
+  and it can stay.
+
+The browser bundle changed: **restart the bundles and re-bake.**
+
 ---
 
 ## 0.7.6 → 0.7.7
