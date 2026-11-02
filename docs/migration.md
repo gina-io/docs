@@ -107,6 +107,10 @@ its staged files removed; on HTTP/1.1 the connection then closes, on HTTP/2 the 
 stops being read while the session keeps serving its other streams. Raise `maxFieldsSize` if such
 uploads are legitimate. A browser form sends a `content-length`, which was already checked.
 
+A security advisory,
+[GHSA-6x9w-56x2-v24q](https://github.com/gina-io/gina/security/advisories/GHSA-6x9w-56x2-v24q),
+accompanies this fix.
+
 Server-side: pickup is a bundle restart, no re-bake.
 
 ### Fixed — a form re-bound after a file was staged keeps the staged files (bundle restart and re-bake)
@@ -184,6 +188,10 @@ the case renames. The two folder shapes are refused before anything is written, 
 - Code that calls `rm()` or `mv()`: an `unlink` the system denies is now a failure, where it read as a
   success with the file still there.
 
+A security advisory,
+[GHSA-f9cq-pr3p-c8vv](https://github.com/gina-io/gina/security/advisories/GHSA-f9cq-pr3p-c8vv),
+accompanies this fix.
+
 Server-side only: **restart the bundle**.
 
 ### Security — on Bun, an HTTP/2 `self.query()` timeout belongs to its call, and a session no longer stops at the upstream's stream limit (bundle restart)
@@ -213,6 +221,10 @@ sending past that count. See [HTTP/2 client resilience](/guides/http2-resilience
 - A hung call that never called back on Bun 1.4 now fails with `TIMEOUT` (503) at its
   `requestTimeout`, so the action waiting on it now answers.
 - A call that failed at a sibling's timeout, or mid-body, now runs to its own timeout.
+
+A security advisory,
+[GHSA-vj89-h9p8-wcvc](https://github.com/gina-io/gina/security/advisories/GHSA-vj89-h9p8-wcvc),
+accompanies this fix.
 
 Server-side only: **restart the bundle**.
 
@@ -495,6 +507,10 @@ bundle, a download fetched by XHR (`data-gina-link`) reads its name from `filena
 
 - A client that reads only the `filename` parameter now sees `?` in place of those characters.
 - The `s3` adapter's offload path, which puts the name in the presigned URL, is unchanged.
+
+A security advisory,
+[GHSA-p2qq-m2c6-54ch](https://github.com/gina-io/gina/security/advisories/GHSA-p2qq-m2c6-54ch),
+accompanies this fix.
 
 The server code and the browser bundle changed: **restart the bundles and re-bake.**
 
