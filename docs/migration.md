@@ -93,7 +93,7 @@ already failed with a 503 (`TIMEOUT`).
 
 Server-side only: **restart the bundle**.
 
-### Fixed — a multipart upload that does not complete stops and removes what it staged (bundle restart)
+### Security — a multipart upload that does not complete stops and removes what it staged (bundle restart)
 
 A multipart upload whose parse fails, or whose client goes away, now stops at once: the request
 stops feeding the parser, its write streams close and every file it staged is removed, the parts
@@ -151,7 +151,7 @@ skipped or refused « undefined » no longer receives it.
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
-### Fixed — `mv()`, `rm()`, `mkdir()` and `cp()` call back once, and keep what they could not copy (bundle restart)
+### Security — `mv()`, `rm()`, `mkdir()` and `cp()` call back once, and keep what they could not copy (bundle restart)
 
 Up to 0.7.7, the async operations of the [path helper](/globals/path) could throw past your
 callback, lose it, or destroy data while reporting a success:
@@ -186,7 +186,7 @@ the case renames. The two folder shapes are refused before anything is written, 
 
 Server-side only: **restart the bundle**.
 
-### Fixed — on Bun, an HTTP/2 `self.query()` timeout belongs to its call, and a session no longer stops at the upstream's stream limit (bundle restart)
+### Security — on Bun, an HTTP/2 `self.query()` timeout belongs to its call, and a session no longer stops at the upstream's stream limit (bundle restart)
 
 This concerns bundles that run on Bun. Node.js is unchanged.
 
