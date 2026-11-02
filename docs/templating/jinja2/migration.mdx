@@ -81,6 +81,7 @@ Straight copy-paste — no changes needed:
 - `{% macro name(a, b="x") %}`, `{% import "macros.jinja2" as forms %}`, `{% from "macros.jinja2" import one, two as alias %}`
 - `{% filter upper %}…{% endfilter %}`, `{% with x = 1 %}…{% endwith %}`, `{% autoescape false %}…{% endautoescape %}`, `{% raw %}…{% endraw %}`
 - `is defined`, `is undefined`, `is none`, `is even`, `is odd`, `is divisibleby(n)` (or `is divisibleby n`), `is iterable`, `is mapping`, `is sequence`, `is string`, `is number`, `is boolean`, `is callable`, `is lower`, `is upper` — on numbers and strings they answer as in Jinja2, except that `even`, `odd` and `divisibleby` are false on a string and `lower` and `upper` false on a number, where Jinja2 raises or tests the string form; on `null`, an undefined variable, a boolean, a list, a mapping or a function, and with `divisibleby(0)`, several answer differently (see [Behavioural differences](./parity#behavioural-differences))
+- `is eq`, `is ne`, `is lt`, `is le`, `is gt`, `is ge` and the aliases `is equalto`, `is lessthan`, `is greaterthan` (since 2.11.0) — each gives what the operator it names gives, including where Jinja2 raises on an ordering (see [Behavioural differences](./parity#behavioural-differences)); write a negative argument in parentheses, `x is gt(-1)`
 - The filter catalog — all 39 built-ins were cross-checked against Jinja2 3.x (see [Parity → Filters](./parity#filters))
 
 ## Semantic differences
@@ -124,7 +125,7 @@ JavaScript has a single `number` type, so `is integer` and `is float` read the v
 
 ### Unknown filter and test names
 
-A name the instance does not hold fails as in Jinja2 (since 2.10.0), with the differences listed under [Parity → Unknown filter and test names](./parity#unknown-names). Jinja2's comparison tests (`eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases) and `escaped` are among those names, so rewrite `x is lt 3` as `x < 3`.
+A name the instance does not hold fails as in Jinja2 (since 2.10.0), with the differences listed under [Parity → Unknown filter and test names](./parity#unknown-names). `escaped` is among those names; the comparison tests (`eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases) were too until 2.10.0.
 
 ### `round`
 
