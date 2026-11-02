@@ -557,7 +557,14 @@ returned, followed by its preview's `originalFilename` when the answer described
 a preview. A staging action that stores files with `self.store()` finds them
 under those names, since `store()` publishes each file under its original name.
 One that stores them under other names, a generated one for instance, has to map
-each `originalFilename` back to the file it stored.
+each `originalFilename` back to the file it stored. When the answer gives no
+`originalFilename` for a preview, the request leaves that preview out; when it
+gives none for a file, the request names the file by the name of the file the
+user chose.
+
+*Changed in 0.7.8.* A file or a preview whose staging answer carried no
+`originalFilename` was named « undefined », in the reset request and in the
+`files` the removal callback receives.
 
 *Changed in 0.7.6.* A `change` on the input that carries no file (an emptied
 selection) leaves the input's files as they were, so their reset or delete control
@@ -676,6 +683,14 @@ file's location and original filename; a second file chosen on the same input
 likewise submitted the first file's `name`. A key your answer leaves out, `name`
 included, leaves its field as it is: keep a value that a replacement must not
 change, a record id for instance, in a field whose name the answer does not return.
+
+*Changed in 0.7.8.* Re-binding the form — `$forms[id].reBind()`, `.bind()`, or `destroy()`
+followed by `validateFormById()` — keeps the files an input has staged. Gina reads
+`<input id>-preview` for saved files again only once none of the input's staged files still has
+its reset control `<input id>-<index>-reset-trigger` on the page, as after your page replaces the
+container to show the saved file. Before, a re-bind after a staging read the staged previews as
+saved files: a file shown without an image could no longer be reset and the form still saved it,
+and an image logged a warning for a delete link the page never had.
 
 ### Persisting the preview
 

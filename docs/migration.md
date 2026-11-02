@@ -64,6 +64,48 @@ uploads are legitimate. A browser form sends a `content-length`, which was alrea
 
 Server-side: pickup is a bundle restart, no re-bake.
 
+### Fixed — a form re-bound after a file was staged keeps the staged files (bundle restart and re-bake)
+
+Up to 0.7.7, a form re-bound while one of its file inputs showed a file the user had staged —
+`$forms[id].reBind()`, `.bind()`, or `destroy()` followed by `validateFormById()` — read the
+staged previews in `<input id>-preview` as saved files:
+
+- a file shown without an image (a PDF whose staging answer carries no `preview` thumbnail) lost
+  its entry, so its reset control removed nothing and the form still saved the file the user had
+  removed;
+- beside an image on a `multiple` input, that file's reset removed the image instead, and the form
+  still saved the PDF;
+- an image logged « did not find `upload delete trigger` » for a delete link the page never had
+  (the case the 0.7.6 entry below says still warns).
+
+Since 0.7.8 a re-bind leaves an input's staged files as they are while their reset controls are on
+the page. Once the page has replaced the preview container, for instance to show the saved file
+after a save, the container is read again as before; a form re-bound before any staging, or after
+a reset, is unchanged. See
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:** nothing; a form that is not re-bound while a file is staged works as before.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
+### Fixed — a reset no longer names a file « undefined » (bundle restart and re-bake)
+
+Up to 0.7.7, when a staging answer gave no `originalFilename` for a file or for its `preview`,
+the client stored the missing name on the preview image as the text « undefined », and the reset
+sent it: in its `{ "files": [ … ] }` request and in the `files` that the
+`data-gina-form-upload-on-reset` callback receives. The guide's own `preview` example carries no
+`originalFilename`, so the reset of a file staged with that shape named its preview « undefined ».
+
+Since 0.7.8 a name is recorded only when the answer gives one: the reset leaves a preview without
+one out of the request, and names a file without one by the name of the file the user chose. See
+[Previews and removal](/guides/file-uploads#previews-and-removal).
+
+**What to check:** if your staging answer gives no `originalFilename` for a file, its reset now
+names the file by the name of the file the user chose instead of « undefined »; a reset route that
+skipped or refused « undefined » no longer receives it.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.6 → 0.7.7
