@@ -265,6 +265,24 @@ Since 0.7.8 every key is native, as on any other field and any other browser. Th
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — `Collection.notIn()` and `delete()` return `[]` on an empty source (bundle restart and re-bake)
+
+Up to 0.7.7, the array form of `notIn`, `notIn(rows, key)`, also with no key or with `false`, returned
+`rows` itself when the searched array was empty: a `new Collection([])`, or an empty `find()` result
+chained into `notIn`. The call handed back the very rows it excludes, none of which belong to the
+source. `delete(rows, key)` delegates to `notIn` and did the same.
+
+Since 0.7.8 both return `[]`. The filter-object form, `notIn({ … })`, already did.
+
+**What to check:**
+
+- Code that assigns the result of `notIn(rows, key)` to the list it filters got `rows` back when that
+  list was empty. It now gets an empty list.
+- Code that counted on the old result, and wants `rows` when the source is empty, now takes `rows`
+  directly.
+
+Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
+
 ---
 
 ## 0.7.6 → 0.7.7
