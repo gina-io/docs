@@ -339,6 +339,38 @@ and collections count as before.
 
 Server-side only: **restart the bundle**.
 
+### Fixed — `merge()` and `JSON.clone` keep a key named after an `Object.prototype` member (bundle restart and re-bake)
+
+Up to 0.7.7, a fill-only [`merge()`](/api/merge) — the default mode — read a target's value through the
+prototype chain, so on a plain object a source key named `toString`, `valueOf`, `isPrototypeOf`,
+`hasOwnProperty`, `propertyIsEnumerable` or gina's own `count` counted as an existing value: the
+inherited function was written back as an own key over the source's value, and JSON output then omitted
+the key. A PUT form or JSON field so named reached the action as nothing, and a GET `inheritedData`
+carrying `toString` lost it. Two related paths failed the same way: `merge()`'s array-element fill tested
+ownership with the element's own `hasOwnProperty`, so a PUT body such as
+`list[0][hasOwnProperty]=1&list[0][b]=2` answered 500 « newTarget[a].hasOwnProperty is not a function »;
+and `JSON.clone`, the server's and the browser bundle's, filled a key only when the target had no value
+for it, read through the chain, so a cloned object lost the same keys (a GET `inheritedData` is cloned
+before it is merged, so a nested `toString` or `hasOwnProperty` was lost there too).
+
+Since 0.7.8 a key the target holds only through `Object.prototype` counts as missing and is filled; a
+key the target owns, or inherits from its own prototype (an entity's query methods, a class's own
+`toString`), keeps winning as documented. The array-element fill tests ownership through the built-in,
+and both cloners fill a key the target does not own. Override mode (`merge(target, source, true)`) is
+unchanged.
+
+**What to check:**
+
+- A request field named after one of those members now reaches your action (`req.put`, `req.get`
+  through `inheritedData`, a nested element on PUT). Code that reads such a bag with
+  `bag.hasOwnProperty(key)` should use `Object.prototype.hasOwnProperty.call(bag, key)`, since the own
+  key now shadows the method, as it already did on POST, PATCH and GET.
+- A merge that relied on the old behaviour to drop such a key, or on a `toString`-named data key being
+  replaced by the built-in function, now keeps the data value.
+
+`lib/merge` and the polyfill are in the browser bundle: **restart the bundle and rebuild its
+static assets** (`gina bundle:build`).
+
 ---
 
 ## 0.7.6 → 0.7.7
