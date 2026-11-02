@@ -283,6 +283,40 @@ Since 0.7.8 both return `[]`. The filter-object form, `notIn({ … })`, already 
 
 Browser-bundled: **restart the bundle and re-bake** your bundles (`gina bundle:build`).
 
+### Fixed — an `Error` handed to the server's error responder answers with its text (bundle restart)
+
+Up to 0.7.7, the server's error responder (the `throwError` the router and the request parser
+use, which a bundle's `controllers/setup.js` also receives as `this.throwError`) wrote an `Error`
+object it was handed as `"error":{}` in a JSON error body, and a
+[custom error page](/guides/error-pages) received the object itself as `page.data.message`, which
+rendered `[object Object]`. It was handed one in three cases: a POST or PATCH whose
+`application/json` body does not parse, a `requireController()` call whose controller throws while
+it is built, and a `setup.js` calling `this.throwError(res, code, err)` with an `Error`. Outside the
+local scope it also deleted the `stack` of the error object passed in.
+
+Since 0.7.8 it writes the error's text, as for an error passed as `err.stack`: the whole stack in
+the local scope, its first line (`Error: <message>`) elsewhere. The error object passed in is left
+as it was.
+
+**What to check:**
+
+- A client that reads `error` from these responses now receives a string, for example
+  `"Error: Could not parse application/json POST body. …"` outside the local scope.
+- A custom error template that prints `page.data.message` now shows that text; in the local scope
+  it carries the stack, as for the other errors the server answers.
+
+Server-side only: **restart the bundle**.
+
+### Fixed — request data no longer switches a swig render into error-page mode (bundle restart)
+
+Up to 0.7.7, with the swig engine, an action that renders request data, such as
+`self.render(req.get)`, switched into error-page rendering when the request carried
+`isRenderingCustomError=true`, and the request was answered 500. Since 0.7.8 only gina's own
+error-page rendering sets that mode, as with the nunjucks engine; the value reaches the template
+like any other request value.
+
+Nothing to change in your code. Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.6 → 0.7.7
