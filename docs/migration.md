@@ -317,6 +317,28 @@ like any other request value.
 
 Nothing to change in your code. Server-side only: **restart the bundle**.
 
+### Fixed — `| length` returns a string's length (bundle restart)
+
+Up to 0.7.7, the `length` filter gina registers on swig and on nunjucks rendered nothing for a
+string: `{{ "abc" | length }}` rendered empty, `{% if title | length %}` was false for any string,
+and `{{ "hello" | length }}`, the example on the [swig filters page](/templating/swig/filters#length),
+rendered empty instead of 5. Only a string that reads as JSON, such as `'{"a":1}'` or `"5"`, gave
+its length. On nunjucks, a string passed through `| safe` gave nothing, or 2 for a JSON-looking one.
+
+Since 0.7.8 a string gives its length on both engines, with or without `| safe`. Arrays, objects
+and collections count as before.
+
+**What to check:**
+
+- On swig, a missing or null variable now gives 0. Swig hands a filter an empty string for one, so
+  `{{ missing | length }}` renders `0` where it rendered nothing, and
+  `{{ missing | length | default("No") }}` gives `0` instead of `No`, as swig's own `length` filter
+  does. `{% if missing | length %}` stays false. Nunjucks already gave 0.
+- A template that relied on `| length` rendering nothing for a string, or on a `| default(...)`
+  after it taking over, now shows the count.
+
+Server-side only: **restart the bundle**.
+
 ---
 
 ## 0.7.6 → 0.7.7
