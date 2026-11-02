@@ -473,6 +473,31 @@ failure. A page that is really left prints nothing, and a page that stays gets i
 
 The browser bundle changed: **restart the bundles and re-bake.**
 
+### Fixed — a download name with a character above U+00FF (bundle restart and re-bake)
+
+Up to 0.7.7, a download name holding a character above U+00FF (a typographic apostrophe, a CJK or
+emoji name, or an accent typed as a separate combining mark) broke the `Content-Disposition` header:
+
+- **On HTTP/1.1**, `self.downloadFromURL()` and `self.downloadFromLocal()` answered `500`, and
+  `self.serveFromStorage()` with `download` or `filename` ended the bundle process (from 0.6.8, the
+  release that added it).
+- **On HTTP/2**, `self.downloadFromLocal()` and `self.serveFromStorage()` answered `200` with the name cut
+  to one byte per character, or with no `Content-Disposition` at all; `self.downloadFromURL()` answered `500`.
+
+Since 0.7.8 such a name gets an RFC 8187 `filename*=UTF-8''…` parameter, which browsers prefer, after a
+`filename` fallback that reads `?` for each character above U+00FF. An accent typed as a separate
+combining mark is composed first, so a name such as `résumé.pdf` keeps the plain form, and every other
+name keeps the header it had. A throw inside `serveFromStorage()`'s storage callbacks (a header the
+response refuses, for instance) is now answered `500` instead of ending the process. In the browser
+bundle, a download fetched by XHR (`data-gina-link`) reads its name from `filename*` first.
+
+**What to check:**
+
+- A client that reads only the `filename` parameter now sees `?` in place of those characters.
+- The `s3` adapter's offload path, which puts the name in the presigned URL, is unchanged.
+
+The server code and the browser bundle changed: **restart the bundles and re-bake.**
+
 ---
 
 ## 0.7.6 → 0.7.7
