@@ -60,6 +60,39 @@ allows, and the session keeps serving its other streams. HTTP/1.1 is unchanged. 
 answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
 because of it.
 
+### Security — a key from the template data no longer reaches the prototype chain: Gina requires `@rhinostone/swig` `^2.12.1` (bundle restart)
+
+Gina 0.7.9 requires [`@rhinostone/swig`](/templating/swig) `^2.12.1` in both of its manifests. Up to
+2.12.0, a key from the template data that names `__proto__`, `constructor` or `prototype`, or a list
+holding one of those names, reached the prototype chain wherever a template read a value with it:
+
+- a subscript such as `{{ foo[k] }}` printed the Object constructor, and a call on such a value could
+  run text from the data as JavaScript: `{{ foo[a][b]("…")() }}` with `a` and `b` set to `constructor`
+  reaches the Function constructor;
+- a native `{% set %}` whose bracket target took the key, such as `{% set obj[k].x = 1 %}`, put a
+  property on `Object.prototype` for the whole process.
+
+A template is exposed when it indexes a value with a key that the request controls: see the advisory
+[GHSA-8mf3-p375-389g](https://github.com/gina-io/swig/security/advisories/GHSA-8mf3-p375-389g) and the
+swig [security page](/templating/swig/security#ghsa-8mf3-p375-389g). 2.12.1 reads such a key as
+missing, and a native `set` target given one throws, when the template runs,
+« `Unsafe assignment to "__proto__" via bracket notation is not allowed (prototype-chain guard) on line N.` »
+(here for `__proto__`). The templates Gina ships use no bracket subscript. Gina compiles a template
+each time it renders it and stores no compiled output, so restarting the bundle picks the fix up.
+
+**What to check:**
+
+- Upgrading gina installs `@rhinostone/swig` 2.12.1 or later. A project copy loaded through
+  `swig.useProject`, or a frontend selected through `swig.package`, keeps its own version: update it
+  there to 2.12.1.
+- A template that indexes with an ordinary key renders as before, a set target keyed by a loop index
+  included. A prototype-chain name written as a variable inside a `set` target's brackets, such as
+  `{% set t[constructor] = "x" %}`, now fails at compile.
+- Output you precompiled with swig 2.12.0 or earlier (`swig compile`, a stored `precompile()` result)
+  keeps the old behaviour until you recompile it with 2.12.1.
+
+Server-side only: **restart the bundle**.
+
 ### Fixed — an HTML upload that stops while a file part is being written gets its error page (bundle restart)
 
 Up to 0.7.8, an HTML request whose multipart upload stopped while a file part was still being written
