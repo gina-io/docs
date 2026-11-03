@@ -19,6 +19,31 @@ upward to the target version.
 
 ---
 
+## 0.7.8 → 0.7.9
+
+### Fixed — a live check that outlives its form no longer throws (bundle restart and re-bake)
+
+Up to 0.7.8, a live check still on its way when its form went threw an uncaught `TypeError` in the
+page:
+
+- a field's check, which waits for a one-second pause in the typing, when the form was destroyed
+  within that second (`.destroy()`, which a popin also runs on the forms of the content it replaces):
+  « Cannot set properties of undefined (setting 'isValidating') »;
+- the check of a radio or checkbox pick, when the form was destroyed in the same event dispatch;
+- the answer of a `query` rule that arrived after the form was destroyed: « Cannot read properties of
+  undefined (reading 'resetCount') »;
+- the same checks when their field had been moved out of its form (« … reading 'getAttribute' »).
+
+The form was already gone, so nothing else broke: the error reached the console, and any handler you
+attach to uncaught errors (`window.onerror`, an error monitor) recorded it. Since 0.7.9 the check stops
+with the form. While a form stays bound nothing changes, a form destroyed and bound again included: its
+pending check runs on the new binding. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:** nothing to change. A filter you added for these messages in an error monitor can go.
+
+---
+
 ## 0.7.7 → 0.7.8
 
 ### Changed — Gina requires `@rhinostone/swig` `^2.11.0`, which changes some native swig outputs (bundle restart)

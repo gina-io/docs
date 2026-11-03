@@ -246,6 +246,12 @@ A few behaviours worth knowing:
   is painted or announced, and a `query` answer that comes back afterwards is dropped. Before 0.7.8 each
   field ran its own check: the live region announced an error and kept it, a required checkbox or radio
   stayed in error, and `.resetFields()` alone left every empty required field in error.
+- **A destroyed form runs no pending check (since 0.7.9).** A field's check waits for a pause in the
+  typing, a radio or checkbox pick's runs just after the pick, and a `query` rule's waits for its
+  answer. When the form is destroyed meanwhile (`.destroy()`, which a popin also runs on the forms of
+  the content it replaces) or the field is moved out of its form, that check now stops with it and
+  paints nothing. Before 0.7.9 it threw an uncaught `TypeError` (« Cannot set properties of undefined
+  (setting 'isValidating') »), which reached the console and any handler you attach to uncaught errors.
 - **Give each control its own `id`.** Live checking keys its listeners on the control's `id`. Of two
   controls that share one, in one form or in two, only the first is live-checked: the second shows no
   error, and its form's submit control stays gated while the user types. Duplicate ids are invalid HTML,
@@ -1483,7 +1489,7 @@ exposing:
 | `.submit()` | trigger validation + submit programmatically |
 | `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
 | `.reBind()` | re-scan the form after you have changed its DOM: what the previous bind attached is detached, then attached again — your `.on()` handlers and the declarative `data-gina-form-event-on-*` callbacks stay |
-| `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle |
+| `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle; a live check still on its way stops with it (since 0.7.9) |
 | `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8) |
 | `.resetErrorsDisplay()` | clear rendered error/warning state |
 

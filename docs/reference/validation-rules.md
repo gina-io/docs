@@ -517,6 +517,9 @@ Validates the value against a remote endpoint (e.g. a uniqueness check).
 - **Before 0.7.8**, a field whose only rule is `query`, or a `query` field that drives a `_case_` block,
   could freeze the tab or send requests without end on an otherwise valid form: see the
   [migration notes](/migration).
+- **Before 0.7.9**, an answer that arrived after its form was destroyed, or after the field was moved
+  out of its form, threw an uncaught `TypeError` in the page; since 0.7.9 it is dropped: see the
+  [migration notes](/migration).
 - On the **server** it returns a `Promise`.
 - **Default message:** *Must be a valid response*
 
