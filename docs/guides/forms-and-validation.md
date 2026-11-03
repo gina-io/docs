@@ -246,6 +246,12 @@ A few behaviours worth knowing:
   is painted or announced, and a `query` answer that comes back afterwards is dropped. Before 0.7.8 each
   field ran its own check: the live region announced an error and kept it, a required checkbox or radio
   stayed in error, and `.resetFields()` alone left every empty required field in error.
+- **A reset also restores custom elements and cancels a waiting submit (since 0.7.9).** A
+  [form-associated custom element](#form-associated-custom-elements) runs its own
+  `formResetCallback`, and a submit waiting for a staged upload is cancelled (see
+  [Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight)).
+  Before 0.7.9 a custom element kept its last value, and the waiting submit was sent once the upload
+  succeeded.
 - **A destroyed form runs no pending check (since 0.7.9).** A field's check waits for a pause in the
   typing, a radio or checkbox pick's runs just after the pick, and a `query` rule's waits for its
   answer. When the form is destroyed meanwhile (`.destroy()`, which a popin also runs on the forms of
@@ -1490,7 +1496,7 @@ exposing:
 | `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
 | `.reBind()` | re-scan the form after you have changed its DOM: what the previous bind attached is detached, then attached again — your `.on()` handlers and the declarative `data-gina-form-event-on-*` callbacks stay |
 | `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle; a live check still on its way stops with it (since 0.7.9) |
-| `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8) |
+| `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8); a form-associated custom element runs its `formResetCallback`, and a submit waiting for a staged upload is cancelled (since 0.7.9) |
 | `.resetErrorsDisplay()` | clear rendered error/warning state |
 
 Events are attached with `.on(eventName, handler)`:
@@ -1751,6 +1757,15 @@ To participate, a component must:
 - reflect validity through `ElementInternals` — `internals.setValidity(...)` and
   `internals.ariaInvalid` — so screen readers get the same feedback native controls
   give (see [Accessibility](#accessibility)).
+
+**Reset** (*since 0.7.9*). Gina handles a form's reset itself (`form.reset()`, a reset
+button or `.resetFields()`) and calls the component's `formResetCallback()`, as a native
+reset does: restore the component's default value there. A component without that
+callback keeps its value, as it would under a native reset. A callback that throws is
+reported as an uncaught error, and the rest of the form is still reset. Gina resets the
+components it found when it bound the form: one added to the form, or defined, after
+that is reset only once the handle's `.reBind()` has re-scanned the form. Before 0.7.9
+the callback never ran under Gina, so the component kept its last value.
 
 :::caution A named element rides the payload — validate it server-side
 A form-associated element with a `name` is serialized into the submission **even

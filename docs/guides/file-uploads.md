@@ -921,14 +921,19 @@ When the last upload of the form settles:
   validated and sent once;
 - **an upload failed** — the waiting submit is cancelled: nothing is sent, the
   loading state is released, and the upload's error shows as usual. The user
-  submits again once the file is dealt with.
+  submits again once the file is dealt with;
+- **the form is reset** (*since 0.7.9*) — `form.reset()`, a reset button or
+  `.resetFields()` cancel the waiting submit at once: the loading state is
+  released and nothing is sent when the upload settles. A submit made after the
+  reset, while the upload is still in flight, waits for it again. Before 0.7.9
+  the waiting submit survived the reset and was sent with the restored values.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Waiting: submit while an upload is in flight
     Waiting --> Waiting: another upload of the form is still in flight
     Waiting --> Sent: every upload succeeded (fields collected again)
-    Waiting --> Cancelled: an upload failed, or the form left the page
+    Waiting --> Cancelled: an upload failed, the form was reset, or the form left the page
 ```
 
 A second activation while the submit is already waiting adds nothing. A direct

@@ -72,6 +72,35 @@ See [Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
 
 **What to check:** nothing to change.
 
+### Fixed — a form reset restores custom elements and cancels a submit waiting for an upload (bundle restart and re-bake)
+
+Up to 0.7.8, a form reset (`form.reset()`, a reset button or the handle's `.resetFields()`) restored the
+values but left two things behind:
+
+- a form-associated custom element kept its last value: Gina cancels the native reset and restores the
+  form itself, and it never ran the element's `formResetCallback`;
+- a submit waiting for one of the form's staged uploads stayed waiting: its submit control kept its
+  loading state, and when the upload succeeded the submit was sent with the restored values and the
+  uploaded file's metadata.
+
+Since 0.7.9 the reset calls a custom element's `formResetCallback` (one without it keeps its value, as
+under a native reset; a callback that throws is reported and the rest of the form is still reset), and
+cancels the waiting submit, releasing its loading state. See
+[Form-associated custom elements](/guides/forms-and-validation#form-associated-custom-elements) and
+[Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight).
+
+**What to check:** a custom element's `formResetCallback` now runs on every reset under Gina, so keep it
+to restoring the element's value; a component added to the form, or defined, after the form was bound
+is reset only after `.reBind()`. A page that counted on the waiting submit going out after a reset has
+to submit again.
+
+### Fixed — a select change no longer writes `window.once` (bundle restart and re-bake)
+
+Up to 0.7.8, each change of a live-checked `<select>` set a page global named `once` to `false`, and
+created it on a page that had none. Since 0.7.9 the select's check writes no global.
+
+**What to check:** nothing to change, unless a script of yours reads a global named `once`.
+
 ---
 
 ## 0.7.7 → 0.7.8
