@@ -42,6 +42,36 @@ pending check runs on the new binding. See
 
 **What to check:** nothing to change. A filter you added for these messages in an error monitor can go.
 
+### Security — an HTTP/2 stream answered mid-body is closed once its answer has gone out (bundle restart)
+
+Up to 0.7.8, over HTTP/2, three answers given while the client was still sending its body left the
+request's stream open: the 431 past `upload.maxFieldsSize` on a multipart request that sends no
+`content-length`, the 413 past `server.maxBodySize`, and the 400 of a multipart body that fails to
+parse. Node.js closes a server stream by itself only when its body was never read, so the client could
+push one more stream window (up to 640 KB) into a request nobody reads before it stalled; Bun 1.4
+behaved the same, and Bun 1.2 and 1.3 took everything the client sent and held it in memory, the 431
+sent before reading a body whose `content-length` is past the cap included. Since 0.7.9 the server
+closes the stream with `RST_STREAM(NO_ERROR)` once the answer has gone out whole, as RFC 9113 § 8.1
+allows, and the session keeps serving its other streams. HTTP/1.1 is unchanged. See
+[Configuring uploads](/guides/file-uploads#configuring-uploads) and
+[`maxBodySize`](/reference/settings#server).
+
+**What to check:** nothing to change. A client still writing when the answer arrives reads the whole
+answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
+because of it.
+
+### Fixed — an HTML upload that stops while a file part is being written gets its error page (bundle restart)
+
+Up to 0.7.8, an HTML request whose multipart upload stopped while a file part was still being written
+could get the built-in 500 page instead of the bundle's custom error page for that stop: the 431 past
+`upload.maxFieldsSize` on a request that sends no `content-length`, or the 400 of a body that fails to
+parse after a large file part. The stop destroys that part's write stream, and its error answered 500
+while the custom page was still being rendered. A JSON answer, sent at once, was not affected. Since
+0.7.9 that error is ignored once the upload has stopped; a write error with no stop still answers 500.
+See [Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
+
+**What to check:** nothing to change.
+
 ---
 
 ## 0.7.7 → 0.7.8
