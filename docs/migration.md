@@ -83,16 +83,18 @@ values but left two things behind:
   loading state, and when the upload succeeded the submit was sent with the restored values and the
   uploaded file's metadata.
 
-Since 0.7.9 the reset calls a custom element's `formResetCallback` (one without it keeps its value, as
-under a native reset; a callback that throws is reported and the rest of the form is still reset), and
-cancels the waiting submit, releasing its loading state. See
+Since 0.7.9 the reset calls a custom element's `formResetCallback` once the form's other controls are
+restored, as a native reset does (one without it keeps its value, as under a native reset; a callback
+that throws is reported and the rest of the form is still reset), and cancels the waiting submit,
+releasing its loading state. See
 [Form-associated custom elements](/guides/forms-and-validation#form-associated-custom-elements) and
 [Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight).
 
-**What to check:** a custom element's `formResetCallback` now runs on every reset under Gina, so keep it
-to restoring the element's value; a component added to the form, or defined, after the form was bound
-is reset only after `.reBind()`. A page that counted on the waiting submit going out after a reset has
-to submit again.
+**What to check:** a custom element's `formResetCallback` now runs on every reset under Gina, after the
+form's other controls are restored, so keep it to restoring the element's value; a component added to
+the form, or defined, after the form was bound is reset only after `.reBind()`, and one moved into
+another form after the bind is left to that form. A page that counted on the waiting submit going out
+after a reset has to submit again.
 
 ### Fixed — a select change no longer writes `window.once` (bundle restart and re-bake)
 

@@ -1759,13 +1759,16 @@ To participate, a component must:
   give (see [Accessibility](#accessibility)).
 
 **Reset** (*since 0.7.9*). Gina handles a form's reset itself (`form.reset()`, a reset
-button or `.resetFields()`) and calls the component's `formResetCallback()`, as a native
-reset does: restore the component's default value there. A component without that
-callback keeps its value, as it would under a native reset. A callback that throws is
-reported as an uncaught error, and the rest of the form is still reset. Gina resets the
-components it found when it bound the form: one added to the form, or defined, after
-that is reset only once the handle's `.reBind()` has re-scanned the form. Before 0.7.9
-the callback never ran under Gina, so the component kept its last value.
+button or `.resetFields()`) and calls the component's `formResetCallback()` once every
+other control is restored, as a native reset does: restore the component's default value
+there; a callback that reads another field of the form sees its restored value. A
+component without that callback keeps its value, as it would under a native reset. A
+callback that throws is reported as an uncaught error, and the rest of the form is still
+reset, the other components' callbacks included. Gina resets the components it found
+when it bound the form: one added to the form, or defined, after that is reset only once
+the handle's `.reBind()` has re-scanned the form, and one moved into another form since
+then is left to that form. Before 0.7.9 the callback never ran under Gina, so the
+component kept its last value.
 
 :::caution A named element rides the payload — validate it server-side
 A form-associated element with a `name` is serialized into the submission **even
