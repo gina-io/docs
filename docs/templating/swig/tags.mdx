@@ -298,7 +298,7 @@ Declare or update a context variable. Valid at the top of a template even when e
 {% set items = ["a", "b", "c"] %}
 ```
 
-Assigning to reserved property names (`__proto__`, `constructor`, `prototype`) throws at parse time — see [Security](./security).
+Assigning to reserved property names (`__proto__`, `constructor`, `prototype`) throws at parse time, and since `2.12.1` so does such a name written as a variable inside the target's brackets, as in `{% set obj[constructor] = "v" %}`. A key taken from the data that names one of them, as in `{% set obj[k].x = "v" %}`, throws the guard error when the template runs (« Unsafe assignment to "__proto__" via bracket notation is not allowed (prototype-chain guard) on line N. » for `__proto__`), where earlier releases wrote to `Object.prototype` — see [Security](./security#ghsa-8mf3-p375-389g).
 
 ## spaceless
 
