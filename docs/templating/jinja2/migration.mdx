@@ -58,6 +58,12 @@ In `@rhinostone/swig-jinja2` a mapping is a plain JavaScript object with **no `.
 {% for k, v in mapping %}{{ k }}={{ v }}{% endfor %}
 ```
 
+Or use the `items` filter (since 2.12.0). Python Jinja2 has the same filter since 3.1, so this loop runs on both:
+
+```jinja2
+{% for k, v in mapping|items %}{{ k }}={{ v }}{% endfor %}
+```
+
 For sorted iteration, use the `dictsort` filter; its pairs unpack into the key and the value, as in Jinja2:
 
 ```jinja2
@@ -82,7 +88,7 @@ Straight copy-paste — no changes needed:
 - `{% filter upper %}…{% endfilter %}`, `{% with x = 1 %}…{% endwith %}`, `{% autoescape false %}…{% endautoescape %}`, `{% raw %}…{% endraw %}`
 - `is defined`, `is undefined`, `is none`, `is even`, `is odd`, `is divisibleby(n)` (or `is divisibleby n`), `is iterable`, `is mapping`, `is sequence`, `is string`, `is number`, `is boolean`, `is callable`, `is lower`, `is upper` — on numbers and strings they answer as in Jinja2, except that `even`, `odd` and `divisibleby` are false on a string and `lower` and `upper` false on a number, where Jinja2 raises or tests the string form; on `null`, an undefined variable, a boolean, a list, a mapping or a function, and with `divisibleby(0)`, several answer differently (see [Behavioural differences](./parity#behavioural-differences))
 - `is eq`, `is ne`, `is lt`, `is le`, `is gt`, `is ge` and the aliases `is equalto`, `is lessthan`, `is greaterthan` (since 2.11.0) — each gives what the operator it names gives, including where Jinja2 raises on an ordering (see [Behavioural differences](./parity#behavioural-differences)); write a negative argument in parentheses, `x is gt(-1)`
-- The filter catalog — all 39 built-ins were cross-checked against Jinja2 3.x (see [Parity → Filters](./parity#filters))
+- The filter catalog — all 45 built-ins were cross-checked against Jinja2 3.x (see [Parity → Filters](./parity#filters))
 
 ## Semantic differences
 
@@ -146,7 +152,7 @@ Python Jinja2 runs inside CPython with the full Python runtime reachable (dict m
 
 Practical consequences:
 
-- **No dict methods.** `mapping.items()` / `.keys()` / `.values()` are absent (see the section above). Iterate the mapping directly, or use `dictsort` / `list`.
+- **No dict methods.** `mapping.items()` / `.keys()` / `.values()` are absent (see the section above). Iterate the mapping directly, or use `items`, `dictsort` or `list`.
 - **Object method calls require JS functions.** `{{ user.name() }}` works when `user.name` is a JS function — there is no Python descriptor protocol.
 - **Iteration is over enumerable own properties.** `{% for k, v in obj %}` yields `Object.keys(obj)` order — insertion order for string keys in modern engines.
 - **Stringification uses `String(x)`.** Objects without a custom `toString` render as `"[object Object]"` rather than the Python `repr`. `null` / `undefined` render as `""` (engine coercion).
