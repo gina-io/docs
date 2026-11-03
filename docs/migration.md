@@ -136,6 +136,25 @@ created it on a page that had none. Since 0.7.9 the select's check writes no glo
 
 **What to check:** nothing to change, unless a script of yours reads a global named `once`.
 
+### Fixed — a form's error callback says the server answered, and what it answered (bundle restart and re-bake)
+
+Up to 0.7.8, when the server answered a form's submit with an error status, the payload of the error
+callback (`data-gina-form-event-on-submit-error`, the `error.<id>` event) had no `transportError` key,
+although the forms guide says it is `false` there, so a check `data.transportError === false` never
+matched. Nothing said what the answer was either: an answer that is not JSON, such as a reverse proxy's
+`502` page, arrived whole in `data.message`, with the same keys as a message your application wrote, and
+one sent as an attachment lost that body altogether.
+
+Since 0.7.9 every error payload that follows an answer carries `transportError: false` and
+`contentType`, the answer's `Content-Type` as the browser reads it (`null` when there is none), and an
+answer sent as an attachment keeps a body that is not JSON in `data.message`, as the others do. `data.message` is unchanged. See
+[Declarative callbacks](/guides/forms-and-validation#declarative-callbacks).
+
+**What to check:** a handler that shows `data.message` can look at `data.contentType` first and show a
+message of its own for an answer that is not JSON. Code that told a server error from a transport
+failure by `data.transportError === undefined` now reads `false`: test `data.transportError` for
+truthiness, as the guide's example does.
+
 ---
 
 ## 0.7.7 → 0.7.8

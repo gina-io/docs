@@ -1071,10 +1071,10 @@ window.onSignupError = function (event, data) {
 
 `data` carries the outcome. Two shapes reach the error callback:
 
-| Failure | `data.status` | `data.transportError` |
-|---|---|---|
-| The server answered with an error status | that status (`500`, `422`, …) | `false` |
-| The request ended without an answer — network down, connection refused, DNS failure, server restarting, a proxy refusing the body while it is still being sent, a navigation away from the page | `408` | `true` |
+| Failure | `data.status` | `data.transportError` | `data.contentType` |
+|---|---|---|---|
+| The server answered with an error status | that status (`500`, `422`, …) | `false` | the answer's `Content-Type` |
+| The request ended without an answer — network down, connection refused, DNS failure, server restarting, a proxy refusing the body while it is still being sent, a navigation away from the page | `408` | `true` | — |
 
 The second row is why matching on `status >= 400` alone is enough for the common
 case: a transport failure is reported as `408` so existing range checks keep
@@ -1104,6 +1104,31 @@ window.onSignupError = function (event, data) {
 :::note A genuine request timeout is also `408`
 `transportError` is what separates the two: a timeout reports `408` without it.
 :::
+
+*Since 0.7.9* the first shape always carries those two keys: `transportError: false`, and
+`contentType`, the answer's `Content-Type` as the browser reads it (`null` when there is
+none; a JSON error body that carries its own `contentType` keeps it, except in an answer
+sent as an attachment). Before, the key was
+missing, so a check `data.transportError === false` never matched. An answer that is not
+JSON, such as a reverse proxy's `502` page or a plain-text body, arrives whole in
+`data.message`, as does one sent as an attachment: look at `data.contentType` before you
+show it. A `2xx` answer that cannot be handled, such as a JSON body that does not parse,
+is reported the same way, as a `422` with an `error` text.
+
+```js
+window.onSignupError = function (event, data) {
+  if (data && data.transportError) {
+    showRetryBanner('The request did not complete. Check your connection and try again.');
+    return;
+  }
+  if (data && !/json/.test(data.contentType || '')) {
+    // a gateway's or a proxy's page, not a message your application wrote
+    showGenericError(data.status);
+    return;
+  }
+  showServerErrors(data);
+};
+```
 
 :::warning Use a bare identifier
 The attribute value must be the **name** of a `window` function
