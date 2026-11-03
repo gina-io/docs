@@ -56,6 +56,16 @@ allows, and the session keeps serving its other streams. HTTP/1.1 is unchanged. 
 [Configuring uploads](/guides/file-uploads#configuring-uploads) and
 [`maxBodySize`](/reference/settings#server).
 
+On Bun the same held for every request answered before its body is read: a refusal from a `/_gina/*`
+control endpoint or from the cross-origin write guard (a write to a `/_gina/` path from another site,
+with no account needed), the maintenance gate, the admin endpoints answered ahead of routing, and a
+static file answered to a request that carries a body. Up to 0.7.8, Bun 1.2 and 1.3 kept everything the
+client sent into such a request in memory, without bound, and Bun 1.4 held the client at the stream
+window. A client that never reads its answer (a zero receive window keeps the answer from finishing)
+could do the same at the stops above. Since 0.7.9 gina discards that body on Bun, and closes the stream
+with `RST_STREAM(NO_ERROR)` once the answer has gone out. Node.js is unchanged. See
+[HTTP/2 security hardening](/guides/http2-native#http2-security-hardening).
+
 **What to check:** nothing to change. A client still writing when the answer arrives reads the whole
 answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
 because of it.
