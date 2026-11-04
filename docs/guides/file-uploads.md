@@ -425,8 +425,9 @@ a staged uploader: the file is sent to a temporary endpoint **as soon as it is
 chosen**, a preview appears, and hidden metadata fields are written into your
 real form so its eventual submit carries only lightweight references — not the
 binary, and not the file input's own value either (*since 0.7.2*: the browser's
-`C:\fakepath\<name>` placeholder is left out of the payload, while rules such as
-`isRequired` still see the input). (Before 0.5.16 this was also the only way to keep text fields alongside
+`C:\fakepath\<name>` placeholder is left out of the payload; *since 0.7.9* a rule
+on the input judges the files it holds, see
+[Rules on a staged input](#rules-on-a-staged-input)). (Before 0.5.16 this was also the only way to keep text fields alongside
 an upload, because multipart requests dropped non-file parts. Those fields are
 [captured now](#receiving-uploads-in-a-controller), so the staging layer is
 about UX — previews, per-file removal, a lightweight final submit — not field
@@ -560,6 +561,14 @@ A reset or a delete removes **every** file of its input, whichever of the
 input's controls is activated, in one request naming them all. A file input that
 holds several files cannot drop just one of them.
 
+A new selection replaces the files the input holds once its staging succeeds.
+*Changed in 0.7.9:* when it holds fewer files, the hidden fields of the indices it
+no longer has are taken out of the form, as a reset takes them out: a field marked
+`data-gina-form-upload-is-locked` stays, and the fields you declared at those
+indices come back with a later, larger selection. Before, they stayed: three files
+staged, then one, and the save posted the two replaced files beside the new one
+while the page showed one.
+
 By default the reset request is a `POST` of `{ "files": [ … ] }` to the reset
 action. It names each staged file by the `originalFilename` your staging answer
 returned, followed by its preview's `originalFilename` when the answer described
@@ -675,6 +684,13 @@ its index, its fields and its preview container. Since `0.7.6` the saved file's
 delete link goes away too, once the staging succeeds, wherever the link sits.
 Before, a link placed after the preview container stayed on the page and did
 nothing when activated (a console warning named the mismatch).
+
+*Changed in 0.7.9.* A selection of fewer files than the saved ones also takes out
+the fields of the saved files at the indices it does not reach, so the form posts
+the new files only, as the page shows. No delete request goes out for those saved
+files (their delete links went with the staging): what becomes of them is for your
+action to decide when it saves the form. Before, their fields stayed and the form
+posted them beside the new files.
 
 *Changed in 0.7.6.* The saved file is replaced when the staging succeeds, not when
 the new file is chosen. If the staging fails, the saved file keeps its preview, its
@@ -879,12 +895,21 @@ and a `reason`: `'unload'` when the page was being navigated away from,
 "did not reach the server", which is false for the proxy and navigation cases,
 and could not be translated.
 
-*Changed in 0.7.6.* A failed staging changes nothing else. The files the input
-held keep their previews, their reset or delete links and their hidden fields,
+*Changed in 0.7.6.* A failed staging leaves the files the input held as they were.
+They keep their previews, their reset or delete links and their hidden fields,
 and the form submits them as before; the file that failed is not submitted.
 Before, the failure emptied the preview container, taking its previews and any
 link inside it off the page; the links outside it then did nothing, and the
 hidden fields the failed file had added were submitted empty.
+
+*Changed in 0.7.9.* A failed staging also empties the file input, so the same file
+can be chosen again. Before, the input still named the file that failed, and
+Chromium answers a pick of the file an input already holds with a `cancel` event,
+not a `change`, so choosing it again staged nothing, even once the network was
+back. The files the input held before keep their previews, links and hidden
+fields. A staging that a newer selection
+[cancelled](#choosing-another-file-while-one-is-uploading) does not fail, so the
+newer selection stays on the input while it uploads.
 
 ### Choosing another file while one is uploading
 
@@ -949,6 +974,51 @@ A second activation while the submit is already waiting adds nothing. A direct
 `gina.validator.$forms[id].send(data)` call carries its own payload and is not
 held. Before 0.7.2 the submit went out at once and posted the upload's hidden
 fields empty.
+
+### Rules on a staged input
+
+*Changed in 0.7.9.* A rule declared under a staged input's name in the form's rule
+file judges the files the input holds: the files it staged, a selection still
+staging, and the saved files an [edit form](#saved-files-in-an-edit-form) shows.
+The rules see the names of those files, joined with `, `, or `''` when the input
+holds none. So `"isRequired": true` refuses a submit made while the input holds no
+file, and marks the input `aria-invalid="true"`:
+
+```json title="src/myapp/forms/rules/profile.json"
+{
+  "avatar": { "isRequired": true }
+}
+```
+
+That value is for the rules only. The input's own value, the browser's
+`C:\fakepath\<name>` placeholder, is never sent: the files reach your action through
+their hidden fields. A staged input without a rule is collected as before, with no
+value.
+
+On a form with [live checking](/guides/forms-and-validation#live-checking), the
+[submit control](/guides/forms-and-validation#the-submit-control) follows the
+input's files: a required staged input keeps it gated until a file is chosen, and
+gates it again when a reset, or a failed staging, leaves the input with no file.
+
+Two limits:
+
+- **Declare the rule at the top level** of the rule file, under the input's name. A
+  rule that a [`_case_` condition](/guides/forms-and-validation#conditional-rules)
+  adds is not applied to a staged input, and a key written as a regular expression
+  does not match one.
+- **The server sees no field for an input with no file.** With the default prefix
+  (the input's name), the same rules passed to
+  `gina.plugins.Validator(rules, data, formId)` see the input's files as the array
+  their `<prefix>[<index>][…]` fields make: `isRequired` passes with a file and
+  refuses an empty array. An input that holds no file sends none of the fields gina
+  writes for its files, and the validator checks only the fields present in the data
+  it is given, so give it `''` under the input's name when the body has none, or
+  check for the files in your action (see
+  [Validating a submitted body in the controller](/guides/forms-and-validation#validating-a-submitted-body-in-the-controller)).
+
+From 0.7.2 to 0.7.8 no rule ran on a staged input, so `isRequired` let the form be
+sent with no file. Before 0.7.2 the rules judged the input's own value, which the
+form also sent.
 
 ## Drag-and-drop (dropzone)
 

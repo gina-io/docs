@@ -197,6 +197,56 @@ The results are unchanged, except that an element that refers to itself no longe
 **What to check:** nothing to change. `lib/merge` is in the browser bundle: restart the bundle and rebuild
 its static assets (`gina bundle:build`).
 
+### Fixed — a rule on a staged file input runs again (bundle restart and re-bake)
+
+From 0.7.2 to 0.7.8, a staged file input (`data-gina-form-upload-action`) was collected without a value,
+so none of the rules declared under its name ran: `"isRequired": true` on it let the form be sent with no
+file. Since 0.7.9 such a rule judges the files the input holds: the files it staged, a selection still
+staging, and the saved files an edit form shows. A required staged input with no file refuses the submit
+and is marked `aria-invalid="true"`. The input's own value, the browser's `C:\fakepath\<name>`
+placeholder, is still never sent. On a live-checked form the submit control follows those files: it stays
+gated until a file is chosen, and is gated again when a reset or a failed staging leaves the input with no
+file. A staged input without a rule is unchanged. See
+[Rules on a staged input](/guides/file-uploads#rules-on-a-staged-input).
+
+**What to check:**
+
+- A rule you declared on a staged input now runs: a required one blocks a submit with no file, as it did
+  before 0.7.2.
+- Declare it at the top level of the rule file, under the input's name: a rule that a `_case_` condition
+  adds is not applied to a staged input, and a key written as a regular expression does not match one.
+- On the server, an input with no file sends none of the fields gina writes for its files, and
+  `gina.plugins.Validator(rules, data, formId)` checks only the fields present in the data it is given:
+  give it `''` under the input's name when the body has none, or check for the files in your action.
+
+### Fixed — a smaller staged selection no longer posts the files it replaced (bundle restart and re-bake)
+
+Up to 0.7.8, a staged file input that held several files and then took a selection of fewer files kept the
+hidden fields of the indices the new selection no longer has: three files staged, then one, and the save
+posted the two replaced files beside the new one, while the page showed one. On an edit form that shows
+saved files, a selection of fewer files than the saved ones posted the saved files at the other indices
+with the new files. Since 0.7.9 those fields are taken out of the form when the new staging succeeds, as a
+reset takes them out: a field marked `data-gina-form-upload-is-locked` stays, and the fields you declared
+at those indices come back with a later, larger selection. See
+[Previews and removal](/guides/file-uploads#previews-and-removal) and
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:** nothing to change. On an edit form, the saved files a smaller selection replaces are no
+longer posted, and no delete request goes out for them: your action decides what becomes of them when it
+saves the form.
+
+### Fixed — after a failed staging, the same file can be chosen again (bundle restart and re-bake)
+
+Up to 0.7.8, a staged file input whose staging failed still held the file that failed. Chromium answers a
+pick of the file an input already holds with a `cancel` event, not a `change`, so choosing that file again
+staged nothing, even once the network was back. Since 0.7.9 a failed staging also empties the input. The
+files the input held before keep their previews, links and hidden fields, and a staging that a newer
+selection cancelled leaves that selection on the input. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** nothing to change, unless a script of yours reads the input's `value` or `files` after
+a failed staging: both are now empty.
+
 ---
 
 ## 0.7.7 → 0.7.8
