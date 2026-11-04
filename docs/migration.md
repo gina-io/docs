@@ -180,6 +180,23 @@ message of its own for an answer that is not JSON. Code that told a server error
 failure by `data.transportError === undefined` now reads `false`: test `data.transportError` for
 truthiness, as the guide's example does.
 
+### Fixed — merging an id-keyed array no longer takes cubic time (bundle restart and re-bake)
+
+Up to 0.7.8, `merge()` from `lib/merge` took time cubic in the length of an array of objects compared on
+their `id` (or on the key set with `merge.setKeyComparison()`) when the target already held every id of
+the source: a source array the target lacks, `merge([], items)`, an array inside an object the target
+lacks, and a target holding the same ids. A merge of 2,000 such objects took about 4 to 5 seconds and held
+the process's event loop for that time. With `override`, a target holding the same ids took time quadratic
+in the array's length (about 3 seconds for 40,000 objects).
+
+Since 0.7.9 such a merge returns as soon as it finds that no element can be added, and the `override`
+case runs in linear time: 2,000 objects take a few milliseconds, and 40,000 with `override` under 30 ms.
+The results are unchanged, except that an element that refers to itself no longer throws
+`RangeError: Maximum call stack size exceeded` when every id is already present. See [Merge](/api/merge).
+
+**What to check:** nothing to change. `lib/merge` is in the browser bundle: restart the bundle and rebuild
+its static assets (`gina bundle:build`).
+
 ---
 
 ## 0.7.7 → 0.7.8
