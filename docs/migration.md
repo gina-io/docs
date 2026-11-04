@@ -66,6 +66,21 @@ could do the same at the stops above. Since 0.7.9 gina discards that body on Bun
 with `RST_STREAM(NO_ERROR)` once the answer has gone out. Node.js is unchanged. See
 [HTTP/2 security hardening](/guides/http2-native#http2-security-hardening).
 
+A multipart upload that Gina refused while it parsed the body did not stop either. Up to 0.7.8 the
+`400`s for too many files (`upload.maxFields`), an upload group that is not configured, an extension the
+group does not allow and a second file in a single-file group, the `500`s of an upload directory that
+cannot be created, of a write error and of a multipart listener that throws, and the `400`s past
+`upload.maxTextFieldSize` and `upload.maxTextFields` were answered without stopping the upload. Over
+HTTP/2 a refused file part was never read, so the parse waited on it while the client kept sending:
+Bun 1.2 and 1.3 held everything the client sent in memory, without bound, Node.js and Bun 1.4 held the
+client at the stream window with the stream left open, and when the client finished sending, the parts
+staged before a refused file part, or after a refused text field, stayed on disk (Node.js and Bun 1.4).
+Since 0.7.9, over HTTP/2, the refusal stops the upload: the parts it staged are removed and, once the
+answer has gone out, the server closes the stream with `RST_STREAM(NO_ERROR)`. A client that never reads
+the answer is held at the stream window on Node.js, and on Bun what it sends is discarded. HTTP/1.1
+answers are unchanged: the connection closes after them, as before. See
+[Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
+
 **What to check:** nothing to change. A client still writing when the answer arrives reads the whole
 answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
 because of it.

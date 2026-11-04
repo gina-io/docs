@@ -106,7 +106,16 @@ name), and reports back.
 
 A multipart request that does not complete (its parse fails, its client goes
 away, or it passes `maxFieldsSize`) removes the parts it staged at once, the
-finished ones included, and its action does not run. A staged part of a request
+finished ones included, and its action does not run. Over HTTP/2, so does a
+request that Gina refuses while it parses the body (new in 0.7.9): one carrying
+too many files or text fields, a text field past `maxTextFieldSize`, a file for
+an upload group that is not configured, or one its group refuses (a disallowed
+extension, a second file in a single-file group), or one that meets a server
+error during the parse (an upload directory that cannot be created, a write
+error, a failure in Gina's own multipart code). Its stream is then closed once
+the answer has gone out; see
+[HTTP/2 security hardening](/guides/http2-native#http2-security-hardening).
+A staged part of a request
 that does complete (a server-generated `.part` file in the landing directory) has
 exactly **two** reclaim paths: the move performed when `self.store()` publishes
 it, and the `autoTmpCleanupTimeout` deletion timer. A part that never reaches
