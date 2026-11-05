@@ -24,7 +24,9 @@ There are **two ways** to drive that, and you can use either on its own:
   client-side to wire. This is the whole story for simple uploads.
 - **The `data-gina-form-upload-*` client layer** — richer UX: the file uploads
   to a temporary endpoint the moment it is selected, an image preview appears,
-  and each file gets its own reset/delete control. It is opt-in and needs a
+  and each file gets its own reset/delete control. It takes several files at
+  once on a `multiple` input, and files dropped on an element you choose
+  ([drag-and-drop](#drag-and-drop-dropzone)). It is opt-in and needs a
   couple of routes you provide.
 
 The server side (`req.files` + `self.store()` + upload groups) is the same for
@@ -435,6 +437,9 @@ an upload, because multipart requests dropped non-file parts. Those fields are
 [captured now](#receiving-uploads-in-a-controller), so the staging layer is
 about UX — previews, per-file removal, a lightweight final submit — not field
 survival.)
+
+A `multiple` input stages several files in one request, and files dropped on
+a zone take the same path: see [Drag-and-drop (dropzone)](#drag-and-drop-dropzone).
 
 ```mermaid
 flowchart TD
@@ -1072,6 +1077,43 @@ pipeline with no attribute needed. The dropzone attribute exists to delegate a
 larger, styled element.
 
 This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
+
+### A zone that also opens the picker
+
+The `<div>` zone above takes drops only: a click on it does nothing. To let a
+click open the file picker too, make the zone a `<label>` and put the input
+inside it, visually hidden:
+
+```html
+<label id="avatar-dropzone" class="dropzone">
+    Drop a picture here, or click to choose one
+    <input type="file" id="avatar" name="avatar" class="visually-hidden"
+        data-gina-form-upload-action="/upload/tmp"
+        data-gina-form-upload-dropzone="avatar-dropzone">
+</label>
+```
+
+```css
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+.dropzone:focus-within {
+    outline: 2px solid #4a90d9;
+}
+```
+
+A click anywhere on the label opens the picker, because a label activates the
+input it holds, and a drop on it stages the files as above. The input stays in
+the keyboard's tab order, and the `:focus-within` rule outlines the zone while
+the input has the focus, since the input itself cannot be seen. Hide it this
+way rather than with `display: none`: a click on the label still opens the
+picker, but the Tab key skips a `display: none` input, so the upload cannot be
+reached from the keyboard. Give the input the other attributes it needs (a
+preview container, a group) as in [Wire it up](#wire-it-up).
 
 ## Limitations and gotchas
 
