@@ -4,11 +4,11 @@ import readingTimePlugin from './src/remark/reading-time.js';
 
 // Auto-patched on `npm start` / `npm run build` by scripts/sync-versions.js.
 // Resolution order: <PKG>_PATH env → npm-global → ~/Sites/gina/<name> → npm registry → node_modules.
-const ginaVersion = '0.7.8';
-const swigVersion = '2.11.0';
-const twigVersion = '2.11.0';
-const jinjaVersion = '2.11.0';
-const djangoVersion = '2.11.0';
+const ginaVersion = '0.7.9';
+const swigVersion = '2.12.1';
+const twigVersion = '2.12.1';
+const jinjaVersion = '2.12.1';
+const djangoVersion = '2.12.1';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {

@@ -456,8 +456,13 @@ driver.createUpload({
     // session => { uploadId, chunkSize, expectedSize }
 });
 
-// 2. send segments — any order, in parallel, resumable
-driver.writeSegment(uploadId, 8388608, req, function (err, r) {
+// 2. send segments — any order, in parallel, resumable. Each request carries
+//    one segment as a multipart file part, with uploadId and offset as text
+//    fields (see the warning below).
+var fs      = require('fs');
+var segment = req.files[0];
+driver.writeSegment(req.post.uploadId, Number(req.post.offset), fs.createReadStream(segment.path), function (err, r) {
+    fs.unlink(segment.path, function () {}); // the part's temporary file
     // r => { offset, length, received }
 });
 
@@ -474,6 +479,22 @@ driver.finalize(uploadId, function (err, res) {
 // …or throw the session away
 driver.abortUpload(uploadId, function (err, r) { /* r => { aborted } */ });
 ```
+
+:::warning Pass the segment's file, not `req`
+By the time your action runs, gina has already read the whole request body (a
+multipart body into `req.files` and `req.post`, any other body into `req.body`
+and, as text, `req.rawBody`).
+The request stream is spent, so `writeSegment(uploadId, offset, req, cb)` calls
+back with no error and `length: 0`, and writes nothing; and a raw binary body is
+decoded as text on the way in, which changes its bytes. Send each segment as a
+multipart file part and pass a stream of its temporary file, as above. The part
+is checked against your [upload groups](/guides/file-uploads#configuring-uploads)
+like any other file, and the whole request must fit under
+[`upload.maxFieldsSize`](/guides/file-uploads#configuring-uploads) when it is set
+(the scaffolded `settings.json` sets `"2MB"`; a larger request is answered
+**HTTP 431**): choose a segment size below that cap. `chunkSize` does not lift
+it: it is only the size the write path is tuned for, not a limit on a segment.
+:::
 
 Segments are written **at their byte offset**, straight into the file being assembled, so they may arrive out of order or in parallel and no assembly pass runs at the end. Re-sending a range that already landed is harmless, and overlapping re-sends are fine. A session's state lives in the driver root rather than in memory, so it survives a bundle restart — `statUpload()` answers correctly afterwards.
 

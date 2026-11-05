@@ -266,6 +266,7 @@ Isaac includes built-in protection against known HTTP/2 attack vectors:
 | CONTINUATION flood | Invalid frame limit | 1000 (`maxSessionInvalidFrames`) |
 | Settings flood | Settings ACK timeout | 10 s |
 | Stream exhaustion | Concurrent stream limit | 256 (`maxConcurrentStreams`) |
+| A body pushed into a request already answered | The stream is closed with `RST_STREAM(NO_ERROR)` once the answer has gone out; on Bun the rest of the body is discarded (new in 0.7.9) | Always on |
 
 These protections apply to any `http/2.0` bundle — `https` and cleartext h2c
 (`"scheme": "http"`, e.g. behind a TLS-terminating reverse proxy) alike.
@@ -316,6 +317,24 @@ limit (measured on Bun 1.2–1.4) and ignores the two keys — a bundle setting 
 logs one boot warning — so `maxStreamResetsPerSecond` is the only rapid-reset limit
 there. The guard reads Bun's stream state to recognise a client reset, every reset code
 included, and trips at the same count as on Node.js.
+
+Since `0.7.9`, a request answered while its client may still be sending the body has its
+stream closed with `RST_STREAM(NO_ERROR)` once the answer has gone out whole, as RFC 9113
+§ 8.1 allows, and the session keeps serving its other streams. That covers the upload and
+body-size stops (`431` past `upload.maxFieldsSize`, `413` past `server.maxBodySize`, `400`
+for a multipart body that fails to parse), the refusals Gina gives while it parses a
+multipart body (the `400`s past `upload.maxFields`, `upload.maxTextFields` and
+`upload.maxTextFieldSize`, for an upload group that is not configured, an extension the
+group does not allow and a second file in a single-file group, and the `500`s of an upload
+directory that cannot be created, of a write error and of a failure in Gina's own multipart
+code, each of which also stops the upload and removes what it staged) and, on Bun, every
+answer given before the body is read: a refusal from a `/_gina/*` control endpoint or from the cross-origin write guard,
+the maintenance gate, a static file answered to a request that carries a body. On Bun gina
+also discards the rest of such a body, so a client that never reads its answer (a zero
+receive window keeps the answer from finishing) cannot make the bundle hold what it keeps
+sending: Bun 1.2 and 1.3 used to keep it in memory without bound, and Bun 1.4 held the
+client at the stream window. On Node.js gina stops reading such a stream, so the runtime
+holds the client at its flow-control window. HTTP/1.1 is unchanged.
 
 Before `0.6.33` the key was `maxStreamsPerSecond` and it counted *new streams*; it is
 no longer read (one boot warning names it) — see the

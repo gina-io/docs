@@ -157,7 +157,7 @@ Returns a JS source string that is spliced into the compiled function body.
 | Param | Purpose |
 | --- | --- |
 | `compiler` | Reference to `parser.compile` — call it to recurse into `content`. |
-| `args` | JS-source fragments emitted by `parse` (what ended up in `parser.out`). |
+| `args` | JS-source fragments emitted by `parse` (what ended up in `parser.out`). Since `2.12.1` a member bracket in them checks its key when the template runs, so a key from the data that names `__proto__`, `constructor` or `prototype` reads as missing; a bracket after a token your own `parser.on` handler consumed without emitting it is left as it was. |
 | `content` | Child tokens between the opening tag and `end<name>` — empty when `ends = false`. |
 | `parents` | On the sync render path, the parent templates' parse trees, or, inside a `{% block %}` since `2.9.12`, the farther definitions of that block, nearest first (entries with `name` and `blocks`, no `tokens`). Empty on the async render path. |
 | `options` | The Swig options. |

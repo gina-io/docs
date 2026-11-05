@@ -19,6 +19,292 @@ upward to the target version.
 
 ---
 
+## 0.7.8 → 0.7.9
+
+### Fixed — a live check that outlives its form no longer throws (bundle restart and re-bake)
+
+Up to 0.7.8, a live check still on its way when its form went threw an uncaught `TypeError` in the
+page:
+
+- a field's check, which waits for a one-second pause in the typing, when the form was destroyed
+  within that second (`.destroy()`, which a popin also runs on the forms of the content it replaces):
+  « Cannot set properties of undefined (setting 'isValidating') »;
+- the check of a radio or checkbox pick, when the form was destroyed in the same event dispatch;
+- the answer of a `query` rule that arrived after the form was destroyed: « Cannot read properties of
+  undefined (reading 'resetCount') »;
+- the same checks when their field had been moved out of its form (« … reading 'getAttribute' »).
+
+The form was already gone, so nothing else broke: the error reached the console, and any handler you
+attach to uncaught errors (`window.onerror`, an error monitor) recorded it. Since 0.7.9 the check stops
+with the form. While a form stays bound nothing changes, a form destroyed and bound again included: its
+pending check runs on the new binding. See
+[Live checking](/guides/forms-and-validation#live-checking).
+
+**What to check:** nothing to change. A filter you added for these messages in an error monitor can go.
+
+### Security — an HTTP/2 stream answered mid-body is closed once its answer has gone out (bundle restart)
+
+Up to 0.7.8, over HTTP/2, three answers given while the client was still sending its body left the
+request's stream open: the 431 past `upload.maxFieldsSize` on a multipart request that sends no
+`content-length`, the 413 past `server.maxBodySize`, and the 400 of a multipart body that fails to
+parse. Node.js closes a server stream by itself only when its body was never read, so the client could
+push one more stream window (up to 640 KB) into a request nobody reads before it stalled; Bun 1.4
+behaved the same, and Bun 1.2 and 1.3 took everything the client sent and held it in memory, the 431
+sent before reading a body whose `content-length` is past the cap included. Since 0.7.9 the server
+closes the stream with `RST_STREAM(NO_ERROR)` once the answer has gone out whole, as RFC 9113 § 8.1
+allows, and the session keeps serving its other streams. HTTP/1.1 is unchanged. See
+[Configuring uploads](/guides/file-uploads#configuring-uploads) and
+[`maxBodySize`](/reference/settings#server).
+
+On Bun the same held for every request answered before its body is read: a refusal from a `/_gina/*`
+control endpoint or from the cross-origin write guard (a write to a `/_gina/` path from another site,
+with no account needed), the maintenance gate, the admin endpoints answered ahead of routing, and a
+static file answered to a request that carries a body. Up to 0.7.8, Bun 1.2 and 1.3 kept everything the
+client sent into such a request in memory, without bound, and Bun 1.4 held the client at the stream
+window. A client that never reads its answer (a zero receive window keeps the answer from finishing)
+could do the same at the stops above. Since 0.7.9 gina discards that body on Bun, and closes the stream
+with `RST_STREAM(NO_ERROR)` once the answer has gone out. Node.js is unchanged. See
+[HTTP/2 security hardening](/guides/http2-native#http2-security-hardening).
+
+A multipart upload that Gina refused while it parsed the body did not stop either. Up to 0.7.8 the
+`400`s for too many files (`upload.maxFields`), an upload group that is not configured, an extension the
+group does not allow and a second file in a single-file group, the `500`s of an upload directory that
+cannot be created, of a write error and of a multipart listener that throws, and the `400`s past
+`upload.maxTextFieldSize` and `upload.maxTextFields` were answered without stopping the upload. Over
+HTTP/2 a refused file part was never read, so the parse waited on it while the client kept sending:
+Bun 1.2 and 1.3 held everything the client sent in memory, without bound, Node.js and Bun 1.4 held the
+client at the stream window with the stream left open, and when the client finished sending, the parts
+staged before a refused file part, or after a refused text field, stayed on disk (Node.js and Bun 1.4).
+Since 0.7.9, over HTTP/2, the refusal stops the upload: the parts it staged are removed and, once the
+answer has gone out, the server closes the stream with `RST_STREAM(NO_ERROR)`. A client that never reads
+the answer is held at the stream window on Node.js, and on Bun what it sends is discarded. HTTP/1.1
+answers are unchanged: the connection closes after them, as before. See
+[Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
+
+**What to check:** nothing to change. A client still writing when the answer arrives reads the whole
+answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
+because of it.
+
+### Security — a key from the template data no longer reaches the prototype chain: Gina requires `@rhinostone/swig` `^2.12.1` (bundle restart)
+
+Gina 0.7.9 requires [`@rhinostone/swig`](/templating/swig) `^2.12.1` in both of its manifests. Up to
+2.12.0, a key from the template data that names `__proto__`, `constructor` or `prototype`, or a list
+holding one of those names, reached the prototype chain wherever a template read a value with it:
+
+- a subscript such as `{{ foo[k] }}` printed the Object constructor, and a call on such a value could
+  run text from the data as JavaScript: `{{ foo[a][b]("…")() }}` with `a` and `b` set to `constructor`
+  reaches the Function constructor;
+- a native `{% set %}` whose bracket target took the key, such as `{% set obj[k].x = 1 %}`, put a
+  property on `Object.prototype` for the whole process.
+
+A template is exposed when it indexes a value with a key that the request controls: see the advisory
+[GHSA-8mf3-p375-389g](https://github.com/gina-io/swig/security/advisories/GHSA-8mf3-p375-389g) and the
+swig [security page](/templating/swig/security#ghsa-8mf3-p375-389g). 2.12.1 reads such a key as
+missing, and a native `set` target given one throws, when the template runs,
+« `Unsafe assignment to "__proto__" via bracket notation is not allowed (prototype-chain guard) on line N.` »
+(here for `__proto__`). The templates Gina ships use no bracket subscript. Gina compiles a template
+each time it renders it and stores no compiled output, so restarting the bundle picks the fix up.
+
+**What to check:**
+
+- Upgrading gina installs `@rhinostone/swig` 2.12.1 or later. A project copy loaded through
+  `swig.useProject`, or a frontend selected through `swig.package`, keeps its own version: update it
+  there to 2.12.1.
+- A template that indexes with an ordinary key renders as before, a set target keyed by a loop index
+  included. A prototype-chain name written as a variable inside a `set` target's brackets, such as
+  `{% set t[constructor] = "x" %}`, now fails at compile.
+- Output you precompiled with swig 2.12.0 or earlier (`swig compile`, a stored `precompile()` result)
+  keeps the old behaviour until you recompile it with 2.12.1.
+
+Server-side only: **restart the bundle**.
+
+### Security — an upload group named after a member of `Object.prototype` is not a configured group (bundle restart)
+
+Up to 0.7.8, a multipart file part whose `group` parameter named a member of `Object.prototype` —
+`__proto__`, `constructor`, `hasOwnProperty`, `toString`, and the rest — passed the check that every
+file must map to a configured upload group: the check read the name on `upload.groups` without
+asking whether it was one of its own keys, so the name resolved to the inherited member, and the
+rules then read on it (`allowedExtensions`, `isMultipleAllowed`, `path`) read `undefined` and were
+skipped. The file was accepted whatever its extension, a single-file group accepted several, and
+the file was staged to the default upload directory instead of the group's. A client needed no
+account for it, and it sidestepped the restriction the [Limitations](/guides/file-uploads#limitations-and-gotchas)
+recommend, giving `untagged` its own `allowedExtensions`. Since 0.7.9 such a name is answered
+HTTP 400 as an unconfigured group, like any other unknown name. See
+[Configuring uploads](/guides/file-uploads#configuring-uploads).
+
+**What to check:** nothing to change. A group you declare keeps working whatever its name; only a
+name that no key in `groups` spells out is refused. If your application serves or runs uploaded
+files by their extension and relied on a restricted `untagged` group, upgrade and restart your
+bundles: the restriction held for every tagged group except those names.
+
+---
+
+### Fixed — an HTML upload that stops while a file part is being written gets its error page (bundle restart)
+
+Up to 0.7.8, an HTML request whose multipart upload stopped while a file part was still being written
+could get the built-in 500 page instead of the bundle's custom error page for that stop: the 431 past
+`upload.maxFieldsSize` on a request that sends no `content-length`, or the 400 of a body that fails to
+parse after a large file part. The stop destroys that part's write stream, and its error answered 500
+while the custom page was still being rendered. A JSON answer, sent at once, was not affected. Since
+0.7.9 that error is ignored once the upload has stopped; a write error with no stop still answers 500.
+See [Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
+
+**What to check:** nothing to change.
+
+### Fixed — a form reset restores custom elements and cancels a submit waiting for an upload (bundle restart and re-bake)
+
+Up to 0.7.8, a form reset (`form.reset()`, a reset button or the handle's `.resetFields()`) restored the
+values but left two things behind:
+
+- a form-associated custom element kept its last value: Gina cancels the native reset and restores the
+  form itself, and it never ran the element's `formResetCallback`;
+- a submit waiting for one of the form's staged uploads stayed waiting: its submit control kept its
+  loading state, and when the upload succeeded the submit was sent with the restored values and the
+  uploaded file's metadata.
+
+Since 0.7.9 the reset calls a custom element's `formResetCallback` once the form's other controls are
+restored, as a native reset does (one without it keeps its value, as under a native reset; a callback
+that throws is reported and the rest of the form is still reset), and cancels the waiting submit,
+releasing its loading state. See
+[Form-associated custom elements](/guides/forms-and-validation#form-associated-custom-elements) and
+[Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight).
+
+**What to check:** a custom element's `formResetCallback` now runs on every reset under Gina, after the
+form's other controls are restored, so keep it to restoring the element's value; a component added to
+the form, or defined, after the form was bound is reset only after `.reBind()`, and one moved into
+another form after the bind is left to that form. A page that counted on the waiting submit going out
+after a reset has to submit again.
+
+### Fixed — a select change no longer writes `window.once` (bundle restart and re-bake)
+
+Up to 0.7.8, each change of a live-checked `<select>` set a page global named `once` to `false`, and
+created it on a page that had none. Since 0.7.9 the select's check writes no global.
+
+**What to check:** nothing to change, unless a script of yours reads a global named `once`.
+
+### Fixed — a form's error callback says the server answered, and what it answered (bundle restart and re-bake)
+
+Up to 0.7.8, when the server answered a form's submit with an error status, the payload of the error
+callback (`data-gina-form-event-on-submit-error`, the `error.<id>` event) had no `transportError` key,
+although the forms guide says it is `false` there, so a check `data.transportError === false` never
+matched. Nothing said what the answer was either: an answer that is not JSON, such as a reverse proxy's
+`502` page, arrived whole in `data.message`, with the same keys as a message your application wrote, and
+one sent as an attachment lost that body altogether.
+
+Since 0.7.9 every error payload that follows an answer carries `transportError: false` and
+`contentType`, the answer's `Content-Type` as the browser reads it (`null` when there is none), and an
+answer sent as an attachment keeps a body that is not JSON in `data.message`, as the others do. `data.message` is unchanged. See
+[Declarative callbacks](/guides/forms-and-validation#declarative-callbacks).
+
+**What to check:** a handler that shows `data.message` can look at `data.contentType` first and show a
+message of its own for an answer that is not JSON. Code that told a server error from a transport
+failure by `data.transportError === undefined` now reads `false`: test `data.transportError` for
+truthiness, as the guide's example does.
+
+### Security — merging an id-keyed array no longer takes cubic time (bundle restart and re-bake)
+
+Up to 0.7.8, `merge()` from `lib/merge` took time cubic in the length of an array of objects compared on
+their `id` (or on the key set with `merge.setKeyComparison()`) when the target already held every id of
+the source: a source array the target lacks, `merge([], items)`, an array inside an object the target
+lacks, and a target holding the same ids. A merge of 2,000 such objects took about 4 to 5 seconds and held
+the process's event loop for that time. With `override`, a target holding the same ids took time quadratic
+in the array's length (about 3 seconds for 40,000 objects).
+
+Since 0.7.9 such a merge returns as soon as it finds that no element can be added, and the `override`
+case runs in linear time: 2,000 objects take a few milliseconds, and 40,000 with `override` under 30 ms.
+The results are unchanged, except that an element that refers to itself no longer throws
+`RangeError: Maximum call stack size exceeded` when every id is already present. See [Merge](/api/merge).
+
+**What to check:** nothing to change. `lib/merge` is in the browser bundle: restart the bundle and rebuild
+its static assets (`gina bundle:build`).
+
+### Fixed — a rule on a staged file input runs again (bundle restart and re-bake)
+
+From 0.7.2 to 0.7.8, a staged file input (`data-gina-form-upload-action`) was collected without a value,
+so none of the rules declared under its name ran: `"isRequired": true` on it let the form be sent with no
+file. Since 0.7.9 such a rule judges the files the input holds: the files it staged, a selection still
+staging, and the saved files an edit form shows. A required staged input with no file refuses the submit
+and is marked `aria-invalid="true"`. The input's own value, the browser's `C:\fakepath\<name>`
+placeholder, is still never sent. On a live-checked form the submit control follows those files: it stays
+gated until a file is chosen, and is gated again when a reset or a failed staging leaves the input with no
+file. A staged input without a rule is unchanged. See
+[Rules on a staged input](/guides/file-uploads#rules-on-a-staged-input).
+
+**What to check:**
+
+- A rule you declared on a staged input now runs: a required one blocks a submit with no file, as it did
+  before 0.7.2.
+- Declare it at the top level of the rule file, under the input's name: a rule that a `_case_` condition
+  adds is not applied to a staged input, and a key written as a regular expression does not match one.
+- On the server, an input with no file sends none of the fields gina writes for its files, and
+  `gina.plugins.Validator(rules, data, formId)` checks only the fields present in the data it is given:
+  give it `''` under the input's name when the body has none, or check for the files in your action.
+
+### Fixed — a smaller staged selection no longer posts the files it replaced (bundle restart and re-bake)
+
+Up to 0.7.8, a staged file input that held several files and then took a selection of fewer files kept the
+hidden fields of the indices the new selection no longer has: three files staged, then one, and the save
+posted the two replaced files beside the new one, while the page showed one. On an edit form that shows
+saved files, a selection of fewer files than the saved ones posted the saved files at the other indices
+with the new files. Since 0.7.9 those fields are taken out of the form when the new staging succeeds, as a
+reset takes them out: a field marked `data-gina-form-upload-is-locked` stays, and the fields you declared
+at those indices come back with a later, larger selection. See
+[Previews and removal](/guides/file-uploads#previews-and-removal) and
+[Saved files in an edit form](/guides/file-uploads#saved-files-in-an-edit-form).
+
+**What to check:** nothing to change. On an edit form, the saved files a smaller selection replaces are no
+longer posted, and no delete request goes out for them: your action decides what becomes of them when it
+saves the form.
+
+### Fixed — after a failed staging, the same file can be chosen again (bundle restart and re-bake)
+
+Up to 0.7.8, a staged file input whose staging failed still held the file that failed. Chromium answers a
+pick of the file an input already holds with a `cancel` event, not a `change`, so choosing that file again
+staged nothing, even once the network was back. Since 0.7.9 a failed staging also empties the input. The
+files the input held before keep their previews, links and hidden fields, and a staging that a newer
+selection cancelled leaves that selection on the input. See
+[When staging fails](/guides/file-uploads#when-staging-fails).
+
+**What to check:** nothing to change, unless a script of yours reads the input's `value` or `files` after
+a failed staging: both are now empty.
+
+### Fixed — `self.sendTrailers()` delivers its fields over HTTP/2 (bundle restart)
+
+Up to 0.7.8, the HTTP/2 trailers an action recorded with `self.sendTrailers(fields)` never arrived. The render
+delegates sent them from their own `wantTrailers` listener, which runs after the one the HTTP/2 compatibility
+response registers when it is built, and that one had already sent the response's own, empty, trailer list: a
+client saw no trailer block, or an empty one on Bun 1.2.21. Each stable release from 0.4.0, which added trailer
+support, behaves the same way. Since 0.7.9, `renderJSON`, `renderStream`, `renderXML` and `render` (swig or
+nunjucks, from disk or a memory loader, with or without bundle middleware) hand each field to the compatibility
+response, which sends them after the body. A field the HTTP/2 layer could not send is dropped when it is
+recorded, and the others are sent: a name that is not an HTTP token, a connection-specific name (`connection`,
+`upgrade`, `http2-settings`, `keep-alive`, `proxy-connection`, `transfer-encoding`, and `te` unless its value is
+`trailers`), a value that is neither a string nor a number, or a string value holding a character other than a
+tab, U+0020 to U+007E and U+0080 to U+00FF (a CR, a LF, a NUL or another control character, DEL, or a character
+above U+00FF). Names are sent lower-case. An answer that `self.throwError()` gives (a custom error page, a JSON
+error body) carries none: it drops the fields recorded before it. A HEAD and a 204 carry none, as before.
+
+**What to check:** nothing for an action that uses `self.sendTrailers()`: its trailers now reach the client. An
+action that answers on `res.stream` itself and sends trailers from its own `wantTrailers` listener still sends
+none: call `res.addTrailers(fields)` before `res.stream.respond(headers, { waitForTrailers: true })`. Restart the
+bundle.
+
+### Fixed — `merge()` returns when an array holds objects and then `NaN` (bundle restart and re-bake)
+
+Up to 0.7.8, `merge()` never returned when an array inside an object the target lacks held two or more object
+elements followed by `NaN`, or when an array was merged with itself: it kept pushing the `NaN` onto the source array
+it was walking until the heap ran out. Its primitive merge decided whether a value was already present with
+`indexOf`, which never finds `NaN`. Since 0.7.9, a `NaN` is present once the result holds one, and it is never
+topped up: `merge([1, NaN], [NaN, 2])` gives `[1, NaN, 2]` (it gave `[1, NaN, NaN, 2]`), and merging the same
+source a second time is a no-op for `NaN` too. Every other value merges as before, in the server and in the
+browser bundle.
+
+**What to check:** nothing, unless your code merges arrays holding a `NaN` it computed (`Number('x')`,
+`parseInt()` of a non-number, `0 / 0`) and counted on the extra copies. The request parsers produce no `NaN`: form
+and query values arrive as strings, and JSON has no `NaN`. Restart the bundle and re-bake the browser bundle.
+
+---
+
 ## 0.7.7 → 0.7.8
 
 ### Changed — Gina requires `@rhinostone/swig` `^2.11.0`, which changes some native swig outputs (bundle restart)

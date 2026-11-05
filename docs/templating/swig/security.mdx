@@ -55,6 +55,14 @@ flowchart LR
 
 **Fixed in `2.7.1`:** with a `basepath` set, `resolve()` now rejects any path that resolves outside the root (a `path.sep`-anchored prefix check, so a `/views-secret` sibling cannot bypass `/views`). **`2.7.2`** then resolved the `basepath` to an absolute path before the check, so a *relative* basepath works — `2.7.1` wrongly rejected every in-root path when `basepath` was relative. Templates that intentionally read outside the root opt out with the third loader argument, [`swig.loaders.fs(basepath, encoding, allowOutsideRoot)`](./loaders#swigloadersfs). **Upgrade to `≥ 2.7.2`.** No-`basepath` mode is unconfined — the secure posture is to set a `basepath`.
 
+### GHSA-8mf3-p375-389g — keys from the data that name the prototype chain {#ghsa-8mf3-p375-389g}
+
+**Affected:** all five packages before `2.12.1`: `@rhinostone/swig` from `1.4.4` (the code dates from the original swig `1.4.2`), `@rhinostone/swig-core` and `@rhinostone/swig-twig` from `2.0.0-alpha.3`, `@rhinostone/swig-jinja2` from `2.5.0` and `@rhinostone/swig-django` from `2.7.0`, on the sync and async render paths. Critical, CWE-1321, CVSS 9.8 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`).
+
+**Root cause:** a key taken from the template data was used as a property name with no check: in a subscript such as `{{ foo[k] }}`, in a call on one such as `{{ foo[k](x) }}`, in the target of a native `{% set obj[k].x = "v" %}`, in the bracket fragments a tag registered with `setTag` receives, and in the attribute argument of swig-jinja2's `groupby` and `sum`. The [prototype-chain guards](#prototype-chain-hardening) checked only names written in the template source. A key that named `__proto__`, `constructor` or `prototype`, or a list holding one of those names, reached the prototype chain: a template could read the `Object` and `Function` constructors, put a property on `Object.prototype` for the whole process (through a native set target, or by writing to a value read this way), and, through a call on such a value, run text from the data as JavaScript. A template is exposed when it indexes a value with a key the request controls, such as `{{ labels[lang] }}`. Until `2.12.1` this page listed such a key under what the guards do not protect against, rated « Low — info leak only, not RCE »; that rating was wrong.
+
+**Fixed in `2.12.1`:** such a key reads as missing in a subscript, in a call on one, in a custom tag's bracket fragments and in swig-jinja2's `groupby` and `sum`. A native set target given one throws the guard error when the template runs (« `Unsafe assignment to "__proto__" via bracket notation is not allowed (prototype-chain guard) on line N.` » for `__proto__`), and a prototype-chain name written as a variable inside a set target's brackets, such as `{% set obj[constructor] = "v" %}`, fails at compile time. The checks for a set target and for a custom tag's fragments are in the code the compiler emits, so templates compiled by an earlier release (`swig compile` output, `registerBundle` bundles, stored `precompile()` results) keep the old behaviour until they are recompiled with `2.12.1`, and so does a subscript compiled before `2.9.10`. Upgrade the five packages together: the `2.12.1` frontends require `@rhinostone/swig-core` `2.12.1`. If you cannot upgrade, do not index template values with keys taken from the request, or check such keys before rendering against the names the template expects. See the [advisory](https://github.com/gina-io/swig/security/advisories/GHSA-8mf3-p375-389g).
+
 ### GHSA-25w8-77gg-4ccw — data passed to one render reaching other renders {#ghsa-25w8-77gg-4ccw}
 
 **Affected:** every release of `@rhinostone/swig`, `@rhinostone/swig-core`, `@rhinostone/swig-twig`, `@rhinostone/swig-jinja2` and `@rhinostone/swig-django` before `2.9.6`; the code dates from the original swig 1.4.2. High, CWE-488, CVSS 8.2 (`CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N`).
@@ -123,12 +131,13 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 
 **Root cause it addresses:** template source that reaches the prototype chain through `_ctx` access (`__proto__`, `constructor`, `prototype`) can escape into the surrounding JavaScript runtime. The canonical exploit is `{{ constructor.constructor("return process")() }}` — the lexer emits a single VAR token, the parser generates `_ctx.constructor.constructor` (which is `Function`), and the template then calls it with arbitrary code.
 
-**Added in two phases:**
+**Added in three phases:**
 
 | Phase | Version | Coverage |
 | --- | --- | --- |
 | Phase 1 | `1.4.4` | Dot-notation and direct-name access in `parseVar` + DOTKEY handler + `set` tag. |
 | Phase 2 | `1.5.0` | Bracket-notation in variable output and `set`; reserved names blocked in `for` loop variables, `macro` names, and `import` aliases. |
+| Phase 3 | `2.12.1` | Keys taken from the data at run time: subscripts and calls on them, native `set` targets, custom-tag bracket fragments, and the attribute argument of swig-jinja2 `groupby` and `sum` ([GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g)). |
 
 ### What the guards protect against
 
@@ -142,13 +151,16 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 | `{% for __proto__ in items %}` | `for.js` VAR handler | High — per-iteration pollution of `_ctx` |
 | `{% macro __proto__() %}` | `macro.js` FUNCTION handler | Medium — overwrites `_ctx.__proto__` with a function |
 | `{% import "f" as __proto__ %}` | `import.js` VAR handler | Medium — overwrites `_ctx.__proto__` with a namespace |
+| `{{ foo[k] }}`, `{{ foo[k](x) }}` with `k` taken from the data and naming `__proto__`, `constructor` or `prototype` (or a list holding one), or a key built at run time such as `foo["__pr" + "oto__"]` | Run-time key check, since `2.12.1`: the key reads as missing | Critical ([GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g)) — reads the constructors; a call on the value runs data text |
+| `{% set obj[k].x = "v" %}` with such a `k` | Run-time key check, since `2.12.1`: throws the guard error | Critical — puts a property on `Object.prototype` for the whole process |
+| A custom tag's bracket fragments; the attribute argument of swig-jinja2 `groupby` and `sum` | Run-time key check, since `2.12.1`: the key reads as missing | Critical — same advisory |
 
 ### What the guards do NOT protect against
 
 | Vector | Why not | Risk |
 | --- | --- | --- |
-| `{{ foo[varname] }}` where `varname` resolves to `"__proto__"` at runtime | The key is known only at run time, and no runtime check tests it. | Low — info leak only, not RCE. |
-| `{{ foo["__pr" + "oto__"] }}` | Result only known at runtime. | Low — same as above. |
+| A template compiled by an earlier release and run on `2.12.1` (`swig compile` output, `registerBundle` bundles, stored `precompile()` results): a native set target or custom-tag fragment compiled before `2.12.1`, or a subscript compiled before `2.9.10` | Those checks are in the code the compiler emits; a subscript has called a runtime helper since `2.9.10`. | As [GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g) until recompiled with `2.12.1`. |
+| `{{ foo[k] }}` where `k` names another built-in member, such as `__defineGetter__` or `__lookupGetter__` | The run-time check refuses only `__proto__`, `constructor` and `prototype`. | Low — the template reads the built-in method; misusing it takes template code that calls the value it read. |
 | `{{ Function("return process")() }}` | Template source is trusted; globals are available by design. | N/A — SSTI is game over for any template engine. |
 | `{{ eval("code") }}` | Same as above. | N/A — by design. |
 | Prototype pollution via a locals object with an own `__proto__` property | `for…in` + `hasOwnProperty` iterates own properties; JSON-parsed objects can carry `__proto__` as own property. | Low — only affects that template's `_ctx`; does not pollute `Object.prototype`. |

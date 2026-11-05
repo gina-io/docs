@@ -24,7 +24,9 @@ There are **two ways** to drive that, and you can use either on its own:
   client-side to wire. This is the whole story for simple uploads.
 - **The `data-gina-form-upload-*` client layer** — richer UX: the file uploads
   to a temporary endpoint the moment it is selected, an image preview appears,
-  and each file gets its own reset/delete control. It is opt-in and needs a
+  and each file gets its own reset/delete control. It takes several files at
+  once on a `multiple` input, and files dropped on an element you choose
+  ([drag-and-drop](#drag-and-drop-dropzone)). It is opt-in and needs a
   couple of routes you provide.
 
 The server side (`req.files` + `self.store()` + upload groups) is the same for
@@ -106,7 +108,16 @@ name), and reports back.
 
 A multipart request that does not complete (its parse fails, its client goes
 away, or it passes `maxFieldsSize`) removes the parts it staged at once, the
-finished ones included, and its action does not run. A staged part of a request
+finished ones included, and its action does not run. Over HTTP/2, so does a
+request that Gina refuses while it parses the body (new in 0.7.9): one carrying
+too many files or text fields, a text field past `maxTextFieldSize`, a file for
+an upload group that is not configured, or one its group refuses (a disallowed
+extension, a second file in a single-file group), or one that meets a server
+error during the parse (an upload directory that cannot be created, a write
+error, a failure in Gina's own multipart code). Its stream is then closed once
+the answer has gone out; see
+[HTTP/2 security hardening](/guides/http2-native#http2-security-hardening).
+A staged part of a request
 that does complete (a server-generated `.part` file in the landing directory) has
 exactly **two** reclaim paths: the move performed when `self.store()` publishes
 it, and the `autoTmpCleanupTimeout` deletion timer. A part that never reaches
@@ -225,7 +236,7 @@ Upload behaviour is configured in your bundle's `settings.json`, under the
 |---|---|
 | `tmpPath` | Directory each uploaded file streams to. The default resolves to `<project>/tmp`; a per-group `path` overrides it. A configured directory is created automatically if it does not exist. |
 | `uploadDir` | Alternative global landing directory. When both are set, `uploadDir` wins over `tmpPath`. |
-| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request whose `content-length` is larger is rejected with **HTTP 431** before any file is read. One that sends no `content-length` (a chunked or an HTTP/2 request) is rejected with **HTTP 431** once the bytes received pass it: the files it had staged are removed and the request is cut — on HTTP/1.1 the connection closes; on HTTP/2 the request's stream stops being read while the session keeps serving its other streams — so a client still writing may read the close, or stall, instead of the answer. |
+| `maxFieldsSize` | Maximum size of the **whole request**. Accepts a unit suffix — `B`, `KB`, `MB`, `GB` (a bare number is read as MB, e.g. `"2MB"`). A request whose `content-length` is larger is rejected with **HTTP 431** before any file is read. One that sends no `content-length` (a chunked or an HTTP/2 request) is rejected with **HTTP 431** once the bytes received pass it: the files it had staged are removed and the request is cut: on HTTP/1.1 the connection closes, so a client still writing may read the close instead of the answer. Over HTTP/2, the answer to a request rejected either way goes out whole, then the request's stream is closed with `RST_STREAM(NO_ERROR)` while the session keeps serving its other streams (new in 0.7.9). On Bun the rest of the request's body is discarded too, so a client that never reads the answer cannot make the bundle hold what it keeps sending (new in 0.7.9). |
 | `maxFields` | Maximum number of files accepted in a single request. A request carrying more is rejected with **HTTP 400**. Set `0` (or omit) to disable the cap. |
 | `maxTextFields` | Maximum number of **text (non-file) fields** accepted in a multipart request. Defaults to `1000`; a request carrying more is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
 | `maxTextFieldSize` | Size cap for **each text field's value**. Same unit suffixes as `maxFieldsSize` (a bare number is read as MB); defaults to `"1MB"`. A field exceeding it is rejected with **HTTP 400**. Set `0` to disable the cap. *New in 0.5.16.* |
@@ -240,7 +251,10 @@ A file is tagged with a group on the client via
 `data-gina-form-upload-group` (see below); on the wire the group travels in each
 multipart part. **Every file must map to a configured group:** a file with no
 group falls back to the default `untagged` group, and a group that is not declared
-in `groups` is rejected with **HTTP 400**. Each group's `allowedExtensions` and
+in `groups` is rejected with **HTTP 400**. Declared means one of the keys written in
+`groups`: a name such as `__proto__` or `constructor`, which an object resolves through
+`Object.prototype`, is not one (since 0.7.9; up to 0.7.8 such a name passed the check and
+the group's rules were skipped). Each group's `allowedExtensions` and
 `isMultipleAllowed` are then enforced — `untagged` included.
 
 ```mermaid
@@ -416,12 +430,16 @@ a staged uploader: the file is sent to a temporary endpoint **as soon as it is
 chosen**, a preview appears, and hidden metadata fields are written into your
 real form so its eventual submit carries only lightweight references — not the
 binary, and not the file input's own value either (*since 0.7.2*: the browser's
-`C:\fakepath\<name>` placeholder is left out of the payload, while rules such as
-`isRequired` still see the input). (Before 0.5.16 this was also the only way to keep text fields alongside
+`C:\fakepath\<name>` placeholder is left out of the payload; *since 0.7.9* a rule
+on the input judges the files it holds, see
+[Rules on a staged input](#rules-on-a-staged-input)). (Before 0.5.16 this was also the only way to keep text fields alongside
 an upload, because multipart requests dropped non-file parts. Those fields are
 [captured now](#receiving-uploads-in-a-controller), so the staging layer is
 about UX — previews, per-file removal, a lightweight final submit — not field
 survival.)
+
+A `multiple` input stages several files in one request, and files dropped on
+a zone take the same path: see [Drag-and-drop (dropzone)](#drag-and-drop-dropzone).
 
 ```mermaid
 flowchart TD
@@ -551,6 +569,14 @@ A reset or a delete removes **every** file of its input, whichever of the
 input's controls is activated, in one request naming them all. A file input that
 holds several files cannot drop just one of them.
 
+A new selection replaces the files the input holds once its staging succeeds.
+*Changed in 0.7.9:* when it holds fewer files, the hidden fields of the indices it
+no longer has are taken out of the form, as a reset takes them out: a field marked
+`data-gina-form-upload-is-locked` stays, and the fields you declared at those
+indices come back with a later, larger selection. Before, they stayed: three files
+staged, then one, and the save posted the two replaced files beside the new one
+while the page showed one.
+
 By default the reset request is a `POST` of `{ "files": [ … ] }` to the reset
 action. It names each staged file by the `originalFilename` your staging answer
 returned, followed by its preview's `originalFilename` when the answer described
@@ -666,6 +692,13 @@ its index, its fields and its preview container. Since `0.7.6` the saved file's
 delete link goes away too, once the staging succeeds, wherever the link sits.
 Before, a link placed after the preview container stayed on the page and did
 nothing when activated (a console warning named the mismatch).
+
+*Changed in 0.7.9.* A selection of fewer files than the saved ones also takes out
+the fields of the saved files at the indices it does not reach, so the form posts
+the new files only, as the page shows. No delete request goes out for those saved
+files (their delete links went with the staging): what becomes of them is for your
+action to decide when it saves the form. Before, their fields stayed and the form
+posted them beside the new files.
 
 *Changed in 0.7.6.* The saved file is replaced when the staging succeeds, not when
 the new file is chosen. If the staging fails, the saved file keeps its preview, its
@@ -870,12 +903,21 @@ and a `reason`: `'unload'` when the page was being navigated away from,
 "did not reach the server", which is false for the proxy and navigation cases,
 and could not be translated.
 
-*Changed in 0.7.6.* A failed staging changes nothing else. The files the input
-held keep their previews, their reset or delete links and their hidden fields,
+*Changed in 0.7.6.* A failed staging leaves the files the input held as they were.
+They keep their previews, their reset or delete links and their hidden fields,
 and the form submits them as before; the file that failed is not submitted.
 Before, the failure emptied the preview container, taking its previews and any
 link inside it off the page; the links outside it then did nothing, and the
 hidden fields the failed file had added were submitted empty.
+
+*Changed in 0.7.9.* A failed staging also empties the file input, so the same file
+can be chosen again. Before, the input still named the file that failed, and
+Chromium answers a pick of the file an input already holds with a `cancel` event,
+not a `change`, so choosing it again staged nothing, even once the network was
+back. The files the input held before keep their previews, links and hidden
+fields. A staging that a newer selection
+[cancelled](#choosing-another-file-while-one-is-uploading) does not fail, so the
+newer selection stays on the input while it uploads.
 
 ### Choosing another file while one is uploading
 
@@ -921,20 +963,70 @@ When the last upload of the form settles:
   validated and sent once;
 - **an upload failed** — the waiting submit is cancelled: nothing is sent, the
   loading state is released, and the upload's error shows as usual. The user
-  submits again once the file is dealt with.
+  submits again once the file is dealt with;
+- **the form is reset** (*since 0.7.9*) — `form.reset()`, a reset button or
+  `.resetFields()` cancel the waiting submit at once: the loading state is
+  released and nothing is sent when the upload settles. A submit made after the
+  reset, while the upload is still in flight, waits for it again. Before 0.7.9
+  the waiting submit survived the reset and was sent with the restored values.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Waiting: submit while an upload is in flight
     Waiting --> Waiting: another upload of the form is still in flight
     Waiting --> Sent: every upload succeeded (fields collected again)
-    Waiting --> Cancelled: an upload failed, or the form left the page
+    Waiting --> Cancelled: an upload failed, the form was reset, or the form left the page
 ```
 
 A second activation while the submit is already waiting adds nothing. A direct
 `gina.validator.$forms[id].send(data)` call carries its own payload and is not
 held. Before 0.7.2 the submit went out at once and posted the upload's hidden
 fields empty.
+
+### Rules on a staged input
+
+*Changed in 0.7.9.* A rule declared under a staged input's name in the form's rule
+file judges the files the input holds: the files it staged, a selection still
+staging, and the saved files an [edit form](#saved-files-in-an-edit-form) shows.
+The rules see the names of those files, joined with `, `, or `''` when the input
+holds none. So `"isRequired": true` refuses a submit made while the input holds no
+file, and marks the input `aria-invalid="true"`:
+
+```json title="src/myapp/forms/rules/profile.json"
+{
+  "avatar": { "isRequired": true }
+}
+```
+
+That value is for the rules only. The input's own value, the browser's
+`C:\fakepath\<name>` placeholder, is never sent: the files reach your action through
+their hidden fields. A staged input without a rule is collected as before, with no
+value.
+
+On a form with [live checking](/guides/forms-and-validation#live-checking), the
+[submit control](/guides/forms-and-validation#the-submit-control) follows the
+input's files: a required staged input keeps it gated until a file is chosen, and
+gates it again when a reset, or a failed staging, leaves the input with no file.
+
+Two limits:
+
+- **Declare the rule at the top level** of the rule file, under the input's name. A
+  rule that a [`_case_` condition](/guides/forms-and-validation#conditional-rules)
+  adds is not applied to a staged input, and a key written as a regular expression
+  does not match one.
+- **The server sees no field for an input with no file.** With the default prefix
+  (the input's name), the same rules passed to
+  `gina.plugins.Validator(rules, data, formId)` see the input's files as the array
+  their `<prefix>[<index>][…]` fields make: `isRequired` passes with a file and
+  refuses an empty array. An input that holds no file sends none of the fields gina
+  writes for its files, and the validator checks only the fields present in the data
+  it is given, so give it `''` under the input's name when the body has none, or
+  check for the files in your action (see
+  [Validating a submitted body in the controller](/guides/forms-and-validation#validating-a-submitted-body-in-the-controller)).
+
+From 0.7.2 to 0.7.8 no rule ran on a staged input, so `isRequired` let the form be
+sent with no file. Before 0.7.2 the rules judged the input's own value, which the
+form also sent.
 
 ## Drag-and-drop (dropzone)
 
@@ -985,6 +1077,43 @@ pipeline with no attribute needed. The dropzone attribute exists to delegate a
 larger, styled element.
 
 This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
+
+### A zone that also opens the picker
+
+The `<div>` zone above takes drops only: a click on it does nothing. To let a
+click open the file picker too, make the zone a `<label>` and put the input
+inside it, visually hidden:
+
+```html
+<label id="avatar-dropzone" class="dropzone">
+    Drop a picture here, or click to choose one
+    <input type="file" id="avatar" name="avatar" class="visually-hidden"
+        data-gina-form-upload-action="/upload/tmp"
+        data-gina-form-upload-dropzone="avatar-dropzone">
+</label>
+```
+
+```css
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+}
+.dropzone:focus-within {
+    outline: 2px solid #4a90d9;
+}
+```
+
+A click anywhere on the label opens the picker, because a label activates the
+input it holds, and a drop on it stages the files as above. The input stays in
+the keyboard's tab order, and the `:focus-within` rule outlines the zone while
+the input has the focus, since the input itself cannot be seen. Hide it this
+way rather than with `display: none`: a click on the label still opens the
+picker, but the Tab key skips a `display: none` input, so the upload cannot be
+reached from the keyboard. Give the input the other attributes it needs (a
+preview container, a group) as in [Wire it up](#wire-it-up).
 
 ## Limitations and gotchas
 

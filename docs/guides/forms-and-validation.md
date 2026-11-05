@@ -246,6 +246,18 @@ A few behaviours worth knowing:
   is painted or announced, and a `query` answer that comes back afterwards is dropped. Before 0.7.8 each
   field ran its own check: the live region announced an error and kept it, a required checkbox or radio
   stayed in error, and `.resetFields()` alone left every empty required field in error.
+- **A reset also restores custom elements and cancels a waiting submit (since 0.7.9).** A
+  [form-associated custom element](#form-associated-custom-elements) runs its own
+  `formResetCallback`, and a submit waiting for a staged upload is cancelled (see
+  [Submitting while an upload is in flight](/guides/file-uploads#submitting-while-an-upload-is-in-flight)).
+  Before 0.7.9 a custom element kept its last value, and the waiting submit was sent once the upload
+  succeeded.
+- **A destroyed form runs no pending check (since 0.7.9).** A field's check waits for a pause in the
+  typing, a radio or checkbox pick's runs just after the pick, and a `query` rule's waits for its
+  answer. When the form is destroyed meanwhile (`.destroy()`, which a popin also runs on the forms of
+  the content it replaces) or the field is moved out of its form, that check now stops with it and
+  paints nothing. Before 0.7.9 it threw an uncaught `TypeError` (« Cannot set properties of undefined
+  (setting 'isValidating') »), which reached the console and any handler you attach to uncaught errors.
 - **Give each control its own `id`.** Live checking keys its listeners on the control's `id`. Of two
   controls that share one, in one form or in two, only the first is live-checked: the second shows no
   error, and its form's submit control stays gated while the user types. Duplicate ids are invalid HTML,
@@ -1059,10 +1071,10 @@ window.onSignupError = function (event, data) {
 
 `data` carries the outcome. Two shapes reach the error callback:
 
-| Failure | `data.status` | `data.transportError` |
-|---|---|---|
-| The server answered with an error status | that status (`500`, `422`, …) | `false` |
-| The request ended without an answer — network down, connection refused, DNS failure, server restarting, a proxy refusing the body while it is still being sent, a navigation away from the page | `408` | `true` |
+| Failure | `data.status` | `data.transportError` | `data.contentType` |
+|---|---|---|---|
+| The server answered with an error status | that status (`500`, `422`, …) | `false` | the answer's `Content-Type` |
+| The request ended without an answer — network down, connection refused, DNS failure, server restarting, a proxy refusing the body while it is still being sent, a navigation away from the page | `408` | `true` | — |
 
 The second row is why matching on `status >= 400` alone is enough for the common
 case: a transport failure is reported as `408` so existing range checks keep
@@ -1092,6 +1104,31 @@ window.onSignupError = function (event, data) {
 :::note A genuine request timeout is also `408`
 `transportError` is what separates the two: a timeout reports `408` without it.
 :::
+
+*Since 0.7.9* the first shape always carries those two keys: `transportError: false`, and
+`contentType`, the answer's `Content-Type` as the browser reads it (`null` when there is
+none; a JSON error body that carries its own `contentType` keeps it, except in an answer
+sent as an attachment). Before, the key was
+missing, so a check `data.transportError === false` never matched. An answer that is not
+JSON, such as a reverse proxy's `502` page or a plain-text body, arrives whole in
+`data.message`, as does one sent as an attachment: look at `data.contentType` before you
+show it. A `2xx` answer that cannot be handled, such as a JSON body that does not parse,
+is reported the same way, as a `422` with an `error` text.
+
+```js
+window.onSignupError = function (event, data) {
+  if (data && data.transportError) {
+    showRetryBanner('The request did not complete. Check your connection and try again.');
+    return;
+  }
+  if (data && !/json/.test(data.contentType || '')) {
+    // a gateway's or a proxy's page, not a message your application wrote
+    showGenericError(data.status);
+    return;
+  }
+  showServerErrors(data);
+};
+```
 
 :::warning Use a bare identifier
 The attribute value must be the **name** of a `window` function
@@ -1483,8 +1520,8 @@ exposing:
 | `.submit()` | trigger validation + submit programmatically |
 | `.send(data)` | send a payload over AJAX (skips re-validation); with no `data`, the request has an empty body |
 | `.reBind()` | re-scan the form after you have changed its DOM: what the previous bind attached is detached, then attached again — your `.on()` handlers and the declarative `data-gina-form-event-on-*` callbacks stay |
-| `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle |
-| `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8) |
+| `.destroy()` | unbind the form, remove its listeners — your `.on()` handlers included — and forget its handle; a live check still on its way stops with it (since 0.7.9) |
+| `.resetFields()` | restore fields to their initial values, clear the error display and re-read the submit control; nothing is painted or announced (since 0.7.8); a form-associated custom element runs its `formResetCallback`, and a submit waiting for a staged upload is cancelled (since 0.7.9) |
 | `.resetErrorsDisplay()` | clear rendered error/warning state |
 
 Events are attached with `.on(eventName, handler)`:
@@ -1745,6 +1782,18 @@ To participate, a component must:
 - reflect validity through `ElementInternals` — `internals.setValidity(...)` and
   `internals.ariaInvalid` — so screen readers get the same feedback native controls
   give (see [Accessibility](#accessibility)).
+
+**Reset** (*since 0.7.9*). Gina handles a form's reset itself (`form.reset()`, a reset
+button or `.resetFields()`) and calls the component's `formResetCallback()` once every
+other control is restored, as a native reset does: restore the component's default value
+there; a callback that reads another field of the form sees its restored value. A
+component without that callback keeps its value, as it would under a native reset. A
+callback that throws is reported as an uncaught error, and the rest of the form is still
+reset, the other components' callbacks included. Gina resets the components it found
+when it bound the form: one added to the form, or defined, after that is reset only once
+the handle's `.reBind()` has re-scanned the form, and one moved into another form since
+then is left to that form. Before 0.7.9 the callback never ran under Gina, so the
+component kept its last value.
 
 :::caution A named element rides the payload — validate it server-side
 A form-associated element with a `name` is serialized into the submission **even
