@@ -201,7 +201,7 @@ message of its own for an answer that is not JSON. Code that told a server error
 failure by `data.transportError === undefined` now reads `false`: test `data.transportError` for
 truthiness, as the guide's example does.
 
-### Fixed — merging an id-keyed array no longer takes cubic time (bundle restart and re-bake)
+### Security — merging an id-keyed array no longer takes cubic time (bundle restart and re-bake)
 
 Up to 0.7.8, `merge()` from `lib/merge` took time cubic in the length of an array of objects compared on
 their `id` (or on the key set with `merge.setKeyComparison()`) when the target already held every id of
