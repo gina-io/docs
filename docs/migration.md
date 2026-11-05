@@ -289,6 +289,20 @@ action that answers on `res.stream` itself and sends trailers from its own `want
 none: call `res.addTrailers(fields)` before `res.stream.respond(headers, { waitForTrailers: true })`. Restart the
 bundle.
 
+### Fixed — `merge()` returns when an array holds objects and then `NaN` (bundle restart and re-bake)
+
+Up to 0.7.8, `merge()` never returned when an array inside an object the target lacks held two or more object
+elements followed by `NaN`, or when an array was merged with itself: it kept pushing the `NaN` onto the source array
+it was walking until the heap ran out. Its primitive merge decided whether a value was already present with
+`indexOf`, which never finds `NaN`. Since 0.7.9, a `NaN` is present once the result holds one, and it is never
+topped up: `merge([1, NaN], [NaN, 2])` gives `[1, NaN, 2]` (it gave `[1, NaN, NaN, 2]`), and merging the same
+source a second time is a no-op for `NaN` too. Every other value merges as before, in the server and in the
+browser bundle.
+
+**What to check:** nothing, unless your code merges arrays holding a `NaN` it computed (`Number('x')`,
+`parseInt()` of a non-number, `0 / 0`) and counted on the extra copies. The request parsers produce no `NaN`: form
+and query values arrive as strings, and JSON has no `NaN`. Restart the bundle and re-bake the browser bundle.
+
 ---
 
 ## 0.7.7 → 0.7.8
