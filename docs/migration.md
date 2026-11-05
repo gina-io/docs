@@ -268,6 +268,27 @@ selection cancelled leaves that selection on the input. See
 **What to check:** nothing to change, unless a script of yours reads the input's `value` or `files` after
 a failed staging: both are now empty.
 
+### Fixed — `self.sendTrailers()` delivers its fields over HTTP/2 (bundle restart)
+
+Up to 0.7.8, the HTTP/2 trailers an action recorded with `self.sendTrailers(fields)` never arrived. The render
+delegates sent them from their own `wantTrailers` listener, which runs after the one the HTTP/2 compatibility
+response registers when it is built, and that one had already sent the response's own, empty, trailer list: a
+client saw no trailer block, or an empty one on Bun 1.2.21. Each stable release from 0.4.0, which added trailer
+support, behaves the same way. Since 0.7.9, `renderJSON`, `renderStream`, `renderXML` and `render` (swig or
+nunjucks, from disk or a memory loader, with or without bundle middleware) hand each field to the compatibility
+response, which sends them after the body. A field the HTTP/2 layer could not send is dropped when it is
+recorded, and the others are sent: a name that is not an HTTP token, a connection-specific name (`connection`,
+`upgrade`, `http2-settings`, `keep-alive`, `proxy-connection`, `transfer-encoding`, and `te` unless its value is
+`trailers`), a value that is neither a string nor a number, or a string value holding a character other than a
+tab, U+0020 to U+007E and U+0080 to U+00FF (a CR, a LF, a NUL or another control character, DEL, or a character
+above U+00FF). Names are sent lower-case. An answer that `self.throwError()` gives (a custom error page, a JSON
+error body) carries none: it drops the fields recorded before it. A HEAD and a 204 carry none, as before.
+
+**What to check:** nothing for an action that uses `self.sendTrailers()`: its trailers now reach the client. An
+action that answers on `res.stream` itself and sends trailers from its own `wantTrailers` listener still sends
+none: call `res.addTrailers(fields)` before `res.stream.respond(headers, { waitForTrailers: true })`. Restart the
+bundle.
+
 ---
 
 ## 0.7.7 → 0.7.8
