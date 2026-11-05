@@ -249,7 +249,10 @@ A file is tagged with a group on the client via
 `data-gina-form-upload-group` (see below); on the wire the group travels in each
 multipart part. **Every file must map to a configured group:** a file with no
 group falls back to the default `untagged` group, and a group that is not declared
-in `groups` is rejected with **HTTP 400**. Each group's `allowedExtensions` and
+in `groups` is rejected with **HTTP 400**. Declared means one of the keys written in
+`groups`: a name such as `__proto__` or `constructor`, which an object resolves through
+`Object.prototype`, is not one (since 0.7.9; up to 0.7.8 such a name passed the check and
+the group's rules were skipped). Each group's `allowedExtensions` and
 `isMultipleAllowed` are then enforced — `untagged` included.
 
 ```mermaid

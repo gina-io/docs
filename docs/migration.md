@@ -118,6 +118,27 @@ each time it renders it and stores no compiled output, so restarting the bundle 
 
 Server-side only: **restart the bundle**.
 
+### Security — an upload group named after a member of `Object.prototype` is not a configured group (bundle restart)
+
+Up to 0.7.8, a multipart file part whose `group` parameter named a member of `Object.prototype` —
+`__proto__`, `constructor`, `hasOwnProperty`, `toString`, and the rest — passed the check that every
+file must map to a configured upload group: the check read the name on `upload.groups` without
+asking whether it was one of its own keys, so the name resolved to the inherited member, and the
+rules then read on it (`allowedExtensions`, `isMultipleAllowed`, `path`) read `undefined` and were
+skipped. The file was accepted whatever its extension, a single-file group accepted several, and
+the file was staged to the default upload directory instead of the group's. A client needed no
+account for it, and it sidestepped the restriction the [Limitations](/guides/file-uploads#limitations-and-gotchas)
+recommend, giving `untagged` its own `allowedExtensions`. Since 0.7.9 such a name is answered
+HTTP 400 as an unconfigured group, like any other unknown name. See
+[Configuring uploads](/guides/file-uploads#configuring-uploads).
+
+**What to check:** nothing to change. A group you declare keeps working whatever its name; only a
+name that no key in `groups` spells out is refused. If your application serves or runs uploaded
+files by their extension and relied on a restricted `untagged` group, upgrade and restart your
+bundles: the restriction held for every tagged group except those names.
+
+---
+
 ### Fixed — an HTML upload that stops while a file part is being written gets its error page (bundle restart)
 
 Up to 0.7.8, an HTML request whose multipart upload stopped while a file part was still being written
