@@ -434,6 +434,89 @@ if it is malformed.
 
 ---
 
+## Request-entry line
+
+Gina logs a request when it completes: `GET [200] /orders/42`. A request that blocks
+the bundle's main thread (a slow body parse, a middleware, an action or a render that
+does not yield) writes nothing until it ends, so while it holds the bundle it appears
+nowhere in the bundle's log. From 0.7.10 you can turn on a **request-entry line**: one
+`info` line written when an application request arrives, before its body is read.
+
+Set `server.logRequestStart` in the bundle's `settings.json`:
+
+```json
+{
+  "server": {
+    "logRequestStart": true
+  }
+}
+```
+
+Only the boolean `true` turns it on, and it is off by default. The setting is read once
+when the bundle starts, so turning it on or off takes a bundle restart. See
+[`settings.json` → `server`](/reference/settings#server).
+
+The entry line is written before every step that can block the bundle:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant B as Bundle
+    participant L as Bundle log
+    C->>B: request
+    B->>L: entry line, GET [>] /orders/42 [ req 7f3c2b18-… ]
+    B->>B: read and parse the body
+    B->>B: routing and middleware
+    B->>B: your action and its render
+    B->>L: completion line, GET [200] /orders/42
+```
+
+So a request that blocks the bundle has already written its entry line, and the log
+names it while it still holds the bundle. In text mode the two lines read:
+
+```
+[2026 Nov 05 10:40:02] [info   ][api@myproject] GET [>] /orders/42 [ req 7f3c2b18-… ]
+[2026 Nov 05 10:40:02] [info   ][api@myproject] GET [200] /orders/42
+```
+
+| Part | Meaning |
+|------|---------|
+| `GET` | the request method |
+| `[>]` | marks the request's arrival; the completion line has the status code in its place |
+| `/orders/42` | the request's path, without its query string; a control character in it is written as a visible escape (see [Line breaks in a logged value](#line-breaks-in-a-logged-value)) |
+| `[ req … ]` | the request's correlation id: an inbound `X-Request-Id`, sanitised as [above](#per-request-requestid-and-durationms), or the id Gina generates when there is none. The response carries the same id in its `X-Request-Id` header |
+
+In JSON mode both lines carry the request's `requestId` and `durationMs`, so a
+collector can pair them:
+
+```json
+{"ts":"2026-11-05T10:40:02.118Z","level":"info","bundle":"api@myproject","message":"GET [>] /orders/42 [ req 7f3c2b18-… ]","group":"api@myproject","msg":"GET [>] /orders/42 [ req 7f3c2b18-… ]","requestId":"7f3c2b18-…","durationMs":1}
+{"ts":"2026-11-05T10:40:02.124Z","level":"info","bundle":"api@myproject","message":"GET [200] /orders/42","group":"api@myproject","msg":"GET [200] /orders/42","requestId":"7f3c2b18-…","durationMs":7}
+```
+
+The entry line is an `info` line: a hierarchy that hides `info` (`warn`, `error`,
+`fatal`) hides it too, as it hides the completion line (see
+[Which messages appear at each hierarchy](#which-messages-appear-at-each-hierarchy)).
+
+### What writes no entry line
+
+The line is written where Gina starts work on an application request. Answers given
+before that point write none:
+
+- the framework's own `/_gina/*` endpoints, such as the health check
+  (`/_gina/health/check`), `/_gina/info`, `/_gina/cache/stats` and `/_gina/metrics`;
+- static files;
+- the `503` answers of [maintenance mode](/guides/maintenance-mode);
+- on the isaac engine, a page the in-memory [render cache](/guides/caching) serves.
+  Its completion line still records the hit:
+  `GET [200][gina-cache; hit; ttl=59; detail=memory] /orders`.
+
+A `/_gina/` path that none of the framework's endpoints answers, an unknown one for
+instance, goes through routing like any other request: it writes its entry line, then
+gets a `404`.
+
+---
+
 ## Line breaks in a logged value
 
 A log is only useful when one message is one record. In the text format a line

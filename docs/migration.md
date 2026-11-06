@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.7.9 → 0.7.10
+
+### Added — an opt-in log line when a request arrives (bundle restart)
+
+Gina logs a request when it completes, so a request that blocked the bundle (a slow body
+parse, a middleware, an action or a render) appeared nowhere in its log while it held
+the bundle. With `server.logRequestStart: true` in `settings.json`, each application
+request now also writes one `info` line when it arrives, before its body is read:
+
+```
+[2026 Nov 05 10:40:02] [info   ][api@myproject] GET [>] /orders/42 [ req 7f3c2b18-… ]
+```
+
+The id is the request's correlation id, the `X-Request-Id` the answer echoes; in JSON log
+mode the line also carries `requestId` and `durationMs`. The framework's own `/_gina/*`
+endpoints, static files and maintenance answers write no line, nor does a page the isaac
+engine's in-memory render cache serves. The setting is off by default, so nothing changes
+unless you turn it on; only the boolean `true` does, read when the bundle starts. See
+[Logging → Request-entry line](/guides/logging#request-entry-line).
+
+---
+
 ## 0.7.8 → 0.7.9
 
 ### Fixed — a live check that outlives its form no longer throws (bundle restart and re-bake)
