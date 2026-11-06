@@ -1010,10 +1010,10 @@ gates it again when a reset, or a failed staging, leaves the input with no file.
 
 Two limits:
 
-- **Declare the rule at the top level** of the rule file, under the input's name. A
-  rule that a [`_case_` condition](/guides/forms-and-validation#conditional-rules)
-  adds is not applied to a staged input, and a key written as a regular expression
-  does not match one.
+- **Declare the rule at the top level** of the rule file, under the input's name or
+  with a top-level key written as a regular expression that matches it: a rule that a
+  [`_case_` condition](/guides/forms-and-validation#conditional-rules) adds is not
+  applied to a staged input that has no rule of its own.
 - **The server sees no field for an input with no file.** With the default prefix
   (the input's name), the same rules passed to
   `gina.plugins.Validator(rules, data, formId)` see the input's files as the array
@@ -1023,6 +1023,15 @@ Two limits:
   it is given, so give it `''` under the input's name when the body has none, or
   check for the files in your action (see
   [Validating a submitted body in the controller](/guides/forms-and-validation#validating-a-submitted-body-in-the-controller)).
+
+:::caution Known issue in 0.7.9
+When a staged input has a rule of its own and a matching `_case_` condition names it
+too, its own value (the names of its files, or an empty string) is sent with the
+form's data. If fields of the input's files come before it in the form, that value
+lands in the files' list: under a top-level name such as `doc` it replaces the list,
+and the fields that came before it are lost; under a nested name such as `doc[files]`
+the list ends with that string. The fix ships in the next release.
+:::
 
 From 0.7.2 to 0.7.8 no rule ran on a staged input, so `isRequired` let the form be
 sent with no file. Before 0.7.2 the rules judged the input's own value, which the
