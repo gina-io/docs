@@ -669,6 +669,32 @@ curl 'http://127.0.0.1:<port>/_gina/cache/stats'
 
 ---
 
+## What a cache hit sends back
+
+A hit sends the stored body with the headers stored when the entry was filled,
+except these:
+
+| Header | On a hit |
+|---|---|
+| `Cache-Status` | Set for this response (see [Cache-Status response header](#cache-status-response-header)). |
+| `Cache-Control` | `max-age` is the time the entry has left, when it has a TTL. |
+| `Content-Security-Policy` with a nonce | A new nonce, in the header and in the page. |
+| `X-Request-Id` | This request's own id: its inbound `X-Request-Id` when valid, else a new one. |
+| `Set-Cookie` | The filling request's cookies are never stored, so never sent. |
+
+So a cookie set on a cached route, by a middleware or by the action, reaches
+only the visitor whose request filled the entry. On the Isaac engine a hit is
+answered before any middleware runs, so it carries no cookie at all: a page
+that needs a cookie per visitor, such as the [CSRF](/guides/csrf) token
+cookie, gets it from the next page that is not cached. On the Express engine,
+where only `redis` entries are served from the cache, the bundle's middleware
+runs before the hit and the cookies it sets are kept.
+
+Before 0.7.10 a hit also sent the stored `X-Request-Id` and `Set-Cookie`: those
+of the request that filled the entry.
+
+---
+
 ## Caching and sessions
 
 Cached responses are served **before** the controller runs, which means

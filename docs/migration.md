@@ -39,6 +39,22 @@ engine's in-memory render cache serves. The setting is off by default, so nothin
 unless you turn it on; only the boolean `true` does, read when the bundle starts. See
 [Logging → Request-entry line](/guides/logging#request-entry-line).
 
+### Security — a cached page no longer sends one visitor's cookie or request id to the others (bundle restart)
+
+Up to 0.7.9, a render-cache entry stored every header of the response that filled it, and
+every hit sent them back. A hit therefore answered with that first request's `X-Request-Id`,
+even when the request carried its own, and with its `Set-Cookie`: a cookie set before the
+render, by a middleware (the CSRF plugin's token cookie included) or by the action, reached
+every visitor of the cached page until the entry expired. The session cookie of
+`gina.plugins.Session` was not affected: express-session sets it when the response starts,
+after the entry is stored.
+
+Since 0.7.10 an entry stores neither header, and a hit skips them in an entry stored before
+(an `fs` entry's `.meta` file, a `redis` value). Each hit answers with its own
+`X-Request-Id` (a valid inbound one is kept), and a cookie set on a cached route reaches only
+the visitor whose request filled the entry. Set cookies meant for each visitor on routes you
+do not cache. See [Caching → What a cache hit sends back](/guides/caching#what-a-cache-hit-sends-back).
+
 ---
 
 ## 0.7.8 → 0.7.9
