@@ -55,6 +55,21 @@ Since 0.7.10 an entry stores neither header, and a hit skips them in an entry st
 the visitor whose request filled the entry. Set cookies meant for each visitor on routes you
 do not cache. See [Caching → What a cache hit sends back](/guides/caching#what-a-cache-hit-sends-back).
 
+### Fixed — a staged file input's own value stays out of the form's data under a `_case_` rule (bundle restart and re-bake)
+
+In 0.7.9, a staged file input (`data-gina-form-upload-action`) that had a rule of its own (under its name,
+or under a top-level key written as a regular expression that matches it) and that a matching `_case_`
+condition named too sent its own value with the form's data: the names of its files, or an empty string.
+When fields of the input's files came before it in the form, that value landed in the files' list: under a
+top-level name such as `doc` it replaced the list, and the fields that came before it were lost; under a
+nested name such as `doc[files]` the list ended with that string. Since 0.7.10 the value is left out
+whichever rule judges the input, as it already was for a staged input that no condition names. See
+[Rules on a staged input](/guides/file-uploads#rules-on-a-staged-input).
+
+**What to check:** nothing to change. A workaround that kept the input's own name out of every rule (a
+RegExp key anchored on the `[` that follows the name, so it matches only the staging's hidden fields)
+behaves the same after the fix.
+
 ---
 
 ## 0.7.8 → 0.7.9
