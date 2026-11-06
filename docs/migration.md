@@ -55,6 +55,10 @@ Since 0.7.10 an entry stores neither header, and a hit skips them in an entry st
 the visitor whose request filled the entry. Set cookies meant for each visitor on routes you
 do not cache. See [Caching → What a cache hit sends back](/guides/caching#what-a-cache-hit-sends-back).
 
+A security advisory,
+[GHSA-5gr9-hq8v-f4xc](https://github.com/gina-io/gina/security/advisories/GHSA-5gr9-hq8v-f4xc),
+accompanies the cookie fix.
+
 ### Fixed — a staged file input's own value stays out of the form's data under a `_case_` rule (bundle restart and re-bake)
 
 In 0.7.9, a staged file input (`data-gina-form-upload-action`) that had a rule of its own (under its name,
