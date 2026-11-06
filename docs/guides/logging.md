@@ -515,6 +515,130 @@ A `/_gina/` path that none of the framework's endpoints answers, an unknown one 
 instance, goes through routing like any other request: it writes its entry line, then
 gets a `404`.
 
+
+## Stall watchdog
+
+The [request-entry line](#request-entry-line) names a request that blocks the bundle,
+provided someone reads the log while the block lasts. A block that does not end is often
+ended from outside: the orchestrator's liveness probe gets no answer and the process is
+killed. A blocked main thread writes nothing of its own, since every log line goes through
+its event loop, so such a stall can leave no trace at all. From 0.7.11 a **stall
+watchdog** writes one: a worker thread watches the main thread and, when it stops for too
+long, writes a `crit` line itself while the main thread is still blocked.
+
+Set `server.stallWatchdog` in the bundle's `settings.json`:
+
+```json
+{
+  "server": {
+    "stallWatchdog": {
+      "enabled": true,
+      "threshold": "5s"
+    }
+  }
+}
+```
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `enabled` | boolean | `false` | Only the boolean `true` turns the watchdog on. A truthy value of another type (the string `"true"`) leaves it off, with a warning at boot. |
+| `threshold` | string or number | `"5s"` | How long the main thread may stay silent before a stall is reported: `"5s"`, `"1500ms"`, `"1m"`, or a number of milliseconds. At least `1s`. |
+| `inFlight` | integer | `8` | How many requests in flight the line names, the oldest first (1 to 64). |
+| `captureFrames` | boolean | `true` | Read the blocked thread's call frames (Node only). Validated now; takes effect with the frame capture. |
+| `frames` | integer | `8` | How many call frames the line names (1 to 32). Validated now; takes effect with the frame capture. |
+
+The block is read once when the bundle starts, so a change takes a bundle restart. On an
+enabled block, a key that is not in this table, or a wrong value, stops the boot with a
+message naming it, before the bundle listens. See
+[`settings.json` → `server`](/reference/settings#server).
+
+### How the watchdog works
+
+```mermaid
+sequenceDiagram
+    participant M as Main thread
+    participant W as Watchdog thread
+    participant O as stdout and gina tail
+    loop every 250 ms
+        M->>W: heartbeat
+    end
+    M->>W: request in: PUT /orders/42 [ req 7f3c2b18-… ]
+    Note over M: blocked (a body parse, an action, a render)
+    W->>W: no heartbeat for 5 s
+    W->>O: crit — main thread blocked, in flight: PUT /orders/42 …
+    Note over M: runs again
+    M->>W: heartbeat
+    W->>M: the stall is over: 6.1 s
+    M->>O: warn — main thread resumed
+```
+
+The main thread bumps a heartbeat every 250 ms, and tells the watchdog thread when an
+application request arrives (before its body is read, as the request-entry line is
+written) and when its response is done. When the heartbeat has not moved for
+`threshold`, the watchdog thread writes one line:
+
+```
+[2026 Nov 06 15:12:07] [crit   ][api@myproject] [ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 2: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s, GET /orders [ req 0c1d9e44-… ] 0.4s
+```
+
+| Part | Meaning |
+|------|---------|
+| `no heartbeat for 5.0s` | how long the main thread has been silent |
+| `in flight 2` | how many application requests have arrived and not finished; with more than `inFlight`, the line adds `(oldest 8)` and names those |
+| `PUT /orders/42 [ req … ] 5.3s` | one of them: its method, its path, its correlation id (the `X-Request-Id` its answer echoes) and its age |
+
+The requests are those that write a [request-entry line](#what-writes-no-entry-line),
+whether that line is on or not; their paths are written the same way, and a backtick
+in a path is written `%60`. One line per stall: while the stall lasts, nothing more is
+written. When the main thread runs again, it logs a `warn` line with the whole silence:
+
+```
+[2026 Nov 06 15:12:08] [warn   ][api@myproject] [ STALL ] main thread resumed: no heartbeat for 6.1s in all
+```
+
+### Where the line goes
+
+The logger runs on the blocked thread, so the watchdog thread writes its line itself:
+
+- to the process's **stdout**. Under [`gina-container`](/guides/k8s-docker#gina-container--foreground-bundle-launcher)
+  that is the container's log, which the orchestrator keeps after it ends the process;
+- to the **log relay `gina tail` reads**, when the bundle runs under the framework daemon
+  (`gina bundle:start`): the watchdog thread opens its own connection to it.
+
+It never writes to stderr, and the [file transport](#file-transport-experimental), which
+only the logger writes, does not get it. The `warn` line, written by the logger once the
+main thread runs again, reaches every transport.
+
+In JSON mode the line is one JSON object at `crit`, with a `stall` object:
+
+```json
+{"ts":"2026-11-06T14:12:07.338Z","level":"crit","bundle":"api@myproject","message":"[ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 1: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s","group":"api@myproject","msg":"[ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 1: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s","stall":{"ms":5000,"runtime":"node","captured":false,"frames":[],"inFlight":[{"id":"7f3c2b18-…","method":"PUT","path":"/orders/42","ms":5310}]}}
+```
+
+It has no `requestId` or `durationMs`: the stall is not one request's. `stall.captured`
+is `false` and `stall.frames` empty until the frame capture fills them. The line is
+masked with the bundle's [log redaction rules](#redacting-credentials-from-logs),
+including rules set after the bundle started.
+
+With [Prometheus metrics](/guides/observability#main-thread-stalls) enabled, each stall is also
+counted when the main thread runs again: `gina_main_thread_stalls_total` and
+`gina_main_thread_stall_seconds`.
+
+### What it costs, and what it cannot see
+
+Turned on, the watchdog costs one thread (about 13 MB of memory on Node, 7 MB on Bun) and
+under a microsecond per application request on Node; turned off, one test per request. It
+works on Node and Bun; the call frames are Node only.
+
+- A process that is stopped or asleep as a whole (`SIGSTOP`, a laptop's sleep) is not a
+  stall: the watchdog thread stops with it, and starts counting again when it runs again.
+  For the same reason, a host so loaded that the watchdog thread itself does not run for
+  `threshold` gets no line.
+- A main thread paused at a debugger breakpoint is a stall: leave the watchdog off while
+  you debug.
+- In development, the framework reloads its code on every request, which can take
+  hundreds of milliseconds: keep `threshold` at a few seconds.
+
 ---
 
 ## Line breaks in a logged value

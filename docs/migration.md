@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.7.10 → 0.7.11
+
+### Added — an opt-in stall watchdog (bundle restart)
+
+A request that blocks the bundle's main thread also blocks its logging, and an
+orchestrator's liveness probe may end the process before the block ends. With
+`server.stallWatchdog` in `settings.json`, a worker thread watches the main thread and,
+when it stays silent for `threshold` (5 s by default), writes one `crit` line itself while
+the main thread is still blocked, to stdout and to the log relay `gina tail` reads:
+
+```
+[2026 Nov 06 15:12:07] [crit   ][api@myproject] [ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 2: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s, GET /orders [ req 0c1d9e44-… ] 0.4s
+```
+
+When the main thread runs again, a `warn` line gives the whole silence, and with metrics
+on, `gina_main_thread_stalls_total` and `gina_main_thread_stall_seconds` count the stall.
+The watchdog is off by default, so nothing changes unless you turn it on; only the
+boolean `true` does, read when the bundle starts, and on an enabled block an unknown key
+or a wrong value refuses the boot. See [Logging → Stall watchdog](/guides/logging#stall-watchdog).
+
+---
+
 ## 0.7.9 → 0.7.10
 
 ### Added — an opt-in log line when a request arrives (bundle restart)

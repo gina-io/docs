@@ -164,6 +164,27 @@ Histogram with default buckets covering 5ms to 10s (override via
 [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]
 ```
 
+### Main-thread stalls
+
+With the [stall watchdog](/guides/logging#stall-watchdog) on
+(`settings.json > server.stallWatchdog`, from 0.7.11), two more series, without labels,
+exported at `0` from the bundle's start:
+
+```
+gina_main_thread_stalls_total
+gina_main_thread_stall_seconds
+```
+
+A stall is counted when the main thread runs again: the counter by one, and the
+histogram with the whole silence, in seconds, over these buckets:
+
+```
+[1, 2, 5, 10, 30, 60, 120, 300]
+```
+
+A stall that ends with the process, an orchestrator killing it, is never counted: the
+stall line in the log is its record.
+
 ---
 
 ## Cardinality safety

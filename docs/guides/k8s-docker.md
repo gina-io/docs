@@ -267,6 +267,19 @@ If you build that readiness endpoint yourself and use
 every probe that targets it must carry the bypass key.
 :::
 
+### When a probe fails on a blocked bundle
+
+The health endpoint is answered on the bundle's main thread. A request that blocks that
+thread (a long synchronous body parse, action or render) also stops the probe's answers,
+and the orchestrator ends the process once the probe has failed enough times, usually
+before the bundle could log anything about it. Turn on the
+[stall watchdog](/guides/logging#stall-watchdog) (`settings.json > server.stallWatchdog`):
+a worker thread writes one `crit` line to the container's stdout while the main thread is
+still blocked, naming the requests in flight, so the container log you read after the
+restart says what held the bundle. Keep its `threshold` (5 s by default) below the time
+your probe takes to fail (`periodSeconds` × `failureThreshold`, plus `timeoutSeconds`), or
+the process can be ended before the line is written.
+
 ---
 
 ## Base image
