@@ -81,6 +81,10 @@ the answer is held at the stream window on Node.js, and on Bun what it sends is 
 answers are unchanged: the connection closes after them, as before. See
 [Staged file lifecycle](/guides/file-uploads#staged-file-lifecycle).
 
+A security advisory,
+[GHSA-mwx9-q5hx-wj8p](https://github.com/gina-io/gina/security/advisories/GHSA-mwx9-q5hx-wj8p),
+accompanies this fix.
+
 **What to check:** nothing to change. A client still writing when the answer arrives reads the whole
 answer, then a stream reset with code `NO_ERROR`; RFC 9113 tells a client not to discard the answer
 because of it.
@@ -131,6 +135,10 @@ account for it, and it sidestepped the restriction the [Limitations](/guides/fil
 recommend, giving `untagged` its own `allowedExtensions`. Since 0.7.9 such a name is answered
 HTTP 400 as an unconfigured group, like any other unknown name. See
 [Configuring uploads](/guides/file-uploads#configuring-uploads).
+
+A security advisory,
+[GHSA-r54p-mw8g-66f7](https://github.com/gina-io/gina/security/advisories/GHSA-r54p-mw8g-66f7),
+accompanies this fix.
 
 **What to check:** nothing to change. A group you declare keeps working whatever its name; only a
 name that no key in `groups` spells out is refused. If your application serves or runs uploaded
@@ -215,6 +223,10 @@ case runs in linear time: 2,000 objects take a few milliseconds, and 40,000 with
 The results are unchanged, except that an element that refers to itself no longer throws
 `RangeError: Maximum call stack size exceeded` when every id is already present. See [Merge](/api/merge).
 
+A security advisory,
+[GHSA-jw6q-q694-2f66](https://github.com/gina-io/gina/security/advisories/GHSA-jw6q-q694-2f66),
+accompanies this fix.
+
 **What to check:** nothing to change. `lib/merge` is in the browser bundle: restart the bundle and rebuild
 its static assets (`gina bundle:build`).
 
@@ -234,8 +246,14 @@ file. A staged input without a rule is unchanged. See
 
 - A rule you declared on a staged input now runs: a required one blocks a submit with no file, as it did
   before 0.7.2.
-- Declare it at the top level of the rule file, under the input's name: a rule that a `_case_` condition
-  adds is not applied to a staged input, and a key written as a regular expression does not match one.
+- Declare it at the top level of the rule file, under the input's name or with a top-level key written
+  as a regular expression that matches it: a rule that a `_case_` condition adds is not applied to a
+  staged input that has no rule of its own.
+- Known issue in 0.7.9: when a staged input has a rule of its own and a matching `_case_` condition names
+  it too, its own value (the names of its files, or an empty string) is sent with the form's data. If
+  fields of the input's files come before it in the form, that value lands in the files' list: under a
+  top-level name such as `doc` it replaces the list, and the fields that came before it are lost; under
+  a nested name such as `doc[files]` the list ends with that string. The fix ships in the next release.
 - On the server, an input with no file sends none of the fields gina writes for its files, and
   `gina.plugins.Validator(rules, data, formId)` checks only the fields present in the data it is given:
   give it `''` under the input's name when the body has none, or check for the files in your action.
