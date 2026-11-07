@@ -42,6 +42,26 @@ or a wrong value refuses the boot. Reading the call frames takes the blocked thr
 milliseconds once per stall; `captureFrames: false` turns it off. See
 [Logging → Stall watchdog](/guides/logging#stall-watchdog).
 
+### Added — an opt-in load limit for popins (bundle restart and re-bake)
+
+A popin whose content request never answered kept its loading shell, and its trigger
+stayed busy, for as long as the request hung. `loadTimeout` sets a limit in
+milliseconds, per popin or for every popin without its own:
+
+```js
+new Popin({ name: 'report', preOpen: true, loadTimeout: 15000 });
+gina.setOptions({ popin: { loadTimeout: 15000 } });
+```
+
+A load still unanswered at the limit is aborted and fails like any failed load: `error`
+fires with `{ status: 408, error: 'Request Timeout' }`, then the shell closes unless a
+listener loaded content, and the trigger is released. A hover or focus warm of the URL
+carries the same limit, so a click that adopted a stalled warm fails at most twice the
+limit after the warm began. There is no limit unless you set one, so nothing changes
+until you do. The popin plugin ships in each bundle's browser bundle: run
+`gina bundle:build` to pick it up. See
+[Popins and dialogs → A load that never answers](/guides/popin#a-load-that-never-answers).
+
 ---
 
 ## 0.7.9 → 0.7.10

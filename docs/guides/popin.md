@@ -386,6 +386,40 @@ keeps the dialog open with its own content — and the shell closes if nothing h
 so a failed load never leaves a spinner behind. A popin without `preOpen` shows nothing
 while it loads and never enters the state.
 
+### A load that never answers
+
+By default a load waits as long as its request does, so a content request that never
+answers keeps the shell showing and the trigger busy. Give the popin a limit, in
+milliseconds, to fail such a load instead:
+
+```js
+new Popin({ name: 'report', preOpen: true, loadTimeout: 15000 });
+```
+
+To give the same limit to every popin that has none of its own:
+
+```js
+gina.setOptions({ popin: { loadTimeout: 15000 } });
+```
+
+A load still unanswered at the limit is aborted and fails like any other failed load:
+`error` fires with `{ status: 408, error: 'Request Timeout' }`, a listener that calls
+`loadContent()` keeps the dialog open with its own content, and otherwise the shell
+closes. The trigger is released either way, and the limit applies with or without
+`preOpen`.
+
+- A popin's own `loadTimeout` wins over the one set through `gina.setOptions()`, and a
+  popin's `0` means no limit for that popin.
+- Closing the popin during the load still cancels it: no `error` follows, before the
+  limit or after it.
+- A hover or focus warm of the URL carries the same limit. A click that adopted a warm
+  still in flight therefore does not wait forever: when the warm fails at its limit, the
+  click loads the content itself, with its own limit, so the `error` comes at most twice
+  the limit after the warm began.
+
+There is no limit unless you set one: failing a slow load changes behaviour, so it stays
+opt-in. *Added in 0.7.11.*
+
 ## The `gina.popin` API
 
 ```js
@@ -431,7 +465,7 @@ form's HTML answer goes (see [Reacting to the result](/guides/forms-and-validati
 | `close` | the popin |
 | `loaded` | the response body |
 | `success` | the parsed JSON body — a JSON answer that neither redirects nor reloads |
-| `error` | `{ status, error }` |
+| `error` | `{ status, error }` — `{ status: 408, error: 'Request Timeout' }` when the [load limit](#a-load-that-never-answers) stopped the load |
 | `destroy` | `{ name, id }` |
 
 :::note Two names that do not fire
