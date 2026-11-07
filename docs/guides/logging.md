@@ -524,7 +524,8 @@ ended from outside: the orchestrator's liveness probe gets no answer and the pro
 killed. A blocked main thread writes nothing of its own, since every log line goes through
 its event loop, so such a stall can leave no trace at all. From 0.7.11 a **stall
 watchdog** writes one: a worker thread watches the main thread and, when it stops for too
-long, writes a `crit` line itself while the main thread is still blocked.
+long, writes a `crit` line itself while the main thread is still blocked, naming where it
+is blocked (its call frames, on Node) and the requests in flight.
 
 Set `server.stallWatchdog` in the bundle's `settings.json`:
 
@@ -544,8 +545,8 @@ Set `server.stallWatchdog` in the bundle's `settings.json`:
 | `enabled` | boolean | `false` | Only the boolean `true` turns the watchdog on. A truthy value of another type (the string `"true"`) leaves it off, with a warning at boot. |
 | `threshold` | string or number | `"5s"` | How long the main thread may stay silent before a stall is reported: `"5s"`, `"1500ms"`, `"1m"`, or a number of milliseconds. At least `1s`. |
 | `inFlight` | integer | `8` | How many requests in flight the line names, the oldest first (1 to 64). |
-| `captureFrames` | boolean | `true` | Read the blocked thread's call frames (Node only). Validated now; takes effect with the frame capture. |
-| `frames` | integer | `8` | How many call frames the line names (1 to 32). Validated now; takes effect with the frame capture. |
+| `captureFrames` | boolean | `true` | Name the blocked thread's call frames in the line (see [The call frames](#the-call-frames)). Node only: on Bun the line says `frames: none (bun)`. With `false`, the line names no frames and the main thread is never paused. |
+| `frames` | integer | `8` | How many call frames the line names, innermost first (1 to 32). A deeper stack ends with `<- …`. |
 
 The block is read once when the bundle starts, so a change takes a bundle restart. On an
 enabled block, a key that is not in this table, or a wrong value, stops the boot with a
@@ -565,7 +566,8 @@ sequenceDiagram
     M->>W: request in: PUT /orders/42 [ req 7f3c2b18-… ]
     Note over M: blocked (a body parse, an action, a render)
     W->>W: no heartbeat for 5 s
-    W->>O: crit — main thread blocked, in flight: PUT /orders/42 …
+    W->>M: pause, read the call frames, resume (Node)
+    W->>O: crit — main thread blocked, frames: …, in flight: PUT /orders/42 …
     Note over M: runs again
     M->>W: heartbeat
     W->>M: the stall is over: 6.1 s
@@ -575,17 +577,21 @@ sequenceDiagram
 The main thread bumps a heartbeat every 250 ms, and tells the watchdog thread when an
 application request arrives (before its body is read, as the request-entry line is
 written) and when its response is done. When the heartbeat has not moved for
-`threshold`, the watchdog thread writes one line:
+`threshold`, the watchdog thread reads where the main thread is blocked (on Node, see
+[The call frames](#the-call-frames)), then writes one line. This one comes from a bundle
+`web` whose action `swBlock` blocks the main thread for 6 s, with `threshold: "2s"` (the
+request ids are shortened):
 
 ```
-[2026 Nov 06 15:12:07] [crit   ][api@myproject] [ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 2: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s, GET /orders [ req 0c1d9e44-… ] 0.4s
+[2026 Nov 07 01:27:18] [crit   ][web@myproject] [ STALL ] main thread blocked: no heartbeat for 2.1s — frames: WebContentController.swBlock (src/web/controllers/controller.content.js:21:9) <- _msvDispatchBand (core/router.js:1355:57) <- _dispatchControllerAction (core/router.js:1319:21) <- _idemThenDispatch (core/router.js:1397:21) <- Router.route (core/router.js:1399:17) <- onNextMiddleware (core/server.js:8372:28) <- composeHeadersMiddleware (core/gna.js:2093:45) <- nextMiddleware (core/server.js:8342:9) <- … — in flight 2: PUT /web/sw/put [ req 706305fe-… ] 2.4s, GET /web/sw/block [ req ec3ec774-… ] 2.1s
 ```
 
 | Part | Meaning |
 |------|---------|
-| `no heartbeat for 5.0s` | how long the main thread has been silent |
+| `no heartbeat for 2.1s` | how long the main thread has been silent when the line is written |
+| `frames: WebContentController.swBlock (…:21:9) <- …` | where the main thread is blocked: its call frames, innermost first, each called from the next; when they cannot be read, `frames: none (<reason>)` (see [The call frames](#the-call-frames)) |
 | `in flight 2` | how many application requests have arrived and not finished; with more than `inFlight`, the line adds `(oldest 8)` and names those |
-| `PUT /orders/42 [ req … ] 5.3s` | one of them: its method, its path, its correlation id (the `X-Request-Id` its answer echoes) and its age |
+| `PUT /web/sw/put [ req … ] 2.4s` | one of them: its method, its path, its correlation id (the `X-Request-Id` its answer echoes) and its age |
 
 The requests are those that write a [request-entry line](#what-writes-no-entry-line),
 whether that line is on or not; their paths are written the same way, and a backtick
@@ -593,8 +599,39 @@ in a path is written `%60`. One line per stall: while the stall lasts, nothing m
 written. When the main thread runs again, it logs a `warn` line with the whole silence:
 
 ```
-[2026 Nov 06 15:12:08] [warn   ][api@myproject] [ STALL ] main thread resumed: no heartbeat for 6.1s in all
+[2026 Nov 07 01:27:22] [warn   ][web@myproject] [ STALL ] main thread resumed: no heartbeat for 6.3s in all
 ```
+
+### The call frames
+
+On Node, before it writes the line, the watchdog thread reads where the main thread is
+blocked. It connects to the main thread's inspector from inside the process (no
+`--inspect` flag, and no port is opened), pauses the thread, reads its call frames,
+resumes it and disconnects. Each step has one second and the whole capture three; a step
+that fails or runs out of time ends the capture with the disconnect, which resumes the
+thread.
+
+The line names the top `frames` call frames, innermost first, each called from the next
+(`<-`), and ends with `<- …` when the stack is deeper. As in a stack trace, a frame names
+its function (`(anonymous)` when it has none), then its file, line and column, counted
+from 1. A file of the project is written relative to the project's root, a file of the
+framework relative to the framework's directory, and Node's own as Node names them
+(`node:internal/timers`).
+
+#### When the line names no frames
+
+When the frames cannot be read, the line says why in their place:
+
+| The line says | Why |
+|---------------|-----|
+| `frames: none (native-call-or-outside-js)` | The main thread did not answer within a second: it is inside a native call (a synchronous `crypto`, `zlib`, `fs` or child-process call) or otherwise outside JavaScript, and answers only when it runs JavaScript again. It is not paused afterwards, and the line comes a second later than without frames. |
+| `frames: none (debugger)` | Another inspector session, a debugger at a breakpoint, already holds the main thread paused. The watchdog neither pauses nor resumes it, and leaves that pause in place. |
+| `frames: none (ended)` | The main thread ran again during the capture: the frames read would be those of the code that ran next, not the stall's. |
+| `frames: none (bun)` | The bundle runs on Bun, whose inspector cannot be used without opening a debugging port, which the watchdog never does. |
+| `frames: none (unavailable)` | The runtime has no inspector to connect to. |
+| `frames: none (error:<code>)` | A step of the capture failed with that error. |
+
+With `captureFrames: false`, the line names no frames and the main thread is never paused.
 
 ### Where the line goes
 
@@ -609,15 +646,17 @@ It never writes to stderr, and the [file transport](#file-transport-experimental
 only the logger writes, does not get it. The `warn` line, written by the logger once the
 main thread runs again, reaches every transport.
 
-In JSON mode the line is one JSON object at `crit`, with a `stall` object:
+In JSON mode the line is one JSON object at `crit`, with a `stall` object (here with
+`"frames": 2`):
 
 ```json
-{"ts":"2026-11-06T14:12:07.338Z","level":"crit","bundle":"api@myproject","message":"[ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 1: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s","group":"api@myproject","msg":"[ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 1: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s","stall":{"ms":5000,"runtime":"node","captured":false,"frames":[],"inFlight":[{"id":"7f3c2b18-…","method":"PUT","path":"/orders/42","ms":5310}]}}
+{"ts":"2026-11-07T00:27:01.969Z","level":"crit","bundle":"web@myproject","message":"[ STALL ] main thread blocked: no heartbeat for 2.0s — frames: WebContentController.swBlock (src/web/controllers/controller.content.js:21:9) <- _msvDispatchBand (core/router.js:1355:57) <- … — in flight 2: PUT /web/sw/put [ req ebdb2693-… ] 2.3s, GET /web/sw/block [ req 149b9620-… ] 2.0s","group":"web@myproject","msg":"[ STALL ] main thread blocked: no heartbeat for 2.0s — frames: WebContentController.swBlock (src/web/controllers/controller.content.js:21:9) <- _msvDispatchBand (core/router.js:1355:57) <- … — in flight 2: PUT /web/sw/put [ req ebdb2693-… ] 2.3s, GET /web/sw/block [ req 149b9620-… ] 2.0s","stall":{"ms":2007,"runtime":"node","captured":true,"frames":[{"fn":"WebContentController.swBlock","file":"src/web/controllers/controller.content.js","line":21,"col":9},{"fn":"_msvDispatchBand","file":"core/router.js","line":1355,"col":57}],"inFlight":[{"id":"ebdb2693-…","method":"PUT","path":"/web/sw/put","ms":2281},{"id":"149b9620-…","method":"GET","path":"/web/sw/block","ms":1987}]}}
 ```
 
-It has no `requestId` or `durationMs`: the stall is not one request's. `stall.captured`
-is `false` and `stall.frames` empty until the frame capture fills them. The line is
-masked with the bundle's [log redaction rules](#redacting-credentials-from-logs),
+It has no `requestId` or `durationMs`: the stall is not one request's. `stall.frames`
+holds the call frames as objects (`fn`, `file`, `line`, `col`), with `stall.captured`
+`true`; when none were read, `captured` is `false`, `frames` is empty, and `message` says
+why. The line is masked with the bundle's [log redaction rules](#redacting-credentials-from-logs),
 including rules set after the bundle started.
 
 With [Prometheus metrics](/guides/observability#main-thread-stalls) enabled, each stall is also
@@ -628,14 +667,17 @@ counted when the main thread runs again: `gina_main_thread_stalls_total` and
 
 Turned on, the watchdog costs one thread (about 13 MB of memory on Node, 7 MB on Bun) and
 under a microsecond per application request on Node; turned off, one test per request. It
-works on Node and Bun; the call frames are Node only.
+works on Node and Bun; the call frames are Node only. Reading them takes the blocked
+thread 18 to 61 ms once per stall (measured on a JavaScript block), with no lasting
+slowdown after it.
 
 - A process that is stopped or asleep as a whole (`SIGSTOP`, a laptop's sleep) is not a
   stall: the watchdog thread stops with it, and starts counting again when it runs again.
   For the same reason, a host so loaded that the watchdog thread itself does not run for
   `threshold` gets no line.
-- A main thread paused at a debugger breakpoint is a stall: leave the watchdog off while
-  you debug.
+- A main thread paused at a debugger breakpoint is a stall: the line says
+  `frames: none (debugger)`, and the watchdog leaves the debugger's pause alone. Leave the
+  watchdog off while you debug.
 - In development, the framework reloads its code on every request, which can take
   hundreds of milliseconds: keep `threshold` at a few seconds.
 

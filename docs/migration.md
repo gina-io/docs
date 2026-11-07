@@ -27,17 +27,20 @@ A request that blocks the bundle's main thread also blocks its logging, and an
 orchestrator's liveness probe may end the process before the block ends. With
 `server.stallWatchdog` in `settings.json`, a worker thread watches the main thread and,
 when it stays silent for `threshold` (5 s by default), writes one `crit` line itself while
-the main thread is still blocked, to stdout and to the log relay `gina tail` reads:
+the main thread is still blocked, naming where it is blocked (its call frames, on Node)
+and the requests in flight, to stdout and to the log relay `gina tail` reads:
 
 ```
-[2026 Nov 06 15:12:07] [crit   ][api@myproject] [ STALL ] main thread blocked: no heartbeat for 5.0s — in flight 2: PUT /orders/42 [ req 7f3c2b18-… ] 5.3s, GET /orders [ req 0c1d9e44-… ] 0.4s
+[2026 Nov 07 01:27:18] [crit   ][web@myproject] [ STALL ] main thread blocked: no heartbeat for 2.1s — frames: WebContentController.swBlock (src/web/controllers/controller.content.js:21:9) <- _msvDispatchBand (core/router.js:1355:57) <- _dispatchControllerAction (core/router.js:1319:21) <- _idemThenDispatch (core/router.js:1397:21) <- Router.route (core/router.js:1399:17) <- onNextMiddleware (core/server.js:8372:28) <- composeHeadersMiddleware (core/gna.js:2093:45) <- nextMiddleware (core/server.js:8342:9) <- … — in flight 2: PUT /web/sw/put [ req 706305fe-… ] 2.4s, GET /web/sw/block [ req ec3ec774-… ] 2.1s
 ```
 
 When the main thread runs again, a `warn` line gives the whole silence, and with metrics
 on, `gina_main_thread_stalls_total` and `gina_main_thread_stall_seconds` count the stall.
 The watchdog is off by default, so nothing changes unless you turn it on; only the
 boolean `true` does, read when the bundle starts, and on an enabled block an unknown key
-or a wrong value refuses the boot. See [Logging → Stall watchdog](/guides/logging#stall-watchdog).
+or a wrong value refuses the boot. Reading the call frames takes the blocked thread some
+milliseconds once per stall; `captureFrames: false` turns it off. See
+[Logging → Stall watchdog](/guides/logging#stall-watchdog).
 
 ---
 

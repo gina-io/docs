@@ -275,10 +275,12 @@ and the orchestrator ends the process once the probe has failed enough times, us
 before the bundle could log anything about it. Turn on the
 [stall watchdog](/guides/logging#stall-watchdog) (`settings.json > server.stallWatchdog`):
 a worker thread writes one `crit` line to the container's stdout while the main thread is
-still blocked, naming the requests in flight, so the container log you read after the
-restart says what held the bundle. Keep its `threshold` (5 s by default) below the time
-your probe takes to fail (`periodSeconds` × `failureThreshold`, plus `timeoutSeconds`), or
-the process can be ended before the line is written.
+still blocked, naming where it is blocked (its call frames, on Node) and the requests in
+flight, so the container log you read after the restart says what held the bundle. Keep
+its `threshold` (5 s by default) below the time your probe takes to fail
+(`periodSeconds` × `failureThreshold`, plus `timeoutSeconds`), with room for the frames
+to be read (some milliseconds, about three seconds at most), or the process can be ended
+before the line is written.
 
 ---
 
