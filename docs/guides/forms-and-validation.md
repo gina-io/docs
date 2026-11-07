@@ -400,6 +400,10 @@ gina.config.a11y = {
     uploadComplete : 'Fichier envoyé',
     uploadPending  : 'En attente de la fin de l’envoi…',
     fileRemoved    : '%s supprimé',
+    // a selection a staged input refuses before staging (since 0.7.11)
+    uploadNotSent     : '%s n’a pas été envoyé',
+    uploadTypeRefused : '%s n’a pas été envoyé : ce type de fichier n’est pas accepté',
+    uploadSizeRefused : '%s n’a pas été envoyé : le fichier est trop lourd',
     // a request that ends without an answer
     transportError : 'Échec du transfert : la requête n’a pas abouti'
 };
@@ -409,8 +413,10 @@ Anything you do not translate keeps its English default. These are separate
 from rule error labels, which are keyed by rule name and set with
 [`setErrorLabels`](#overriding-a-label-at-runtime).
 
-`fileRemoved` takes a `%s` placeholder, replaced with the file name — keep it
-in your translation, and put it wherever the sentence needs it.
+`fileRemoved` takes a `%s` placeholder, replaced with the file name, and the
+three upload refusals take one replaced with the names of the refused files,
+joined with `, ` — keep it in your translation, and put it wherever the sentence
+needs it.
 
 | Key | Default | Announced when |
 | --- | --- | --- |
@@ -420,9 +426,13 @@ in your translation, and put it wherever the sentence needs it.
 | `uploadPending` | `Waiting for the upload to finish…` | a submit waits for one of the form's staged uploads ([details](/guides/file-uploads#submitting-while-an-upload-is-in-flight)) |
 | `fileRemoved` | `%s removed` | a staged file's reset/delete control removes it |
 | `transportError` | `Transport failure: the request did not complete` | a request ends without an answer (status `0`): it is the failure's `data.error`, which a staged upload shows in its error element and announces |
+| `uploadNotSent` | `%s was not uploaded` | a staged input with no staging action refuses a selection before any request; shown in its error element and announced ([details](/guides/file-uploads#refused-before-staging)) |
+| `uploadTypeRefused` | `%s was not uploaded: this type of file is not accepted` | a staged input's `accept` refuses a file before staging |
+| `uploadSizeRefused` | `%s was not uploaded: the file is too large` | a file over the input's `data-gina-form-upload-max-size` is refused before staging |
 
 *The `uploadStarted`, `uploadComplete` and `fileRemoved` keys are new in 0.6.4;
-`uploadPending` and `transportError` are new in 0.7.2.*
+`uploadPending` and `transportError` are new in 0.7.2; `uploadNotSent`,
+`uploadTypeRefused` and `uploadSizeRefused` are new in 0.7.11.*
 
 ---
 

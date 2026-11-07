@@ -62,6 +62,49 @@ until you do. The popin plugin ships in each bundle's browser bundle: run
 `gina bundle:build` to pick it up. See
 [Popins and dialogs → A load that never answers](/guides/popin#a-load-that-never-answers).
 
+### Changed — a staged input's `accept` refuses a file before staging (bundle restart and re-bake)
+
+A staged file input sent every file it was given: the browser's picker only filters what it
+shows (a user can still choose « All files »), and a drop is not filtered at all. Since 0.7.11
+the input applies its `accept` to the files it is given, and refuses the whole selection before
+any request when one of them is of a type `accept` excludes: *"photo.png was not uploaded: this
+type of file is not accepted"* shows in its error element and is announced, and its
+`data-gina-form-upload-on-error` callback runs with
+`{ refused: true, reason: 'type', files, error, transportError: false }`. A new attribute,
+`data-gina-form-upload-max-size` (the grammar of `upload.maxFieldsSize`), refuses a file over
+its size the same way (`reason: 'size'`). The server stays the authority. See
+[File uploads → Refused before staging](/guides/file-uploads#refused-before-staging).
+
+**What to check:** a staged input whose `accept` names fewer types than its upload group's
+`allowedExtensions` now refuses the files of the other types: list them in `accept`, or remove
+it. If you translate gina's announcements, add `uploadTypeRefused` and `uploadSizeRefused` (and
+`uploadNotSent`, below) to `gina.config.a11y`; until then they show in English.
+
+### Fixed — a staged input with no staging action refuses a file before any request (bundle restart and re-bake)
+
+Up to 0.7.10, a staged file input with no `data-gina-form-upload-action`, on a page without an
+`upload-to-tmp-xml` route to fall back on, posted a chosen or dropped file to `/null`, and the
+404 that answered was reported as a failed staging. Since 0.7.11 it refuses the file before any
+request, with *"photo.png was not uploaded"* (a new translatable string, `uploadNotSent`), and
+its on-error callback runs with `reason: 'action'`. See
+[Refused before staging](/guides/file-uploads#refused-before-staging).
+
+**What to check:** nothing to change: give such an input a staging action, or name a route
+`upload-to-tmp-xml`, if it is meant to stage files.
+
+### Fixed — a `_case_` rule on a staged input judges its files (bundle restart and re-bake)
+
+Up to 0.7.10, a rule that a `_case_` condition gave a staged file input was not applied when the
+rule file held one `_case_` key, so a required staged input refused nothing; with two or more,
+the condition of a key that was not the last one judged the input's own value, so an edit form
+showing a saved file was refused, and a file just staged passed on the browser's placeholder.
+Since 0.7.11 such a rule judges the files the input holds, as a rule under its name does, and
+the submit control follows the input's files when the rules hold a `_case_` key. See
+[Rules on a staged input](/guides/file-uploads#rules-on-a-staged-input).
+
+**What to check:** a form whose `_case_` rules name a staged input now enforces them: a required
+one refuses a submit made while the input holds no file.
+
 ---
 
 ## 0.7.9 → 0.7.10

@@ -441,6 +441,11 @@ survival.)
 A `multiple` input stages several files in one request, and files dropped on
 a zone take the same path: see [Drag-and-drop (dropzone)](#drag-and-drop-dropzone).
 
+*Since 0.7.11* the input checks what it is given before sending anything: a file
+its `accept` excludes, a file over its `data-gina-form-upload-max-size`, or any
+file when it has no staging action, refuses the selection before any request (see
+[Refused before staging](#refused-before-staging)).
+
 ```mermaid
 flowchart TD
     A["User picks a file"] --> B["Client builds a virtual<br/>multipart form, POSTs the file<br/>to data-gina-form-upload-action"]
@@ -487,6 +492,12 @@ the client falls back to the route names `upload-to-tmp-xml` (stage) and
 `upload-delete-from-tmp-xml` (remove), so you can either name your routes that or
 point the attributes at routes of your own.
 
+*Changed in 0.7.11.* Without the attribute and without an `upload-to-tmp-xml`
+route to fall back on, the input refuses a chosen or dropped file before any
+request, with *"photo.png was not uploaded"* (see
+[Refused before staging](#refused-before-staging)). It used to post the file to
+`/null`, and the 404 that answered was reported as a failed staging.
+
 Your staging action receives the file as an ordinary multipart request
 (`req.files`), stores it somewhere temporary with `self.store()`, and responds
 with JSON the client understands:
@@ -523,13 +534,15 @@ browse-able `tmpUri` for the preview.
 |---|---|
 | `data-gina-form-upload-action` | URL (or route name) the chosen file is POSTed to for staging. Defaults to the route `upload-to-tmp-xml`. |
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
+| `accept` | The standard attribute. *Since 0.7.11* the client also applies it to the files it is given (a choice in the picker, which only filters what it shows, and a drop): a file of a type it excludes refuses the selection before any request. See [Refused before staging](#refused-before-staging). |
+| `data-gina-form-upload-max-size` | The largest file the client sends, per file: a number with an optional `b`, `kb`/`k`, `mb`/`m` or `gb`/`g` (1024-based), a bare number in megabytes, as `upload.maxFieldsSize` reads. A larger file refuses the selection before any request; `0` sets no limit. *New in 0.7.11.* See [Refused before staging](#refused-before-staging). |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
-| `data-gina-form-upload-error` | Id of the element that displays staging errors. Defaults to `<fieldId>-error`. Optional — see [When staging fails](#when-staging-fails). |
+| `data-gina-form-upload-error` | Id of the element that displays staging errors and (*since 0.7.11*) refusals. Defaults to `<fieldId>-error`. Optional — see [When staging fails](#when-staging-fails). |
 | `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
 | `data-gina-form-upload-dropzone` | Id of an element to bind as a drag-and-drop target for this input. **Explicit id only — no default**; without the attribute the feature is inactive. *New in 0.5.24.* |
 | `data-gina-form-upload-prefix` | Field-name prefix for the generated hidden fields. Defaults to the input's `name`. |
 | `data-gina-form-upload-on-success` | Bare name of a `window` callback run when staging succeeds. |
-| `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails. |
+| `data-gina-form-upload-on-error` | Bare name of a `window` callback run when staging fails, or (*since 0.7.11*) when a selection is [refused before staging](#refused-before-staging). |
 | `data-gina-form-upload-on-progress` | Bare name of a `window` callback run on each staging transfer-progress frame. *New in 0.5.24.* |
 | `data-gina-form-upload-on-reset` / `-on-delete` | Bare name of a `window` callback run after a *staged* (reset) or *saved* (delete) file's removal. *New in 0.5.15.* |
 | `data-gina-form-upload-reset-label` | Visible text of the auto-generated reset control, and the prefix of its accessible name (`<label> <filename>`). Defaults to `Reset`. |
@@ -919,6 +932,84 @@ fields. A staging that a newer selection
 [cancelled](#choosing-another-file-while-one-is-uploading) does not fail, so the
 newer selection stays on the input while it uploads.
 
+### Refused before staging
+
+*New in 0.7.11.* A staged input checks the files it is given, chosen in the
+picker or dropped on its [zone](#drag-and-drop-dropzone), before it sends
+anything, and refuses the whole selection when one of them cannot or should not
+be sent:
+
+- **no staging action**: the input has no `data-gina-form-upload-action` and the
+  page has no `upload-to-tmp-xml` route to fall back on (see
+  [You provide the staging routes](#you-provide-the-staging-routes)); every file
+  is refused, with *"photo.png was not uploaded"*;
+- **a type the input's `accept` excludes**: *"photo.png was not uploaded: this
+  type of file is not accepted"*;
+- **a file over `data-gina-form-upload-max-size`**: *"scan.pdf was not uploaded:
+  the file is too large"*.
+
+```html
+<input type="file" id="proof" name="proof" multiple
+    accept=".pdf, image/*"
+    data-gina-form-upload-max-size="8MB"
+    data-gina-form-upload-action="/media/stage"
+    data-gina-form-upload-on-error="onProofError">
+<p id="proof-error"></p>
+```
+
+`accept` is read as the browser reads it: tokens separated by commas, each
+trimmed and case-insensitive. A `.ext` token matches the end of the file name
+(`.pdf` matches `SCAN.PDF`), a `type/*` token the start of the file's type
+(`image/*` matches `image/png`, and `*/*` any type), any other `type/subtype`
+token the type exactly. The type is the one the browser gives the file, so a file
+it gives no type matches an extension token only. A token of another shape, such
+as `pdf` without its dot or a type with parameters like `image/png;q=1`, is
+ignored, with a console warning in dev mode, and an `accept` that holds no valid
+token checks no type.
+
+`data-gina-form-upload-max-size` reads as
+[`upload.maxFieldsSize`](#configuring-uploads) does: a number with an optional
+`b`, `kb`/`k`, `mb`/`m` or `gb`/`g` (1024-based), a bare number in megabytes. It
+applies to each file: a file the size of the limit passes, `0` sets no limit, and
+a value that does not parse checks no size, with a console warning in dev mode.
+The type is checked first, so a file refused for its type is not checked for its
+size.
+
+A refused selection sends nothing, and none of its files is staged, not even
+those that passed. The message names the refused files, one line per reason (the
+type, then the size), as text in the input's error element, and the form's live
+region announces it. The `data-gina-form-upload-on-error` callback runs with
+`(event, result)`; for a selection refused for both reasons, `result` is:
+
+```js
+{
+  refused: true,
+  reason: 'type',
+  files: ['notes.txt', 'big.pdf'],
+  error: 'notes.txt was not uploaded: this type of file is not accepted. big.pdf was not uploaded: the file is too large',
+  transportError: false
+}
+```
+
+`reason` is `'action'`, `'type'` (when a file was refused for its type) or
+`'size'`, and `files` names every refused file. No `error.<id>` event is
+dispatched, since no staging request exists. The input is emptied once its
+`change` event is over; its zone goes back to `idle`; the files the input already
+held keep their previews, links and hidden fields; and a staging of its earlier
+selection still in flight finishes and takes the input over. In dev mode a
+console error names the attribute that refused the files. The three messages
+translate through `gina.config.a11y` (`uploadNotSent`, `uploadTypeRefused`,
+`uploadSizeRefused`; see
+[Translating the status announcements](/guides/forms-and-validation#translating-the-status-announcements)).
+
+These checks only spare a request: the server stays the authority and enforces
+the [upload group's](#configuring-uploads) `allowedExtensions` and
+`upload.maxFieldsSize` whatever the client does. Keep `accept` in step with the
+group: an `accept` that names fewer types than the group allows refuses the
+others.
+
+This is **browser-bundled**: rebuild your bundles (re-bake) to pick it up.
+
 ### Choosing another file while one is uploading
 
 *Changed in 0.7.2.* Choosing another file while the input's previous file is
@@ -1008,12 +1099,19 @@ On a form with [live checking](/guides/forms-and-validation#live-checking), the
 input's files: a required staged input keeps it gated until a file is chosen, and
 gates it again when a reset, or a failed staging, leaves the input with no file.
 
-Two limits:
+*Changed in 0.7.11.* A rule that a
+[`_case_` condition](/guides/forms-and-validation#conditional-rules) gives a staged
+input judges its files the same way, also when the input has no rule of its own,
+and the submit control follows the input's files when the form's rules hold a
+`_case_` key. Before 0.7.11 such a rule was not applied when the rule file held one
+`_case_` key, so a required staged input refused nothing; with two or more, the
+condition of a key that was not the last one judged the input's own value, so an
+edit form showing a saved file was refused, and a file just staged passed on the
+browser's placeholder. A top-level key written as a regular expression that
+matches the input's name is a rule of its own, as a rule under its name is.
 
-- **Declare the rule at the top level** of the rule file, under the input's name or
-  with a top-level key written as a regular expression that matches it: a rule that a
-  [`_case_` condition](/guides/forms-and-validation#conditional-rules) adds is not
-  applied to a staged input that has no rule of its own.
+One limit:
+
 - **The server sees no field for an input with no file.** With the default prefix
   (the input's name), the same rules passed to
   `gina.plugins.Validator(rules, data, formId)` see the input's files as the array
@@ -1048,8 +1146,9 @@ Point the input at it:
 ```
 
 Files dropped on the zone go through the **exact same staging pipeline** as a
-native picker selection — group tagging, the staging POST, previews, hidden
-metadata fields, reset/delete, and upload progress all behave identically.
+native picker selection — the [checks before staging](#refused-before-staging)
+(*since 0.7.11*), group tagging, the staging POST, previews, hidden metadata
+fields, reset/delete, and upload progress all behave identically.
 
 Unlike the other target attributes, `data-gina-form-upload-dropzone` has **no
 default id**: the attribute must name an element explicitly, and the feature
@@ -1136,9 +1235,14 @@ preview container, a group) as in [Wire it up](#wire-it-up).
   still sidestep a restrictive *named* group by tagging its file `untagged`: if you
   rely on an allow-list, give `untagged` its own `allowedExtensions`, or require an
   explicit group.
-- **No client-side size or type checking.** The client does not pre-validate a
-  file's size or extension before staging — enforcement is server-side only (the
-  upload-group rules). Do not assume the browser blocked anything.
+- **The client checks only what you declare; the server stays the authority.**
+  *Since 0.7.11* a staged input refuses a file its `accept` excludes, or one over
+  its `data-gina-form-upload-max-size`, before sending it (see
+  [Refused before staging](#refused-before-staging)); without those attributes it
+  checks neither, and before 0.7.11 it checked nothing. Either way the checks
+  that count are the server's (the upload-group rules and `upload.maxFieldsSize`):
+  a client can skip the page's script, so do not assume the browser blocked
+  anything.
 - **A staging request that never answers keeps a waiting submit waiting.** The
   client sets no timeout on staging requests, so a submit
   [waiting for an upload](#submitting-while-an-upload-is-in-flight) stays waiting
