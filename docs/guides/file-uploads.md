@@ -535,7 +535,7 @@ browse-able `tmpUri` for the preview.
 | `data-gina-form-upload-action` | URL (or route name) the chosen file is POSTed to for staging. Defaults to the route `upload-to-tmp-xml`. |
 | `data-gina-form-upload-group` | The upload group tagged onto the file (drives the server-side extension/count checks). Defaults to `untagged`. |
 | `accept` | The standard attribute. *Since 0.7.11* the client also applies it to the files it is given (a choice in the picker, which only filters what it shows, and a drop): a file of a type it excludes refuses the selection before any request. See [Refused before staging](#refused-before-staging). |
-| `data-gina-form-upload-max-size` | The largest file the client sends, per file: a number with an optional `b`, `kb`/`k`, `mb`/`m` or `gb`/`g` (1024-based), a bare number in megabytes, as `upload.maxFieldsSize` reads. A larger file refuses the selection before any request; `0` sets no limit. *New in 0.7.11.* See [Refused before staging](#refused-before-staging). |
+| `data-gina-form-upload-max-size` | The largest file the client sends, per file: a number with an optional `b`, `kb`/`k`, `mb`/`m` or `gb`/`g` (1024-based), a bare number in megabytes, as `upload.maxFieldsSize` reads. A larger file refuses the selection before any request; `0` or an empty value sets no limit. *New in 0.7.11.* See [Refused before staging](#refused-before-staging). |
 | `data-gina-form-upload-preview` | Id of the element that receives image previews. Defaults to `<fieldId>-preview`. |
 | `data-gina-form-upload-error` | Id of the element that displays staging errors and (*since 0.7.11*) refusals. Defaults to `<fieldId>-error`. Optional — see [When staging fails](#when-staging-fails). |
 | `data-gina-form-upload-progress` | Id of the element that displays staging transfer progress. Defaults to `<fieldId>-progress`; active only when the element exists. *New in 0.5.24.* |
@@ -960,18 +960,19 @@ be sent:
 `accept` is read as the browser reads it: tokens separated by commas, each
 trimmed and case-insensitive. A `.ext` token matches the end of the file name
 (`.pdf` matches `SCAN.PDF`), a `type/*` token the start of the file's type
-(`image/*` matches `image/png`, and `*/*` any type), any other `type/subtype`
+(`image/*` matches `image/png`), `*/*` any file, and any other `type/subtype`
 token the type exactly. The type is the one the browser gives the file, so a file
-it gives no type matches an extension token only. A token of another shape, such
-as `pdf` without its dot or a type with parameters like `image/png;q=1`, is
-ignored, with a console warning in dev mode, and an `accept` that holds no valid
-token checks no type.
+it gives no type matches only an extension token or `*/*`. A token of another
+shape, such as `pdf` without its dot or a type with parameters like
+`image/png;q=1`, is ignored, with a console warning in dev mode, and an `accept`
+that holds no valid token checks no type.
 
 `data-gina-form-upload-max-size` reads as
 [`upload.maxFieldsSize`](#configuring-uploads) does: a number with an optional
 `b`, `kb`/`k`, `mb`/`m` or `gb`/`g` (1024-based), a bare number in megabytes. It
-applies to each file: a file the size of the limit passes, `0` sets no limit, and
-a value that does not parse checks no size, with a console warning in dev mode.
+applies to each file: a file the size of the limit passes, `0` or an empty value
+sets no limit, and a value that does not parse checks no size, with a console
+warning in dev mode.
 The type is checked first, so a file refused for its type is not checked for its
 size.
 
