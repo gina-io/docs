@@ -121,6 +121,22 @@ See [The `gina.popin` API](/guides/popin#the-ginapopin-api).
 **What to check:** code that reads back an options object it passed to `load()`: the object no
 longer holds the popin's options.
 
+### Fixed — `downloadFromURL()` answers a bad `options.file` or url with a `500` (bundle restart)
+
+Up to 0.7.10, `self.downloadFromURL(url, { file })` checked the extension of the url's own
+filename but not that of `options.file`, which replaces it. A `file` with no extension made of
+ASCII letters, digits or `_` (`report`, `notes.été`, `a.pdf ` with a trailing space), or one
+that was not a string, made the method throw inside its promise, and so did a `url` that was
+not a string, or a scheme such as `httpfoo` that passed the old check for `http`: the request
+got no response, and a call that was neither awaited nor caught raised an unhandled rejection.
+Since 0.7.11 each of these is answered with a `500` through `throwError()` before any request
+is made, as a url without an extension already was, and only the `http` and `https` schemes
+pass. The controller runs on the server: restart the bundle to pick it up. See
+[`self.downloadFromURL()`](/guides/controller#selfdownloadfromurlurl-options-cb).
+
+**What to check:** a download whose name comes from data, such as a file's name as a user gave
+it: make sure it ends in a known extension, or leave `file` out and let the url name it.
+
 ---
 
 ## 0.7.9 → 0.7.10

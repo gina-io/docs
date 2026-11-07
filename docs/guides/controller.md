@@ -376,14 +376,32 @@ in a filename with an extension, since that is what names the download. By defau
 response is an attachment, with the filename as an RFC 6266 quoted-string, plus a
 `filename*` parameter for a name with a character above U+00FF, as for
 [`downloadFromLocal()`](#selfdownloadfromlocalfilename); pass
-`{ contentDisposition: 'inline' }` to let the browser display it instead. Any other
-scheme, or a url without a filename, is answered with a `500` through `throwError()`.
+`{ contentDisposition: 'inline' }` to let the browser display it instead.
 
 ```js
 this.logo = function(req, res, next) {
   self.downloadFromURL('https://example.com/brand/logo.png');
 };
 ```
+
+To save the download under another name, pass that name as `options.file`. It replaces the
+url's name, so it must also end in an extension made of ASCII letters, digits or `_` (`.pdf`,
+not `.été`): the extension gives the `content-type`, from gina's `mime.types`.
+
+```js
+this.invoice = function(req, res, next) {
+  self.downloadFromURL('https://files.example.com/2026/proof.pdf', {
+    file: 'invoice-' + req.params.id + '.pdf'
+  });
+};
+```
+
+The method answers a `500` through `throwError()`, and makes no request, when the url is not
+a string, its scheme is not `http` or `https`, it does not end in a filename, that filename
+or `options.file` has no such extension, the extension is not in `mime.types`, or
+`options.file` is not a string. Up to 0.7.10, a url that was not a string, a scheme such as
+`httpfoo`, or an `options.file` without such an extension made the method's promise reject
+instead, and the request got no response.
 
 ### `self.redirect(url, ignoreWebRoot)`
 
