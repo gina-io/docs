@@ -449,6 +449,13 @@ the open — `open` fires once, from that completion — and the content still i
 lands afterwards as any later `loadContent()` would. `gina.popin.loadContent(html)`
 reaches open popins only, since a loading popin is not the active one.
 
+`load(name, url, options)` copies the options it is given: the object you pass is
+left as it was, so one object can serve several loads, and each popin keeps its own
+options. *Fixed in 0.7.11:* two popins loaded with `load()` and no options, or with
+one options object passed to both loads, shared one options object, so the second
+showed the first one's loading shell (`preOpen`) and took its `loadingShell` and
+class.
+
 `getActivePopin()` returns **open** popins only: with two open it returns the most
 recently opened one, and a popin that is registered but not yet open — during its
 own click-time load, for instance — is never returned. Prefer looking a popin up

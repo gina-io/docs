@@ -105,6 +105,22 @@ the submit control follows the input's files when the rules hold a `_case_` key.
 **What to check:** a form whose `_case_` rules name a staged input now enforces them: a required
 one refuses a submit made while the input holds no file.
 
+### Fixed — two popins loaded with `gina.popin.load()` no longer share their options (bundle restart and re-bake)
+
+Up to 0.7.10, `gina.popin.load(name, url)` called with no options made the popin's options the
+plugin's own request defaults, and called with options it made them the object passed. Two
+popins loaded that way, or one options object passed to two loads, therefore shared one options
+object: the second popin took the first one's `preOpen` (it showed the first popin's loading
+shell), its `loadingShell` and its class, and the object passed gained the popin's options.
+Since 0.7.11 `load()` copies the options it is given and leaves the object as it was. A load
+without options to another site also no longer stops later popin loads to a sibling subdomain
+from sending credentials. Popins opened by their `data-gina-dialog` triggers were not affected.
+The popin plugin ships in each bundle's browser bundle: run `gina bundle:build` to pick it up.
+See [The `gina.popin` API](/guides/popin#the-ginapopin-api).
+
+**What to check:** code that reads back an options object it passed to `load()`: the object no
+longer holds the popin's options.
+
 ---
 
 ## 0.7.9 → 0.7.10
