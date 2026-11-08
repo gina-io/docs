@@ -355,12 +355,17 @@ this.partialNav = function(req, res, next) {
 
 Streams a file from the local filesystem to the client as an attachment. The
 `content-type` is derived from the file's extension, and the `content-disposition`
-header carries the file's basename as an RFC 6266 quoted-string. Since 0.7.8, a name
-with a character above U+00FF also gets an RFC 8187 `filename*=UTF-8''…` parameter,
-which browsers prefer, after a `filename` fallback that reads `?` for each such
-character. An accent typed as a separate combining mark is composed first, so a name
-such as `résumé.pdf` keeps the plain form. Before 0.7.8 such a name was answered with a
-`500` on HTTP/1.1.
+header carries the file's basename as an RFC 6266 quoted-string. A name made only of
+printable ASCII characters and tabs keeps this plain form. Any other name, such as one
+with an accented letter like `é` or a character above U+00FF, also gets an RFC 8187
+`filename*=UTF-8''…` parameter, which browsers prefer, after an all-ASCII `filename`
+fallback for clients that read only `filename`: accents are dropped, and any other
+character outside printable ASCII reads `?`. So `résumé.pdf` is sent as
+`filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf`, and an accent typed as
+a separate combining mark gives the same header. Up to 0.7.10 a Latin-1 character
+(U+0080 to U+00FF) went out as a raw byte in `filename`, and Chromium 156 and WebKit
+27.2 saved the file with `�` (U+FFFD) in its place; before 0.7.8 a name with a
+character above U+00FF was answered with a `500` on HTTP/1.1.
 
 ```js
 this.export = function(req, res, next) {
@@ -374,8 +379,8 @@ this.export = function(req, res, next) {
 Fetches an `http` or `https` resource and streams it to the client. The url must end
 in a filename with an extension, since that is what names the download. By default the
 response is an attachment, with the filename as an RFC 6266 quoted-string, plus a
-`filename*` parameter for a name with a character above U+00FF, as for
-[`downloadFromLocal()`](#selfdownloadfromlocalfilename); pass
+`filename*` parameter for a name with any character other than printable ASCII or a tab,
+as for [`downloadFromLocal()`](#selfdownloadfromlocalfilename); pass
 `{ contentDisposition: 'inline' }` to let the browser display it instead.
 
 ```js

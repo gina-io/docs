@@ -137,6 +137,26 @@ pass. The controller runs on the server: restart the bundle to pick it up. See
 **What to check:** a download whose name comes from data, such as a file's name as a user gave
 it: make sure it ends in a known extension, or leave `file` out and let the url name it.
 
+### Fixed — a download name with an accented letter is saved right in Chromium and WebKit (bundle restart)
+
+Up to 0.7.10, `self.downloadFromLocal()`, `self.downloadFromURL()` and
+`self.serveFromStorage()` with `download`, on its in-process path, sent a name holding a
+Latin-1 character (U+0080 to U+00FF, as in `résumé.pdf`) as raw bytes in `filename="…"`.
+Chromium 156 and WebKit 27.2, from a page served as UTF-8, saved such a file as
+`r�sum�.pdf`, with `�` (U+FFFD) in place of each such letter. Since 0.7.11 a name with any
+character other than printable ASCII or a tab gets an RFC 8187 `filename*=UTF-8''…`
+parameter, which browsers prefer, after an all-ASCII `filename` fallback: `résumé.pdf` is
+sent as `filename="resume.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9.pdf` and saved as
+`résumé.pdf`. A name of printable ASCII keeps its exact header. The controller runs on the
+server: restart the bundle to pick it up. See
+[`self.downloadFromLocal()`](/guides/controller#selfdownloadfromlocalfilename).
+
+**What to check:** a client that reads only `filename`, such as `curl -OJ` or a script that
+parses `filename` itself, now gets an ASCII name: accents are dropped (`resume.pdf`), and
+any other character outside printable ASCII reads `?` (`café’s.pdf` gives `cafe?s.pdf`,
+where 0.7.8 to 0.7.10 sent `café?s.pdf` with a raw `é`). The offload path of
+`serveFromStorage()` builds its own header and is unchanged.
+
 ---
 
 ## 0.7.9 → 0.7.10
