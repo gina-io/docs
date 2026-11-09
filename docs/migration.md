@@ -219,6 +219,22 @@ any other character outside printable ASCII reads `?` (`café’s.pdf` gives `ca
 where 0.7.8 to 0.7.10 sent `café?s.pdf` with a raw `é`). The offload path of
 `serveFromStorage()` builds its own header and is unchanged.
 
+### Fixed — `self.redirect()` no longer fails on a route that binds a URL segment as `code` (bundle restart)
+
+Up to 0.7.10, `self.redirect()` sent the `param.code` of the route it read as the status
+without checking it, and `req.routing.param` keeps a binding's placeholder text: a route
+declaring `"url": "/item/:code"` with `"code": ":code"` made every redirect that read it send
+the status `:code`. Over HTTP/1.1 the request answered `500`; over HTTP/2 it answered `200`, a
+page showing the redirect's JSON. Since 0.7.11 `param.code` sets the status only when it is
+`301`, `302`, `303`, `307` or `308`, read as Node reads a status (`"302"` works); any other
+value answers `301` and logs a warning once per route and value. The controller runs on the
+server: restart the bundle to pick it up. See
+[Redirect routes](/guides/routing#redirect-routes).
+
+**What to check:** a route whose `param.code` is not one of the five statuses, such as `200`,
+`300` or `304`, which were sent as they were, now answers `301`; a URL segment bound as `code`
+is best renamed with its placeholder (`"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`).
+
 ---
 
 ## 0.7.9 → 0.7.10

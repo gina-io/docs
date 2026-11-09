@@ -164,6 +164,8 @@ this.get = function(req, res, next) {
 `req.params.<key>` holds the **actual URL value** captured at request time (e.g. `"abc-123"`).
 
 `req.routing.param` is the **raw routing config** for this request — it contains the placeholder declaration (`":id"`) and static values you set in `routing.json` (e.g. `"code": 302`). Use it to read static routing metadata; never use it to read URL parameter values.
+
+Bind a URL segment under a name gina does not read as configuration. A key such as `code` (the [redirect status](#redirect-routes)) or `section` (see [Section dispatch](#section-dispatch)) keeps the placeholder text in `req.routing.param`, so `"code": ":code"` hands gina `":code"` as its redirect status: since 0.7.11 that answers `301` and logs a warning; up to 0.7.10 every redirect reading that route failed. Bind the segment under another name, such as `"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`.
 :::
 
 ### Multiple URLs
@@ -331,13 +333,13 @@ slashes, flags after the last slash):
 
 ```json
 "docs": {
-  "url": "/docs/:section",
+  "url": "/docs/:topic",
   "requirements": {
-    "section": "/^(intro|quickstart|reference)$/i"
+    "topic": "/^(intro|quickstart|reference)$/i"
   },
   "param": {
     "control": "docs",
-    "section": ":section"
+    "topic": ":topic"
   }
 }
 ```
@@ -527,7 +529,9 @@ in the HTTP server. Use `param.ignoreWebRoot: true` to opt out for a specific ro
 ## Redirect routes
 
 Redirect a URL to another path using `param.path`. An optional `param.code` sets
-the status code (default: `301`).
+the status code: `301`, `302`, `303`, `307` or `308` (default: `301`). Since 0.7.11 any other
+value answers `301` and logs a warning once per route; up to 0.7.10 it was passed on as it was,
+and a value Node refuses as a status answered `500`.
 
 In the `dev` environment and on reverse-proxied requests, redirect responses carry
 `Cache-Control: no-cache, no-store, must-revalidate` so browsers never cache them —
