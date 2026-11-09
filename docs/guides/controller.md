@@ -401,12 +401,19 @@ this.invoice = function(req, res, next) {
 };
 ```
 
-The method answers a `500` through `throwError()`, and makes no request, when the url is not
-a string, its scheme is not `http` or `https`, it does not end in a filename, that filename
-or `options.file` has no such extension, the extension is not in `mime.types`, or
-`options.file` is not a string. Up to 0.7.10, a url that was not a string, a scheme such as
-`httpfoo`, or an `options.file` without such an extension made the method's promise reject
-instead, and the request got no response.
+The method reads the `options` object without changing it: it works on a copy of the object
+and of its `headers`, so one object can serve every call, such as an options object kept at
+module level. Up to 0.7.10 it wrote its defaults, the formatted `Content-Disposition` and the
+forwarded headers into that object, so a second call given the same object went out under the
+first one's filename and request id.
+
+The method answers a `500` through `throwError()`, and makes no request, when `options` is
+neither an object nor `null` (a string or a number, say), the url is not a string, its scheme
+is not `http` or `https`, it does not end in a filename, that filename or `options.file` has
+no such extension, the extension is not in `mime.types`, or `options.file` is not a string.
+Up to 0.7.10, such an `options`, a url that was not a string, a scheme such as `httpfoo`, or
+an `options.file` without such an extension made the method's promise reject instead, and the
+request got no response.
 
 ### `self.redirect(url, ignoreWebRoot)`
 
