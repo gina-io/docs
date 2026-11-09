@@ -407,6 +407,12 @@ host is that of a bundle named in `app.json`'s [`proxy`](/reference/app#proxy) a
 another port, the request goes to that bundle's port. Up to 0.7.10 an `https` url without a port
 went to port 80, and that override put the port in place of the host: both answered a `500`.
 
+The host and the port are read from the url's authority, what follows `scheme://` up to the
+first `/`, `?` or `#`, so a `:<digits>` later in the path or the query is not a port. An IPv6
+literal is written in brackets (`https://[::1]:8443/report.pdf`). Credentials do not go in the
+url: pass them in `options.auth` (`'user:password'`). Up to 0.7.10 a `:<digits>/` anywhere in
+the url set the port, and a `user:password@` or an IPv6 literal broke the host.
+
 The method reads the `options` object without changing it: it works on a copy of the object
 and of its `headers`, so one object can serve every call, such as an options object kept at
 module level. Up to 0.7.10 it wrote its defaults, the formatted `Content-Disposition` and the
@@ -415,8 +421,9 @@ first one's filename and request id.
 
 The method answers a `500` through `throwError()`, and makes no request, when `options` is
 neither an object nor `null` (a string or a number, say), the url is not a string, its scheme
-is not `http` or `https`, it does not end in a filename, that filename or `options.file` has
-no such extension, the extension is not in `mime.types`, or `options.file` is not a string.
+is not `http` or `https`, it carries credentials before its host (`user:password@`, or `user@`
+alone), it does not end in a filename, that filename or `options.file` has no such extension,
+the extension is not in `mime.types`, or `options.file` is not a string.
 Up to 0.7.10, such an `options`, a url that was not a string, a scheme such as `httpfoo`, or
 an `options.file` without such an extension made the method's promise reject instead, and the
 request got no response.

@@ -182,6 +182,23 @@ to the bundle's port. The controller runs on the server: restart the bundle to p
 **What to check:** a url on a proxied bundle's host that names another service's port on that
 host: it now reaches the bundle's port, where up to 0.7.10 it answered a `500`.
 
+### Fixed — `downloadFromURL()` reads the host and the port from the url's authority (bundle restart)
+
+Up to 0.7.10, `self.downloadFromURL(url)` took the port from the first `:<digits>/` anywhere in
+the url, so a path segment such as `/files/a:1/x.pdf`, or a query holding another url with a
+port, sent the request to that port. It took the host as the text before the first `/` with its
+first `:<digits>` cut out, so a `user:password@` stayed in the host and an IPv6 literal lost
+part of its address (`[::1]` became `[:]`): neither request could reach its host. Since 0.7.11
+the host and the port come from the url's authority only, what follows `scheme://` up to the
+first `/`, `?` or `#`, and an IPv6 literal is written in brackets. A url that carries
+credentials now answers a `500` and names `options.auth`, where they go. The controller runs on
+the server: restart the bundle to pick it up. See
+[`self.downloadFromURL()`](/guides/controller#selfdownloadfromurlurl-options-cb).
+
+**What to check:** a download url with a `:<digits>/` in its path or its query now goes to the
+port its authority names, or to `options.port`, or to its scheme's; a url that carries
+credentials answers a `500` until they move to `options.auth`.
+
 ### Fixed — a download name with an accented letter is saved right in Chromium and WebKit (bundle restart)
 
 Up to 0.7.10, `self.downloadFromLocal()`, `self.downloadFromURL()` and
