@@ -155,6 +155,33 @@ bundle to pick it up. See
 **What to check:** code that reads back `contentDisposition`, `headers` or a default from an
 options object it passed to `downloadFromURL()`: the object no longer holds them.
 
+### Fixed — `downloadFromURL()` sends an `https` url without a port to port 443 (bundle restart)
+
+Up to 0.7.10, `self.downloadFromURL(url)` sent an `https` url that names no port, such as the
+guide's `https://example.com/brand/logo.png`, to port 80: the method's defaults carried
+`port: 80`, which Node's https client uses before its own default of 443. The TLS handshake then
+met whatever answered on port 80, or nothing at all, and the method answered a `500`. Since
+0.7.11 such a url goes to port 443, and an `http` url without a port still goes to port 80. A
+port in the url, or `options.port` when the url names none, is used as before. The controller
+runs on the server: restart the bundle to pick it up. See
+[`self.downloadFromURL()`](/guides/controller#selfdownloadfromurlurl-options-cb).
+
+**What to check:** a workaround that adds `:443` to such urls, or passes `port: 443`, keeps
+working and can go.
+
+### Fixed — `downloadFromURL()` sends a url aimed at a proxied bundle's host on another port to that bundle's port (bundle restart)
+
+Up to 0.7.10, when the url's host was that of a bundle named in `app.json`'s
+[`proxy`](/reference/app#proxy) (a `bundle@project` hostname) and the url's port was not that
+bundle's, `self.downloadFromURL()` logged « Overriding port to fit protocol upgrade » and then
+put the bundle's port in place of the host: the request was never made, and the method answered
+a `500` (« The "options.host" property must be of type string »). Since 0.7.11 the request goes
+to the bundle's port. The controller runs on the server: restart the bundle to pick it up. See
+[`self.downloadFromURL()`](/guides/controller#selfdownloadfromurlurl-options-cb).
+
+**What to check:** a url on a proxied bundle's host that names another service's port on that
+host: it now reaches the bundle's port, where up to 0.7.10 it answered a `500`.
+
 ### Fixed — a download name with an accented letter is saved right in Chromium and WebKit (bundle restart)
 
 Up to 0.7.10, `self.downloadFromLocal()`, `self.downloadFromURL()` and

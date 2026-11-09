@@ -401,6 +401,12 @@ this.invoice = function(req, res, next) {
 };
 ```
 
+A url that names no port goes to its scheme's port, 443 for `https` and 80 for `http`;
+`options.port` sets one for a url that names none, and a port in the url wins. When the url's
+host is that of a bundle named in `app.json`'s [`proxy`](/reference/app#proxy) and the url names
+another port, the request goes to that bundle's port. Up to 0.7.10 an `https` url without a port
+went to port 80, and that override put the port in place of the host: both answered a `500`.
+
 The method reads the `options` object without changing it: it works on a copy of the object
 and of its `headers`, so one object can serve every call, such as an options object kept at
 module level. Up to 0.7.10 it wrote its defaults, the formatted `Content-Disposition` and the
