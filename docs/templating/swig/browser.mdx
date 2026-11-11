@@ -88,7 +88,7 @@ swig.registerBundle(require('./dist/templates.js'));
 
 See [CLI — AOT bundle](./cli#aot-bundle--compile-a-directory) for the full flag reference and caveats.
 
-A compiled template keeps the behaviour of the swig release that compiled it, so compile your templates again when you upgrade swig: a bundle compiled by 2.9.10 and registered on 2.9.11 still prints `undefined` for `{{ items|first }}` over an empty list. A bundle compiled before `2.12.1` also keeps its unguarded native `set` targets and custom-tag fragments, and one compiled before `2.9.10` its subscripts ([GHSA-8mf3-p375-389g](./security#ghsa-8mf3-p375-389g)).
+A compiled template keeps the behaviour of the swig release that compiled it, so compile your templates again when you upgrade swig: a bundle compiled by 2.9.10 and registered on 2.9.11 still prints `undefined` for `{{ items|first }}` over an empty list. A bundle compiled before `2.12.1` also keeps its unguarded native `set` targets and custom-tag fragments, and one compiled before `2.9.10` its subscripts ([GHSA-8mf3-p375-389g](./security#ghsa-8mf3-p375-389g)). A bundle compiled before `2.12.2` also keeps the old answers of native `in` and of an object-literal `"__proto__"` key, and a bundle compiled by `2.12.2` needs a `2.12.2` runtime, full or runtime-only: on `2.12.1`, native `in` throws `_utils.hasKey is not a function`.
 
 ## Strict CSP — the runtime-only build
 

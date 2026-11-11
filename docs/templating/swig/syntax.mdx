@@ -73,7 +73,7 @@ Conditional: `? :` (ternary), `?:` (Elvis)
 {{ user.nickname ?: user.name }}
 ```
 
-`in` tests a key: a property name of an object or an index of an array. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
+`in` tests a key: a property name of an object or an index of an array. Since `2.12.2` a member the object gets only from `Object.prototype`, such as `toString` or `hasOwnProperty`, does not count; own keys, keys from another prototype (a class's methods) and an array's indexes, `length` and methods do. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
 
 The ternary's `else` branch is required — `{{ x ? "a" }}` throws `Expected colon in ternary expression`. Both operators work in `{{ }}` output and in tag arguments such as `{% if %}`, `{% set %}`, and `{% for %}`.
 

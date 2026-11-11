@@ -65,6 +65,8 @@ Declares a named override point inside a template that is being extended.
 
 Blocks must have unique names within a template: what a repeated name renders is undefined, though since `2.9.12` it renders alike on the two [render paths](./loaders#async-loaders) in most shapes. Use [`parent`](#parent) inside an overriding block to emit the parent's content.
 
+Since `2.12.2` a block named `__proto__` fails to compile with `Unsafe block name "__proto__" is not allowed (prototype-chain guard) on line N.`, where earlier releases lost the extending template's override of it. Blocks named `constructor`, `prototype` or `toString` work, and since `2.12.2` so does one named `hasOwnProperty`, which threw a `TypeError` through `extends`.
+
 A block nested in another block is a definition of its own name, so an extending template can override it without overriding the block around it. Since `2.9.12` this also holds for a block nested in any block of the extending template, even when the root has no block for the enclosing one: over `<{% block b %}P{% endblock %}>`, the child `{% extends "base.html" %}{% block zz %}{% block b %}N{% endblock %}{% endblock %}` renders `<N>`, where it rendered `<P>` before.
 
 ## else
@@ -173,7 +175,7 @@ Conditional. Supports `and`, `or`, `not`, comparison operators, `in`, and the `?
 {% if not items %}Empty.{% endif %}
 ```
 
-`in` tests a key: a property name of an object or an index of an array. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
+`in` tests a key: a property name of an object or an index of an array. Since `2.12.2` a member the object gets only from `Object.prototype`, such as `toString` or `hasOwnProperty`, does not count; own keys, keys from another prototype (a class's methods) and an array's indexes, `length` and methods do. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.
 
 Branch with [`elseif`](#elseif) / [`else`](#else).
 

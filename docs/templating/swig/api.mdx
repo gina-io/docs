@@ -307,7 +307,7 @@ swig.precompile(source, options)
 // → { tpl: Function, tokens: Array }
 ```
 
-Compile `source` and return the raw compiled `Function` + token tree without binding it to a locals context. Use this when you need to serialize compiled output (e.g. for the [CLI](./cli) `compile` command or the [browser build](./browser)). Serialized output keeps the behaviour of the release that compiled it: output compiled before `2.12.1` keeps its unguarded native `set` targets and custom-tag fragments, and output compiled before `2.9.10` its subscripts, until it is compiled again ([GHSA-8mf3-p375-389g](./security#ghsa-8mf3-p375-389g)).
+Compile `source` and return the raw compiled `Function` + token tree without binding it to a locals context. Use this when you need to serialize compiled output (e.g. for the [CLI](./cli) `compile` command or the [browser build](./browser)). Serialized output keeps the behaviour of the release that compiled it: output compiled before `2.12.1` keeps its unguarded native `set` targets and custom-tag fragments, and output compiled before `2.9.10` its subscripts, until it is compiled again ([GHSA-8mf3-p375-389g](./security#ghsa-8mf3-p375-389g)). Output compiled before `2.12.2` also keeps the old answers of native `in` and of an object-literal `"__proto__"` key, and output compiled by `2.12.2` needs the `2.12.2` runtime: run by `2.12.1`, native `in` throws `_utils.hasKey is not a function` and a swig-jinja2 loop filter over a mapping throws `_utils.setOwn is not a function`.
 
 `tpl.toString()` prints the generated JavaScript — a useful debugging hook.
 

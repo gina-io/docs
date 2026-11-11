@@ -92,7 +92,7 @@ swig.setDefaults({ loader: swig.loaders.memory({
 swig.renderFile('page');
 ```
 
-Lookups also try the name without a leading `/` — `resolve` returns a path that the memory loader then strips. `/layout` and `layout` both work.
+Lookups also try the name without a leading `/` — `resolve` returns a path that the memory loader then strips. `/layout` and `layout` both work. Since `2.12.2` a lookup reads only the mapping's own keys, so a name such as `toString` or `__proto__` fails as a missing template (`Unable to find template "/toString".`), where earlier releases took the inherited member as the template's source.
 
 ---
 
