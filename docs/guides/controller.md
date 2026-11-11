@@ -1738,7 +1738,9 @@ gina scaffolds leaves that call commented out), and registers watchers for:
 `require.cache` is evicted **only when a watched file has actually changed** — not on every
 request. This eliminates the per-request eviction overhead while keeping the instant-feedback
 DX. Without the watcher, dev mode evicts and re-requires the controller files on every
-request; production loads them once.
+request; production loads them once. A controller loaded with `requireController()` follows
+the same rule: in development it is required again on every call, and in production it loads
+once per process (up to 0.7.10 it was required again on every call there too).
 
 > **Do not rely on module-level variables** in controller files or `controller.js` — they are
 > evicted and re-required on each change, resetting any state they hold.

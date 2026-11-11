@@ -235,6 +235,25 @@ server: restart the bundle to pick it up. See
 `300` or `304`, which were sent as they were, now answers `301`; a URL segment bound as `code`
 is best renamed with its placeholder (`"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`).
 
+### Security — `requireController()` no longer keeps a copy of the required controller on every call (bundle restart)
+
+Up to 0.7.10, outside development, every call of `self.requireController()` removed the
+required controller and the super controller from Node's require cache and loaded them again,
+and every copy stayed in memory for the life of the process: once V8 had flushed its compiled
+code, each call kept about the size of the required controller's source file, plus whatever the
+controller built at module level, until the process ran out of memory. The calls
+`resumeRequest()` makes when it replays a non-GET request into another namespace counted too.
+Since 0.7.11 both modules load once per process outside development, as a routed controller's
+do; in development they are still loaded again on every call, so an edit shows on the next
+call, and the old copies are released. The router runs on the server: restart the bundle to
+pick it up. See [`self.requireController()`](/guides/middleware#available-methods) and
+[Dev mode hot-reload](/guides/controller#dev-mode-hot-reload).
+
+**What to check:** outside development, a controller loaded with `requireController()` now runs
+its module-level code once per process instead of on every call, so a value it computes at
+module level (a date, a cache, a library instance) is shared by every request, as it already
+was for a routed controller.
+
 ---
 
 ## 0.7.9 → 0.7.10
