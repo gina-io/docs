@@ -235,10 +235,25 @@ server: restart the bundle to pick it up. See
 `300` or `304`, which were sent as they were, now answers `301`; a URL segment bound as `code`
 is best renamed with its placeholder (`"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`).
 
+### Fixed — `requireController()` without `options` uses the request's options (bundle restart)
+
+Up to 0.7.10, `self.requireController(namespace)` called without its `options` argument (or with
+`null`) threw `TypeError: Cannot read properties of undefined (reading 'controlRequired')` before
+doing anything, although the argument is documented as optional. A route middleware and a bundle's
+`controllers/setup.js` have no `self._options` of their own, so in them the method failed however it
+was called. Since 0.7.11 a call without `options` builds the controller with the options of the
+request being served, the object an action passes as `self._options`; a call that passes options is
+unchanged. The router runs on the server: restart the bundle to pick it up. See
+[`self.requireController()`](/guides/middleware#available-methods).
+
+**What to check:** nothing, unless your code relied on the throw: `self.requireController('billing')`
+and `self.requireController('billing', self._options)` now build the same controller.
+
 ### Security — `requireController()` no longer keeps a copy of the required controller on every call (bundle restart)
 
-Up to 0.7.10, outside development, every call of `self.requireController()` removed the
-required controller and the super controller from Node's require cache and loaded them again,
+Up to 0.7.10, outside development, every call of `self.requireController()` that passed an options
+object, as an action does with `self._options` (a call without one threw first, see the entry above),
+removed the required controller and the super controller from Node's require cache and loaded them again,
 and every copy stayed in memory for the life of the process: once V8 had flushed its compiled
 code, each call kept about the size of the required controller's source file, plus whatever the
 controller built at module level, until the process ran out of memory. The calls

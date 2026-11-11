@@ -1772,7 +1772,7 @@ documented. Methods without a link are described here in one line.
 **Flow control**
 
 - [`query`](#outgoing-requests) · [`pauseRequest` / `isHaltedRequest` / `resumeRequest`](#pausing-resuming-requests) · [`push`](#pushing-to-connected-clients) · [`forward`](#forwarding) — above.
-- `requireController` — load another namespace controller in-process — [Middleware](./middleware).
+- `requireController(namespace[, options])` — load another namespace controller in-process; without `options` it is built with the request's own, the object an action passes as `self._options` — [Middleware](./middleware).
 
 **Jobs, events, health**
 

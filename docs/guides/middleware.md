@@ -207,7 +207,7 @@ request after an `await` or in a callback. Nothing is written onto your class.
 | `self.pauseRequest(data[, requestStorage])` | Snapshot the current request for later resumption |
 | `self.resumeRequest([requestStorage])` | Replay a paused request |
 | `self.query(...)` | Run a model query |
-| `self.requireController(ns, opts)` | Load another namespace's controller |
+| `self.requireController(ns[, opts])` | Load another namespace's controller for this request; without `opts` it is built with the request's own options (a middleware has no `self._options` to pass) |
 | `self.checkBundleStatus(bundle[, cb])` | Ping another bundle's health check; `cb(err, { isAlive })`, or a promise when `cb` is omitted |
 
 The `pauseRequest` / `resumeRequest` / `isHaltedRequest` trio is covered in full — with the
