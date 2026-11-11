@@ -216,8 +216,26 @@ server: restart the bundle to pick it up. See
 **What to check:** a client that reads only `filename`, such as `curl -OJ` or a script that
 parses `filename` itself, now gets an ASCII name: accents are dropped (`resume.pdf`), and
 any other character outside printable ASCII reads `?` (`café’s.pdf` gives `cafe?s.pdf`,
-where 0.7.8 to 0.7.10 sent `café?s.pdf` with a raw `é`). The offload path of
-`serveFromStorage()` builds its own header and is unchanged.
+where 0.7.8 to 0.7.10 sent `café?s.pdf` with a raw `é`). The `s3` offload path of
+`serveFromStorage()` sends the same header since 0.7.11 as well (the next entry).
+
+### Fixed — the `s3` adapter's offload download names the file as the in-process path does (bundle restart)
+
+Up to 0.7.10, the `s3` storage adapter wrote the download name raw in the `filename="…"` of the
+`response-content-disposition` it signs into the presigned URL, for `self.serveFromStorage()` with
+`download` or `filename` on an offload-capable driver and for the driver's own `resolve()` with them.
+The provider copies that value into its response header. AWS S3 sent a Latin-1 name such as
+`résumé.pdf` back re-encoded as ISO-8859-1, which Chromium 156 and WebKit 27.2 save as `r�sum�.pdf`,
+and answered a name with a character above U+00FF (`l’offre.pdf`, a CJK or emoji name) with
+`400 InvalidArgument` (« Header value cannot be represented using ISO-8859-1 »): an XML error page
+after the `307`. MinIO sent the name back unchanged. Since 0.7.11 the adapter signs the value the
+in-process path sends: a name of printable ASCII keeps its exact header, and any other name gets an
+all-ASCII `filename` fallback, then `filename*=UTF-8''…`. Measured on AWS S3 and on MinIO, the
+provider sends that value back unchanged. The adapter runs on the server: restart the bundle to pick
+it up. See [Offload serving](/guides/storage#offload-serving--the-presigned-307).
+
+**What to check:** a client that reads only `filename` from an offloaded download now gets an ASCII
+name (`resume.pdf`), as on the in-process path; an `offload: false` set to work around this can go.
 
 ### Fixed — `self.redirect()` no longer fails on a route that binds a URL segment as `code` (bundle restart)
 
