@@ -32,7 +32,7 @@ All of the following throw a generic `Unexpected tag "<name>"` error at parse ti
 
 | Tag | Upstream purpose | Why rejected |
 | --- | --- | --- |
-| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing every run-time path to the prototype chain (since 2.12.1 a key from the data that names `__proto__`, `constructor` or `prototype` reads as missing, but other built-in members stay reachable — a [known gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
+| `{% sandbox %}` | Restrict the template runtime (whitelist tags, filters, functions). | swig-twig's threat model declares template source trusted (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing every run-time path to the prototype chain (since 2.12.2 a key from the data reads as missing when it names `__proto__`, `constructor`, `prototype` or a member the value gets only from `Object.prototype`, but some paths stay open — see the [known gaps](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe=true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the attacker-controlled source. A partial sandbox that users trust is strictly worse than none. |
 | `{% do %}` | Evaluate an expression for its side effects. | Every token-swallowing tag is a new `_dangerousProps` audit site, duplicated across frontend and backend (see [prototype-chain hardening](../swig/security#prototype-chain-hardening)). Small surface widening, for pure sugar over `{{ foo.method() }}`, which runs the method and renders an empty string when it returns `undefined` or `null` (since 2.9.10; before, it printed `undefined` or `null`). |
 
 ### Deferred
@@ -157,7 +157,6 @@ These are tracked but not yet implemented:
 - **Some Twig tests.** `none`, `sequence`, `mapping`, `constant`, `true`, `same as` and `divisible by` are not provided, and each fails at compile. See [Parity → `is` tests](./parity#is-tests).
 - **`date_modify` filter.** Relies on DateTime-object mutation; deferred.
 - **Locale-aware `date` / `number_format`.** swig-twig's `date` uses the shared PHP-style formatter from `@rhinostone/swig-core`; locale rules (weekday names, currency formats) are not plumbed through yet.
-- **Run-time keys that name other built-in members.** Since 2.12.1, `{{ foo[varname] }}` with `varname` resolving to `"__proto__"`, `"constructor"` or `"prototype"` at run time reads as missing; a key that names another built-in member, such as `"__defineGetter__"`, is still read. Documented at the engine level — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
 
 ## Reporting a rejection that feels wrong
 

@@ -30,7 +30,7 @@ Behaviours that are *supported but differ* from Python Jinja2 (macro output auto
 
 | Capability | Upstream Jinja2 | Why rejected |
 | --- | --- | --- |
-| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing every run-time path to the prototype chain (since 2.12.1 a key from the data that names `__proto__`, `constructor` or `prototype` reads as missing, but other built-in members stay reachable — a [known gap](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
+| Sandboxed rendering | `SandboxedEnvironment` restricts attribute access, callable invocation, and the tag/filter set so partially-trusted template source can be rendered. | swig-jinja2's threat model declares template source **trusted** (see [Security — the parser is the boundary](../swig/security#the-parser-is-the-boundary)). Inverting that requires closing every run-time path to the prototype chain (since 2.12.2 a key from the data reads as missing when it names `__proto__`, `constructor`, `prototype` or a member the value gets only from `Object.prototype`, but some paths stay open — see the [known gaps](../swig/security#what-the-guards-do-not-protect-against)), re-auditing every `.safe = true` filter as attacker-reachable, and accepting that `new Function(...)` compiles the source. A partial sandbox that users trust is strictly worse than none. |
 
 ### Deferred
 
@@ -137,7 +137,6 @@ Tracked, not yet implemented:
 - **The `escaped` test.** Jinja2's `escaped` is not provided, and fails as an [unknown name](./parity#unknown-names). The comparison tests (`eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases) are provided since 2.11.0.
 - **Tuple literals.** `(1, 2)` does not parse (`Mismatched nesting state`); write a list, `[1, 2]`.
 - **Locale-aware `date`.** The shared PHP-style formatter from `@rhinostone/swig-core` does not plumb locale rules (weekday/month names in non-English locales). Pre-format on the controller side.
-- **Run-time keys that name other built-in members.** Since 2.12.1, `{{ foo[varname] }}` with `varname` resolving to `"__proto__"`, `"constructor"` or `"prototype"` at run time reads as missing; a key that names another built-in member, such as `"__defineGetter__"`, is still read — see [Security — what the guards do NOT protect against](../swig/security#what-the-guards-do-not-protect-against).
 
 ## Reporting a rejection that feels wrong
 
