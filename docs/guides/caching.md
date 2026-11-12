@@ -100,6 +100,19 @@ uncached and cache the expensive pieces behind it instead.
 
 :::
 
+:::caution A cached page keeps the host and language it was rendered for
+
+The key is the URL alone, so a cached page is the one rendered for the request
+that filled the entry, with that request's hostname, webroot, culture and
+validation labels, which gina's client loader reads. Every later visitor of the
+URL gets them until the entry expires, whatever host or language they asked for.
+A culture taken from the URL prefix is safe, since each culture has its own URL;
+one taken from a cookie or from `Accept-Language` is not. Cache a route only when
+its page is the same for every host and language a visitor may use, or have the
+proxy in front of the bundle send one host for it.
+
+:::
+
 ---
 
 ## Configuration reference
@@ -595,7 +608,9 @@ gina cache:clear <bundle> @<project> --dry-run    # preview — removes nothing
 
 :::note The compiled-template cache carries no request data
 
-With `server.cache.enable` on, gina also keeps each view's **compiled swig template** in memory and persists the processed layout under the bundle's `templates/html/.gina-layout-cache/`. Since 0.6.27 neither holds per-request data: the dev Inspector's `window.__ginaData` script and the hidden inputs that carry a popin's data are spliced into the executed HTML *after* the template runs, so a cache hit serves the current request's payload. Earlier releases baked the first request's page data into both, which every later render — and every later process — then served (a cross-request disclosure whenever the Inspector was injected). A layout-cache file left by an earlier release is healed on the next compile; deleting the directory is optional, never required.
+With `server.cache.enable` on, gina also keeps each view's **compiled swig template** in memory and persists the processed layout under the bundle's `templates/html/.gina-layout-cache/`. Since 0.7.11 neither holds per-request data. The dev Inspector's `window.__ginaData` script and the hidden inputs that carry a popin's data are spliced into the executed HTML *after* the template runs (since 0.6.27), and swig renders the values gina's client loader reads for each request (the public hostname and webroot, the proxy host, the culture and its validation labels) and a layout's `{{ page.section }}` from that request's data (since 0.7.11), so a cache hit serves the current request's values. Earlier releases wrote the first request's values into both, which every later render — and every later process — then served: the Inspector payload up to 0.6.26 (a cross-request disclosure whenever the Inspector was injected), and the loader's hostname, webroot and culture up to 0.7.10 (a forwarded host or prefix sent by that first request reached every later visitor; see the [0.7.11 migration notes](/migration#0710--0711)). A layout-cache file left by an earlier release is healed on the next compile; deleting the directory is optional, never required.
+
+With the cache off, nothing is written there since 0.7.11: each render assembles its layout in memory and compiles the page against it, and a `.gina-layout-cache` directory an earlier release left is no longer read. Up to 0.7.10 every render with the cache off wrote the layout to that directory and compiled from it, so concurrent renders could serve one another's request values (see the [0.7.11 migration notes](/migration#0710--0711)).
 
 :::
 

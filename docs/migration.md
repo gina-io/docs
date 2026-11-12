@@ -287,6 +287,75 @@ its module-level code once per process instead of on every call, so a value it c
 module level (a date, a cache, a library instance) is shared by every request, as it already
 was for a routed controller.
 
+### Security — concurrent renders of a swig page no longer share one layout file (bundle restart)
+
+Up to 0.7.10, with the render cache off (the default when `settings.json` has no `server.cache`
+block, in production as in development), every render of a swig page that extends a layout wrote
+the layout to one shared file under `templates/html/.gina-layout-cache/`, wrote the request's
+values into it (`page.environment.hostname`, `.webroot` and `.culture`, the validation labels, the
+proxy host) and compiled the page from that file. Under parallel load a page could carry another
+request's hostname, webroot or culture, or arrive without gina's client loader, and on a
+bind-mounted templates directory the file could be found absent (`ENOENT`, a `500`). Those values
+come from request headers (`X-Forwarded-Host`, `X-Forwarded-Prefix`, `Accept-Language`, the culture
+cookie), so one client's headers could reach other clients' pages. Since 0.7.11 each render
+assembles its layout in memory and swig compiles the page against it through the engine's loader:
+with the render cache off nothing is written under `.gina-layout-cache`, and with it on the file is
+still written, now without the values that vary per request (see the next entry). The renderer
+runs on the server: restart the bundle to pick it up. See
+[Layout inheritance](/guides/views#layout-inheritance).
+
+**What to check:** nothing to change. With the render cache off, a `.gina-layout-cache` directory
+an earlier release left in a bundle's templates is no longer read or written, and you may delete
+it.
+
+### Security — with the render cache on, the first render's request values no longer reach every later visitor (bundle restart)
+
+Up to 0.7.10, with the render cache on (`server.cache.enable`, in production as in development),
+the values gina's client loader
+reads for each request (the public hostname and webroot, built from `X-Forwarded-Host` and
+`X-Forwarded-Prefix`, the proxy host, the culture and its validation labels) and a layout's
+`{{ page.section }}` were written into the layout before swig compiled it. With the cache on, each
+view's compiled template is kept, and that layout is written under
+`templates/html/.gina-layout-cache/` and read back by every later compile, a restarted process
+included. So the first page render after the file was created (after a deploy that starts without
+it, or after the directory was emptied) gave its hostname, webroot and culture to every later
+render of every view sharing the layout, until the file was removed. A client that reached that
+render first with forwarded headers of its own fixed a foreign hostname or webroot for every
+visitor, a protocol-relative one included (see the next entry), and a route's output cache
+replayed that page. Since 0.7.11 swig renders these values from each request's data, and every
+other value is written into the layout as before. The renderer runs on the server: restart the
+bundle to pick it up.
+
+**What to check:**
+
+- Nothing to change for the layout files: one an earlier release wrote is primed again on the next
+  compile, and deleting `.gina-layout-cache` is optional.
+- Pages a route's `fs` or `redis` output cache stored before the upgrade are not served after it,
+  since that cache is [namespaced](/guides/caching#release-namespacing) by framework version, unless
+  you set `GINA_CACHE_NAMESPACE` to a value the upgrade does not change: then run
+  `gina cache:clear <bundle> @<project>`.
+- The output cache still keys a page on its URL alone, so a cached page keeps the host and language
+  it was rendered for until it expires: see [Quick start](/guides/caching#quick-start).
+
+### Security — an `X-Forwarded-Prefix` that opens with two slashes is refused (bundle restart)
+
+Up to 0.7.10, on the isaac engine, an `X-Forwarded-Prefix` value opening with two slashes, such as
+`//evil.example`, passed the path-character check added in 0.6.8, and the public webroot composed
+from it (`//evil.example/<webroot>/`) is a protocol-relative URL: the browser fetched the client
+routing table (`_gina/assets/routing.json`) from the host it names, and the gina stylesheet too
+when `gina.min.css` was not already linked, and the client then built its route URLs from the
+table that host served. Since 0.7.11 such a value is refused like a malformed one, and the page
+keeps the bundle's own webroot. A client reaching the bundle directly, or through a proxy that
+passes the header on (nginx does unless its configuration sets `X-Forwarded-Prefix`), could send
+such a value; with the concurrent-render or render-cache defect above, it could reach other
+clients' pages. The check runs on the server: restart the bundle to pick it up.
+
+**What to check:** a mount path such as `/admin` is accepted as before. If your proxy does not set
+`X-Forwarded-Prefix` itself, have it set the header to the bundle's mount path, or to an empty
+value when the bundle is mounted at `/` (nginx then sends no such header), so that a client's value
+never reaches the bundle; the [0.6.8 notes](/migration#067--068) explain why this header is the one
+to check.
+
 ---
 
 ## 0.7.9 → 0.7.10
