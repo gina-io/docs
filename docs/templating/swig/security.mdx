@@ -208,6 +208,8 @@ Shipping `.safe`: `safe`, `raw`, `json` / `json_encode` (which self-escape `<`, 
 
 `autoescape: false` disables escaping globally. Any consumer setting this is asserting they control template source entirely.
 
+Before `2.12.3`, three native shapes rendered unescaped where escaping was asked for or on by default: a bare `{% autoescape %}`, an `autoescape` option of `undefined`, and, with escaping off by default, the rest of an `{% autoescape true %}` region after a nested `{% autoescape false %}` region ended. Output compiled before `2.12.3` keeps them until it is compiled again (see [precompile](./api#precompile)).
+
 ### `cache: 'memory'` is not a trust boundary
 
 The in-memory cache is keyed by the loader's resolved filename. Templates compiled for one user's context can be served to another user if the cache key collides — this is a feature (cross-request template reuse) but it means:
