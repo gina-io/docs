@@ -137,8 +137,10 @@ Group an array of objects by a property value. Returns a map.
 ```swig
 {# people = [{name:"Paul",dept:"eng"}, {name:"Jane",dept:"sales"}, {name:"Jim",dept:"eng"}] #}
 {{ people|groupBy('dept')|json }}
-{# => {"eng":[{"name":"Paul",...},{"name":"Jim",...}],"sales":[...]} #}
+{# => {"eng":[{"name":"Paul"},{"name":"Jim"}],"sales":[{"name":"Jane"}]} #}
 ```
+
+Each grouped item is a copy of the item without the grouping key. Items that do not hold the key are left out, and since `2.12.3` so are `null` and `undefined` items; earlier releases threw a `TypeError` for such an item.
 
 ## join
 

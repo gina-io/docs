@@ -19,7 +19,7 @@ In a `set`, `if`, `elseif`, `for`, `include` or `filter` argument a filter appli
 | --- | --- | --- | --- |
 | [`autoescape`](#autoescape) | ✅ | — | Override autoescape for a region. |
 | [`block`](#block) | ✅ | ✅ | Named override point for [`extends`](#extends). |
-| [`else`](#else) / [`elseif`](#elseif) (`elif`) | — | — | Secondary branches inside `if` / `for`. |
+| [`else`](#else) / [`elseif`](#elseif) (`elif`) | — | — | Secondary branches inside `if`. |
 | [`extends`](#extends) | — | ✅ | Declare a parent template. |
 | [`filter`](#filter) | ✅ | — | Pipe an entire block through a filter. |
 | [`for`](#for) | ✅ | — | Iterate arrays, objects, or strings. |
@@ -48,7 +48,7 @@ Override the global `autoescape` option for a block.
 {% endautoescape %}
 ```
 
-The argument is passed to the [`e`](./filters#e--escape) filter. `true`, `false`, and a string type (`'html'`, `'js'`, …) are accepted.
+The argument is `true`, `false`, `"html"` or `"js"` (either quote style) and is passed to the [`e`](./filters#e--escape) filter. Since `2.12.3` a bare `{% autoescape %}` fails to compile with `Expected true, false, "html" or "js" in autoescape tag on line N.`, and another string with `Unexpected token ""foo"" in autoescape tag on line N.` (for `"foo"`), also in a part of a template that never renders, such as the top level of an extending template outside its blocks; earlier releases turned escaping off for a bare tag and passed another string to `e`, which gave HTML escaping unless `e` was replaced. The `autoescape` option still passes any string to `e`, for a replaced `e` filter. Since `2.12.3` the end of a nested region restores the enclosing region; earlier releases restored the template's default.
 
 ## block
 
@@ -71,7 +71,7 @@ A block nested in another block is a definition of its own name, so an extending
 
 ## else
 
-Secondary branch inside [`if`](#if) and [`for`](#for). Inside `for`, it runs when the iterable is empty or missing:
+Secondary branch inside an [`if`](#if):
 
 ```swig
 {% if user.active %}
@@ -79,12 +79,20 @@ Secondary branch inside [`if`](#if) and [`for`](#for). Inside `for`, it runs whe
 {% else %}
   Please log in.
 {% endif %}
+```
 
-{% for item in items %}
-  <li>{{ item }}</li>
+One `if` takes one `else`: since `2.12.3` a second `{% else %}`, or an `{% elseif %}` or `{% elif %}` after the `else`, fails to compile with `Multiple "else" branches in "if" tag on line N.`; earlier releases failed with a raw `SyntaxError: Unexpected token 'else'` that named no line.
+
+Native swig has no `for … else`: an `{% else %}` inside a `{% for %}` fails to compile with `Unexpected tag "else" on line N.`, and an `{% elseif %}` with `Unexpected tag "elseif" on line N.` To render something for an empty or missing list, test `items|length` first; the test fails for an empty list, an empty mapping, an empty string, a missing value and `null`:
+
+```swig
+{% if items|length %}
+  {% for item in items %}
+    <li>{{ item }}</li>
+  {% endfor %}
 {% else %}
   <p>No items.</p>
-{% endfor %}
+{% endif %}
 ```
 
 ## elseif
@@ -162,7 +170,7 @@ Inside the loop, `loop` exposes:
 | `loop.key` | Key for object iteration; same as `index0` for arrays |
 | `loop.length` | Total number of iterations |
 
-Use [`else`](#else) for the empty case.
+Native swig has no `for … else`; for the empty case, see [`else`](#else).
 
 ## if
 
@@ -172,7 +180,7 @@ Conditional. Supports `and`, `or`, `not`, comparison operators, `in`, and the `?
 {% if user and user.active %}…{% endif %}
 {% if "admin" in user.permissions %}…{% endif %}
 {% if user.roles.indexOf("admin") !== -1 %}…{% endif %}
-{% if not items %}Empty.{% endif %}
+{% if not items|length %}Empty.{% endif %}
 ```
 
 `in` tests a key: a property name of an object or an index of an array. Since `2.12.2` a member the object gets only from `Object.prototype`, such as `toString` or `hasOwnProperty`, does not count; own keys, keys from another prototype (a class's methods) and an array's indexes, `length` and methods do. To test an item of an array or a substring of a string, use `indexOf`, as in the `user.roles` example above.

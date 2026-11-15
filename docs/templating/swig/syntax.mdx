@@ -136,7 +136,7 @@ See the [Tags reference](./tags).
 {# This is a comment. It is removed at parse time. #}
 ```
 
-Comments cannot be nested.
+Comments cannot be nested: the first `#}` ends a comment, so `{# a {# b #} c #}` renders ` c #}` (since `2.12.3`; earlier releases rendered nothing). Since `2.12.3` text that is not a whole comment stays text: `a #}` and an unclosed `{# …` render as written, where earlier releases dropped them.
 
 ## Whitespace control
 
