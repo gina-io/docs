@@ -253,6 +253,21 @@ server: restart the bundle to pick it up. See
 `300` or `304`, which were sent as they were, now answers `301`; a URL segment bound as `code`
 is best renamed with its placeholder (`"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`).
 
+### Fixed — `self.redirect('<route>')` without `@bundle` redirects to the route (bundle restart)
+
+Up to 0.7.10, `self.redirect()` given a route name without `@<bundle>` looked the route up
+under a name built from the webroot's characters (`dashboard-home` for `home` under the
+webroot `/dashboard/`), a name gina never creates: under the default webroot `/` the method
+threw and the request answered `500`; under any other webroot it answered `404`. Since 0.7.11
+a name without `@<bundle>` names a route of the current bundle, as
+[`lib.routing.getRoute()`](/guides/routing#reverse-routing--libroutinggetroute) resolves it,
+and route names are matched in lowercase in both forms, so `self.redirect('Home@frontend')`
+no longer answers `404` either. The controller runs on the server: restart the bundle to pick
+it up.
+
+**What to check:** a `self.redirect('<route>')` that answered `500` or `404` now redirects;
+a name that matches no route still answers `404`.
+
 ### Fixed — `requireController()` without `options` uses the request's options (bundle restart)
 
 Up to 0.7.10, `self.requireController(namespace)` called without its `options` argument (or with

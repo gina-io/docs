@@ -440,9 +440,13 @@ self.redirect('settings@account');       // route in another bundle
 self.redirect('/admin', true);           // ignoreWebRoot — skips webroot prefix
 ```
 
+A route name is resolved as [`lib.routing.getRoute()`](/guides/routing#reverse-routing--libroutinggetroute)
+resolves it: without `@<bundle>` it names a route of the current bundle, and it is matched in
+lowercase, as gina keys every route. A name that matches no route answers `404`.
+
 Default status code is `301`. When the route that dispatched the action declares `param.code`
-(`301`, `302`, `303`, `307` or `308`), `self.redirect(url)` and `self.redirect('<route>@<bundle>')`
-answer with it; see [Redirect routes](/guides/routing#redirect-routes).
+(`301`, `302`, `303`, `307` or `308`), `self.redirect(url)`, `self.redirect('<route>')` and
+`self.redirect('<route>@<bundle>')` answer with it; see [Redirect routes](/guides/routing#redirect-routes).
 
 :::note Redirects and browser caching
 In the `dev` environment, and on any request the framework classifies as reverse-proxied, redirects are emitted with `Cache-Control: no-cache, no-store, must-revalidate` (plus `Pragma` and `Expires`) so browsers never cache them — this covers both full-page (`30x`) redirects and redirects returned to an AJAX or popin request (the `isXhrRedirect` JSON payload). A proxied redirect's target host is derived from the proxy context, and a browser-cached `301` would pin that value permanently — a stale copy would keep replaying from the client cache even after the server-side target changes. On direct (non-proxied) production requests, redirects are emitted without cache directives, so a `301` keeps its usual cacheable semantics.
