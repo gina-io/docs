@@ -167,6 +167,8 @@ this.get = function(req, res, next) {
 `req.routing.param` is the **raw routing config** for this request — it contains the placeholder declaration (`":id"`) and static values you set in `routing.json` (e.g. `"code": 302`). Use it to read static routing metadata; never use it to read URL parameter values.
 
 Bind a URL segment under a name gina does not read as configuration. A key such as `code` (the [redirect status](#redirect-routes)) or `section` (see [Section dispatch](#section-dispatch)) keeps the placeholder text in `req.routing.param`, so `"code": ":code"` hands gina `":code"` as its redirect status: since 0.7.11 that answers `301` and logs a warning; up to 0.7.10 every redirect reading that route failed. Bind the segment under another name, such as `"url": "/item/:itemCode"` with `"itemCode": ":itemCode"`.
+
+The keys gina reads as configuration are `control`, `lane`, `dto`, `responseDto`, `requireAuth`, `public`, `roles`, `policy`, `messageValidator`, `wsHandler`, `wsOptions`, `code`, `route`, `url`, `urlIndex`, `keep-params`, `ext`, `section`, `isPopinContext`, `ignoreWebRoot`, `project`, `hostname`, `port` and `method`. A placeholder written in `path`, `namespace`, `title` or `file` takes the URL value, and on a route with `culturePrefix`, `culture` takes the URL value of its segment. Since 0.7.11 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line, listing each route that binds a placeholder under one of those keys; nothing is rewritten for you. A route whose action never redirects is listed too when it binds `code`, so rename that binding as well.
 :::
 
 ### Multiple URLs

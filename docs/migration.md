@@ -62,6 +62,25 @@ until you do. The popin plugin ships in each bundle's browser bundle: run
 `gina bundle:build` to pick it up. See
 [Popins and dialogs → A load that never answers](/guides/popin#a-load-that-never-answers).
 
+### Added — a boot warning for a route that binds a URL placeholder under a key gina reads as configuration (bundle restart)
+
+The presence of a key in a route's `param` block is what binds a URL segment, but
+`req.routing.param` keeps the placeholder text for every key the matcher does not fill.
+So a binding such as `"section": ":section"` sets `page.section` to `:section`, and
+`"code": ":code"` hands gina `:code` as the redirect status (answered with a `301` and a
+warning since 0.7.11). A bundle now warns once at boot, in
+one `[CONFIG][loadBundleConfig]` line, about each such binding:
+
+```
+[CONFIG][loadBundleConfig] [ shop ] 1 route param binding uses a key gina reads as configuration, so gina reads its placeholder text, not the URL value: item@shop { section: ":section" }. Bind the URL segment under another name (e.g. "url": "/item/:itemCode" with "itemCode": ":itemCode"). See https://gina.io/docs/guides/routing#parameterized-url
+```
+
+Routes are matched and served as before. To clear the warning, bind the segment under
+another name (`"url": "/item/:itemSection"` with `"itemSection": ":itemSection"`) and read
+it from `req.params.itemSection`. A route that binds `code` and never redirects is listed
+too, since gina reads `param.code` whenever the route's action redirects. See
+[Routing → Parameterized URL](/guides/routing#parameterized-url).
+
 ### Changed — a staged input's `accept` refuses a file before staging (bundle restart and re-bake)
 
 A staged file input sent every file it was given: the browser's picker only filters what it
