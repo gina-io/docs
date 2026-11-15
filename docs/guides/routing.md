@@ -123,6 +123,7 @@ unique across the project.
 | `queryTimeout` | — | `10s` | Timeout budget for outgoing sub-requests made from this route's controller action via `self.query()`. Accepts a duration string (`"30s"`, `"500ms"`) or milliseconds as a number. Used as a fallback when no timeout is set explicitly in the `query()` call |
 | `cache` | — | — | Response cache strategy. See [Caching](./caching.md) for the full field reference. |
 | `negotiate` | — | `false` | Serve this route as a layoutless fragment when the request asks for one. See [Content negotiation](#content-negotiation) |
+| `culturePrefix` | — | `false` | Take `req.culture` from the URL segment bound to `param.culture` (`"culture": ":culture"`). See [Locale negotiation](/guides/i18n#locale-negotiation--reqculture) |
 | `_comment`, `_sample` | — | — | Developer notes, ignored by the framework |
 
 ---
@@ -805,7 +806,7 @@ Contains the matched route's resolved metadata:
   , param        : {
         control  : "get"               // controller method
       , file     : "invoice/detail"    // template file
-      , id       : "abc-123"           // resolved param value
+      , id       : ":id"               // the binding as declared: the URL value is req.params.id
     }
   , middleware   : ["middlewares.passport.authentificate"]
   , requirements : { id: "/^[-a-f0-9]+$/i" }

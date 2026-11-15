@@ -268,6 +268,23 @@ it up.
 **What to check:** a `self.redirect('<route>')` that answered `500` or `404` now redirects;
 a name that matches no route still answers `404`.
 
+### Fixed — the URL prefix gives `req.culture` its URL value (bundle restart)
+
+Up to 0.7.10, on a route with `culturePrefix: true`, the locale negotiation read
+`req.routing.param.culture`, the route's configuration, where a binding such as
+`"culture": ":culture"` keeps its placeholder text; the URL value is in `req.params.culture`.
+So the URL step never matched a catalog and the request took its culture from the cookie,
+`Accept-Language` or the bundle default: `GET /fr/dashboard/42` answered in the bundle
+default, and `/en/…` with a `fr` cookie in `fr`. Since 0.7.11 the step reads the URL value
+bound to `param.culture`, and a literal `param.culture` is used as before; see
+[Locale negotiation](/guides/i18n#locale-negotiation--reqculture). The negotiation runs on
+the server: restart the bundle to pick it up.
+
+**What to check:** a page under a `culturePrefix` route now answers in the culture of its URL
+prefix, also for a visitor whose cookie or `Accept-Language` names another culture. Bind the
+culture segment in `param` (`"culture": ":culture"`): a `:culture` segment left out of
+`param` makes the route match nothing.
+
 ### Fixed — `requireController()` without `options` uses the request's options (bundle restart)
 
 Up to 0.7.10, `self.requireController(namespace)` called without its `options` argument (or with
