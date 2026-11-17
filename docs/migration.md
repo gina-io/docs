@@ -140,6 +140,23 @@ See [The `gina.popin` API](/guides/popin#the-ginapopin-api).
 **What to check:** code that reads back an options object it passed to `load()`: the object no
 longer holds the popin's options.
 
+### Fixed — a gina page in a frame starts its own client (bundle restart and re-bake)
+
+Up to 0.7.10, a gina page loaded in a same-origin frame took over its parent page's client: at
+start-up the client merged the parent frame's `gina` instance into the frame's, and the parent's
+values won. The frame's loader stopped at once, so the frame's own configuration, session and
+forms were never applied; its popin, validator and navigation were not started; and
+`new Popin()` in the frame looked for the parent's popin container in the frame's document and
+threw `Cannot read properties of undefined (reading 'addListener')`. Since 0.7.11 every document
+has its own instance and the client no longer reads its parent frame at all, so a cross-origin
+parent cannot interrupt the start-up either (the 0.6.28 note below described the inheritance as
+kept for a same-origin parent). The client ships in each bundle's browser bundle: run
+`gina bundle:build` to pick it up. See [A page in a frame](/guides/popin#a-page-in-a-frame).
+
+**What to check:** code in a frame that read its parent page's values through its own `gina` (its
+configuration, its popins, `setOptions()`) now reads and changes the frame's own. Where the two
+pages share an origin and the frame needs the parent's, use `parent.gina`.
+
 ### Fixed — `downloadFromURL()` answers a bad `options`, `options.file` or url with a `500` (bundle restart)
 
 Up to 0.7.10, `self.downloadFromURL(url, { file })` checked the extension of the url's own

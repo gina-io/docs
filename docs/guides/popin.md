@@ -483,6 +483,16 @@ for content arrival, `success` for a JSON answer and `error` for failures.
 `422` status.
 :::
 
+### A page in a frame
+
+A gina page loaded in an `<iframe>` starts its own client: its `gina`, its `gina.popin` and the
+popin container are the frame's own, so its popins open inside the frame and its
+`data-gina-dialog` triggers and `new Popin()` work as on any page. A frame that needs the parent
+page's popins calls them through `parent.gina.popin`, when the two pages share an origin.
+
+*Fixed in 0.7.11:* a page in a same-origin frame took over its parent page's `gina` instance, so
+its own popins did not start and `new Popin()` failed on the parent's container.
+
 ## Migrating from the legacy attributes
 
 | Legacy (deprecated) | Current |
