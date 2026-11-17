@@ -354,6 +354,23 @@ restart the bundle to pick it up. See
 **What to check:** a redirect route whose `param.route` answered `404` now redirects; one that
 names a route of another bundle now sends that bundle's hostname in its `Location`.
 
+### Fixed — a redirect route's `param.path` gets the webroot (bundle restart)
+
+Up to 0.7.10, under a webroot other than `/`, a `routing.json` redirect route's `param.path`
+lost its first character instead of getting the webroot: with the webroot `/dashboard`,
+`"path": "/general"` sent the relative `Location` `general`, `"path": "general"` sent `eneral`
+and `"path": "/"` an empty one, which the browser resolved against the request URL. Since 0.7.11
+the path gets the webroot: both answer `/dashboard/general`, and `/` answers `/dashboard/`. A
+custom action that calls `self.redirect(req, res, next)` on a route with `param.path` gets the
+same. `ignoreWebRoot: true`, a `route` target and an absolute URL are unchanged, and every other
+reader of `param.path`, such as a page route that names its template file with it, now gets it
+as written, where it got it without its first character. The controller runs on the server:
+restart the bundle to pick it up. See [Redirect routes](/guides/routing#redirect-routes).
+
+**What to check:** a redirect route under a webroot other than `/` whose target relied on the
+relative `Location` now gets the webroot; to keep the old target, set `ignoreWebRoot: true` and
+write the full path, which answers the same before and after.
+
 ### Fixed — `lib.routing.getRoute()` looks for a fixed `param` value as written (bundle restart and re-bake)
 
 Up to 0.7.10, when `getRoute()` decided which values of a GET route go into the query string,

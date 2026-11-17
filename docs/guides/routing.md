@@ -565,6 +565,16 @@ requests a `301` remains cacheable as usual.
 }
 ```
 
+`param.path` is a path of this bundle: the [webroot](#webroot) is prepended, as it is to `url`.
+With the webroot `/dashboard`, the route above redirects to `/dashboard/documentation/`, and
+`"path": "documentation/"` does too. A custom action that hands its request to
+`self.redirect(req, res, next)` on a route that sets `param.path` gets the same. The path is sent
+as written when the route sets `ignoreWebRoot: true` (write it in full, webroot included), under
+the webroot `/`, and when it is an absolute URL (`https://…` or `//…`). Every other reader of
+`param.path` gets it as written. Up to 0.7.10, under a webroot other than `/`, the path only lost
+its first character, so the `Location` was relative (`documentation/`) and the browser resolved it
+against the request URL.
+
 ### Redirecting to a route
 
 A redirect route can name its target route with `param.route` instead of a path:
