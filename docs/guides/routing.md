@@ -126,6 +126,18 @@ unique across the project.
 | `culturePrefix` | — | `false` | Take `req.culture` from the URL segment bound to `param.culture` (`"culture": ":culture"`). See [Locale negotiation](/guides/i18n#locale-negotiation--reqculture) |
 | `_comment`, `_sample` | — | — | Developer notes, ignored by the framework |
 
+Every route needs a `param` block with `control`. Since 0.7.11 a route whose `param` block is
+missing or `null` stops the bundle's boot with an error that names the route, written to
+stderr before the process exits with code 1:
+
+```
+[about@frontend] Bad routing syntax: the route has no `param` block; `param.control` is required
+```
+
+Up to 0.7.10 the boot stopped on an uncaught
+`TypeError: Cannot read properties of undefined (reading 'control')` that named neither the
+route nor the block.
+
 ---
 
 ## URL patterns
@@ -553,6 +565,30 @@ requests a `301` remains cacheable as usual.
 }
 ```
 
+### Redirecting to a route
+
+A redirect route can name its target route with `param.route` instead of a path:
+
+```json
+"old-login": {
+  "url": "/signin",
+  "param": {
+    "control": "redirect",
+    "route": "login"
+  }
+}
+```
+
+The name is resolved as [`self.redirect()`](/guides/controller#selfredirecturl-ignorewebroot)
+resolves a route name in a controller: a name without `@<bundle>` names a route of the current
+bundle, the name is matched in lowercase, and `login@account` names the `login` route of the
+`account` bundle, which is redirected to on that bundle's hostname; an environment suffix
+(`login@account/dev`) is accepted. `param.code` and the method rules below apply as for
+`param.path`, and a name that matches no route answers `404`. Up to 0.7.10 the name was looked
+up as written, so only `"<route in lowercase>@<bundle>"` worked: a bare name, a name with
+capitals or one with an environment suffix answered `404`, and a route of another bundle got a
+relative `Location` on the current host.
+
 ### Keeping the query string
 
 `param.path` is a fixed target, so by default a redirect drops whatever query the
@@ -881,7 +917,10 @@ A value written into the path is not repeated in the query string, and none is
 appended twice. A key the rule declares in `requirements` stays out of the query
 string, unless `param` also declares it and the URL composed does not carry it:
 neither its placeholder nor, for a fixed value, the value itself appears in that
-URL.
+URL. Since 0.7.11 a fixed value is looked for as written, regex metacharacters included. Up to
+0.7.10 it was read as a regular expression, so a value such as `C++` or `(beta` made
+`getRoute()` throw a `SyntaxError` whenever it was called with params, and `a.c` was found in
+`/abc/`.
 
 For a rule with [several URLs](#multiple-urls), the URL composed depends on the
 values you pass, unless you name one with the third argument, `urlIndex`:

@@ -321,6 +321,54 @@ prefix, also for a visitor whose cookie or `Accept-Language` names another cultu
 culture segment in `param` (`"culture": ":culture"`): a `:culture` segment left out of
 `param` makes the route match nothing.
 
+### Fixed — a route with no `param` block stops the boot with an error that names it (bundle restart)
+
+Up to 0.7.10, a route in `routing.json` with no `param` block, or with `"param": null`,
+stopped the bundle's boot on an uncaught
+`TypeError: Cannot read properties of undefined (reading 'control')`, which named neither the
+route nor the block. Since 0.7.11 the boot stops with an error that names the route, written
+to stderr before the process exits with code 1:
+
+```
+[about@frontend] Bad routing syntax: the route has no `param` block; `param.control` is required
+```
+
+See [Route fields](/guides/routing#route-fields).
+
+**What to check:** a bundle that failed to boot with that `TypeError` now names the route:
+add its `param` block with `control`. A route that has no `param` block but a non-empty
+`hostname`, and a `param` block without `control`, boot as before.
+
+### Fixed — a redirect route's `param.route` resolves as `self.redirect()` does (bundle restart)
+
+Up to 0.7.10, a `routing.json` redirect route that named its target in `param.route`
+(`{ "control": "redirect", "route": "<route>" }`) looked the name up as written, while gina
+keys every route `<route in lowercase>@<bundle>`: a bare name, a name with capitals or one with
+an environment suffix answered `404`, and a route of another bundle got a relative `Location`
+on the current host. Since 0.7.11 the name is resolved as `self.redirect('<route>')` resolves
+it: without `@<bundle>` a route of the current bundle, matched in lowercase, and a route of
+another bundle is reached on that bundle's hostname. The controller runs on the server:
+restart the bundle to pick it up. See
+[Redirecting to a route](/guides/routing#redirecting-to-a-route).
+
+**What to check:** a redirect route whose `param.route` answered `404` now redirects; one that
+names a route of another bundle now sends that bundle's hostname in its `Location`.
+
+### Fixed — `lib.routing.getRoute()` looks for a fixed `param` value as written (bundle restart and re-bake)
+
+Up to 0.7.10, when `getRoute()` decided which values of a GET route go into the query string,
+it read a fixed `param` value (one that is not a `:placeholder`) as a regular expression: a
+value holding a regex metacharacter, such as `"label": "C++"`, `"(beta"` or `":-)"`, made
+`getRoute()` throw a `SyntaxError` for the route whenever it was called with params, and
+`"a.c"` was found in the URL `/abc/`. Since 0.7.11 the value is looked for as written, as the
+[routing guide](/guides/routing#reverse-routing--libroutinggetroute) describes. The keys gina
+reserves (`title`, `file`, `namespace`, `path`) were never read this way. `lib/routing` also
+ships in each bundle's browser bundle: restart the bundle and run `gina bundle:build` to pick
+it up.
+
+**What to check:** a URL built from a route whose `param` holds such a value now composes; a
+value that only matched as a pattern no longer keeps a parameter out of the query string.
+
 ### Fixed — `requireController()` without `options` uses the request's options (bundle restart)
 
 Up to 0.7.10, `self.requireController(namespace)` called without its `options` argument (or with
