@@ -68,7 +68,7 @@ These fail at compile time, except the `is` rows: inside `{% if %}` an `is` test
 | `{% if x is none %}` | `{% if x === null %}` | Same — no `is`. |
 | `{% if x is iterable %}` | Custom filter or pre-compute in locals | Register a filter: `swig.setFilter('isIterable', fn)`. |
 | `{% if x not in xs %}` | `{% if xs.indexOf(x) === -1 %}` for a list or a string, `{% if not (x in xs) %}` for a mapping | `not in` is not a single token, and `in` tests keys: on a list it tests the indices, not the items. |
-| `{{ a // b }}` | `{{ (a / b)\|int }}` (define `int` filter) or `{{ Math.floor(a / b) }}` | Integer division is not lexed. Math object is reachable as a global. |
+| `{{ a // b }}` | `{{ (a / b)\|int }}` (define `int` filter) or `{{ Math.floor(a / b) }}` | Integer division is not lexed. Math object is reachable as a global when the context holds no `Math` key; since `2.12.4` a `Math` key holding `null` or `undefined` hides it. |
 | `{{ a ** b }}` | `{{ Math.pow(a, b) }}` | Power operator is not lexed. |
 | `{% set x %}body{% endset %}` | `{% set x = "body" %}` | Swig only supports the one-liner form. |
 | `{% from "f.html" import macro1, macro2 %}` | `{% import "f.html" as ns %}` then `{{ ns.macro1() }}` | Swig has no `from ... import`. |

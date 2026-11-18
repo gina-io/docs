@@ -51,6 +51,10 @@ Identifiers resolve against the locals context passed at render time.
 
 A missing variable, or a missing property reached with dots, renders as an empty string. Since 2.9.10 so does a subscript that finds nothing: with `users` empty, `{{ users[0] }}` renders an empty string (before, `undefined`) and so does `{{ users[0].name }}` (before, it failed with `Cannot read properties of undefined`). Where such a subscript enters a filter or an arithmetic operand it reads as an empty string, as a missing variable does: `{{ users[0].name|upper }}` renders an empty string and `{{ users[0] * 2 }}` renders `0`. Since 2.9.11 this also holds in a tag argument that applies a filter: `{% set name = users[0]|upper %}` sets an empty string (before, it failed with `Cannot read properties of undefined`). Under the autoescape `'html'` or `'js'` option, and in an `{% autoescape %}` block with escaping on, these rules hold since 2.9.11: there 2.9.10 printed `undefined` for `{{ users[0] }}`, failed on `{{ users[0].name }}` and gave `NaN` for `{{ users[0] * 2 }}`.
 
+A name the context lacks reads the JavaScript global of that name, such as `Math` (`{{ Math.PI }}` renders `3.141592653589793`), `process` in Node or `document` in a browser, also after a `{% for %}` loop over that name and, since `2.12.4`, after a `{% set %}` of it inside a macro that takes a parameter of that name. Since `2.12.4` a context key that holds `null` or `undefined` hides the global of its name: with `Math` holding `null`, `{{ Math }}` renders an empty string (before, `[object Object]`), and so do `{{ JSON }}` and `{{ Date }}`; a key named like another global, such as `setTimeout`, still lets that global through. Since `2.12.4` `{{ _output }}`, a name the compiled code uses, renders an empty string with or without such a key (before, the output rendered so far), and so does `{{ _ext }}` with no such key (before, `[object Object]`); `{{ _ctx }}` still renders `[object Object]`.
+
+Since `2.12.4` a name a value gets only from `Object.prototype`, such as `toString`, `valueOf` or `hasOwnProperty`, reads as missing, bare or dotted: `{{ toString }}` and `{{ user.toString }}` render an empty string (before, the function's source), and `{% if toString %}` is not taken; a key of that name that the context or the object holds itself is read as before. A variable named with a JavaScript reserved word, such as `class` or `enum`, renders its value since `2.12.4` (before, the template failed to compile), and `{{ await }}` renders its value on the async render path too (before, it failed to compile there).
+
 ### Operators
 
 Arithmetic: `+  -  *  /  %`
@@ -84,6 +88,8 @@ Variables can be functions. Function output is **never autoescaped**. A call tha
 ```swig
 {{ formatDate(user.birthday) }}
 ```
+
+Since `2.12.4` a call reads its name as a variable read does: with no such key in the context, `{{ toString() }}` renders an empty string (before, `[object Undefined]`). A method a value gets only from `Object.prototype` reads as missing when the template calls it: `{{ user.hasOwnProperty("email") }}` renders an empty string (before, `true`), `{% if user.hasOwnProperty("email") %}` is not taken, and `{{ user.toString() }}` on a plain object renders an empty string (before, `[object Object]`). The methods numbers, strings and dates define themselves, such as `toFixed`, `toUpperCase` or a date's `valueOf`, and a method of the object's own class are called as before. To test for a key, write `"email" in user`; to print the value as text, write `{{ user }}`, which renders what `{{ user.toString() }}` rendered.
 
 See [Security](./security) for why functions bypass autoescape.
 

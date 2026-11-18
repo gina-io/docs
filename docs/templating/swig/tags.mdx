@@ -266,6 +266,16 @@ Define a reusable mini-template.
 
 Macros are in scope for the rest of the current template and exported to any template that [`import`](#import)s the file. Macro names are validated — reserved names are rejected (see [Security](./security)).
 
+A macro's parameters are its own: an [`include`](#include) inside the macro and a macro it calls do not see them. Since `2.12.4` a parameter with one of these names is in the context while the macro runs, so a macro called inside the macro sees it on both render paths, and an `include` inside the macro sees it on the sync render path (the async render path does not support an `include` inside a macro):
+
+- a standard JavaScript global, such as `document`;
+- a name the compiled code uses, such as `_ext`;
+- a member objects get from `Object.prototype`, such as `toString`;
+- one of the nine words only strict-mode JavaScript reserves: `yield`, `let`, `static`, `implements`, `interface`, `package`, `private`, `protected` and `public`;
+- `await`, or a name that starts with two underscores, such as `__x`.
+
+For such a parameter, since `2.12.4`, a `{% set %}` of it inside the macro does not stay in the context after the call when the context holds no key of that name, a macro defined inside the macro and called after it has returned does not see it, and a macro defined in a `{% for %}` loop over such a name and called after the loop reads the name as the rest of the template does. A macro that sees the parameters of the macro calling it is a swig extension: in Jinja2 it does not.
+
 ## parent
 
 Inside an overriding `{% block %}`, emit the parent block's rendered content.

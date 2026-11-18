@@ -131,7 +131,7 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 
 **Root cause it addresses:** template source that reaches the prototype chain through `_ctx` access (`__proto__`, `constructor`, `prototype`) can escape into the surrounding JavaScript runtime. The canonical exploit is `{{ constructor.constructor("return process")() }}` — the lexer emits a single VAR token, the parser generates `_ctx.constructor.constructor` (which is `Function`), and the template then calls it with arbitrary code.
 
-**Added in four phases:**
+**Added in five phases:**
 
 | Phase | Version | Coverage |
 | --- | --- | --- |
@@ -139,6 +139,7 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 | Phase 2 | `1.5.0` | Bracket-notation in variable output and `set`; reserved names blocked in `for` loop variables, `macro` names, and `import` aliases. |
 | Phase 3 | `2.12.1` | Keys taken from the data at run time: subscripts and calls on them, native `set` targets, custom-tag bracket fragments, and the attribute argument of swig-jinja2 `groupby` and `sum` ([GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g)). |
 | Phase 4 | `2.12.2` | Members a value gets only from `Object.prototype`, such as `hasOwnProperty`, `toString` or `__defineGetter__`, in subscripts and calls on them, in swig-jinja2 `attr` and the attribute argument of `groupby`, and in native `in`; the four accessor helpers in custom-tag bracket fragments; a native block named `__proto__`; a `"__proto__"` key in an object literal or in a JSON object that swig copies. |
+| Phase 5 | `2.12.4` | Names and dotted reads of members a value gets only from `Object.prototype` (`{{ toString }}`, `{{ obj.toString }}`) in every flavor, calls of them (`{{ obj.hasOwnProperty("a") }}`) in native swig, swig-twig and swig-jinja2, and bare names in custom-tag fragments. |
 
 ### What the guards protect against
 
@@ -159,14 +160,15 @@ Independently of the CVE above, Swig blocks template expressions from reaching t
 | A custom tag's bracket fragments with `k` naming `__defineGetter__`, `__defineSetter__`, `__lookupGetter__` or `__lookupSetter__` | Run-time key check, since `2.12.2`: the key reads as missing, even as an own key | Low — the tag's code reads a built-in method |
 | `{% block __proto__ %}` (native) | Compile-time check, since `2.12.2`: `Unsafe block name "__proto__" is not allowed (prototype-chain guard) on line N.` | Low — the extending template's override of the block was lost |
 | An own `"__proto__"` key in an object literal, or in a JSON object that swig copies: an `include` or a swig-twig `with` given the object, swig-twig `merge`, a filter that maps over the object, a swig-jinja2 loop filter, `run(tpl, locals)` | Kept as an own key, since `2.12.2` | Low — its value became the copy's prototype (through an `include`, its keys then read as names); `Object.prototype` was not touched |
+| `{{ toString }}`, `{{ obj.toString }}` and `{% if toString %}` in every flavor, and `{{ obj.hasOwnProperty("a") }}` in native swig, swig-twig and swig-jinja2: a name, a dotted read or a call of a member a value gets only from `Object.prototype` | Read check, since `2.12.4`: the name or member reads as missing; an own key of that name, and a method of the value's own class, still count | Low — the template read the built-in method, or called it |
 
 ### What the guards do NOT protect against
 
 | Vector | Why not | Risk |
 | --- | --- | --- |
-| A template compiled by an earlier release and run on a later one (`swig compile` output, `registerBundle` bundles, stored `precompile()` results): a native set target or custom-tag fragment compiled before `2.12.1`, a subscript compiled before `2.9.10`, or native `in` and an object-literal `"__proto__"` key compiled before `2.12.2` | Those checks are in the code the compiler emits; a subscript has called a runtime helper since `2.9.10`. | As [GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g) until recompiled with `2.12.1`; Low for the `2.12.2` changes, until recompiled with `2.12.2`. |
+| A template compiled by an earlier release and run on a later one (`swig compile` output, `registerBundle` bundles, stored `precompile()` results): a native set target or custom-tag fragment compiled before `2.12.1`, a subscript compiled before `2.9.10`, native `in` and an object-literal `"__proto__"` key compiled before `2.12.2`, or a variable read that `2.12.4` changes compiled before `2.12.4` | Those checks are in the code the compiler emits; a subscript has called a runtime helper since `2.9.10`. | As [GHSA-8mf3-p375-389g](#ghsa-8mf3-p375-389g) until recompiled with `2.12.1`; Low for the `2.12.2` and `2.12.4` changes, until recompiled with that release; swig-django's `2.12.4` reading of `Object.prototype` functions is in its runtime and needs no recompile, except after a loop over that name. |
 | `{{ foo[k] }}`, native `k in foo` and swig-jinja2 `foo\|attr(k)` where `foo` is an object from another realm, such as a `vm` context, and `k` names a member of that realm's `Object.prototype`, such as `__defineGetter__` | The run-time check compares with this realm's `Object.prototype` only. | Low — the template reads the built-in method; such objects come from application code, not from JSON. |
-| A custom tag's bracket fragments with `k` naming another `Object.prototype` member, such as `hasOwnProperty` or `toString` | The fragments' check refuses `__proto__`, `constructor`, `prototype` and the four accessor helpers only. | Low — the tag's code reads the built-in method. |
+| A custom tag's bracket fragments with `k` naming another `Object.prototype` member, such as `hasOwnProperty` or `toString` | The fragments' check refuses `__proto__`, `constructor`, `prototype` and the four accessor helpers only; since `2.12.4` a bare name in the fragments, such as `toString`, reads as missing, as in a template. | Low — the tag's code reads the built-in method. |
 | `{{ Function("return process")() }}` | Template source is trusted; globals are available by design. | N/A — SSTI is game over for any template engine. |
 | `{{ eval("code") }}` | Same as above. | N/A — by design. |
 
