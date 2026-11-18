@@ -21,6 +21,24 @@ upward to the target version.
 
 ## 0.7.11 → 0.7.12
 
+### Added — a boot warning for a URL placeholder followed by another character (bundle restart)
+
+A placeholder's name is letters, digits and underscores, and it ends at the first other
+character, except on a `DELETE` route with `requirements`: `"url": "/:lang-code/home"` is read as the placeholder
+`:lang`, so a binding under `lang-code` is never filled, the route matches only when its
+`param` also binds `lang`, and a `culturePrefix` route that binds `"culture": ":lang-code"`
+reads no culture from the URL. A bundle now warns once at boot, in one
+`[CONFIG][loadBundleConfig]` line, about each URL segment that holds such a placeholder:
+
+```
+[CONFIG][loadBundleConfig] [ site ] 1 route URL segment holds a placeholder followed by a character other than a letter, a digit or an underscore: home@site ":lang-code". Except on a DELETE route with requirements, gina reads a placeholder's name up to that character: ":lang-code" is read as ":lang". Name each placeholder with letters, digits and underscores (":lang_code"). See https://gina.io/docs/guides/routing#parameterized-url
+```
+
+Routes are matched and served as before. To clear the warning, rename the placeholder with
+letters, digits and underscores (`"url": "/:lang_code/home"` with `"lang_code": ":lang_code"`),
+read it from `req.params.lang_code`, and pass `lang_code` where `getRoute()` fills it. See
+[Routing → Parameterized URL](/guides/routing#parameterized-url).
+
 ### Security — Gina requires `ws` 8.23.0 or later (bundle restart)
 
 Gina's manifests now require `ws` `^8.23.0` (they required `^8.22.0`). Up to 8.22.0, a peer

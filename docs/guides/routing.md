@@ -153,7 +153,7 @@ route nor the block.
 
 ### Parameterized URL
 
-Parameters start with `:`. Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` and into the method's own object (`req.get.<key>` on a GET, `req.delete.<key>` on a DELETE, `req.put.<key>` on a PUT, and so on). `req.params` is set for every method; on a `DELETE` route whose `requirements` put a regex on each placeholder it was left unset before 0.7.6. A query or body key of the same name does not replace it: since 0.7.6 the method's object holds the URL value on every request (see [URL parameters](/guides/controller#url-parameters)).
+Parameters start with `:`, followed by a name of letters, digits and underscores (`:id`, `:lang_code`). Declare the binding in `param` using `"<key>": ":<key>"` — this is what tells the router to capture the URL segment into `req.params.<key>` and into the method's own object (`req.get.<key>` on a GET, `req.delete.<key>` on a DELETE, `req.put.<key>` on a PUT, and so on). `req.params` is set for every method; on a `DELETE` route whose `requirements` put a regex on each placeholder it was left unset before 0.7.6. A query or body key of the same name does not replace it: since 0.7.6 the method's object holds the URL value on every request (see [URL parameters](/guides/controller#url-parameters)).
 
 ```json
 "invoice": {
@@ -172,6 +172,13 @@ this.get = function(req, res, next) {
   // ...
 };
 ```
+
+A parameter's name ends at the first character that is not a letter, a digit or an underscore. Except on a `DELETE` route
+with `requirements`, which reads the whole segment as the name, `"url": "/:lang-code/home"` is read as the parameter
+`:lang`: a binding under `lang-code` is never filled, and the route matches only when `param` also binds `lang`. Text after
+the name in its segment is not compared: `"url": "/feed/:id.json"` matches `/feed/42` as well as `/feed/42.json`, where
+`req.params.id` is `42.json`. Write `:lang_code` instead. Since 0.7.12 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line,
+about each URL segment that holds a parameter followed by such a character; nothing is rewritten for you.
 
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` holds the **actual URL value** captured at request time (e.g. `"abc-123"`).
