@@ -19,6 +19,28 @@ upward to the target version.
 
 ---
 
+## 0.7.11 → 0.7.12
+
+### Security — Gina requires `ws` 8.23.0 or later (bundle restart)
+
+Gina's manifests now require `ws` `^8.23.0` (they required `^8.22.0`). Up to 8.22.0, a peer
+that sent Ping frames and stopped reading made `ws` queue an automatic Pong for each one,
+without limit, until the process ran out of memory
+([GHSA-37g9-w4hg-h9qr](https://github.com/websockets/ws/security/advisories/GHSA-37g9-w4hg-h9qr),
+every `ws` release from 8.0.0 before 8.23.0). 8.23.0 closes the connection once 60 automatic
+Pongs are waiting to be written (`maxPendingAutoPongs`). Gina loads `ws` for one endpoint only:
+the Inspector agent WebSocket at `/_gina/agent`, which exists in dev mode and, outside dev, only
+when `settings.json` `inspector.agent.enabled` is true, where it then requires the agent key (see
+[Authenticated agent endpoint outside dev mode](/guides/inspector#authenticated-agent-endpoint-outside-dev-mode-inspectoragent)).
+Upgrading gina installs 8.23.0 or later. Gina loads `ws` when the bundle starts: restart the
+bundle to pick it up.
+
+**What to check:** nothing in Gina's own use. If your application depends on `ws` itself, its
+own range decides the version it loads; from 8.23.0 on, `ws` closes a connection whose peer
+leaves 60 automatic Pongs unsent.
+
+---
+
 ## 0.7.10 → 0.7.11
 
 ### Added — an opt-in stall watchdog (bundle restart)
