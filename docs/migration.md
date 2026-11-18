@@ -441,6 +441,10 @@ its module-level code once per process instead of on every call, so a value it c
 module level (a date, a cache, a library instance) is shared by every request, as it already
 was for a routed controller.
 
+A security advisory,
+[GHSA-h2xj-fqj4-265x](https://github.com/gina-io/gina/security/advisories/GHSA-h2xj-fqj4-265x),
+accompanies this fix.
+
 ### Security — concurrent renders of a swig page no longer share one layout file (bundle restart)
 
 Up to 0.7.10, with the render cache off (the default when `settings.json` has no `server.cache`
@@ -461,6 +465,10 @@ runs on the server: restart the bundle to pick it up. See
 **What to check:** nothing to change. With the render cache off, a `.gina-layout-cache` directory
 an earlier release left in a bundle's templates is no longer read or written, and you may delete
 it.
+
+A security advisory,
+[GHSA-32fr-36wp-jh9x](https://github.com/gina-io/gina/security/advisories/GHSA-32fr-36wp-jh9x),
+accompanies this fix.
 
 ### Security — with the render cache on, the first render's request values no longer reach every later visitor (bundle restart)
 
@@ -491,6 +499,10 @@ bundle to pick it up.
 - The output cache still keys a page on its URL alone, so a cached page keeps the host and language
   it was rendered for until it expires: see [Quick start](/guides/caching#quick-start).
 
+A security advisory,
+[GHSA-32fr-36wp-jh9x](https://github.com/gina-io/gina/security/advisories/GHSA-32fr-36wp-jh9x),
+accompanies this fix.
+
 ### Security — an `X-Forwarded-Prefix` that opens with two slashes is refused (bundle restart)
 
 Up to 0.7.10, on the isaac engine, an `X-Forwarded-Prefix` value opening with two slashes, such as
@@ -509,6 +521,10 @@ clients' pages. The check runs on the server: restart the bundle to pick it up.
 value when the bundle is mounted at `/` (nginx then sends no such header), so that a client's value
 never reaches the bundle; the [0.6.8 notes](/migration#067--068) explain why this header is the one
 to check.
+
+A security advisory,
+[GHSA-32fr-36wp-jh9x](https://github.com/gina-io/gina/security/advisories/GHSA-32fr-36wp-jh9x),
+accompanies this fix.
 
 ---
 
