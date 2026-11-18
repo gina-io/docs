@@ -99,6 +99,27 @@ its size the same way (`reason: 'size'`). The server stays the authority. See
 it. If you translate gina's announcements, add `uploadTypeRefused` and `uploadSizeRefused` (and
 `uploadNotSent`, below) to `gina.config.a11y`; until then they show in English.
 
+### Changed — swig 2.12.4 reads three names differently in a template (bundle restart)
+
+gina's lockfiles now lock `@rhinostone/swig` 2.12.4 (both manifests keep `^2.12.1`, so a
+fresh install already resolves 2.12.4 or later). It is a fix release with no advisory that
+changes how a compiled template reads a name, and three of its changes can show in a gina
+application:
+
+- `count` and `functionCount`, the helpers gina adds to `Object.prototype`, read as an
+  object's own key only. `{{ r.count() }}` renders an empty string where it rendered the
+  number of keys, and `{% if r.count %}` is false for an object without its own `count` key,
+  where it was true. A query row with a `count` column reads as before.
+- A template's `{{ _ext.name }}` renders an empty string. A custom tag's compiled code still
+  reads `_ext` (see [Extending swig](/templating/swig/extending)).
+- A context key named like a JavaScript global (`JSON`, `Math`, `encodeURIComponent`) that
+  holds `null` or `undefined` hides that global in the template.
+
+**What to check:** templates that call `.count()` or `.functionCount()`, test `.count`, or
+read `_ext`: count in the action and pass the number, and read an extension through a custom
+tag. swig's own release notes list its other read changes. gina compiles each template when it
+renders it, so a bundle restart picks the change up; there is nothing to re-bake.
+
 ### Fixed — a staged input with no staging action refuses a file before any request (bundle restart and re-bake)
 
 Up to 0.7.10, a staged file input with no `data-gina-form-upload-action`, on a page without an

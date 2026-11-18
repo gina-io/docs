@@ -73,6 +73,10 @@ count it:
 Object.prototype.count.call(require('querystring').parse('a=1&b=2'));   // → 2
 ```
 
+In a swig template, `count` and `functionCount` read only an object's own key since 0.7.11
+(swig 2.12.4), so `{{ r.count() }}` renders an empty string: count in the action and pass the
+number to the template.
+
 ---
 
 ## `JSON`
