@@ -136,7 +136,9 @@ module.exports = function(session, request) {
   connection. It can use the framework lib registry (`require('lib/<name>')`),
   the ORM (`getModel('<bundle>', '<Model>')`), and `session.query()` (below).
 - `param.wsOptions` is optional and accepts any subset of `maxPayload`,
-  `protocol`, and `closeTimeout`, applied when the connection is accepted.
+  `protocol`, `closeTimeout`, `autoPong` and `maxPendingAutoPongs` (see
+  [Session limits](#session-limits)), applied when the connection is accepted.
+  `app.onWebSocket()` takes the same object as its third argument.
 - `:param` segments, exact-over-param precedence, and first-registered-wins
   ordering work exactly as for the programmatic API above.
 - A missing or unloadable `channels/<name>.js`, or a `ws` route without
@@ -151,8 +153,8 @@ module.exports = function(session, request) {
 | Member | Behaviour |
 |---|---|
 | `send(data)` | `string` → TEXT frame, `Buffer` → BINARY frame. Returns `false` when the stream signalled backpressure — pause until `onDrain` fires. |
-| `ping(payload)` | Sends a PING (≤ 125 bytes). Inbound PINGs are answered automatically. |
-| `close(code, reason)` | Starts the close handshake; the stream is force-ended if the peer stays silent past the close timeout (5 s). |
+| `ping(payload)` | Sends a PING (≤ 125 bytes). Inbound PINGs are answered automatically, within the [session limits](#session-limits). |
+| `close(code, reason)` | Starts the close handshake; if the peer does not answer within the close timeout (`closeTimeout`, 5 s), the stream is reset and any data still queued on it is dropped. |
 | `onMessage(fn)` | `(data, isBinary)` — text is UTF-8-validated before delivery. |
 | `onPing(fn)` / `onPong(fn)` | Control-frame visibility (the pong reply is already handled). |
 | `onClose(fn)` | `(code, reason)` — the single **terminal** event, delivered exactly once: peer close, protocol failure, or transport loss (`1006`). |
@@ -167,6 +169,25 @@ oversized messages) are answered with the RFC 6455 status code (`1002`,
 clean messages. A **throwing handler** is contained too: the session closes
 with `1011` instead of crashing the bundle. Reassembled messages are capped
 at 1 MiB and 100 fragments.
+
+## Session limits
+
+| Option | Default | Behaviour |
+|---|---|---|
+| `closeTimeout` | `5000` (ms) | How long a session waits for the peer's Close frame after `session.close()`. Past it, the stream is reset and any data still queued on it is dropped (since `0.7.12`; before, the stream was half-closed). |
+| `autoPong` | `true` | Answer inbound PINGs automatically. With `false` the session leaves them unanswered; `onPing` still sees them. |
+| `maxPendingAutoPongs` | `60` | _(since `0.7.12`)_ Automatic Pongs that may wait to be written. One more PING closes the session with `1006` and resets the stream. `0` removes the bound. |
+
+Pass them in `param.wsOptions`, or as `app.onWebSocket()`'s third argument.
+
+- A session answers no PING after it has sent its own Close frame.
+- The bound counts the Pongs the stream has not finished writing, so a client
+  that reads can reach it too when more than 60 PINGs arrive at once. Raise
+  `maxPendingAutoPongs` for such a client.
+- To send a large last message, check what `send()` returns: when it is
+  `false`, wait for `onDrain` before you call `close()`, or raise
+  `closeTimeout`. Data still queued when the close timeout resets the stream
+  is dropped.
 
 ## Cross-bundle calls
 
@@ -206,8 +227,9 @@ app.onWebSocket('/live', function(session, request) {
 
 ## Lifecycle and shutdown
 
-- Inbound PINGs are answered automatically; send your own `session.ping()`
-  as a heartbeat when you need liveness detection.
+- Inbound PINGs are answered automatically, within the
+  [session limits](#session-limits); send your own `session.ping()` as a
+  heartbeat when you need liveness detection.
 - On bundle shutdown (`SIGTERM`), live sessions are closed gracefully with
   `1001 going away` before the server drains.
 - HTTP/2 stream or session loss (network drop, `GOAWAY`) surfaces as

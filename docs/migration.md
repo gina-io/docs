@@ -28,16 +28,69 @@ that sent Ping frames and stopped reading made `ws` queue an automatic Pong for 
 without limit, until the process ran out of memory
 ([GHSA-37g9-w4hg-h9qr](https://github.com/websockets/ws/security/advisories/GHSA-37g9-w4hg-h9qr),
 every `ws` release from 8.0.0 before 8.23.0). 8.23.0 closes the connection once 60 automatic
-Pongs are waiting to be written (`maxPendingAutoPongs`). Gina loads `ws` for one endpoint only:
-the Inspector agent WebSocket at `/_gina/agent`, which exists in dev mode and, outside dev, only
+Pongs are waiting to be written (`maxPendingAutoPongs`). Gina loads `ws` in two places: the
+Inspector agent WebSocket at `/_gina/agent`, which exists in dev mode and, outside dev, only
 when `settings.json` `inspector.agent.enabled` is true, where it then requires the agent key (see
-[Authenticated agent endpoint outside dev mode](/guides/inspector#authenticated-agent-endpoint-outside-dev-mode-inspectoragent)).
-Upgrading gina installs 8.23.0 or later. Gina loads `ws` when the bundle starts: restart the
-bundle to pick it up.
+[Authenticated agent endpoint outside dev mode](/guides/inspector#authenticated-agent-endpoint-outside-dev-mode-inspectoragent)),
+and, through engine.io, a bundle whose `settings.json` sets `ioServer.integrationMode` to
+`"attach"` (engine.io now runs on Gina's own `ws`: see the next section). Upgrading gina
+installs 8.23.0 or later. Gina loads `ws` when the bundle starts: restart the bundle to pick it
+up.
 
-**What to check:** nothing in Gina's own use. If your application depends on `ws` itself, its
-own range decides the version it loads; from 8.23.0 on, `ws` closes a connection whose peer
-leaves 60 automatic Pongs unsent.
+**What to check:** a bundle in attach mode: see the next section. If your application depends
+on `ws` itself, its own range decides the version it loads; from 8.23.0 on, `ws` closes a
+connection whose peer leaves 60 automatic Pongs unsent.
+
+### Security — engine.io's WebSocket transport runs on Gina's own `ws` (bundle restart)
+
+A bundle whose `settings.json` sets `ioServer.integrationMode` to `"attach"` now runs
+engine.io's WebSocket transport on Gina's own `ws` (`^8.23.0`), unless its `ioServer` block
+names a `wsEngine`. engine.io pins its own `ws` range, below 8.23.0 in every 6.6.x release
+(`~8.21.0` in 6.6.9 to 6.6.11, the latest), so an install from the registry placed an older
+`ws` under engine.io that Gina's `ws` range did not reach, and such a bundle stayed exposed to
+[GHSA-37g9-w4hg-h9qr](https://github.com/websockets/ws/security/advisories/GHSA-37g9-w4hg-h9qr):
+a peer that sent Ping frames and stopped reading made `ws` queue an automatic Pong for each one
+until the process ran out of memory. Upgrading gina installs `ws` 8.23.0 or later.
+
+**What to check:** nothing if no bundle sets `ioServer`. Otherwise, restart the bundles in
+attach mode after upgrading. A project whose own `package.json` overrides `ws` decides the
+version Gina loads as well: raise such an override to `^8.23.0`.
+
+### Security — a WebSocket-over-HTTP/2 session bounds its automatic Pongs (bundle restart)
+
+WebSocket over HTTP/2 (`app.onWebSocket()` and `method: "ws"` routes): a session now answers
+at most `maxPendingAutoPongs` Pings automatically (60 by default) while earlier Pongs are still
+waiting to be written, and resets the stream past that: the session closes with `1006`.
+Before, a client that sent Ping frames and did not read the Pongs made the session queue every
+Pong, so memory grew until the process ran out of it. A session also no longer answers a Ping
+after it has sent its Close frame, and a close the peer leaves unanswered for the close timeout
+(5 s) now resets the stream instead of half-closing it, so data still queued at that moment is
+dropped. Only bundles serving WebSocket routes on Isaac with
+`http2Options.enableConnectProtocol: true` were affected.
+
+**What to check:** nothing if no bundle serves WebSocket routes. `param.wsOptions` (and
+`onWebSocket()`'s third argument) accepts `maxPendingAutoPongs`, and `0` restores the unbounded
+behaviour: raise it for a client that sends more than 60 Pings at once, which now reaches the
+bound even when the client reads. A last message sent just before `session.close()` is dropped
+if it is still queued when the close timeout resets the stream: when `send()` returned `false`
+for it, wait for `onDrain` before you close, or raise `closeTimeout`. See
+[Session limits](/guides/websockets#session-limits).
+
+### Security — an upgrade request no longer stops a bundle in attach mode (bundle restart)
+
+Isaac bundles whose `settings.json` sets `ioServer.integrationMode` to `"attach"`: Isaac's own
+upgrade listener, which hands engine.io the upgrades on paths other than engine.io's own (a
+bundle's push path, for instance), no longer hands it an upgrade on engine.io's own path
+(`/engine.io/` unless `ioServer.path` says otherwise), which engine.io's own listener already
+serves, nor any upgrade when the websocket transport is disabled, and it drops the socket if
+engine.io throws. The Inspector agent's upgrade listener (`/_gina/agent`, in dev mode or when
+the agent is enabled) likewise drops a socket that another listener has already upgraded.
+Before, a WebSocket request could throw inside one of these listeners and stop the bundle.
+Upgrades on other paths reach engine.io as before. Only bundles in attach mode were affected.
+
+**What to check:** nothing if no bundle sets `ioServer`. Otherwise, restart the bundles in
+attach mode after upgrading. Which listener serves which path:
+[WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
 
 ---
 
@@ -4970,8 +5023,7 @@ resolve an affected engine.io.
 **What to check:** nothing if no bundle sets `ioServer`. Otherwise, restart the bundles in
 attach mode after upgrading so they load the new engine.io. If you cannot upgrade yet,
 `npm update engine.io` moves an older lockfile to a patched release inside `^6.6.7`, or
-`"allowUpgrades": false` (or a single entry in `"transports"`) in the `ioServer` block
-avoids the upgrade the crash needs.
+`"allowUpgrades": false` in the `ioServer` block avoids the upgrade the crash needs.
 
 ### Added — versioned asset URLs, cached by browsers for a year (production; bundle restart)
 

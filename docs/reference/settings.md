@@ -332,29 +332,50 @@ none of those were ever read by the framework and they have been removed from
 the shipped settings template.
 :::
 
-### WebSocket — `engine.io`
+### WebSocket push — `ioServer`
 
-Enable WebSocket support by adding an `engine.io` block.
+Real-time push over [engine.io](https://github.com/socketio/engine.io), on the
+Isaac engine: a bundle whose `settings.json` sets `ioServer.integrationMode` to
+`"attach"` attaches an engine.io server to its own HTTP server. The block sits
+at the top level of `settings.json`. The Express engine has no engine.io
+support. Pushing to clients from a controller:
+[Pushing to connected clients](../guides/controller#pushing-to-connected-clients).
 
-```json
+```json title="src/<bundle>/config/settings.json"
 {
-  "engine.io": {
-    "port"            : 8888,
-    "transports"      : ["polling", "websocket"],
-    "pingInterval"    : 5000,
-    "pingTimeout"     : 45000,
-    "upgradeTimeout"  : 5000
+  "ioServer": {
+    "integrationMode" : "attach",
+    "transports"      : ["websocket", "polling"],
+    "pingInterval"    : "25s",
+    "pingTimeout"     : "20s"
   }
 }
 ```
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `port` | number | `8888` | WebSocket listener port |
-| `transports` | string[] | — | Allowed transports: `"polling"`, `"websocket"` |
-| `pingInterval` | number (ms) | — | How often the server pings connected clients |
-| `pingTimeout` | number (ms) | — | Time before a silent client is disconnected |
-| `upgradeTimeout` | number (ms) | — | Time allowed for transport upgrade |
+| `integrationMode` | string | — | `"attach"` attaches engine.io. With any other value, or none, the bundle loads no engine.io. |
+| `path` | string | `"/engine.io/"` | engine.io's own path. |
+| `transports` | string[] | `["polling", "websocket"]` | Allowed transports: `"polling"`, `"websocket"`. |
+| `pingInterval` | duration | `25000` | How often engine.io pings a connected client: a string such as `"25s"`, or a number of ms. |
+| `pingTimeout` | duration | `20000` | How long engine.io waits for the client's answer to a ping before it closes the connection; same forms. |
+
+Gina converts `pingInterval`, `pingTimeout`, `timeout`, `interval` and
+`ackTimeout` to milliseconds before engine.io reads them. Every other key goes
+to engine.io's server options as it is (`allowUpgrades`, `upgradeTimeout` in
+ms, `maxHttpBufferSize`, `cors`, …); the defaults above are engine.io's. Since
+`0.7.12`, engine.io runs its websocket transport on Gina's own `ws`; before, it
+used the `ws` it resolved itself.
+
+Which listener serves which path:
+
+- **engine.io's own path** (`path`): engine.io serves its HTTP (polling)
+  requests and, while `transports` holds `"websocket"`, its WebSocket upgrades.
+- **Any other path**: while `transports` holds `"websocket"`, Isaac hands
+  engine.io the WebSocket upgrades (a push path under the bundle's webroot, for
+  instance); HTTP requests there go to the bundle's routes.
+- **`/_gina/agent`** (in dev mode, or when the agent is enabled): the Inspector
+  agent's WebSocket; Isaac never hands it to engine.io.
 
 ### `csrf`
 
