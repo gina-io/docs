@@ -58,7 +58,7 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 
 | Test | Shape | Semantics |
 | --- | --- | --- |
-| `defined` | `x is defined` | `true` if `x` is defined and not `null`. |
+| `defined` | `x is defined` | `true` if `x` is defined and not `null`. A name the context lacks reads the JavaScript global of that name, so `Math is defined` is true with no `Math` key; since `2.12.4` a `Math` key holding `null` or `undefined` hides the global, so `Math is defined` is false and `Math is none` true there (before, the reverse). To test a key of a value, write `o.a is defined`, which is false for a key holding `null`; `o.hasOwnProperty("a")` reads as missing since `2.12.4`. |
 | `undefined` | `x is undefined` | `true` if `x` is undefined or `null`. |
 | `none` | `x is none` | `true` if `x` is `null` or `undefined`. |
 | `even` | `x is even` | `true` if `x` is an even integer. |
@@ -118,7 +118,7 @@ A test registered under the name of a built-in replaces it. A replaced compariso
 | `block` / `endblock` | Yes | Named block for template inheritance. |
 | `extends` | No | Dynamic parent (`{% extends var %}`, `{% extends full if cond else partial %}`) resolves on the [async render path](../swig/loaders#async-loaders); the synchronous path requires a string literal. See [Non-Goals](./non-goals#dynamic-extends). |
 | `include` | No | Supports `with context` (default), `without context`, and `ignore missing`. |
-| `macro` / `endmacro` | Yes | Positional parameters with defaults (`{% macro f(a, b="x") %}`); defaults may reference earlier parameters or be full expressions. Keyword-argument **calls** are not supported — see [Non-Goals](./non-goals#macro-kwargs). |
+| `macro` / `endmacro` | Yes | Positional parameters with defaults (`{% macro f(a, b="x") %}`); defaults may reference earlier parameters or be full expressions; a default that reads a parameter while the context holds a key of the same name reads the key, except for the names listed under [`macro`](../swig/tags#macro), see [Behavioural differences](#behavioural-differences). Keyword-argument **calls** are not supported — see [Non-Goals](./non-goals#macro-kwargs). |
 | `import` | No | `{% import "forms.jinja2" as f %}{{ f.label("x") }}`. Path must be a string literal. |
 | `from` | No | `{% from "forms.jinja2" import label, shout as yell %}`. Path must be a string literal. |
 | `raw` / `endraw` | Yes | Verbatim content; variable, tag, and comment syntax pass through untouched. |
@@ -271,6 +271,9 @@ These behaviours are **supported** but diverge from Python Jinja2 because the Ja
 | `is sequence` | A mapping is also a sequence. | An array or string only; a mapping is `is mapping`. |
 | `with x = …` values | Evaluate against the enclosing scope. | Same — evaluated against the outer scope (object-literal merge, not sequential). |
 | Imported macros | `{% import %}` is `without context` by default. | Imported/`from`-imported macros see the caller context (swig macro model — matches swig-twig). |
+| A macro default that reads a parameter | Reads the parameter: with a context key `zz` holding `"CTX"`, `{% macro m(zz, b=zz) %}[{{ b }}]{% endmacro %}{{ m("X") }}` renders `[X]`. | Reads the context's key when the context holds one: the same template renders `[CTX]`. Since 2.12.4 a parameter named as listed under [`macro`](../swig/tags#macro), such as `process`, `document`, `_ext` or `toString`, reads as in Jinja2, also its own or a later one: with `process` for `zz` the template renders `[X]`, and `{% macro m(a=process, process="D") %}[{{ a }}\|{{ process }}]{% endmacro %}{{ m() }}` renders `[\|D]`. A macro called from such a default reads such a parameter of the calling macro as empty, where Jinja2 reads the context's key: with a context key `process` holding `"CTX"`, `{% macro h() %}{{ process }}{% endmacro %}{% macro m(b=h(), process="D") %}[{{ b }}\|{{ process }}]{% endmacro %}{{ m() }}` renders `[\|D]` (Jinja2 `[CTX\|D]`). |
+| An `include` inside a macro | Sees the macro's parameters. | Sees a parameter named as listed under [`macro`](../swig/tags#macro), on the sync render path (since 2.12.4; the async render path does not support an `include` inside a macro), and no other: with `p.html` holding `{{ zz }}`, `{% macro m(zz) %}[{% include "p.html" %}]{% endmacro %}{{ m("X") }}` renders `[]` (Jinja2 `[X]`), and `[X]` with `document` for `zz`. |
+| A macro called inside another macro | Does not see the calling macro's parameters. | Sees a parameter of the calling macro named as listed under [`macro`](../swig/tags#macro) (since 2.12.4, a swig extension), and no other. |
 | `round` | Float-repr rounding (`42.55\|round(1)` → `42.5`). | Naive decimal rounding (`42.55\|round(1)` → `42.6`). |
 | String filters on an array (`upper`, `lower`, `capitalize`, `title`, `striptags`) | Work on the list's string form: `['hELLO']\|capitalize` gives the string `['hello']`. | Apply to each element and return an array: `['hELLO']\|capitalize` gives the array `['Hello']`, which renders as `Hello`. |
 | Rendering `true`, `false`, `null`, a list and a mapping | `True`, `False`, `None`, `[1, 2]` and `{'a': 1}` — so `true\|urlencode` gives `True`, and a mapping with those values gives `a=True&b=None`. `string`, `forceescape` and `urlize` give the same text. | `true`, `false`, an empty string for `null` / `undefined`, `1,2` and `[object Object]`; `urlencode` gives `true` and `a=true&b=null`. `string`, `forceescape` and `urlize` give the same text, so `true\|string` is `true`. |

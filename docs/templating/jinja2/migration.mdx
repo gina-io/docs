@@ -116,10 +116,11 @@ Python Jinja2's `default` only substitutes when the value is **undefined** (pass
 
 ### Macros
 
-Positional calls and parameter defaults port unchanged. Two differences:
+Positional calls and parameter defaults port unchanged. Three differences:
 
 - **Keyword-argument calls do not port** — `{{ field(name="x") }}` throws. See [Non-Goals — macro kwargs](./non-goals#macro-kwargs) for the object-literal rewrite.
 - **Macro output is autoescaped.** Python Jinja2 returns a `Markup` object from a macro (not re-escaped); swig-jinja2 autoescapes macro output like any other `{{ … }}`. If a macro intentionally emits HTML, wrap the call in `|safe`.
+- **A default that reads another parameter reads the context's key** when the context holds a key of that name, where Jinja2 reads the parameter; since 2.12.4 not for a parameter named as listed under [`macro`](../swig/tags#macro). See [Behavioural differences](./parity#behavioural-differences).
 
 ### Operators: `+` vs `~`
 
@@ -161,7 +162,7 @@ Practical consequences:
 
 Everything below is inherited from `@rhinostone/swig-core` and behaves identically across all frontends (native swig, swig-twig, swig-jinja2, swig-django):
 
-- **Prototype-chain guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in variable output, dot access, bracket access (string literals), and all context-writing tags (`set`, `for`, `macro`, `import`, `from`). See [Security — prototype-chain hardening](../swig/security#prototype-chain-hardening).
+- **Prototype-chain guards.** `__proto__`, `constructor`, and `prototype` are rejected at parse time in variable output, dot access, bracket access (string literals), and all context-writing tags (`set`, `for`, `macro`, `import`, `from`). See [Security — prototype-chain hardening](../swig/security#prototype-chain-hardening). Since `2.12.4` a name objects get only from `Object.prototype`, such as `toString`, reads as missing, bare or dotted (`{{ toString }}`, `{{ o.toString }}`), in every frontend, and in swig-jinja2 a call of such a method, such as `{{ o.hasOwnProperty("a") }}`, renders an empty string.
 - **Autoescape injection.** The final `e` filter is appended automatically to every variable output unless the chain ends in a `.safe = true` filter.
 - **Isolation.** Tags, filters, and extensions registered on one instance are invisible to others. See [swig API — isolated instances](../swig/api#swig).
 - **Cache semantics.** Compiled functions are keyed by the loader-resolved filename. See [Loaders](../swig/loaders).

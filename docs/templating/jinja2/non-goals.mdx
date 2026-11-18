@@ -137,6 +137,7 @@ Tracked, not yet implemented:
 - **The `escaped` test.** Jinja2's `escaped` is not provided, and fails as an [unknown name](./parity#unknown-names). The comparison tests (`eq`, `ne`, `lt`, `le`, `gt`, `ge` and their aliases) are provided since 2.11.0.
 - **Tuple literals.** `(1, 2)` does not parse (`Mismatched nesting state`); write a list, `[1, 2]`.
 - **Locale-aware `date`.** The shared PHP-style formatter from `@rhinostone/swig-core` does not plumb locale rules (weekday/month names in non-English locales). Pre-format on the controller side.
+- **`super()`.** `{{ super() }}` does not render the parent block's content. Since `2.12.4` the call fails at compile with `"super()" is not supported (swig-jinja2 does not render parent blocks)` and the line and file, wherever it stands and on both render paths (before, a raw `SyntaxError: 'super' keyword unexpected here` where the template was compiled). A read of the name, `{{ super }}`, and a call of a member of that name, `{{ o.super() }}`, render since `2.12.4`.
 
 ## Reporting a rejection that feels wrong
 

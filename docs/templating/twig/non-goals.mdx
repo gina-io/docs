@@ -157,6 +157,7 @@ These are tracked but not yet implemented:
 - **Some Twig tests.** `none`, `sequence`, `mapping`, `constant`, `true`, `same as` and `divisible by` are not provided, and each fails at compile. See [Parity → `is` tests](./parity#is-tests).
 - **`date_modify` filter.** Relies on DateTime-object mutation; deferred.
 - **Locale-aware `date` / `number_format`.** swig-twig's `date` uses the shared PHP-style formatter from `@rhinostone/swig-core`; locale rules (weekday names, currency formats) are not plumbed through yet.
+- **`parent()`.** `{{ parent() }}` does not render the parent block's content. Since `2.12.4` the call fails at compile with `"parent()" is not supported (swig-twig does not render parent blocks)` and the line and file, wherever it stands and on both render paths (before, an overriding block that called it rendered without the parent's content). A read of the name, `{{ parent }}`, and a call of a member of that name, `{{ o.parent() }}`, are unchanged.
 
 ## Reporting a rejection that feels wrong
 

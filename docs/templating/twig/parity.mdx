@@ -55,7 +55,7 @@ The semantics match native swig: a `{%- endtag %}` strips trailing whitespace of
 
 | Test | Shape | Semantics |
 | --- | --- | --- |
-| `defined` | `x is defined` | `true` if `x` is defined and not `null` in the context. |
+| `defined` | `x is defined` | `true` if `x` is defined and not `null` in the context. A name the context lacks reads the JavaScript global of that name, so `Math is defined` is true with no `Math` key; since `2.12.4` a `Math` key holding `null` or `undefined` hides the global, so `Math is defined` is false and `Math is null` true there (before, the reverse). To test a key of a value, write `o.a is defined`, which is false for a key holding `null`; `o.hasOwnProperty("a")` reads as missing since `2.12.4`. |
 | `null` | `x is null` | `true` if `x` is `null` or `undefined`. |
 | `empty` | `x is empty` | `true` if `x` is `null`, `undefined`, an empty string, an empty array, or an object with no own keys. |
 | `iterable` | `x is iterable` | `true` if `x` is an array or a plain object. |
@@ -103,7 +103,7 @@ Tags explicitly **not implemented** (throw at parse time):
 
 See [Non-Goals](./non-goals) for the full list and the error messages they produce.
 
-**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it. On the sync path they stayed reachable through the importing alias (`{{ alias.inner.macro() }}`) until `2.9.7`; since then that renders nothing on both paths.
+**Macro / import scoping.** Imported macros are *local to the template that declares the import* — including that template's own macros. A macro can call another macro that its own file imported via `{% import %}` or `{% from %}`; the import resolves at call time, recursively across import depth. Those imports are **not** exposed to templates that in turn import this one, matching upstream Twig's rule that imports are local to the importing template. On the [async render path](../swig/loaders#async-loaders) this holds since `2.9.6`; before, an imported template's own imports, macros and top-level sets landed in the template that imported it. On the sync path they stayed reachable through the importing alias (`{{ alias.inner.macro() }}`) until `2.9.7`; since then that renders nothing on both paths. A macro's parameters follow the native rule, including the names whose parameter a macro called inside the macro, or an `include` inside it, sees since `2.12.4`: see [`macro`](../swig/tags#macro).
 
 ## Filters
 

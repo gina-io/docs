@@ -45,7 +45,7 @@ In Django, `is` is an **identity comparison** — `{% if x is None %}`, `{% if f
 
 | Shape | Semantics |
 | --- | --- |
-| `x is None` | `true` if `x` is absent or `null` (routed through the existence check, so a missing context slot is distinguished from a real value). |
+| `x is None` | `true` if `x` is absent or `null` (routed through the existence check, so a missing context slot is distinguished from a real value). A name the context lacks that names a JavaScript global, such as `Math`, reads the global, so `Math is None` is false with no `Math` key; since `2.12.4` it is true for a `Math` key holding `null` or `undefined` (before, false). |
 | `x is not None` | `true` if `x` is present. |
 | `x is True` / `x is False` | Strict equality against the boolean. |
 | `x is y` | Strict identity (`x === y`). Distinct object references are **not** identical (`{} is {}` → false). |
@@ -74,6 +74,8 @@ Auto-call opt-outs match Django:
 | `fn.do_not_call_in_templates === true` | Returned **uncalled** (the function value itself). Mirrors Django's `do_not_call_in_templates`. |
 
 A call that throws resolves to `undefined` (renders `""`), mirroring Django's `string_if_invalid` default. Every segment is still checked against the prototype-chain (`_dangerousProps`) blocklist at parse time, and the resolver re-checks at runtime as defence in depth — `{{ a.__proto__ }}` throws.
+
+Since `2.12.4` a name a value gets only from `Object.prototype`, such as `toString`, `valueOf` or `hasOwnProperty`, reads as missing instead of being called, bare or dotted: `{{ toString }}` and `{{ o.toString }}` render an empty string (before, `[object Object]`, and `false` for `{{ hasOwnProperty }}`), and so does a function a Proxy returns for such a name. A key of that name the object holds itself, and a method of the object's own class, are read and called as before.
 
 ## Tags
 
