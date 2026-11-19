@@ -128,6 +128,19 @@ Upgrades on other paths reach engine.io as before. Only bundles in attach mode w
 attach mode after upgrading. Which listener serves which path:
 [WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
 
+### Security — an upgrade request that no listener takes is answered or closed (bundle restart)
+
+Every bundle: the Inspector agent's upgrade listener (`/_gina/agent`) is attached to every
+bundle's server, so Node.js accepted every HTTP upgrade request, and an upgrade on any other
+path that no listener took was left open. Such a request is now answered as a plain request
+(Node.js 24.9 and later, when no other upgrade listener is attached) or closed after one second,
+as engine.io closes an upgrade nobody answered.
+
+**What to check:** nothing to configure: restart the bundles after upgrading. An `upgrade`
+listener of your own on a bundle's server must write its answer within one second, or its
+socket is closed. Which listener serves which path:
+[WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
+
 ---
 
 ## 0.7.10 → 0.7.11

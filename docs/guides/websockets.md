@@ -239,6 +239,9 @@ app.onWebSocket('/live', function(session, request) {
 
 - **HTTP/2 only.** A client that does not negotiate HTTP/2 falls back to the
   classic HTTP/1.1 `Upgrade` handshake, which `onWebSocket` does not serve.
+  Since `0.7.12` such a request is answered as a plain HTTP request (Node.js
+  24.9 and later, when no other upgrade listener is attached) or closed after
+  one second.
   Browsers use extended CONNECT automatically when the page's origin
   connection is HTTP/2 and the server advertises the capability; for
   server-to-server use, pick a client that supports RFC 8441.
