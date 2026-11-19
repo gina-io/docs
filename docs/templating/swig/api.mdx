@@ -347,11 +347,13 @@ Do not pass untrusted input to `run` — see [Security](./security#swig-run-is-n
 swig.register(path, fn)
 ```
 
-Register a pre-compiled template function under a template path. Later `include` lookups and [`compileFile`](#compilefile) / [`renderFile`](#renderfile) calls are served from the template cache without compiling. Added in v2.8.0. Since `v2.9.6`, `compileFile(path, { locals })` applies those locals to a registered template too.
+Register a pre-compiled template function under a template path. Later lookups of that path are served from the template cache without compiling. Added in v2.8.0. Since `v2.9.6`, `compileFile(path, { locals })` applies those locals to a registered template too.
+
+Which lookups a registration serves depends on how the function was compiled. One compiled in the default sync mode, such as the [CLI](./cli)'s output, serves the sync render path: `include` lookups, [`compileFile(path)`](#compilefile), [`renderFile(path, locals)`](#renderfile), and `renderFile(path, locals, cb)` when the loader is not async. The async render path does not use it and reads the loader for that name. Since `v2.12.5` a function compiled with `codegenMode: 'async'` also serves the async render path: `renderFile(path, locals, cb)` with an [async loader](./loaders#async-loaders), `compileFile(path, { codegenMode: 'async' })`, and the `{% include %}`, `{% import %}`, `{% from %}` and `{% extends %}` of templates rendered on that path (`import` and `from` in the flavors that have them) read it before the loader (before, they failed with the loader's not-found error, or used the loader's source when the loader also held the name). It then takes part in the render that reaches it, as a template from the loader does: a `{% set %}` in a registered include reaches the including template, and a registered template that includes or extends itself stops with the nesting or the circular-extends error. A function compiled in async mode by `2.12.4` is used as it is. On the sync render path an async-compiled function keeps its async call shape (a Promise of `{ output, exports }`), so register async-compiled output for templates the async render path renders.
 
 The path is normalized through the active loader's `resolve`, so registering `'partials/nav.html'` and writing `{% include "partials/nav.html" %}` agree on the cache key. The entry is stored as a locals-binding wrapper — the call shape `include` expects — so registered partials may use variables, filters, and extensions freely. Passing a path to [`run`](#run) registers the same way, but renders the template once as a side effect; prefer `register` when no output is wanted.
 
-A registered template cannot serve as an `{% extends %}` parent: it carries an executable function, not a parse tree, so the parent's source must stay reachable through the loader. Registering a layout does not shadow one the loader can already read.
+On the sync render path a registered template cannot serve as an `{% extends %}` parent: it carries an executable function, not a parse tree, so the parent's source must stay reachable through the loader there, and registering a layout does not shadow one the loader can already read. On the async render path, since `v2.12.5`, a registration compiled with `codegenMode: 'async'` serves as a parent and is read before the loader; a sync-compiled registration is not read there, so the parent comes from the loader.
 
 ```js
 swig.register('partials/nav.html', navTpl);
@@ -363,7 +365,7 @@ swig.render('{% include "partials/nav.html" %}', {
 
 Before `2.9.6`, calling `render` again with the same `filename` and other `locals` rendered the first call's `locals` ([GHSA-25w8-77gg-4ccw](./security#ghsa-25w8-77gg-4ccw)).
 
-Throws when the instance has caching disabled — the registry is the template cache, so there would be nowhere to keep the registration. For the same reason, [`invalidateCache`](#invalidatecache) drops every registration made against the built-in memory cache.
+Throws when the instance has caching disabled — the registry is the template cache, so there would be nowhere to keep the registration. For the same reason, [`invalidateCache`](#invalidatecache) drops every registration made against the built-in memory cache. Since `v2.12.5` a function compiled with `codegenMode: 'async'` is kept under the resolved name and under that name followed by `#async`; a [custom cache](#caching) must drop both entries itself.
 
 ---
 

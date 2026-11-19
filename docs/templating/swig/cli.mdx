@@ -131,7 +131,7 @@ module.exports = {
 };
 ```
 
-Register the bundle at startup so `include` lookups and `compileFile` / `renderFile` calls resolve to the compiled functions:
+Register the bundle at startup so `include` lookups and `compileFile` / `renderFile` calls on the sync render path resolve to the compiled functions (the CLI compiles in the default sync mode; the async render path uses only registrations compiled with `codegenMode: 'async'`, see [`register`](./api#register)):
 
 ```js
 var swig = require('@rhinostone/swig');
