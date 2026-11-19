@@ -178,7 +178,8 @@ with `requirements`, which reads the whole segment as the name, `"url": "/:lang-
 `:lang`: a binding under `lang-code` is never filled, and the route matches only when `param` also binds `lang`. Text after
 the name in its segment is not compared: `"url": "/feed/:id.json"` matches `/feed/42` as well as `/feed/42.json`, where
 `req.params.id` is `42.json`. Write `:lang_code` instead. Since 0.7.12 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line,
-about each URL segment that holds a parameter followed by such a character; nothing is rewritten for you.
+about each URL segment that holds a parameter followed by such a character; nothing is rewritten for you. Text before a
+parameter in its segment is not compared either: see [Inline parameters](#inline-parameters).
 
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` holds the **actual URL value** captured at request time (e.g. `"abc-123"`).
@@ -228,11 +229,17 @@ no placeholder was filled.
 
 ### Inline parameters
 
-Parameters can be embedded within a segment rather than forming a full segment:
+A parameter takes its whole URL segment: text written next to it in the same segment is
+neither compared nor removed. `"url": "/articles/page:number"` reads as `/articles/:number`:
+`/articles/page3` gives `number` the value `page3`, `/articles/42` gives it `42`, and a
+requirement tests that whole value, so with `"number": "/^[0-9]+$/"` the route answers
+`/articles/42` and never `/articles/page3`. On a `DELETE` route with `requirements`, such a
+segment is compared as written: the route matches only a request that carries `page:number`
+itself, and binds nothing. Write the fixed text as its own segment:
 
 ```json
 "pagination": {
-  "url": "/articles/page:number",
+  "url": "/articles/page/:number",
   "requirements": {
     "number": "/^[0-9]+$/"
   },
@@ -243,7 +250,10 @@ Parameters can be embedded within a segment rather than forming a full segment:
 }
 ```
 
-`/articles/page3` sets `req.params.number` (and `req.get.number`) to `"3"`.
+`/articles/page/3` sets `req.params.number` (and `req.get.number`) to `"3"`. Since 0.7.12 a bundle
+warns once at boot, in one `[CONFIG][loadBundleConfig]` line, about each URL segment that holds
+text before a placeholder its route binds; nothing is rewritten for you. Up to 0.7.11 this section
+showed `"/articles/page:number"` as a pattern that reads `3` from `/articles/page3`; it never did.
 
 ---
 

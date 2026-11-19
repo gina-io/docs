@@ -39,6 +39,24 @@ letters, digits and underscores (`"url": "/:lang_code/home"` with `"lang_code": 
 read it from `req.params.lang_code`, and pass `lang_code` where `getRoute()` fills it. See
 [Routing → Parameterized URL](/guides/routing#parameterized-url).
 
+### Added — a boot warning for text before a URL placeholder (bundle restart)
+
+Gina neither compares nor removes text written before a placeholder in its URL segment: the
+placeholder takes the whole segment, so `"url": "/articles/page:number"` also matches
+`/articles/42`, reads `page3` from `/articles/page3`, and a requirement tests the whole segment (a
+`DELETE` route with `requirements` compares such a segment as written). A bundle now warns once at
+boot, in one `[CONFIG][loadBundleConfig]` line, about each URL segment that holds text before a
+placeholder its route binds:
+
+```
+[CONFIG][loadBundleConfig] [ site ] 1 route URL segment holds text before a placeholder its route binds: list@site "page:number". gina neither compares nor removes that text, except on a DELETE route with requirements, which compares the segment as written: the placeholder takes the whole segment, so "/articles/page:number" also matches "/articles/42", reads "page3" from "/articles/page3", and a requirement tests the whole segment. Put the fixed text in a segment of its own ("/articles/page/:number"). See https://gina.io/docs/guides/routing#inline-parameters
+```
+
+Routes are matched and served as before. To clear the warning, put the fixed text in a segment of
+its own (`"url": "/articles/page/:number"`). Up to 0.7.11 the routing guide showed
+`"/articles/page:number"` reading `3` from `/articles/page3`; it never did. See
+[Routing → Inline parameters](/guides/routing#inline-parameters).
+
 ### Security — Gina requires `ws` 8.23.0 or later (bundle restart)
 
 Gina's manifests now require `ws` `^8.23.0` (they required `^8.22.0`). Up to 8.22.0, a peer
