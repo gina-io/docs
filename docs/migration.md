@@ -133,12 +133,14 @@ attach mode after upgrading. Which listener serves which path:
 Every bundle: the Inspector agent's upgrade listener (`/_gina/agent`) is attached to every
 bundle's server, so Node.js accepted every HTTP upgrade request, and an upgrade on any other
 path that no listener took was left open. Such a request is now answered as a plain request
-(Node.js 24.9 and later, when no other upgrade listener is attached) or closed after one second,
-as engine.io closes an upgrade nobody answered.
+(Node.js 22.21 and later, 24.9 and later, when no other upgrade listener is attached) or closed
+after one second, as engine.io closes an upgrade nobody answered; on Bun, when another upgrade
+listener is attached, it is left to that listener.
 
-**What to check:** nothing to configure: restart the bundles after upgrading. An `upgrade`
-listener of your own on a bundle's server must write its answer within one second, or its
-socket is closed. Which listener serves which path:
+**What to check:** nothing to configure: restart the bundles after upgrading. On Node.js, an
+`upgrade` listener of your own on a bundle's server must write its answer within one second, or
+its socket is closed; on Bun, gina leaves the upgrades of a server with such a listener to it,
+which must answer or close each upgrade it receives. Which listener serves which path:
 [WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
 
 ---

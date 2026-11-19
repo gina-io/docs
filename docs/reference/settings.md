@@ -378,11 +378,12 @@ Which listener serves which path:
   agent's WebSocket; Isaac never hands it to engine.io.
 - **An upgrade that no listener takes** (any bundle, with or without
   `ioServer`): since `0.7.12`, it is served as a plain request when the server
-  has `shouldUpgradeCallback` (Node.js 24.9 and later) and gina's listeners are
-  its only upgrade listeners; otherwise it is closed after one second when
-  nothing has been written on its socket, as engine.io closes an upgrade it
-  does not own. An `upgrade` listener of your own must write its answer within
-  that second.
+  has `shouldUpgradeCallback` (Node.js 22.21 and later, 24.9 and later) and
+  gina's listeners are its only upgrade listeners; otherwise it is closed after
+  one second when nothing has been written on its socket, as engine.io closes
+  an upgrade it does not own. On Node.js, an `upgrade` listener of your own
+  must write its answer within that second; on Bun, gina leaves the upgrades
+  of a server with such a listener to it.
 
 ### `csrf`
 
