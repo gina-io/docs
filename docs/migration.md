@@ -112,6 +112,10 @@ if it is still queued when the close timeout resets the stream: when `send()` re
 for it, wait for `onDrain` before you close, or raise `closeTimeout`. See
 [Session limits](/guides/websockets#session-limits).
 
+A security advisory,
+[GHSA-qpr7-7hv2-7pw6](https://github.com/gina-io/gina/security/advisories/GHSA-qpr7-7hv2-7pw6),
+accompanies this fix.
+
 ### Security — an upgrade request no longer stops a bundle in attach mode (bundle restart)
 
 Isaac bundles whose `settings.json` sets `ioServer.integrationMode` to `"attach"`: Isaac's own
@@ -128,6 +132,10 @@ Upgrades on other paths reach engine.io as before. Only bundles in attach mode w
 attach mode after upgrading. Which listener serves which path:
 [WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
 
+A security advisory,
+[GHSA-m97r-2765-xr2g](https://github.com/gina-io/gina/security/advisories/GHSA-m97r-2765-xr2g),
+accompanies this fix.
+
 ### Security — an upgrade request that no listener takes is answered or closed (bundle restart)
 
 Every bundle: the Inspector agent's upgrade listener (`/_gina/agent`) is attached to every
@@ -142,6 +150,10 @@ listener is attached, it is left to that listener.
 its socket is closed; on Bun, gina leaves the upgrades of a server with such a listener to it,
 which must answer or close each upgrade it receives. Which listener serves which path:
 [WebSocket push — `ioServer`](/reference/settings#websocket-push--ioserver).
+
+A security advisory,
+[GHSA-5688-52rg-4vrm](https://github.com/gina-io/gina/security/advisories/GHSA-5688-52rg-4vrm),
+accompanies this fix.
 
 ---
 
@@ -5075,6 +5087,9 @@ resolve an affected engine.io.
 attach mode after upgrading so they load the new engine.io. If you cannot upgrade yet,
 `npm update engine.io` moves an older lockfile to a patched release inside `^6.6.7`, or
 `"allowUpgrades": false` in the `ioServer` block avoids the upgrade the crash needs.
+A single entry in `"transports"` is not offered here: on a release before 0.7.12,
+`"transports": ["polling"]` lets one WebSocket upgrade request stop the bundle
+([GHSA-m97r-2765-xr2g](https://github.com/gina-io/gina/security/advisories/GHSA-m97r-2765-xr2g)).
 
 ### Added — versioned asset URLs, cached by browsers for a year (production; bundle restart)
 
