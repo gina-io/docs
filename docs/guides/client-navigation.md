@@ -250,9 +250,11 @@ Events, observable with `gina.nav.on('<event>', handler)`:
   layoutless flag only filters assets there). Avoid `negotiate: true` on
   nunjucks `{% extends %}` routes until this is resolved. Swig — the default
   engine — is the fully working path.
-- **URLs with mixed literal+parameter segments** (like `/page:number`) are
-  matchable by the server but deliberately not by the client — links to them
-  navigate normally rather than risking a wrong match.
+- **URLs with mixed literal+parameter segments** (like `/page:number` or
+  `/:id.json`, and since 0.7.13 `/:lang-code`, whose parameter is `:lang`: a
+  name ends at the first character that is not a letter, a digit or an
+  underscore) are matchable by the server but deliberately not by the client —
+  links to them navigate normally rather than risking a wrong match.
 - **Browser floor:** `history.pushState` + `Element.closest`. Below it the
   module simply never intercepts — plain navigation, nothing breaks.
 

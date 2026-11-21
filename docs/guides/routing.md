@@ -173,13 +173,19 @@ this.get = function(req, res, next) {
 };
 ```
 
-A parameter's name ends at the first character that is not a letter, a digit or an underscore. Except on a `DELETE` route
-with `requirements`, which reads the whole segment as the name, `"url": "/:lang-code/home"` is read as the parameter
-`:lang`: a binding under `lang-code` is never filled, and the route matches only when `param` also binds `lang`. Text after
-the name in its segment is not compared: `"url": "/feed/:id.json"` matches `/feed/42` as well as `/feed/42.json`, where
-`req.params.id` is `42.json`. Write `:lang_code` instead. Since 0.7.12 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line,
+A parameter's name ends at the first character that is not a letter, a digit or an underscore: `"url": "/:lang-code/home"`
+is read as the parameter `:lang`, a binding under `lang-code` is never filled, and the route matches only when `param`
+also binds `lang` (on a `DELETE` route with `requirements`, a regular-expression requirement on `lang` that accepts the
+segment also lets it match, and the value then reaches `req.delete` only). Up to 0.7.12 a `DELETE` route with
+`requirements` read the whole segment as the name instead. Text after the name in its segment is not compared:
+`"url": "/feed/:id.json"` matches `/feed/42` as well as `/feed/42.json`, where `req.params.id` is `42.json`, and a
+requirement on `id` tests that whole value. Write `:lang_code` instead. Since 0.7.12 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line,
 about each URL segment that holds a parameter followed by such a character; nothing is rewritten for you. Text before a
 parameter in its segment is not compared either: see [Inline parameters](#inline-parameters).
+
+A URL segment holds one parameter. A segment with two or more (`"url": "/range/:from-:to"`) never matches a value: a
+request matches it only by carrying its text as written. Since 0.7.13 a bundle warns once at boot, in one
+`[CONFIG][loadBundleConfig]` line, about each such segment; give each parameter a segment of its own (`"/range/:from/:to"`).
 
 :::note `req.params` vs `req.routing.param`
 `req.params.<key>` holds the **actual URL value** captured at request time (e.g. `"abc-123"`).
@@ -379,8 +385,10 @@ slashes, flags after the last slash):
 `/docs/intro` matches. `/docs/pricing` does not — the router tries the next route.
 
 A route may put a requirement on some of its placeholders only: a placeholder without one
-accepts any non-empty segment. (On a `DELETE` route that was not so before 0.7.6 — a `DELETE`
-route whose requirements covered only some of its placeholders never matched.)
+accepts any non-empty segment, as long as `param` binds it. (On a `DELETE` route that was not so
+before 0.7.6 — a `DELETE` route whose requirements covered only some of its placeholders never
+matched — and from 0.7.6 to 0.7.12 a `DELETE` route accepted such a placeholder without the
+binding too.)
 
 :::warning A regex requirement is a partial match — anchor it
 The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the

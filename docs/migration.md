@@ -19,6 +19,108 @@ upward to the target version.
 
 ---
 
+## 0.7.12 → 0.7.13
+
+### Added — a boot warning for a URL segment that holds two or more placeholders (bundle restart)
+
+gina never matches a URL segment that holds two or more placeholders (`"url": "/range/:from-:to"`)
+against a value: a request matches it only by carrying its text as written. A bundle now warns once
+at boot, in one `[CONFIG][loadBundleConfig]` line, about each such segment, whatever the route's
+method:
+
+```
+[CONFIG][loadBundleConfig] [ site ] 1 route URL segment holds two or more placeholders: range@site ":from-:to". gina never matches such a segment against a value: a request matches it only by carrying its text as written. Give each placeholder a segment of its own ("/range/:from/:to"). See https://gina.io/docs/guides/routing#parameterized-url
+```
+
+The warning changes no route, and the two boot warnings added in 0.7.12 no longer list such a
+segment. To clear the warning, give each placeholder a segment of its own
+(`"url": "/range/:from/:to"`). See [Routing → Parameterized URL](/guides/routing#parameterized-url).
+
+### Changed — on a `DELETE` route with `requirements`, a placeholder's name is read as on any route (bundle restart and re-bake)
+
+A placeholder's name is its letters, digits and underscores on a `DELETE` route with `requirements`
+too, and its value is the whole segment. Up to 0.7.12 that route read the whole segment as the
+name: from 0.7.6, `"url": "/feed/:id.json"` with `"id": "/^[0-9]+$/"` bound `id.json`, skipped the
+requirement on `id` and matched any segment. It now binds `id` and applies the requirement to
+`42.json`, so the route no longer matches `/feed/42.json`. If an action reads `req.params['id.json']` or
+`req.delete['id.json']`, bind `"id": ":id"` and read `id`, and write the requirement for the whole
+segment (`"/^[0-9]+\\.json$/"`) or give the fixed text a segment of its own. The 0.7.12 boot
+warning for such a placeholder no longer names a `DELETE` exception.
+
+### Changed — on a `DELETE` route with `requirements`, an unbound placeholder without a requirement no longer matches (bundle restart and re-bake)
+
+A placeholder with no requirement accepts any non-empty segment when the route binds it in `param`,
+on `DELETE` as on `GET`. From 0.7.6 to 0.7.12 a `DELETE` route with `requirements` accepted it
+unbound too: `"url": "/m/:grp/:id"` with a requirement on `id` and only `id` bound answered where its
+`GET` twin answers `404`, and `grp` reached `req.delete`. To keep such a route matching, bind the
+placeholder (`"grp": ":grp"`).
+
+### Changed — on a `DELETE` route with `requirements`, a segment holding two or more placeholders no longer matches a value (bundle restart and re-bake)
+
+On a `DELETE` route with `requirements`, a URL segment that starts with a placeholder and holds two
+or more (`"url": "/range/:from-:to"`) matches a request only when the request carries its text as
+written, as on every other route. From 0.7.6 to 0.7.12 that route matched any non-empty segment
+there and wrote the value under the rest of the segment's text (`req.delete['from-:to']`), so
+`DELETE /range/1-5` reached its action; the router now tries the next route. Give each placeholder a
+segment of its own (`"url": "/range/:from/:to"`), as the boot warning above says.
+
+### Changed — a WebSocket route reads a placeholder's name as an HTTP route does (bundle restart)
+
+On a `"method": "ws"` route, or `app.onWebSocket()`, `/live/:lang-code` now exposes
+`request.params.lang`, holding the whole segment, instead of `request.params['lang-code']`, and a
+segment with no name after its `:`, or with two or more placeholders, is compared as written. A
+handler reading `request.params['lang-code']` reads `lang` now; name the placeholder `:lang_code`
+to keep one name. See [WebSockets](/guides/websockets).
+
+### Fixed — the navigation module reads placeholder names as the server does (bundle restart and re-bake)
+
+For `"url": "/:lang-code/x/:id"` on a route that binds `"lang-code": ":lang-code"`, the navigation
+module (`gina/nav`) compiled the segment under the name `lang-code`, where the server reads `:lang`
+holding the whole segment and refuses the request, so the module intercepted links the server
+refuses. It now leaves such a variant uncompiled, as it already did for `/page:number`, and no
+longer intercepts links through that route. The routing map served to the browser is unchanged.
+Re-bake each bundle to pick it up. See [Client navigation](/guides/client-navigation).
+
+### Fixed — a segment with a nameless `:`, or one that is not a valid regular expression, no longer answers 500 (bundle restart and re-bake)
+
+A route URL segment holding a `:` with no name after it (`/t/12:`), or one that is not a valid
+regular expression (`/r/:id)`, `/r/[:id`), answered 500 « Rule [ … ] needs your attention » on every
+request that reached it, and no later rule was tried. A nameless `:` now matches only a request
+carrying the segment as written; the other segment is read like any segment holding one
+placeholder. The `path`, `namespace` and `title` rewrites now replace the segment's own text
+literally: a `.` in it no longer matches any character.
+
+### Fixed — a two-placeholder segment no longer answers 500 to a request carrying a `%`-escape (bundle restart and re-bake)
+
+A route whose URL segment holds two or more placeholders and that declares `requirements` answered
+500 « Rule [ … ] needs your attention » to a request carrying a decodable escape
+(`/shop/item-1%202-fr`), and no later rule was tried. The segment now does not match, and the next
+rule is tried. See the boot warning above.
+
+### Fixed — a `validator::` requirement reads placeholder names in any letter case (bundle restart and re-bake)
+
+For a `validator::` requirement the route does not bind in `param`, `:userId` was read as `:user`, so
+a `query.data` entry referencing `":userId"` was dropped before the validator ran, and, when the
+validator declared a `query.data` entry, a URL whose every placeholder name starts with a capital
+(`/u/:ID`) answered 500. Names are now read with letters, digits and underscores in any case. The
+same block read `:lang-code` whole and set `req.params['id.json']` for `:id.json`; it now reads
+`:lang` and sets `req.params.id`.
+
+### Fixed — a route matcher that throws answers the request once (bundle restart)
+
+When a route's matcher throws, for example on a requirement that is not a valid regular expression,
+the request gets its 500 « Rule [ … ] needs your attention » and nothing more. Up to 0.7.12 a second
+error line, with an error reference of its own, followed it for the same request: « Page not found »,
+or the 405's when an earlier rule had refused the request's method.
+
+### Fixed — `getRoute()` tells a port from a placeholder (bundle restart and re-bake)
+
+`getRoute()` warned « placeholder not defined » when a value held `host:port/` (a redirect target
+such as `localhost:3132/back`), and stayed silent for an unfilled placeholder named `d`. Nothing to
+change.
+
+---
+
 ## 0.7.11 → 0.7.12
 
 ### Added — a boot warning for a URL placeholder followed by another character (bundle restart)

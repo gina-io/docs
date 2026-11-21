@@ -91,7 +91,12 @@ demo.onInitialize(function(event, app, express) {
 - Paths match the request's `:path` with the query string stripped. A plain
   path matches **exactly**; a path with a `:name` segment — e.g. `/live/:room`,
   since `0.5.5` — matches any non-empty segment and exposes the captured value
-  on `request.params.room`. An exact path always wins over a `:param` pattern,
+  on `request.params.room`. A name follows the
+  [routing grammar](/guides/routing#parameterized-url), letters, digits and
+  underscores: since `0.7.13` `/live/:lang-code` exposes `request.params.lang`,
+  holding the whole segment, as an HTTP route reads it, and a segment with no
+  name after its `:`, or with two or more placeholders, is compared as written.
+  An exact path always wins over a `:param` pattern,
   and among overlapping patterns the first registered wins. An extended-CONNECT
   request for an unregistered path is refused with `404`.
 - The handler receives the live `session` plus the original `request`, whose
