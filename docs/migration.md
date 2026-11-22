@@ -127,6 +127,17 @@ or the 405's when an earlier rule had refused the request's method.
 such as `localhost:3132/back`), and stayed silent for an unfilled placeholder named `d`. Nothing to
 change.
 
+### Fixed — on Node.js 22.21.0, an HTTP/1.1 request carrying `Upgrade` headers no longer stops an `https` HTTP/2 bundle (bundle restart)
+
+Node.js 22.21.0's HTTP layer calls a server's `shouldUpgradeCallback` for every HTTP/1.1 request
+carrying `Upgrade` headers, and that release's `http2` server with `allowHTTP1` (the default for an
+`https` HTTP/2 bundle, on Isaac and on Express) does not define it, so such a request threw inside
+Node's parser and the bundle stopped
+([nodejs/node#60336](https://github.com/nodejs/node/issues/60336), fixed in Node.js 22.21.1). At
+boot, gina now gives such a server Node.js 22.21.1's own callback when it has none, so the request
+is answered as on later releases. Nothing to change; other Node.js releases and Bun are unchanged.
+Moving to Node.js 22.21.1 or later fixes it as well.
+
 ---
 
 ## 0.7.11 → 0.7.12
