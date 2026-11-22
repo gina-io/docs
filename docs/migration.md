@@ -15914,6 +15914,12 @@ on the same tick, so existing code is unaffected; going forward prefer
 `return self.redirect(...)` from your action, so a resolution error reaches the
 framework's error handler instead of surfacing as an unhandled rejection.
 
+`lib.routing.getRouteByUrl()` is `async` too since this release. A caller that
+reads its return value synchronously (`var route = lib.routing.getRouteByUrl(url)`)
+now gets a Promise, whose properties read `undefined`, with no error raised:
+`await` it from an async function, or use `.then()`, as the
+[routing API reference](/api/routing#getRouteByUrl) shows.
+
 Second, a redirect whose target cannot be resolved now returns a clean `404` for
 that one request. Previously the unresolved sentinel reached the response-header
 composer, which threw from inside the error path and **took the whole bundle
