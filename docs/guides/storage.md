@@ -158,7 +158,7 @@ gina.storage().put(fs.createReadStream('/tmp/report-8821.pdf'), {
 });
 ```
 
-Two things you do not have to do yourself: `res.size` is **measured by the layer** from what it actually published, so there is no reason to `stat()` afterwards or to trust a size you were handed; and on failure `put()` **destroys the source stream** before calling back, so a failed store leaves you no stream to clean up. The temp file itself is yours — the layer copies out of it and never assumes it may delete it.
+Two things you do not have to do yourself: `res.size` is **measured by the layer** from what it actually published, so there is no reason to `stat()` afterwards or to trust a size you were handed; and on failure `put()` **destroys the source stream** before calling back, so a failed store leaves you no stream to clean up. The exception is a source that has already ended or been destroyed when you call `put()` (an action's `req`, whose body gina has already read, is one): it is refused before anything opens, with an error whose `code` is `STORAGE_STREAM_SPENT`, and left as it is. The temp file itself is yours — the layer copies out of it and never assumes it may delete it.
 
 If you hold the bytes in memory rather than on disk, wrap them the same way: `require('stream').Readable.from([buffer])`.
 
@@ -174,7 +174,7 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 
 | Method | Returns | Notes |
 | --- | --- | --- |
-| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. Under `cas` the result also carries `deduplicated` — `true` when identical content already existed. |
+| `put(stream, meta, cb)` | `{key, size, contentType}` | `size` is measured by the layer from the published bytes, never taken from the client. A source that has already ended or been destroyed is refused (`err.code` `STORAGE_STREAM_SPENT`). Under `cas` the result also carries `deduplicated` — `true` when identical content already existed. |
 | `get(key, cb)` | a readable stream | **Errors** on an unknown key — a caller wanting bytes has no use for a null stream. Serves both tiers. |
 | `getRange(key, start, end, cb)` | a readable stream | A byte range, `end` **inclusive** (as in the HTTP header). An `end` past the last byte is clamped; only a `start` at or beyond the object's size errors — that is your `416`. Serves both tiers. Gated by `capabilities.ranges`, true on every local driver. |
 | `stat(key, cb)` | metadata, or `null` | `null` (not an error) when the key is unknown. This is the existence question. Never includes payload bytes. Under `cas` it includes `refs`, the live reference count. |
@@ -182,7 +182,7 @@ The client's filename never becomes the path. It is kept verbatim in the metadat
 | `resolve(key, cb)` | `{kind: 'path', path}` or `{kind: 'inline'}` | How to serve the object. Branch on `kind` — an inline object has no path; stream it through `get()`. |
 | `findByDigest(algo, hex, cb)` | a key, or `null` | **cas only** — gated by `capabilities.dedup`. The pre-upload existence check; see [the oracle caution](#content-addressed-storage-cas). |
 | `createUpload(meta, cb)` | `{uploadId, chunkSize, expectedSize}` | **stream only** — gated by `capabilities.resumable`. Opens a [resumable session](#large-media-and-resumable-uploads-stream). `meta.expectedSize` is **required**. |
-| `writeSegment(id, offset, stream, cb)` | `{offset, length, received}` | **stream only.** Writes one segment at a byte offset. Segments may arrive out of order; re-sending a covered range is harmless. |
+| `writeSegment(id, offset, stream, cb)` | `{offset, length, received}` | **stream only.** Writes one segment at a byte offset. Segments may arrive out of order; re-sending a covered range is harmless. A source that has already ended or been destroyed is refused (`STORAGE_STREAM_SPENT`). |
 | `statUpload(id, cb)` | upload state | **stream only.** `{expectedSize, received[], missing[], complete, …}` — the resumable twin of `stat()`, and what makes resuming possible. |
 | `finalize(id, cb)` | `{key, size, contentType}` | **stream only.** Verifies coverage and publishes. Refuses a gap and keeps the session alive. Idempotent. |
 | `abortUpload(id, cb)` | `{aborted}` | **stream only.** Discards a session. Idempotent. |
@@ -484,9 +484,10 @@ driver.abortUpload(uploadId, function (err, r) { /* r => { aborted } */ });
 By the time your action runs, gina has already read the whole request body (a
 multipart body into `req.files` and `req.post`, any other body into `req.body`
 and, as text, `req.rawBody`).
-The request stream is spent, so `writeSegment(uploadId, offset, req, cb)` calls
-back with no error and `length: 0`, and writes nothing; and a raw binary body is
-decoded as text on the way in, which changes its bytes. Send each segment as a
+The request stream is spent, so `writeSegment(uploadId, offset, req, cb)` is
+refused with an error whose `code` is `STORAGE_STREAM_SPENT` and writes nothing
+(before 0.7.13 it called back with no error and `length: 0`); and a raw binary
+body is decoded as text on the way in, which changes its bytes. Send each segment as a
 multipart file part and pass a stream of its temporary file, as above. The part
 is checked against your [upload groups](/guides/file-uploads#configuring-uploads)
 like any other file, and the whole request must fit under

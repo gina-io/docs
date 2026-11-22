@@ -151,6 +151,19 @@ boot, gina now gives such a server Node.js 22.21.1's own callback when it has no
 is answered as on later releases. Nothing to change; other Node.js releases and Bun are unchanged.
 Moving to Node.js 22.21.1 or later fixes it as well.
 
+### Fixed — `put()` and `writeSegment()` refuse a source stream that has already ended (bundle restart)
+
+Handed a stream that had already ended or been destroyed (most often an action's `req`, whose
+body gina has already read), `put()` stored an empty object and reported success under the
+`sharded`, `stream` and `cas` strategies, or never called back (`sharded` with size tiering on),
+and `writeSegment()` answered `length: 0` with no error, or never called back and kept the
+session's data file open (a destroyed source). Both now call back at once with an error whose
+`code` is `STORAGE_STREAM_SPENT`, and nothing is written; the `s3` adapter's `put()` runs the same
+check. A live source that turns out empty is still stored: an empty file is a legitimate 0-byte
+object. If your code passes `req`, pass a stream of the uploaded file instead
+(`fs.createReadStream(req.files[0].path)`). Restart each bundle to pick it up. See
+[Object storage](/guides/storage#resumable-uploads).
+
 ---
 
 ## 0.7.11 → 0.7.12
