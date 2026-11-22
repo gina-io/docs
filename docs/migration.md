@@ -55,6 +55,14 @@ unbound too: `"url": "/m/:grp/:id"` with a requirement on `id` and only `id` bou
 `GET` twin answers `404`, and `grp` reached `req.delete`. To keep such a route matching, bind the
 placeholder (`"grp": ":grp"`).
 
+### Changed — on a `DELETE` route with `requirements`, an unbound placeholder with a regular-expression requirement no longer matches (bundle restart and re-bake)
+
+A placeholder with a requirement matches only when the route binds it in `param`, on `DELETE` as on
+`GET`. Up to 0.7.12 a `DELETE` route with `requirements` let a regular-expression requirement match it
+unbound: `"url": "/u/:grp/:id"` with requirements on both and only `grp` bound answered where its
+`GET` twin answers `404`, and `id` reached `req.delete` only, never `req.params`. To keep such a route
+matching, bind the placeholder (`"id": ":id"`); its value then reaches `req.params` too.
+
 ### Changed — on a `DELETE` route with `requirements`, a segment holding two or more placeholders no longer matches a value (bundle restart and re-bake)
 
 On a `DELETE` route with `requirements`, a URL segment that starts with a placeholder and holds two

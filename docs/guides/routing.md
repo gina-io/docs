@@ -175,9 +175,8 @@ this.get = function(req, res, next) {
 
 A parameter's name ends at the first character that is not a letter, a digit or an underscore: `"url": "/:lang-code/home"`
 is read as the parameter `:lang`, a binding under `lang-code` is never filled, and the route matches only when `param`
-also binds `lang` (on a `DELETE` route with `requirements`, a regular-expression requirement on `lang` that accepts the
-segment also lets it match, and the value then reaches `req.delete` only). Up to 0.7.12 a `DELETE` route with
-`requirements` read the whole segment as the name instead. Text after the name in its segment is not compared:
+also binds `lang`. Up to 0.7.12 a `DELETE` route with `requirements` read the whole segment as the name instead.
+Text after the name in its segment is not compared:
 `"url": "/feed/:id.json"` matches `/feed/42` as well as `/feed/42.json`, where `req.params.id` is `42.json`, and a
 requirement on `id` tests that whole value. Write `:lang_code` instead. Since 0.7.12 a bundle warns once at boot, in one `[CONFIG][loadBundleConfig]` line,
 about each URL segment that holds a parameter followed by such a character; nothing is rewritten for you. Text before a
@@ -389,6 +388,11 @@ accepts any non-empty segment, as long as `param` binds it. (On a `DELETE` route
 before 0.7.6 — a `DELETE` route whose requirements covered only some of its placeholders never
 matched — and from 0.7.6 to 0.7.12 a `DELETE` route accepted such a placeholder without the
 binding too.)
+
+A requirement does not replace the binding: a placeholder that `param` does not bind makes the
+route match nothing, with or without a requirement. (Up to 0.7.12, on a `DELETE` route, a regular-expression
+requirement that accepted the segment let such a placeholder match, and its value reached
+`req.delete` only, never `req.params`.)
 
 :::warning A regex requirement is a partial match — anchor it
 The pattern is tested against the parameter value with `RegExp#test`, which succeeds when the
