@@ -89,6 +89,19 @@ refuses. It now leaves such a variant uncompiled, as it already did for `/page:n
 longer intercepts links through that route. The routing map served to the browser is unchanged.
 Re-bake each bundle to pick it up. See [Client navigation](/guides/client-navigation).
 
+### Fixed — the navigation module no longer intercepts a link that a route it cannot match exactly could answer (re-bake)
+
+The navigation module (`gina/nav`) leaves a route variant uncompiled when a segment holds text next
+to its placeholder (`"url": "/page:number"`) or a placeholder name ending in a character other than
+a letter, a digit or an underscore (`/:lang-code`), and its scan skipped such a route. The server
+reads that placeholder over the whole segment, so it answers `/page2` from `/page:number`. When a
+later route declared `negotiate: true` and matched the same URL, the module intercepted the click:
+one fragment request, answered without `Vary: X-Gina-Navigate`, an `error` event, then a full page
+load. Such a route now stops the scan when the server could answer the URL from it, as its
+requirements allow, so the link navigates normally and `gina.nav.matchUrl()` answers `null` for it.
+A link that the route's requirement refuses still reaches the later route. Re-bake each bundle to
+pick it up. See [Client navigation](/guides/client-navigation#which-clicks-are-intercepted).
+
 ### Fixed — a segment with a nameless `:`, or one that is not a valid regular expression, no longer answers 500 (bundle restart and re-bake)
 
 A route URL segment holding a `:` with no name after it (`/t/12:`), or one that is not a valid

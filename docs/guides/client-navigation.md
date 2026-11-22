@@ -161,6 +161,11 @@ Two matching rules are worth designing around:
   first route matching a URL is not negotiable, the click is *not* intercepted,
   even if a later route would match and be negotiable. Route order in
   `routing.json` is significant for navigation, exactly as it is for dispatch.
+  A route whose URL the module cannot match exactly (see [Caveats](#caveats))
+  counts too: when the server could answer the URL from it, the click is not
+  intercepted. *Changed in 0.7.13:* the module used to skip such a route, so a
+  later negotiable route took the link, and the page then reloaded in full
+  after an `error` event.
 - **GET only.** Navigation is a read. Forms keep going through the
   [validator's XHR submit](/guides/forms-and-validation); non-GET links are
   left to the browser.
@@ -225,6 +230,9 @@ var matched = gina.nav.matchUrl('/dashboard');
 // → { rule: 'dashboard', route: {…}, isGet: true } or null
 ```
 
+`matchUrl` also answers `null` when the first route that could answer the
+pathname is one the module cannot match exactly (see [Caveats](#caveats)).
+
 `gina.nav.navigate(url)` on a page where navigation is not active — or toward
 a non-negotiable route — behaves like `window.location.href = url`, so it is
 always safe to call.
@@ -254,7 +262,10 @@ Events, observable with `gina.nav.on('<event>', handler)`:
   `/:id.json`, and since 0.7.13 `/:lang-code`, whose parameter is `:lang`: a
   name ends at the first character that is not a letter, a digit or an
   underscore) are matchable by the server but deliberately not by the client —
-  links to them navigate normally rather than risking a wrong match.
+  links to them navigate normally rather than risking a wrong match. Such a
+  route still stops the scan: a later route never takes a link it could
+  answer. A segment holding two or more placeholders is compared as written,
+  on the server and here.
 - **Browser floor:** `history.pushState` + `Element.closest`. Below it the
   module simply never intercepts — plain navigation, nothing breaks.
 
