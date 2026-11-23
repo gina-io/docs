@@ -19,6 +19,30 @@ upward to the target version.
 
 ---
 
+## 0.7.13 → 0.7.14
+
+### Fixed — the Inspector reports index usage inside Couchbase subqueries (bundle restart)
+
+The Query tab's index badge for a Couchbase statement comes from the statement's
+`EXPLAIN` plan. Couchbase plans some subqueries apart (a `LET` or `WITH`
+subquery, a correlated subquery, a nested subquery) and lists their plans beside
+the statement's own plan, which was the only plan the badge read. A statement
+whose reads all sat in such subqueries therefore showed the red
+*"no index — full bucket scan"* badge and was counted in the *"queries without
+index"* banner, although each subquery was served by an index. The badge now
+reports the indexes of every subquery plan as well, each index once. A subquery
+in the `FROM` clause was already reported, since Couchbase plans it inside the
+statement.
+
+A statement that reads no keyspace at all, such as `SELECT 1` or an
+`INSERT … VALUES`, now shows a green *"no keyspace read"* chip instead of the
+red badge, and leaves the banner. A plan holding any other operator keeps the
+previous reading. **No action required**: restart each bundle to pick it up
+(server-side only, no re-bake). See
+[Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
+
+---
+
 ## 0.7.12 → 0.7.13
 
 ### Added — a boot warning for a URL segment that holds two or more placeholders (bundle restart)

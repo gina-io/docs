@@ -658,12 +658,18 @@ Each query entry includes:
 | Badge | Meaning |
 |---|---|
 | Green | Secondary index (efficient) |
+| Green (`no keyspace read`) | The statement reads no document (`SELECT 1`, `INSERT … VALUES`), so no index applies |
 | Amber | Primary index scan (full bucket scan -- slow) |
 | Red | No index used |
 | Grey (N/A) | Index information not available (SDK v4 first request) |
 
 This is powered by `extractIndexes()`, which walks the N1QL execution plan tree
-to find `IndexScan3`, `PrimaryScan3`, and `ExpressionScan` operators.
+to find `IndexScan3`, `PrimaryScan3`, and `ExpressionScan` operators. Couchbase
+plans some subqueries apart (a `LET` or `WITH` subquery, a correlated or a
+nested subquery) and lists their plans beside the statement's own plan; those
+plans are walked too, so a statement whose reads all sit in subqueries shows the
+subqueries' indexes. A subquery in the `FROM` clause is planned inside the
+statement and was always reported.
 
 See the [Inspector guide](/guides/inspector) for the full Query tab documentation.
 

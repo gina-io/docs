@@ -183,10 +183,12 @@ appropriate database index exists for the query's target table:
 | `PRIMARY` | Amber | Only a primary key scan is available |
 | `no index` | Red | The query's target table has no index at all |
 | `no index for filter` | Amber-gold | Indexes exist, but none cover the columns this query filters on (SQL connectors) |
+| `no keyspace read` | Green | Couchbase: the statement reads no document (`SELECT 1`, `INSERT … VALUES`), so no index applies |
 | `N/A` | Grey | Connector does not support index reporting |
 
 **Couchbase** extracts indexes automatically from the query execution plan — no
-configuration needed.
+configuration needed. Subquery plans count too: a statement whose reads sit in a
+`LET`, `WITH`, correlated or nested subquery shows those subqueries' indexes.
 
 **MySQL, PostgreSQL, SQLite** read an `indexes.sql` file from your bundle's SQL
 directory at startup. Create this file with the `CREATE INDEX` statements that match
