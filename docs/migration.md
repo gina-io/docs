@@ -41,6 +41,34 @@ previous reading. **No action required**: restart each bundle to pick it up
 (server-side only, no re-bake). See
 [Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
 
+### Security — a route's output cache stores a page per host and language (bundle restart)
+
+A route's output cache (`cache` in `routing.json`) keyed a page on its URL
+alone, so the request that filled an entry decided what every later visitor of
+that URL got until the entry expired: its host in the absolute links and form
+actions `getUrl()` builds and in gina's client loader values, its webroot, and
+its language in the translated text and the validation labels. Where a bundle
+accepts a client's `Host` or `X-Forwarded-Host` (reached directly, or through a
+proxy that forwards them), a request carrying another host could fill an entry
+so that every visitor's links and form submissions went to that host.
+
+The key now also carries the request's forwarded scheme and host, its forwarded
+prefix and the culture its culture cookie or `Accept-Language` selects, compared
+as written (`fr` and `fr_FR` are two entries). A page is stored only when it was
+rendered with those values: a culture taken from a URL prefix, or set by a
+middleware, that the headers do not select is rendered each time. An `fs` entry
+is stored under a directory named for its values, and `GET /_gina/cache/stats`
+lists each entry's `variant`. See
+[Caching → Each host and language has its own cached page](/guides/caching).
+
+**Action:** restart each bundle (server-side only, no re-bake). If a script
+pre-fills cached routes, make it send the host, scheme and language your
+visitors send (for example `X-Forwarded-Proto: https` and `Accept-Language: fr`
+behind a proxy that sets them): it now fills only the entries for the values it
+sends. Entries stored before the upgrade are not read after it; with a constant
+`GINA_CACHE_NAMESPACE`, `fs` files from before stay on disk until
+`gina cache:clear <bundle> @<project>` removes them.
+
 ---
 
 ## 0.7.12 → 0.7.13

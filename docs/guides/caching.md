@@ -100,16 +100,32 @@ uncached and cache the expensive pieces behind it instead.
 
 :::
 
-:::caution A cached page keeps the host and language it was rendered for
+:::caution Each host and language has its own cached page
 
-The key is the URL alone, so a cached page is the one rendered for the request
-that filled the entry, with that request's hostname, webroot, culture and
-validation labels, which gina's client loader reads. Every later visitor of the
-URL gets them until the entry expires, whatever host or language they asked for.
-A culture taken from the URL prefix is safe, since each culture has its own URL;
-one taken from a cookie or from `Accept-Language` is not. Cache a route only when
-its page is the same for every host and language a visitor may use, or have the
-proxy in front of the bundle send one host for it.
+Since 0.7.14 the key carries, beside the URL, the request values a page is
+rendered with: the public scheme and host of a proxied request
+(`X-Forwarded-Proto` with `X-Forwarded-Host`, or a `Host` without a port), its
+`X-Forwarded-Prefix`, and the culture the request's culture cookie or
+`Accept-Language` selects. Each combination is its own entry, and the culture is
+compared as written: `fr` and `fr_FR` are two entries. A page is stored only
+when it was rendered with exactly those values, so no visitor gets the page of
+another host or language:
+
+- on a route whose culture comes from its URL prefix
+  ([`culturePrefix`](/guides/i18n)), a page is stored only for a request whose
+  cookie or `Accept-Language` selects the same culture as the prefix; other
+  requests render it each time;
+- a page whose culture a middleware sets is stored only when it is the culture
+  the request's headers select.
+
+A script that pre-fills cached routes fills only the entries for the values it
+sends. Send the host, scheme and language your visitors send (for example
+`X-Forwarded-Proto: https` and `Accept-Language: fr` behind a proxy that sets
+them), or the warmup fills entries no visitor reads.
+
+Up to 0.7.13 the key was the URL alone: a cached page kept the host, webroot and
+language of the request that filled the entry, in the links `getUrl()` builds
+too, for every visitor, until the entry expired.
 
 :::
 
@@ -183,9 +199,14 @@ in-process `Map`, so heap use is minimal regardless of response size.
 
 Files are written to:
 ```
-${cache.path}/${bundle}/html${url}.html      ← HTML responses
-${cache.path}/${bundle}/data${url}.json      ← JSON responses
+${cache.path}/${bundle}/${variant}/html${url}.html      ← HTML responses
+${cache.path}/${bundle}/${variant}/data${url}.json      ← JSON responses
 ```
+
+`${variant}` is `v` followed by 32 hexadecimal characters: one directory for
+each host, prefix and culture a page was stored for (since 0.7.14; see
+*Each host and language has its own cached page* under
+[Quick start](#quick-start)).
 
 When an entry expires or is invalidated the cached file is deleted
 automatically.
@@ -582,8 +603,8 @@ The value is treated as a simple identifier (characters outside
 For the `fs` backend, each namespace gets its own subdirectory:
 
 ```
-${cache.path}/${bundle}/${namespace}/html${url}.html
-${cache.path}/${bundle}/${namespace}/data${url}.json
+${cache.path}/${bundle}/${namespace}/${variant}/html${url}.html
+${cache.path}/${bundle}/${namespace}/${variant}/data${url}.json
 ```
 
 When the namespace changes, new files are written under the new directory and
@@ -658,8 +679,9 @@ curl 'http://127.0.0.1:<port>/_gina/cache/stats'
 {
   "size": 1,
   "entries": [
-    { "key": "0.5.18:data:demo:/", "type": "memory", "sliding": false,
-      "createdAt": "…", "lastAccessedAt": "…", "ttlRemaining": 569.3, "maxAgeRemaining": null }
+    { "key": "0.7.14:static:demo:v2220e2a7463b81d0fe2d582623e0318e:/", "type": "memory", "sliding": false,
+      "createdAt": "…", "lastAccessedAt": "…", "ttlRemaining": 569.3, "maxAgeRemaining": null,
+      "variant": "https://www.example.com||en" }
   ],
   "l2": {
     "store": "redis", "status": "ready", "mode": "standalone", "prefix": "cache:",
@@ -670,6 +692,9 @@ curl 'http://127.0.0.1:<port>/_gina/cache/stats'
 
 - **Admin-gated** like `/_gina/cache/clear` (`app.json` `admin.allowFrom`,
   default loopback only).
+- **`variant`** (since 0.7.14) — on an output-cache entry, the values it was
+  stored for, as `<scheme>://<host>|<prefix>|<culture>`: an empty host for a
+  direct request, an empty prefix when the request sent none.
 - The `l2` block is **additive** — it is absent on `memory`/`fs`-only bundles,
   so existing consumers of `{ size, entries }` are unaffected.
 - `l2.status` is the redis driver's live connection state (`ready`,
