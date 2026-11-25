@@ -75,6 +75,19 @@ is not cached. See
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake).
 
+### Fixed — a bundle with `server.rateLimit` or `server.idempotency` boots (bundle restart)
+
+A bundle that enabled [rate limiting](/guides/rate-limiting) or
+[idempotency](/guides/idempotency) refused to boot with `[kv] not configured`,
+although its `settings.json` declared the `kv` namespace: the engine resolves
+both policies when it starts, and the kv namespaces were installed only after
+the server started listening. The namespaces are now installed before the
+engine starts, so both features boot with the configuration their guides show,
+and a kv configuration error now refuses the boot before the port is bound.
+
+**No action required**: a bundle that enables either feature now boots; restart
+it to pick the fix up (server-side only, no re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL
