@@ -732,6 +732,7 @@ except these:
 | `Content-Security-Policy` with a nonce | A new nonce, in the header and in the page. |
 | `X-Request-Id` | This request's own id: its inbound `X-Request-Id` when valid, else a new one. |
 | `Set-Cookie` | The filling request's cookies are never stored, so never sent. |
+| `RateLimit`, `RateLimit-Policy` | Never stored, so never sent: a hit is answered before the [rate-limit](/guides/rate-limiting) gate runs, so it is not counted. |
 
 So a cookie set on a cached route, by a middleware or by the action, reaches
 only the visitor whose request filled the entry. On the Isaac engine a hit is
@@ -743,8 +744,8 @@ runs before the hit and the cookies it sets are kept.
 
 Before 0.7.10 a hit also sent the stored `X-Request-Id` and `Set-Cookie`: those
 of the request that filled the entry. Before 0.7.14 it sent that request's
-`Access-Control-Allow-Origin` too, and `Vary` named none of the request headers
-the page depends on.
+`Access-Control-Allow-Origin`, `RateLimit` and `RateLimit-Policy` too, and `Vary`
+named none of the request headers the page depends on.
 
 ---
 

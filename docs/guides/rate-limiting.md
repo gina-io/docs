@@ -125,6 +125,10 @@ RateLimit-Policy: "default";q=100;w=60
 RateLimit: "default";r=42
 ```
 
+A page served from the [render cache](/guides/caching#what-a-cache-hit-sends-back)
+is answered before the gate runs: such a hit is not counted, and it carries
+neither header.
+
 A denial answers **`429 Too many requests`** with a deliberately generic body
 — the machine-readable detail rides the headers:
 

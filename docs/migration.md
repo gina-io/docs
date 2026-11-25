@@ -88,6 +88,18 @@ and a kv configuration error now refuses the boot before the port is bound.
 **No action required**: a bundle that enables either feature now boots; restart
 it to pick the fix up (server-side only, no re-bake).
 
+### Fixed — a cached page no longer sends another caller's rate-limit standing (bundle restart)
+
+On a [rate-limited](/guides/rate-limiting) route served from the
+[render cache](/guides/caching#what-a-cache-hit-sends-back), every hit sent the
+`RateLimit` and `RateLimit-Policy` headers of the request that filled the
+entry: later visitors, anonymous ones included, read that caller's remaining
+quota. A hit is answered before the rate-limit gate, so it is not counted; it
+now carries neither header.
+
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL
