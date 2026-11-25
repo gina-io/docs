@@ -166,6 +166,15 @@ responses a `Cache-Control: <visibility>, max-age=<ttl>` header (the route's
 `ttl`, or the bundle default; `visibility` defaults to `private`), so the
 visitor's browser may reuse the response for that long without asking again.
 On a response served from the cache, `max-age` is the time its entry has left.
+Since 0.7.14 the same responses list in `Vary` the request headers the page
+depends on: `Accept-Language` and `Cookie` (the culture cookie) select its
+language, and `X-Forwarded-Host`, `X-Forwarded-Proto` and `X-Forwarded-Prefix`
+its host, scheme and prefix behind a proxy. They come after the names the
+response already lists (a configured `vary: Origin` stays first), so a browser
+or a shared cache reuses a response only for a request that sends the same
+values. `Vary: Cookie` makes a browser fetch the page again after any of its
+cookies changes, and a shared cache in front of a `public` route keeps a copy
+per cookie value, or none.
 With the server cache off, the route adds no `Cache-Control` at all: nothing on
 the server stores the response, so the browser is not told to reuse it either
 (since 0.7.4 — earlier releases sent the header whatever the switch).
@@ -718,6 +727,8 @@ except these:
 |---|---|
 | `Cache-Status` | Set for this response (see [Cache-Status response header](#cache-status-response-header)). |
 | `Cache-Control` | `max-age` is the time the entry has left, when it has a TTL. |
+| `Vary` | As on the response that filled the entry: its names, then `Accept-Language`, `Cookie`, `X-Forwarded-Host`, `X-Forwarded-Proto` and `X-Forwarded-Prefix`. |
+| `Access-Control-Allow-Origin` | This request's own value, picked as for a response that is not cached. The filling request's is never stored. |
 | `Content-Security-Policy` with a nonce | A new nonce, in the header and in the page. |
 | `X-Request-Id` | This request's own id: its inbound `X-Request-Id` when valid, else a new one. |
 | `Set-Cookie` | The filling request's cookies are never stored, so never sent. |
@@ -731,7 +742,9 @@ where only `redis` entries are served from the cache, the bundle's middleware
 runs before the hit and the cookies it sets are kept.
 
 Before 0.7.10 a hit also sent the stored `X-Request-Id` and `Set-Cookie`: those
-of the request that filled the entry.
+of the request that filled the entry. Before 0.7.14 it sent that request's
+`Access-Control-Allow-Origin` too, and `Vary` named none of the request headers
+the page depends on.
 
 ---
 

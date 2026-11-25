@@ -41,6 +41,40 @@ previous reading. **No action required**: restart each bundle to pick it up
 (server-side only, no re-bake). See
 [Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
 
+### Fixed — a cached route's responses list in `Vary` the request headers its page depends on (bundle restart)
+
+A cached route's page follows the visitor's language (the `Accept-Language`
+header or the culture cookie) and, behind a proxy, the forwarded host, scheme
+and prefix, and it is sent with `Cache-Control: <visibility>, max-age=<seconds>`.
+It carried no `Vary` naming those headers, so a browser kept the copy it held
+for the page's whole `max-age` after the visitor's language changed. The
+response that fills an entry and every hit now append
+`Accept-Language, Cookie, X-Forwarded-Host, X-Forwarded-Proto, X-Forwarded-Prefix`
+to `Vary`, after the names it already carries (a configured `vary: Origin` stays
+first). See [Caching → Configuration reference](/guides/caching#configuration-reference).
+
+**Action:** restart each bundle (server-side only, no re-bake). `Vary: Cookie`
+makes a browser fetch a cached page again after any of its cookies changes. A
+shared cache in front of a `public` route (a CDN) keeps a copy per cookie value,
+or stores none: check how yours treats `Vary: Cookie`.
+
+### Fixed — a cached page answers each cross-origin caller with its own `Access-Control-Allow-Origin` (bundle restart)
+
+With `access-control-allow-origin` set to a comma-separated list in
+`server.response.header`, gina answers a request with its origin when the list
+holds it, and with none otherwise. A hit of a route's output cache answered
+with the value picked for the request that filled the entry instead: a caller
+from another listed origin was refused by its browser, and an unlisted caller,
+or a request without `Origin`, received the first caller's origin. The same held
+for the bundle's own origin and for an empty configured value, which both
+answer with the request's origin. An entry no longer stores the header, and
+every hit computes it for its own request by the same rule as a response that
+is not cached. See
+[Caching → What a cache hit sends back](/guides/caching#what-a-cache-hit-sends-back).
+
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL
