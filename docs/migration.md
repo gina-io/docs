@@ -103,6 +103,40 @@ sends. Entries stored before the upgrade are not read after it; with a constant
 `GINA_CACHE_NAMESPACE`, `fs` files from before stay on disk until
 `gina cache:clear <bundle> @<project>` removes them.
 
+### Security — a malformed `Origin` or `Host` no longer stops a bundle (bundle restart)
+
+The rule that picks a response's `Access-Control-Allow-Origin` compiled regular
+expressions from the request. An `Origin` or `Host` header that is not a valid
+regular expression (for example `Origin: http://a(`), an `X-Forwarded-Proto`
+that is not one, or an HTTP/1.0 request without a `Host` header, made it throw: for a static file the bundle process
+exited, and a page, a 404 or a preflight was left unanswered. Through 0.7.13
+every bundle ran the rule; in 0.7.14 a bundle runs it only when
+`server.response.header` declares `access-control-allow-origin`.
+
+The rule now compiles no pattern from the request, and a request without an
+`Origin` on an HTTP/1.1 bundle takes the bundle's configured scheme, the value
+it got whenever the rule did not throw. If the rule throws for another reason
+(a configured value that is not a string), the response carries no
+`Access-Control-Allow-Origin`, the error is logged and the bundle keeps running.
+See [Settings → CORS headers](/reference/settings#cors).
+
+**Action:** restart each bundle (server-side only, no re-bake). Until you do,
+have the proxy in front of it reject a request whose `Origin` is not a plain
+`scheme://host[:port]`, and set `Host` and `X-Forwarded-Proto` itself, on every
+location that reaches a gina bundle, the ones that serve static files included.
+
+### Security — an empty `access-control-allow-origin` answers each request with its origin as received (bundle restart)
+
+With `access-control-allow-origin` set to an empty value, each request gets its
+own origin back. The bundle-name substitution meant for a configured value
+(see [Settings → CORS headers](/reference/settings#cors)) also ran on that
+origin, so a request whose `Origin` named another bundle the way a configured
+value does was answered with that bundle's configured hostname, or its scheme,
+host and port when it has none. A bundle name is now resolved in a configured
+value only.
+
+**Action:** restart each bundle (server-side only, no re-bake).
+
 ---
 
 ## 0.7.12 → 0.7.13
