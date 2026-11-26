@@ -320,6 +320,11 @@ action runs, with `req.get` set to the same object as `req.head`, so it reads th
 and query parameters as it does for a `GET`; `req.method` stays `HEAD`, and the
 response carries the headers without the body.
 
+Since 0.7.14, a request whose method Node's HTTP parser does not accept, one that
+[`http.METHODS`](https://nodejs.org/api/http.html#httpmethods) does not list, gets a
+**501** (`Not Implemented`) before any rule is compared. Only an HTTP/2 client can send
+such a method: over HTTP/1.1, Node answers it with a 400 before the request reaches gina.
+
 :::warning namespace is required
 Without `"namespace"`, the router looks in `controller.js` instead of
 `controller.content.js`. If your action is defined in a namespace controller,

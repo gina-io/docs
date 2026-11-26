@@ -162,6 +162,27 @@ value only.
 
 **Action:** restart each bundle (server-side only, no re-bake).
 
+### Security — a request method Node does not accept gets a 501 (bundle restart)
+
+gina compared a request's method with each rule's `method` by compiling the
+request's method as a regular expression. Over HTTP/1.1, Node answers a method it
+does not know with a 400 before the request reaches gina, but an HTTP/2 client can
+send any token as its method: `*` or `+` made the compile throw, so the request was
+never answered; a method such as `.` matched every rule, so an action ran under a
+method its rule does not list, without its body; and a long run of `.*` made the
+match backtrack for seconds, during which the bundle answered no other request.
+
+A request whose method is not in Node's
+[`http.METHODS`](https://nodejs.org/api/http.html#httpmethods) now gets a **501**
+(`Not Implemented`) before any rule is compared, and the method is matched as
+text; the methods Node lists match as before. See
+[Routing → HTTP methods](/guides/routing#http-methods).
+
+**Action:** restart each bundle (server-side only, no re-bake). Until you do, have
+the proxy in front of a bundle that serves HTTP/2 itself refuse a request whose
+method is not one Node lists. Behind a proxy that speaks HTTP/1.1 to the bundle,
+Node already answers such a method with a 400.
+
 ---
 
 ## 0.7.12 → 0.7.13
