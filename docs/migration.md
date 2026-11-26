@@ -100,6 +100,20 @@ now carries neither header.
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake).
 
+### Fixed — a `//` inside a quoted JSON value is kept (bundle restart)
+
+[`requireJSON()` and `parseJSONWithComments()`](/globals/json) strip `//` line
+comments before parsing. A line was cut at its first `//` unless the character
+before it was `:`, `"` or `\`, quoted values or not, so a value holding a `//`
+that is not a URL — a path joined from a directory ending in `/`, such as
+`"/var/folders/…/T//gina"` — was cut and its file failed to parse; and a `//`
+comment after a URL value on the same line was kept, so that line failed to
+parse too. A `//` now starts a comment only outside a quoted value; a file that
+parsed before parses to the same value.
+
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL

@@ -38,8 +38,8 @@ Two comment styles are recognised and removed before parsing:
   block-stripped
 - Line comments: `// ...`
 
-URL strings are preserved — `://` sequences inside quoted values are not treated
-as line comment markers.
+A `//` inside a quoted value is data — a URL, a path holding `//` — and a `//`
+comment after such a value on the same line is still removed.
 
 Block stripping is a linear, string-aware scan: a `/*` inside a quoted value —
 a glob such as `"./lib/**/*"` or a certificate path such as
