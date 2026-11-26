@@ -670,7 +670,7 @@ Add CORS headers under `server.response.header` in `settings.server.json`:
   "server": {
     "response": {
       "header": {
-        "access-control-allow-origin": "${api}@${myproject}, https://checkout.stripe.com",
+        "access-control-allow-origin": "{api@myproject}, https://checkout.stripe.com",
         "access-control-allow-methods": "GET, POST, OPTIONS",
         "access-control-allow-headers": "Content-Type, Authorization, X-Requested-With",
         "access-control-allow-credentials": true,
@@ -683,7 +683,7 @@ Add CORS headers under `server.response.header` in `settings.server.json`:
 
 | Header | Type | Default | Description |
 |---|---|---|---|
-| `access-control-allow-origin` | string | Reflects own hostname (same-origin only) | Comma-separated list of allowed origins. Supports `${bundle}@${project}` placeholders (see below). Cross-origin requests are blocked when the origin is not listed |
+| `access-control-allow-origin` | string | Reflects own hostname (same-origin only) | Comma-separated list of allowed origins. Supports `{bundle@project}` placeholders (see below). Cross-origin requests are blocked when the origin is not listed |
 | `access-control-allow-methods` | string | `"GET, POST, HEAD"` | HTTP methods the client may use on cross-origin requests |
 | `access-control-allow-headers` | string | — | Headers the client may send. Add `Content-Type` for JSON APIs, `Authorization` for token-based auth |
 | `access-control-allow-credentials` | boolean | — | Set to `true` to allow cookies and credentials on cross-origin requests |
@@ -699,16 +699,19 @@ configured CORS headers — no controller action executes. The
 [controller guide](/guides/controller) notes that `OPTIONS` never reaches a
 controller action.
 
-**The `${bundle}@${project}` placeholder:** References another bundle's hostname at
-runtime. `${api}@${myproject}` resolves to `http://localhost:3100` (or the production
-URL depending on the environment). Use this for inter-bundle CORS instead of
-hardcoding hostnames:
+**The `{bundle@project}` placeholder:** References a bundle of the same project by
+name. At runtime it becomes that bundle's scheme, host and port in the current
+environment: with an `api` bundle listening on port 3100 in development,
+`{api@myproject}` resolves to `http://localhost:3100`. Use it for inter-bundle CORS
+instead of hardcoding hostnames:
 
 ```json
-"access-control-allow-origin": "${frontend}@${myproject}, ${admin}@${myproject}"
+"access-control-allow-origin": "{frontend@myproject}, {admin@myproject}"
 ```
 
-You can also append an environment: `${api}@${myproject}/prod`.
+Write the placeholder with braces only, and its names with letters, `-` and `_`. A
+`${…}` form, a name with a digit, or a name with no bundle configuration behind it is
+not resolved: the placeholder is left as written and matches no origin.
 
 :::tip
 Gina never sends `Access-Control-Allow-Origin: *` — it always resolves to a specific
