@@ -114,6 +114,22 @@ parsed before parses to the same value.
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake).
 
+### Fixed — a SQLite method whose statement starts with `WITH`, `VALUES` or `PRAGMA` returns its rows (bundle restart)
+
+The SQLite connector read rows only from a statement starting with `SELECT` and
+ran every other one for its `{ changes, lastInsertRowid }`, so a `.sql` method
+starting with `WITH` (a common table expression), `VALUES` or a `PRAGMA` that
+reads a value returned `{ changes: 0, lastInsertRowid: 0 }` instead of its
+rows, with no error. The connector now asks each prepared statement whether it
+returns rows, once, when the bundle loads it.
+
+**Action:** restart each bundle (server-side only, no re-bake). One result
+changes: a method whose statement is `INSERT`, `UPDATE` or `DELETE … RETURNING`
+returned the write's `{ changes, lastInsertRowid }`; it now returns the rows its
+`RETURNING` clause lists. On a Node whose statements have no `columns()` (it
+arrived in 22.16.0 and 23.11.0) the leading keyword still decides; see
+[SQLite ORM → SQL file format](/data/sqlite-orm#sql-file-format).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL

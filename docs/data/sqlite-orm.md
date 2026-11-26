@@ -203,13 +203,26 @@ Arguments are cast before the statement runs.
 | Annotation | What is returned |
 |---|---|
 | `@return {object}` | First row via `stmt.get()`, or `null` if empty |
-| `@return {array}` | All rows via `stmt.all()` (default for SELECT), `null` when empty |
-| `@return {boolean}` | `true` if `length > 0` (SELECT) or `changes > 0` (write) |
+| `@return {array}` | All rows via `stmt.all()` (the default for a statement that returns rows), `null` when empty |
+| `@return {boolean}` | `true` if `length > 0` (a statement that returns rows) or `changes > 0` (a write) |
 | `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
-| *(omitted on write)* | `{ changes, lastInsertRowid }` |
+| *(omitted on a write)* | `{ changes, lastInsertRowid }` |
+
+**Which statements return rows.** The connector asks each prepared statement
+once, when the bundle loads it. A `SELECT`, a `WITH … SELECT`, a `VALUES`
+statement, a `PRAGMA` that reads a value, `EXPLAIN` and `INSERT`, `UPDATE` or
+`DELETE … RETURNING` return rows; an `INSERT`, `UPDATE` or `DELETE`, a `WITH`
+clause feeding one of them, and DDL return `{ changes, lastInsertRowid }`. Where
+a statement cannot be asked — on a Node whose `node:sqlite` statements have no
+`columns()` (it arrived in 22.16.0 and 23.11.0), or on a Bun whose statements
+offer neither `columns()` nor `reader` — the leading keyword decides: `SELECT`,
+`WITH`, `VALUES`, `PRAGMA` and `EXPLAIN` return rows, so there a `WITH` clause
+feeding a write returns no `{ changes, lastInsertRowid }` and `INSERT …
+RETURNING` returns no rows.
 
 `@return {number}` applies only when the query contains `COUNT(` — on any
-other SELECT it silently falls back to the default all-rows shape.
+other statement that returns rows it silently falls back to the default
+all-rows shape.
 
 `@options` and `@include` are **not** available for SQLite — they are
 Couchbase-only annotations.
