@@ -144,6 +144,18 @@ returned the write's `{ changes, lastInsertRowid }`; it now returns the rows its
 arrived in 22.16.0 and 23.11.0) the leading keyword still decides; see
 [SQLite ORM → SQL file format](/data/sqlite-orm#sql-file-format).
 
+### Fixed — on a Bun whose `bun:sqlite` statements carry no `reader`, a SQLite method reads `columnNames` (bundle restart)
+
+On a Bun whose `bun:sqlite` statements carry no `reader`, as on Bun 1.2.21, the
+SQLite connector fell back to a statement's leading keyword, so a `WITH` clause
+feeding a write was read for rows and an `INSERT`, `UPDATE` or `DELETE …
+RETURNING` returned the write's `{ changes, lastInsertRowid }`. It now asks the
+statement's `columnNames`, the column list `bun:sqlite` reports: a statement that
+lists a column returns its rows, as node:sqlite's `columns()` decides. See
+[SQLite ORM → SQL file format](/data/sqlite-orm#sql-file-format).
+
+**Action:** restart each bundle (server-side only, no re-bake).
+
 ### Fixed — `req.routing.method` is upper case on every request (bundle restart)
 
 The first request to a route, matched by a scan of the routing rules, read
@@ -241,6 +253,8 @@ send any token as its method: `*` or `+` made the compile throw, so the request 
 never answered; a method such as `.` matched every rule, so an action ran under a
 method its rule does not list, without its body; and a long run of `.*` made the
 match backtrack for seconds, during which the bundle answered no other request.
+The method `__proto__` replaced the request object's prototype: the request went
+unanswered, and the bundle process stopped when its stream closed.
 
 A request whose method is not in Node's
 [`http.METHODS`](https://nodejs.org/api/http.html#httpmethods) now gets a **501**
