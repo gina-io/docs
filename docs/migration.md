@@ -243,6 +243,10 @@ sends. Entries stored before the upgrade are not read after it; with a constant
 `GINA_CACHE_NAMESPACE`, `fs` files from before stay on disk until
 `gina cache:clear <bundle> @<project>` removes them.
 
+A security advisory,
+[GHSA-pq5j-72cf-j782](https://github.com/gina-io/gina/security/advisories/GHSA-pq5j-72cf-j782),
+accompanies this fix.
+
 ### Security — a malformed `Origin` or `Host` no longer stops a bundle (bundle restart)
 
 The rule that picks a response's `Access-Control-Allow-Origin` compiled regular
@@ -264,6 +268,10 @@ See [Settings → CORS headers](/reference/settings#cors).
 have the proxy in front of it reject a request whose `Origin` is not a plain
 `scheme://host[:port]`, and set `Host` and `X-Forwarded-Proto` itself, on every
 location that reaches a gina bundle, the ones that serve static files included.
+
+A security advisory,
+[GHSA-9972-vj64-h68x](https://github.com/gina-io/gina/security/advisories/GHSA-9972-vj64-h68x),
+accompanies this fix.
 
 ### Security — an empty `access-control-allow-origin` answers each request with its origin as received (bundle restart)
 
@@ -299,6 +307,10 @@ text; the methods Node lists match as before. See
 the proxy in front of a bundle that serves HTTP/2 itself refuse a request whose
 method is not one Node lists. Behind a proxy that speaks HTTP/1.1 to the bundle,
 Node already answers such a method with a 400.
+
+A security advisory,
+[GHSA-mgjp-29vr-773w](https://github.com/gina-io/gina/security/advisories/GHSA-mgjp-29vr-773w),
+accompanies this fix.
 
 ---
 
