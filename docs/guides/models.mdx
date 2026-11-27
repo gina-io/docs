@@ -464,9 +464,9 @@ used to cast arguments before the query runs.
 |---|---|
 | `@return {object}` | First row, or `null` if the result is empty |
 | `@return {array}` | All rows (default for SELECT) |
-| `@return {boolean}` | `true` if any row exists (SELECT) or any rows were affected (write) |
+| `@return {boolean}` | `true` if the statement returned a row, `false` otherwise — a write returns rows only with `RETURNING`; a failed query rejects with its error |
 | `@return {number}` | Numeric value of the first key of the first row — for `COUNT(*)` queries |
-| *(omitted on write)* | Raw Couchbase mutation result |
+| *(omitted on write)* | `null`; the callback form receives the driver's result metadata as its third argument — add `RETURNING` to get the written documents |
 
 **`@options` — query-level settings**
 

@@ -19,6 +19,24 @@ upward to the target version.
 
 ---
 
+## 0.7.14 → 0.7.15
+
+### Fixed — a Couchbase `@return {boolean}` statement always answers (bundle restart)
+
+A Couchbase statement annotated `@return {boolean}` could leave its caller waiting
+with no response: when it matched no row (a `SELECT` without `COUNT(`, a `COUNT(`
+with `GROUP BY` that matched nothing, a write without `RETURNING`), when it
+returned a `null` row, and on every failed query, `COUNT(` statements included.
+It now settles `false` when no row comes back and `true` when one does, and a
+failed query rejects with its own error, so your handler receives it.
+
+The value counts the rows the statement returned. A write changes rows without
+returning them unless it ends with `RETURNING`, so a boolean write without it
+settles `false`; add `RETURNING` when the value must report the rows it changed.
+A write with no `@return` resolves `null`.
+
+Restart each bundle after the upgrade.
+
 ## 0.7.13 → 0.7.14
 
 ### Fixed — the Inspector reports index usage inside Couchbase subqueries (bundle restart)
