@@ -248,8 +248,9 @@ request without a restart. Enable `cache` for staging / production hot paths.
 With nunjucks, a shared environment reuses compiled templates for the whole
 `extends` / `include` chain. With swig, the top-level page template is reused but
 the nested templates in its chain are recompiled per render, because the engine Gina
-builds passes `cache: false` to swig; both still skip the default per-request engine
-rebuild.
+builds for the loader passes `cache: false` to swig (since `v0.7.14`, the engine that
+renders templates on disk keeps compiled includes outside dev mode); both still skip
+the default per-request engine rebuild.
 :::
 
 ## Bundle filters, tags and extensions

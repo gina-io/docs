@@ -182,6 +182,39 @@ and its cache entry kept them. A `bulkInsert` runs an
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake).
 
+### Fixed — outside dev mode, swig compiles each include once per process (bundle restart)
+
+Gina built its swig engine with `cache: false`, so each `{% include %}` read
+its file and compiled it again on every render, and on every iteration of a
+`{% for %}` loop around it, whether `server.cache.enable` was on or off.
+Outside dev mode the engine now keeps each compiled include for the life of the
+bundle process, as the nunjucks engine keeps its templates: an include is read
+and compiled once. A template read by `self.engine.compileFile()` or
+`self.engine.renderFile()`, or compiled by `self.engine.compile()` with a
+`filename` option, is kept the same way. Gina still compiles the page and its
+layout on each render, unless `server.cache.enable` is on. Dev mode is
+unchanged: every render reads and compiles its includes, so an edit shows on
+the next render. See [Caching](/guides/caching#flushing-the-cache).
+
+**Action:** restart each bundle (server-side only, no re-bake). Outside dev
+mode a template change now reaches a running bundle at its restart:
+
+- A deploy that writes new templates and restarts the bundles later serves the
+  new page with the old includes until the restart (with `server.cache.enable`
+  on, the old page and the old includes), and an include deleted from disk keeps
+  rendering until then. Restart the bundles when their templates change.
+- `gina cache:clear` does not drop compiled includes;
+  `self.engine.invalidateCache()` drops them in the process that calls it.
+- Pass `cache: false` in the options of a `self.engine.compile()` whose source
+  changes from call to call under one `filename`.
+- `self.engine.register()` now works outside dev mode; with `cache: false` it
+  threw, and in dev mode it still does, because swig keeps registrations in its
+  cache.
+- A bundle that renders with its own swig (`swig.useProject`) below 2.9.6 keeps
+  compiling includes on every render: before 2.9.6, swig's memory cache could
+  carry one page's override of a nested block, or one call's `locals`, into
+  other renders. Move it to 2.12.1 or later to get the fix.
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL

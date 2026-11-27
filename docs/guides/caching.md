@@ -644,6 +644,12 @@ With the cache off, nothing is written there since 0.7.11: each render assembles
 
 :::
 
+:::note Includes are compiled once per process outside dev mode
+
+Since 0.7.14, outside dev mode, swig keeps each template an `{% include %}` reads, compiled, for the life of the bundle process, whether `server.cache.enable` is on or off: an include inside a `{% for %}` loop is read and compiled once, not on every iteration of every render. A template read by `self.engine.compileFile()` or `self.engine.renderFile()`, or compiled by `self.engine.compile()` with a `filename` option, is kept the same way; pass `cache: false` in the options of a `compile()` whose source changes from call to call. A template change reaches a running bundle at its restart: `gina cache:clear` does not drop these compiled templates, and `self.engine.invalidateCache()` drops them in the process that calls it. In dev mode every render still reads and compiles its includes, so an edit shows on the next render. The page and its layout are compiled on each render, unless `server.cache.enable` is on, as before. A bundle that renders with its own swig (`swig.useProject`) below 2.9.6 keeps compiling its includes on every render; see the [0.7.14 migration notes](/migration#0713--0714).
+
+:::
+
 It runs two passes: an **offline** reclaim of the on-disk cache directories
 (including the orphaned prior-namespace directories described above), and an
 **in-heap** flush of the running bundle. A bundle that is not running still gets
