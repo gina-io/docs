@@ -896,6 +896,9 @@ Contains the matched route's resolved metadata:
 }
 ```
 
+`method` is upper case on every request (`GET`, `HEAD`, `POST`…), including a
+request answered from the route cache.
+
 ### `req.get` / `req.post` / `req.put` / `req.delete`
 
 The parsed request payload for the corresponding HTTP method. URL parameters and

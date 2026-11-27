@@ -130,6 +130,17 @@ returned the write's `{ changes, lastInsertRowid }`; it now returns the rows its
 arrived in 22.16.0 and 23.11.0) the leading keyword still decides; see
 [SQLite ORM → SQL file format](/data/sqlite-orm#sql-file-format).
 
+### Fixed — `req.routing.method` is upper case on every request (bundle restart)
+
+The first request to a route, matched by a scan of the routing rules, read
+`req.routing.method` in upper case (`GET`); every later request to it, answered
+from the route cache, read it in lower case (`get`). Code comparing it with
+`'GET'`, as the [routing guide](/guides/routing#reqrouting) shows the field,
+matched on the first request only. It now reads upper case on every request.
+
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL
