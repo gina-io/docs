@@ -141,6 +141,21 @@ matched on the first request only. It now reads upper case on every request.
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake).
 
+### Fixed — the Inspector shows `no keyspace read` for a Couchbase `bulkInsert` (bundle restart)
+
+The Query tab's index badge for a Couchbase `bulkInsert` came from an `EXPLAIN`
+of the statement as the Inspector logs it, when the SDK returns no query
+profile: by default the line
+`INSERT INTO <keyspace> (KEY, VALUE) -- N record(s) [values redacted]`, which
+the server rejects, so the badge read *"N/A"*; with
+`inspector.queries.captureValues` on, the `EXPLAIN` carried the record values
+and its cache entry kept them. A `bulkInsert` runs an
+`INSERT … VALUES … RETURNING`, which reads no keyspace: it now shows the green
+*"no keyspace read"* chip, and no `EXPLAIN` is sent.
+
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake).
+
 ### Security — a route's output cache stores a page per host and language (bundle restart)
 
 A route's output cache (`cache` in `routing.json`) keyed a page on its URL
