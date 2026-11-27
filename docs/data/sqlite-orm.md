@@ -215,10 +215,10 @@ statement, a `PRAGMA` that reads a value, `EXPLAIN` and `INSERT`, `UPDATE` or
 clause feeding one of them, and DDL return `{ changes, lastInsertRowid }`. Where
 a statement cannot be asked — on a Node whose `node:sqlite` statements have no
 `columns()` (it arrived in 22.16.0 and 23.11.0), or on a Bun whose statements
-offer neither `columns()` nor `reader` — the leading keyword decides: `SELECT`,
-`WITH`, `VALUES`, `PRAGMA` and `EXPLAIN` return rows, so there a `WITH` clause
-feeding a write returns no `{ changes, lastInsertRowid }` and `INSERT …
-RETURNING` returns no rows.
+offer none of `columns()`, `reader` and `columnNames` — the leading keyword
+decides: `SELECT`, `WITH`, `VALUES`, `PRAGMA` and `EXPLAIN` return rows, so
+there a `WITH` clause feeding a write returns no `{ changes, lastInsertRowid }`
+and `INSERT … RETURNING` returns no rows.
 
 `@return {number}` applies only when the query contains `COUNT(` — on any
 other statement that returns rows it silently falls back to the default
