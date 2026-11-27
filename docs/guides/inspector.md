@@ -183,7 +183,7 @@ appropriate database index exists for the query's target table:
 | `PRIMARY` | Amber | Only a primary key scan is available |
 | `no index` | Red | The query's target table has no index at all |
 | `no index for filter` | Amber-gold | Indexes exist, but none cover the columns this query filters on (SQL connectors) |
-| `no keyspace read` | Green | Couchbase: the statement reads no document (`SELECT 1`, `INSERT … VALUES`), so no index applies |
+| `no keyspace read` | Green | Couchbase: the statement reads no document (`SELECT 1`, `INSERT … VALUES`, a `FROM` over an expression), so no index applies |
 | `N/A` | Grey | Connector does not support index reporting |
 
 **Couchbase** extracts indexes automatically from the query execution plan — no

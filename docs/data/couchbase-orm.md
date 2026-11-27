@@ -658,13 +658,15 @@ Each query entry includes:
 | Badge | Meaning |
 |---|---|
 | Green | Secondary index (efficient) |
-| Green (`no keyspace read`) | The statement reads no document (`SELECT 1`, `INSERT … VALUES`), so no index applies |
+| Green (`no keyspace read`) | The statement reads no document (`SELECT 1`, `INSERT … VALUES`, a `FROM` over an expression such as `FROM [ … ] AS d`), so no index applies |
 | Amber | Primary index scan (full bucket scan -- slow) |
 | Red | No index used |
 | Grey (N/A) | Index information not available (SDK v4 first request) |
 
 This is powered by `extractIndexes()`, which walks the N1QL execution plan tree
-to find `IndexScan3`, `PrimaryScan3`, and `ExpressionScan` operators. Couchbase
+to find `IndexScan3`, `PrimaryScan3`, and `KeyScan` operators (a `USE KEYS`
+read, shown as *KV lookup*). An `ExpressionScan`, the plan of a `FROM` over an
+expression, reads no keyspace. Couchbase
 plans some subqueries apart (a `LET` or `WITH` subquery, a correlated or a
 nested subquery) and lists their plans beside the statement's own plan; those
 plans are walked too, so a statement whose reads all sit in subqueries shows the

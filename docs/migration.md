@@ -41,6 +41,20 @@ previous reading. **No action required**: restart each bundle to pick it up
 (server-side only, no re-bake). See
 [Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
 
+### Fixed — the Inspector no longer reports a Couchbase `FROM` over an expression as a key lookup (bundle restart)
+
+Couchbase plans a `FROM` over an expression, such as
+`SELECT RAW d.x FROM [ … ] AS d`, as an `ExpressionScan`, which reads no
+keyspace. The index badge reported it as the green *"KV lookup (USE KEYS)"*
+chip, the reading of a `USE KEYS` statement (a `KeyScan`). A statement whose only
+source is an expression now shows *"no keyspace read"*, as `SELECT 1` does, and
+an expression read beside an index read adds nothing to the index's chip.
+`USE KEYS` keeps its chip. A `FROM` over an expression that feeds a `JOIN` or `NEST … ON KEYS`
+now shows the red badge although it reads by key: the badge does not label a
+key-based join. **No action required**: restart each bundle to pick
+it up (server-side only, no re-bake). See
+[Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
+
 ### Fixed — a cached route's responses list in `Vary` the request headers its page depends on (bundle restart)
 
 A cached route's page follows the visitor's language (the `Accept-Language`
