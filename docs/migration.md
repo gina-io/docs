@@ -21,6 +21,24 @@ upward to the target version.
 
 ## 0.7.14 → 0.7.15
 
+### Changed — MySQL and PostgreSQL statements that return rows read them (bundle restart)
+
+The MySQL and PostgreSQL connectors took the read path only for a statement
+that starts with `SELECT`. They now ask the driver's answer whether rows came
+back, as the SQLite connector asks the prepared statement:
+
+- a `WITH … SELECT`, a `VALUES` (PostgreSQL) or a `SHOW` returns its rows, where
+  it came back shaped as a write with its rows lost;
+- on PostgreSQL, a write with `RETURNING` returns the rows it returned (the first
+  one under `@return {object}`, all of them without `@return`), where it returned
+  `{ changes, command }`;
+- a `SELECT … INTO`, which returns no rows, gets the write shape.
+
+**Action**: if a PostgreSQL statement with `RETURNING` and no `@return` was read
+for its `changes`, read the returned rows instead, or drop the `RETURNING`
+clause. Restart each bundle after the upgrade. See
+[PostgreSQL ORM](/data/postgresql-orm) and [MySQL ORM](/data/mysql-orm).
+
 ### Fixed — a Couchbase `@return {boolean}` statement always answers (bundle restart)
 
 A Couchbase statement annotated `@return {boolean}` could leave its caller waiting

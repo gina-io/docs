@@ -195,13 +195,19 @@ The `@param` declaration order determines binding. Supported types: `string`,
 | Annotation | What is returned |
 |---|---|
 | `@return {object}` | First row, or `null` if the result is empty |
-| `@return {array}` | All rows (default for SELECT), `null` when empty |
-| `@return {boolean}` | `true` if `length > 0` (SELECT) or `affectedRows > 0` (write) |
+| `@return {array}` | All rows (default for a statement that returns rows), `null` when empty |
+| `@return {boolean}` | `true` if `length > 0` (rows returned) or `affectedRows > 0` (write) |
 | `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
 | *(omitted on write)* | `{ changes, insertId }` |
 
 `@return {number}` applies only when the query contains `COUNT(` — on any
 other SELECT it silently falls back to the default all-rows shape.
+
+A statement takes the read path when the server returns rows for it: a
+`SELECT`, a `WITH … SELECT` (MySQL 8), a `SHOW`, an `EXPLAIN`, and on MariaDB a
+write with `RETURNING`. A `SELECT … INTO @var` returns no rows and gets the write
+shape. Before 0.7.15 only a statement starting with `SELECT` took the read path:
+a `WITH … SELECT` came back as `{ changes: undefined, insertId: undefined }`.
 
 `@options` and `@include` are **not** available for MySQL — they are
 Couchbase-only annotations.

@@ -196,8 +196,8 @@ types: `string`, `number` / `integer` (parsed as integer), `float`.
 | Annotation | What is returned |
 |---|---|
 | `@return {object}` | First row (`result.rows[0]`), or `null` if the result is empty |
-| `@return {array}` | All rows (`result.rows`, default for SELECT), `null` when empty |
-| `@return {boolean}` | `true` if `rows.length > 0` (SELECT) or `rowCount > 0` (write) |
+| `@return {array}` | All rows (`result.rows`, default for a statement that returns rows), `null` when empty |
+| `@return {boolean}` | `true` if `rows.length > 0` (rows returned) or `rowCount > 0` (write) |
 | `@return {number}` | Numeric value from the first key of the first row — for `COUNT(*)` |
 | *(omitted on write)* | `{ changes, command }` — e.g. `{ changes: 1, command: 'INSERT' }` |
 
@@ -207,9 +207,13 @@ value — which `pg` returns as a bigint *string* — is coerced to a JavaScript
 number.
 
 Note there is no insert id in the write shape — PostgreSQL reports `command`
-instead, and a `RETURNING` clause's rows are not surfaced by the annotation
-layer (only statements *starting with* `SELECT` take the read path). Read
-generated values back with a separate SELECT-shaped query.
+instead. A statement takes the read path when PostgreSQL returns rows for it,
+so add a `RETURNING` clause to read generated values: `INSERT … RETURNING id`
+under `@return {object}` gives the inserted row, and without `@return` all the
+returned rows. A `WITH … SELECT`, a `VALUES` or a `SHOW` returns its rows too. A
+`SELECT … INTO` creates a table and returns no rows, so it gets the write shape
+(`command: 'SELECT'`). Before 0.7.15 only a statement *starting with* `SELECT`
+took the read path.
 
 `@options` and `@include` are **not** available for PostgreSQL — they are
 Couchbase-only annotations.
