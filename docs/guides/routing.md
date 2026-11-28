@@ -353,7 +353,11 @@ The override reaches a static URL, or a parameterised URL whose key carries a
 
 Requirements validate URL parameter values before the route is considered a match.
 A route whose requirements fail is skipped, as if it did not exist — the router
-moves on to the next candidate.
+moves on to the next candidate. The values a skipped route bound from the URL do
+not stay on the request either: `req.params` and the method's data (`req.get`,
+`req.post`, …) are as they were before it was tried, also when
+[`lib.routing.getRouteByUrl()`](/api/routing#getRouteByUrl) resolves a URL for
+you, as `self.redirect()` does.
 
 ### Regex requirements
 

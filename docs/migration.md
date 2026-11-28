@@ -75,6 +75,20 @@ the green *"KV lookup (ON KEYS)"* chip, as `USE KEYS` adds *"KV lookup (USE KEYS
 **No action required**: restart each bundle to pick it up (server-side only, no
 re-bake). See [Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
 
+### Fixed — a route lookup leaves the request as it found it (bundle restart and re-bake)
+
+`lib.routing.getRouteByUrl()` tries each candidate rule in turn, and a rule that
+bound a URL value before a later segment failed left that value in `req.params`
+and in the method's data (`req.get`, `req.post`, …). The next candidate started
+from it, so the matched route's own value could lose to the failed one's, and on
+a lookup that matched nothing the request kept it: `self.redirect()`, which looks
+its target up with the request's method and then with GET, could carry it across
+a POST→GET redirect. A rule that does not match now leaves nothing on the
+request, and the request's objects stay the same objects (`req.body`, `req.query`
+and an array body stay shared). **No action required**: `lib/routing` is in the
+browser bundle, so restart each bundle and run `gina bundle:build` to pick it up.
+See [Routing → Requirements](/guides/routing#requirements).
+
 ## 0.7.13 → 0.7.14
 
 ### Fixed — the Inspector reports index usage inside Couchbase subqueries (bundle restart)
