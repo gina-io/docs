@@ -238,7 +238,9 @@ app.onWebSocket('/live', function(session, request) {
 - On bundle shutdown (`SIGTERM`), live sessions are closed gracefully with
   `1001 going away` before the server drains.
 - HTTP/2 stream or session loss (network drop, `GOAWAY`) surfaces as
-  `onClose(1006)`.
+  `onClose(1006)`, and so does a peer that ends its stream without a Close
+  frame: the session ends its own side at once (since `0.7.15`; before, it
+  stayed open until your handler or the connection closed it).
 
 ## Limitations
 

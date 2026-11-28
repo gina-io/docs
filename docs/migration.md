@@ -39,6 +39,15 @@ for its `changes`, read the returned rows instead, or drop the `RETURNING`
 clause. Restart each bundle after the upgrade. See
 [PostgreSQL ORM](/data/postgresql-orm) and [MySQL ORM](/data/mysql-orm).
 
+### Fixed — a WebSocket session closes when the peer ends its stream (bundle restart)
+
+A WebSocket-over-HTTP/2 session whose peer ended its stream without sending a
+Close frame stayed open until your handler closed it or the HTTP/2 connection
+ended, holding one of the connection's concurrent streams. It now ends its own
+side and delivers `onClose(1006)` at once. A Close frame followed by the end of
+the stream still closes with the peer's code. **No action required**: restart
+each bundle to pick it up. See [WebSocket over HTTP/2](/guides/websockets).
+
 ### Fixed — a Couchbase `@return {boolean}` statement always answers (bundle restart)
 
 A Couchbase statement annotated `@return {boolean}` could leave its caller waiting
