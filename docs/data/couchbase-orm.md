@@ -665,7 +665,9 @@ Each query entry includes:
 
 This is powered by `extractIndexes()`, which walks the N1QL execution plan tree
 to find `IndexScan3`, `PrimaryScan3`, and `KeyScan` operators (a `USE KEYS`
-read, shown as *KV lookup*). An `ExpressionScan`, the plan of a `FROM` over an
+read, shown as *KV lookup*), and a `Join` or `Nest` operator carrying `on_keys` (a
+`JOIN` or `NEST … ON KEYS`, shown as *KV lookup (ON KEYS)* since 0.7.15). An
+`ExpressionScan`, the plan of a `FROM` over an
 expression, reads no keyspace. Couchbase
 plans some subqueries apart (a `LET` or `WITH` subquery, a correlated or a
 nested subquery) and lists their plans beside the statement's own plan; those

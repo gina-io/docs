@@ -37,6 +37,17 @@ A write with no `@return` resolves `null`.
 
 Restart each bundle after the upgrade.
 
+### Fixed — the Inspector labels a Couchbase `JOIN` or `NEST … ON KEYS` (bundle restart)
+
+Couchbase plans a `JOIN` or a `NEST … ON KEYS` as a `Join` or `Nest` operator that
+reads the joined keyspace by key, and the index badge labelled neither: a `FROM`
+over an expression that feeds one, such as
+`SELECT d.k FROM [ … ] AS x JOIN sample AS d ON KEYS x`, showed the red badge,
+and a join from an indexed keyspace showed only that index. Such a join now adds
+the green *"KV lookup (ON KEYS)"* chip, as `USE KEYS` adds *"KV lookup (USE KEYS)"*.
+**No action required**: restart each bundle to pick it up (server-side only, no
+re-bake). See [Couchbase ORM → the Inspector's index badges](/data/couchbase-orm).
+
 ## 0.7.13 → 0.7.14
 
 ### Fixed — the Inspector reports index usage inside Couchbase subqueries (bundle restart)
